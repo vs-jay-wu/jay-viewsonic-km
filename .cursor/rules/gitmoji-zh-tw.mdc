@@ -1,0 +1,28 @@
+---
+description: Use gitmoji commits and Traditional Chinese responses
+alwaysApply: true
+---
+
+# Gitmoji 與語言規則
+
+- 回覆內容以繁體中文為主，除非使用者明確要求其他語言。
+- 產生 commit 訊息時，標題前面加上對應的 gitmoji。
+
+## Commit 訊息格式
+
+`<gitmoji> <type>: <繁體中文簡述>`
+
+範例：
+- `✨ feat: 新增同步組織專案腳本`
+- `🐛 fix: 修正 macOS 無法使用 mapfile 的問題`
+- `📝 docs: 更新 command 使用說明`
+
+## 常用 gitmoji 對照
+
+- `✨` 新功能
+- `🐛` 修 bug
+- `♻️` 重構
+- `⚡️` 效能優化
+- `✅` 測試
+- `📝` 文件
+- `🔧` 設定或工具調整
