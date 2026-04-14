@@ -35,12 +35,39 @@ while IFS= read -r repo; do
   total=$((total + 1))
 
   if [ -d "$repo/.git" ]; then
-    echo "Pulling $ORG/$repo ..."
-    if git -C "$repo" pull --ff-only; then
+    echo "Syncing $ORG/$repo ..."
+    sym="$(git -C "$repo" ls-remote --symref origin HEAD 2>/dev/null || true)"
+    primary="$(print -r "$sym" | awk '/^ref:/ { r=$2; sub("refs/heads/", "", r); print r; exit }')"
+    if [ -z "$primary" ]; then
+      if git -C "$repo" ls-remote --heads origin main 2>/dev/null | grep -q .; then
+        primary=main
+      elif git -C "$repo" ls-remote --heads origin master 2>/dev/null | grep -q .; then
+        primary=master
+      fi
+    fi
+    if [ -z "$primary" ]; then
+      echo "Note: $ORG/$repo has no remote branches (empty repo); treating as up to date."
       pulled=$((pulled + 1))
     else
-      echo "Failed to pull $ORG/$repo"
-      failed=$((failed + 1))
+      current="$(git -C "$repo" symbolic-ref -q --short HEAD 2>/dev/null || true)"
+      if [ "$current" = "$primary" ]; then
+        echo "  On primary branch '$primary'; fetching (prune) and fast-forwarding ..."
+        if git -C "$repo" fetch origin --prune && git -C "$repo" merge --ff-only "origin/${primary}"; then
+          pulled=$((pulled + 1))
+        else
+          echo "Failed to pull $ORG/$repo"
+          failed=$((failed + 1))
+        fi
+      else
+        here="${current:-detached HEAD}"
+        echo "  On '$here' (not primary '$primary'); fetching origin/$primary only ..."
+        if git -C "$repo" fetch origin "refs/heads/${primary}:refs/remotes/origin/${primary}"; then
+          pulled=$((pulled + 1))
+        else
+          echo "Failed to fetch primary for $ORG/$repo"
+          failed=$((failed + 1))
+        fi
+      fi
     fi
   else
     echo "Cloning $ORG/$repo ..."
