@@ -2,6 +2,13 @@
 # set-repo-secrets.sh
 # 互動式設定 GitHub repo 的 Actions secrets / variables
 #
+# 使用 gh CLI 直接呼叫 GitHub API，適合快速、單次設定。
+#
+# 若需要大批次管理、有 Terraform state 追蹤，請改用 Terraform 方案：
+#   repo: edu-ado-github-migrator
+#   路徑: live/viewsonic/secrets/
+#   設定: secrets.auto.tfvars（參考 secrets.auto.tfvars.example）
+#
 # 用法：
 #   ./set-repo-secrets.sh <repo-name>
 #   ./set-repo-secrets.sh <repo-name> --org <org>
