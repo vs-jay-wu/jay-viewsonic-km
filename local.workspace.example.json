@@ -3,5 +3,10 @@
     "Viewsonic-EDU": {
       "localPath": "/Users/your-username/ProjectsWork_GitHub/Orgs/Viewsonic-EDU"
     }
+  },
+  "teams": {
+    "token": "YOUR_TOKEN_VALUE_HERE",
+    "token_type": "Bearer",
+    "region": "amer"
   }
 }
