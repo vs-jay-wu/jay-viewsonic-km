@@ -14,7 +14,10 @@
     "mvbf": {
       "fullName": "myViewBoard Flutter",
       "aliases": ["mvbf", "mvb flutter", "myViewBoard app"],
-      "description": "myViewBoard 行動端 Flutter App（Android / iOS）"
+      "description": "myViewBoard 行動端 Flutter App（Android / iOS）",
+      "dependencies": [
+        { "repo": "ragdoll-cat", "product": "classswift", "note": "整合 ClassSwift 教師端功能" }
+      ]
     },
     "sparrow": {
       "fullName": "myViewBoard for Windows",
