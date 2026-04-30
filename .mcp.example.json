@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "teams-mcp": {
+      "command": "npx",
+      "args": ["-y", "@floriscornel/teams-mcp@latest"]
+    }
+  }
+}

@@ -1,2 +1,5 @@
 # 本機工作區設定（各裝置路徑不同，不納入版本控制）
 local.workspace.json
+
+# MCP 設定（含 token，各裝置自行設定）
+.mcp.json
