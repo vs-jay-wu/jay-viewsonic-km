@@ -1,7 +1,7 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useParams, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState, useCallback, Suspense } from "react";
 import Avatar from "@/components/Avatar";
 import MessageContent from "@/components/MessageContent";
 
@@ -26,11 +26,14 @@ function formatTime(iso: string | null): string {
 }
 
 function isSystemMessage(type: string | null): boolean {
-  return !!type && (type.startsWith("ThreadActivity") || type === "RichText/Html" === false && !type.startsWith("RichText") && !type.startsWith("Text"));
+  return !!type && !type.startsWith("RichText") && !type.startsWith("Text");
 }
 
-export default function ChatPage() {
+function ChatPageInner() {
   const { chatId } = useParams<{ chatId: string }>();
+  const searchParams = useSearchParams();
+  const highlightMsgId = searchParams.get("msg");
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -38,6 +41,7 @@ export default function ChatPage() {
   const [search, setSearch] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
 
   const fetchMessages = useCallback(async (before?: string) => {
     const url = `/api/chats/${chatId}/messages?limit=60${before ? `&before=${encodeURIComponent(before)}` : ""}`;
@@ -53,9 +57,16 @@ export default function ChatPage() {
       setMessages(msgs);
       setHasMore(msgs.length >= 60);
       setLoading(false);
-      setTimeout(() => bottomRef.current?.scrollIntoView(), 50);
+      // scroll to highlighted msg or bottom
+      setTimeout(() => {
+        if (highlightMsgId) {
+          highlightRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        } else {
+          bottomRef.current?.scrollIntoView();
+        }
+      }, 100);
     });
-  }, [chatId, fetchMessages]);
+  }, [chatId, fetchMessages, highlightMsgId]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || messages.length === 0) return;
@@ -67,7 +78,6 @@ export default function ChatPage() {
     setLoadingMore(false);
   }, [loadingMore, hasMore, messages, fetchMessages]);
 
-  // Intersection observer for infinite scroll upward
   useEffect(() => {
     const el = topRef.current;
     if (!el) return;
@@ -87,7 +97,7 @@ export default function ChatPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Search bar */}
+      {/* Search */}
       <div className="px-4 py-2 border-b border-gray-200 bg-white shrink-0">
         <input
           type="text"
@@ -100,7 +110,6 @@ export default function ChatPage() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-0.5">
-        {/* Load more trigger */}
         <div ref={topRef} className="h-4 flex items-center justify-center">
           {loadingMore && <span className="text-xs text-gray-400">載入更多...</span>}
           {!hasMore && messages.length > 0 && (
@@ -114,11 +123,16 @@ export default function ChatPage() {
 
         {filtered.map((msg, i) => {
           const prev = filtered[i - 1];
-          const isSameSender = prev?.display_name === msg.display_name &&
-            Math.abs(new Date(msg.composed_at ?? "").getTime() - new Date(prev?.composed_at ?? "").getTime()) < 5 * 60 * 1000;
+          const isSameSender =
+            prev?.display_name === msg.display_name &&
+            Math.abs(
+              new Date(msg.composed_at ?? "").getTime() -
+              new Date(prev?.composed_at ?? "").getTime()
+            ) < 5 * 60 * 1000;
 
           const name = msg.display_name || "Unknown";
           const isSystem = isSystemMessage(msg.content_type);
+          const isHighlighted = msg.teams_msg_id === highlightMsgId;
 
           if (isSystem) {
             return (
@@ -131,14 +145,21 @@ export default function ChatPage() {
           }
 
           return (
-            <div key={msg.id} className={`flex gap-2.5 ${isSameSender ? "mt-0.5" : "mt-3"}`}>
-              {/* Avatar col */}
+            <div
+              key={msg.id}
+              id={`msg-${msg.teams_msg_id}`}
+              ref={isHighlighted ? highlightRef : undefined}
+              className={`flex gap-2.5 rounded-lg px-2 transition-colors ${
+                isSameSender ? "mt-0.5" : "mt-3"
+              } ${isHighlighted ? "bg-amber-50 ring-2 ring-amber-300" : ""}`}
+            >
+              {/* Avatar */}
               <div className="w-9 shrink-0">
                 {!isSameSender && <Avatar name={name} />}
               </div>
 
-              {/* Content col */}
-              <div className="flex-1 min-w-0">
+              {/* Content */}
+              <div className="flex-1 min-w-0 py-0.5">
                 {!isSameSender && (
                   <div className="flex items-baseline gap-2 mb-0.5">
                     <span className="text-sm font-semibold text-gray-900">{name}</span>
@@ -152,7 +173,6 @@ export default function ChatPage() {
                   <MessageContent html={msg.content ?? ""} />
                 )}
 
-                {/* Reactions */}
                 {msg.reactions.length > 0 && (
                   <div className="flex gap-1 mt-1 flex-wrap">
                     {Object.entries(
@@ -175,5 +195,13 @@ export default function ChatPage() {
         <div ref={bottomRef} />
       </div>
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400">載入中...</div>}>
+      <ChatPageInner />
+    </Suspense>
   );
 }
