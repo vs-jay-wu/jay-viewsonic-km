@@ -1,0 +1,54 @@
+{
+  "mcpServers": {
+    "Atlassian-MCP": {
+      "command": "/Users/jay.wj.wu/.local/bin/uvx",
+      "args": [
+        "mcp-atlassian"
+      ],
+      "env": {
+        "CONFLUENCE_URL": "https://viewsonic-vsi.atlassian.net/wiki",
+        "CONFLUENCE_USERNAME": "jay.wj.wu@viewsonic.com",
+        "CONFLUENCE_API_TOKEN": "${CONFLUENCE_API_TOKEN}",
+        "JIRA_URL": "https://viewsonic-vsi.atlassian.net",
+        "JIRA_USERNAME": "jay.wj.wu@viewsonic.com",
+        "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
+      }
+    },
+    "Figma-MCP-Server": {
+      "command": "mcp-figma",
+      "args": [],
+      "env": {
+        "FIGMA_ACCESS_TOKEN": "${FIGMA_ACCESS_TOKEN}"
+      }
+    },
+    "Firebase-MCP": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "firebase-tools@latest",
+        "mcp",
+        "--dir",
+        "/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs/Viewsonic-EDU/edu-droid-flutter"
+      ],
+      "env": {}
+    },
+    "Flutter-MCP-Server": {
+      "command": "/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs/Viewsonic-EDU/edu-droid-flutter/.fvm/versions/3.41.5/bin/cache/dart-sdk/bin/dart",
+      "args": [
+        "mcp-server"
+      ],
+      "env": {}
+    },
+    "POEditor-MCP-Server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "poeditor-mcp@latest"
+      ],
+      "env": {
+        "POEDITOR_API_TOKEN": "${POEDITOR_API_TOKEN}",
+        "POEDITOR_PROJECT_ID": "754682"
+      }
+    }
+  }
+}

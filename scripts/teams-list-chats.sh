@@ -15,16 +15,21 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE="$SCRIPT_DIR/../local.workspace.json"
 
+ENV_FILE="$SCRIPT_DIR/../.env"
+if [[ -f "$ENV_FILE" ]]; then
+  set -a; source "$ENV_FILE"; set +a
+fi
+
 if ! command -v jq &>/dev/null; then
   echo "❌ 需要安裝 jq：brew install jq"
   exit 1
 fi
 
-TOKEN=$(jq -r '.teams.token // empty' "$WORKSPACE")
+TOKEN="${TEAMS_TOKEN:-$(jq -r '.teams.token // empty' "$WORKSPACE")}"
 REGION=$(jq -r '.teams.region // "amer"' "$WORKSPACE")
 
 if [[ -z "$TOKEN" ]]; then
-  echo "❌ 請先設定 local.workspace.json 的 teams.token"
+  echo "❌ 請設定環境變數 TEAMS_TOKEN 或 .env 檔案"
   exit 1
 fi
 

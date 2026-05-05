@@ -11,6 +11,7 @@ teams-scrape.py
 
 import argparse
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -26,6 +27,18 @@ except ImportError:
 PROJECT_ROOT = Path(__file__).parent.parent
 WORKSPACE    = PROJECT_ROOT / "local.workspace.json"
 DB_PATH      = PROJECT_ROOT / "data" / "teams.db"
+
+
+def _load_dotenv():
+    env_file = PROJECT_ROOT / ".env"
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip())
+
+_load_dotenv()
 
 HEADERS_BASE = {
     "x-ms-request-priority": "20",
@@ -45,10 +58,11 @@ def load_config() -> dict:
     with open(WORKSPACE) as f:
         cfg = json.load(f)
     teams = cfg.get("teams", {})
-    token = teams.get("token", "")
+    token = os.environ.get("TEAMS_TOKEN", "") or teams.get("token", "")
     if not token:
-        print("❌ 請先設定 local.workspace.json 的 teams.token")
+        print("❌ 請設定環境變數 TEAMS_TOKEN 或 .env 檔案")
         sys.exit(1)
+    teams["token"] = token
     return teams
 
 

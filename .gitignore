@@ -1,8 +1,8 @@
+# 環境變數 / 金鑰（請填入 .env，勿 commit）
+.env
+
 # 本機工作區設定（各裝置路徑不同，不納入版本控制）
 local.workspace.json
-
-# MCP 設定（含 token，各裝置自行設定）
-.mcp.json
 
 # 瀏覽器 profile（含登入 cookie，各裝置自行登入）
 .browser-profile/
