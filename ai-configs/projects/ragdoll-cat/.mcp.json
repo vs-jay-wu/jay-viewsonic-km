@@ -51,8 +51,8 @@
         }
       },
       "gitnexus": {
-        "command": "npx",
-        "args": ["-y", "gitnexus@latest", "mcp"]
+        "command": "/opt/homebrew/bin/gitnexus",
+        "args": ["mcp"]
       }
     }
   }
