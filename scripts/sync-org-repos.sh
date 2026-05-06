@@ -4,6 +4,7 @@ set -euo pipefail
 ORG="${1:-Viewsonic-EDU}"
 BASE="/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs"
 TARGET="$BASE/$ORG"
+WORKSPACE_JSON="$(dirname "$0")/../local.workspace.json"
 
 if ! command -v gh >/dev/null 2>&1; then
   echo "Error: gh (GitHub CLI) is required."
@@ -14,6 +15,15 @@ if ! gh auth status >/dev/null 2>&1; then
   echo "Error: gh is not authenticated. Run: gh auth login"
   exit 1
 fi
+
+OFFLOADED_LIST=""
+if [ -f "$WORKSPACE_JSON" ] && command -v jq >/dev/null 2>&1; then
+  OFFLOADED_LIST="$(jq -r --arg org "$ORG" '.orgs[$org].offloaded[]? // empty' "$WORKSPACE_JSON" 2>/dev/null || true)"
+fi
+
+is_offloaded() {
+  [ -n "$OFFLOADED_LIST" ] && echo "$OFFLOADED_LIST" | grep -qx "$1"
+}
 
 mkdir -p "$TARGET"
 cd "$TARGET"
@@ -28,11 +38,18 @@ fi
 cloned=0
 pulled=0
 failed=0
+offloaded=0
 total=0
 
 while IFS= read -r repo; do
   [ -z "$repo" ] && continue
   total=$((total + 1))
+
+  if is_offloaded "$repo"; then
+    echo "Skipping $ORG/$repo (offloaded to external drive)"
+    offloaded=$((offloaded + 1))
+    continue
+  fi
 
   if [ -d "$repo/.git" ]; then
     echo "Syncing $ORG/$repo ..."
@@ -87,4 +104,10 @@ echo "Target: $TARGET"
 echo "Total: $total"
 echo "Cloned: $cloned"
 echo "Pulled: $pulled"
+echo "Offloaded (skipped): $offloaded"
 echo "Failed: $failed"
+if [ "$offloaded" -gt 0 ]; then
+  echo
+  echo "Note: $offloaded repo(s) were skipped because they are offloaded to an external drive."
+  echo "To restore a repo: remove it from 'offloaded' in local.workspace.json and re-run sync."
+fi
