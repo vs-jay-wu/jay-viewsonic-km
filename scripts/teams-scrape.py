@@ -138,7 +138,8 @@ def upsert_chat(conn: sqlite3.Connection, teams_id: str, topic: str, type_: str,
     conn.execute("""
         INSERT INTO chats (teams_id, topic, type, created_at)
         VALUES (?, ?, ?, ?)
-        ON CONFLICT(teams_id) DO NOTHING
+        ON CONFLICT(teams_id) DO UPDATE SET
+            topic = CASE WHEN excluded.topic != '' THEN excluded.topic ELSE topic END
     """, (teams_id, topic, type_, created_at))
     return conn.execute("SELECT id FROM chats WHERE teams_id = ?", (teams_id,)).fetchone()[0]
 
@@ -239,11 +240,26 @@ def fetch_messages_page(url: str, token: str) -> dict:
     return r.json()
 
 
+def fetch_chat_topic(chat_id: str, token: str, region: str) -> str:
+    base = f"https://teams.cloud.microsoft/api/chatsvc/{region}/v1"
+    try:
+        r = requests.get(
+            f"{base}/users/ME/conversations/{chat_id}?view=msnp24Equivalent",
+            headers=make_headers(token), timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json()
+        return data.get("threadProperties", {}).get("topic", "") or ""
+    except Exception:
+        return ""
+
+
 def scrape_chat(chat_id: str, token: str, region: str, conn: sqlite3.Connection):
     base = f"https://teams.cloud.microsoft/api/chatsvc/{region}/v1"
 
-    # 建立 chat 記錄
-    db_chat_id = upsert_chat(conn, chat_id, "星期六浩克", "chat", "")
+    # 建立 chat 記錄（從 API 取得真實 topic）
+    topic = fetch_chat_topic(chat_id, token, region)
+    db_chat_id = upsert_chat(conn, chat_id, topic, "chat", "")
 
     # 增量同步：從上次最新訊息繼續
     cursor = get_last_synced_msg_id(conn, db_chat_id)
