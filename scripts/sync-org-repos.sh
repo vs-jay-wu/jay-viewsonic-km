@@ -17,12 +17,18 @@ if ! gh auth status >/dev/null 2>&1; then
 fi
 
 OFFLOADED_LIST=""
+EXCLUDED_LIST=""
 if [ -f "$WORKSPACE_JSON" ] && command -v jq >/dev/null 2>&1; then
   OFFLOADED_LIST="$(jq -r --arg org "$ORG" '.orgs[$org].offloaded[]? // empty' "$WORKSPACE_JSON" 2>/dev/null || true)"
+  EXCLUDED_LIST="$(jq -r --arg org "$ORG" '.orgs[$org].excluded[]? // empty' "$WORKSPACE_JSON" 2>/dev/null || true)"
 fi
 
 is_offloaded() {
   [ -n "$OFFLOADED_LIST" ] && echo "$OFFLOADED_LIST" | grep -qx "$1"
+}
+
+is_excluded() {
+  [ -n "$EXCLUDED_LIST" ] && echo "$EXCLUDED_LIST" | grep -qx "$1"
 }
 
 mkdir -p "$TARGET"
@@ -44,6 +50,11 @@ total=0
 while IFS= read -r repo; do
   [ -z "$repo" ] && continue
   total=$((total + 1))
+
+  if is_excluded "$repo"; then
+    echo "Skipping $ORG/$repo (excluded — not a managed repo)"
+    continue
+  fi
 
   if is_offloaded "$repo"; then
     echo "Skipping $ORG/$repo (offloaded to external drive)"

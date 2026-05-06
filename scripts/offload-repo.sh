@@ -30,13 +30,29 @@ if [ "$LOCAL_PATH" = "null" ] || [ "$EXTERNAL_PATH" = "null" ]; then
   exit 1
 fi
 
+EXCLUDED_LIST="$(jq -r --arg org "$ORG" '.orgs[$org].excluded[]? // empty' "$WORKSPACE_JSON" 2>/dev/null || true)"
+
+is_excluded() {
+  [ -n "$EXCLUDED_LIST" ] && echo "$EXCLUDED_LIST" | grep -qx "$1"
+}
+
 case "$ACTION" in
   offload)
     SRC="$LOCAL_PATH/$REPO"
     DST="$EXTERNAL_PATH/$REPO"
 
+    if is_excluded "$REPO"; then
+      echo "Error: '$REPO' is in the excluded list and must not be moved. See local.workspace.json."
+      exit 1
+    fi
+
     if [ ! -d "$SRC" ]; then
       echo "Error: '$SRC' does not exist locally."
+      exit 1
+    fi
+
+    if [ ! -d "$SRC/.git" ]; then
+      echo "Error: '$SRC' is not a git repository. Only git repos can be offloaded."
       exit 1
     fi
 
