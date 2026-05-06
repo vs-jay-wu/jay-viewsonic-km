@@ -6,3 +6,4 @@ local.workspace.json
 
 # 瀏覽器 profile（含登入 cookie，各裝置自行登入）
 .browser-profile/
+.gitnexus
