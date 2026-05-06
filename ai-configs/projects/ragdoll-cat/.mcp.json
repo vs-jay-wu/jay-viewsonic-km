@@ -8,10 +8,10 @@
         "env": {
           "CONFLUENCE_URL": "https://viewsonic-vsi.atlassian.net/wiki",
           "CONFLUENCE_USERNAME": "jay.wj.wu@viewsonic.com",
-          "CONFLUENCE_API_TOKEN": "${CONFLUENCE_API_TOKEN}",
+          "CONFLUENCE_API_TOKEN": "${ATLASSIAN_API_TOKEN}",
           "JIRA_URL": "https://viewsonic-vsi.atlassian.net",
           "JIRA_USERNAME": "jay.wj.wu@viewsonic.com",
-          "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
+          "JIRA_API_TOKEN": "${ATLASSIAN_API_TOKEN}"
         }
       },
       "Figma-MCP-Server": {
