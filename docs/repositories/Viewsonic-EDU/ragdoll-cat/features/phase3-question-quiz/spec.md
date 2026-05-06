@@ -22,6 +22,15 @@
 
 ---
 
+## Architecture Note
+
+> **Standalone vs MVB UI 分離原則**
+>
+> - **Standalone 模式**（從 ClassSwift class management 等非 MVB 入口開啟）：使用**舊的** quiz edit windows（TrueFalseEditWindow、MultipleChoiceEditWindow、PollQuizEditWindow 等）
+> - **MVB 模式**（從 MVB whiteboard 的 ClassSwift toggle 開啟）：使用**新的** `MvbQuestionWindow`，所有題型（是非、選擇、簡答、聲音、投票）統一進入同一個 Question window，再依題型顯示對應設定區
+
+---
+
 ## Background
 
 目標：老師在 MVB 課堂上開啟 ClassSwift toggle，透過截圖派題功能或備課題庫，快速派發題目給學生，即時了解學生的知識掌握度。
