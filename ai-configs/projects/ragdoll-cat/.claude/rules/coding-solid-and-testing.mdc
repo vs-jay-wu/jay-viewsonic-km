@@ -1,0 +1,37 @@
+---
+description: Coding structure and testing principles for this repository
+alwaysApply: true
+---
+
+# Coding Structure and Testing Principles
+
+## Architecture
+
+- Follow SOLID principles for all new implementation and refactoring.
+- Keep business logic separated from UI/framework-specific concerns.
+- Prefer dependency injection and dependency inversion for collaborators.
+- If a module is hard to test, refactor architecture first instead of skipping tests.
+- To achieve SOLID in practice, use suitable design patterns when helpful, for example:
+  - Strategy
+  - Factory Method / Abstract Factory
+  - Adapter
+  - Facade
+  - Decorator
+  - Observer (Publisher-Subscriber)
+  - Command (or UseCase style)
+  - Repository
+
+## Unit Test Requirements
+
+- Any new business logic must include unit tests.
+- Unit tests should cover:
+  - normal/success path
+  - error/failure path
+  - key edge cases
+- Bug fixes in business logic must include a regression unit test.
+- Avoid hidden hard dependencies in business logic (static/singleton direct usage) that block unit testing.
+
+## Delivery Standard
+
+- Prioritize testable design over quick but tightly coupled implementation.
+- New behavior is considered incomplete if business logic tests are missing without technical justification.

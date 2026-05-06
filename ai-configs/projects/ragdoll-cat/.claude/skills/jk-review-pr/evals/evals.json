@@ -1,0 +1,23 @@
+{
+  "skill_name": "jk-review-pr",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "幫我 review PR #846，看一下 Brandon 的 code 有沒有什麼問題",
+      "expected_output": "A structured review report for PR #846 (open feature PR) with severity-tiered issues table, commit message review, verdict, and offer to post as GitHub comment. Should reference ClassSwift architecture rules and naming conventions.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "review this PR for me: https://github.com/VSX-ViewSonic/ragdoll-cat/pull/843",
+      "expected_output": "A structured review of merged PR #843 (bug fix). Should parse the PR number from URL, show PR metadata (author, base/head, merged state), apply review rules, and produce a verdict. Tone should note it's already merged if relevant.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "看一下 PR #844 的改動，有沒有符合我們的 coding convention",
+      "expected_output": "A focused review of PR #844 (bug fix) checking naming conventions, file placement, and commit message format. Should include severity-tiered findings and a closing verdict.",
+      "files": []
+    }
+  ]
+}

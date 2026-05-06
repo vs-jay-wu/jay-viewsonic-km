@@ -1,0 +1,12 @@
+{
+  "skill_name": "jk-standalone-login",
+  "evals": [
+    {
+      "id": 0,
+      "name": "standalone-login",
+      "prompt": "幫我跑一次 ClassSwift 的 standalone login 流程，用測試帳號 dillon.cy.chang@viewsonic.com / Qa@123456 從 app icon 一路登入到選擇組織畫面。裝置是 SM-X520，用 MCP mobile 工具和 adb 操作。完成後截一張螢幕截圖 (adb exec-out screencap -p > final.png) 存到我指定的 outputs 目錄，並在 outputs/result.md 裡寫下你做了哪些步驟、有沒有抵達 SelectOrg。",
+      "expected_output": "Device reaches the SelectOrg overlay (選擇組織). outputs/ contains a screenshot showing 選擇組織 title + org list, and a result.md summarizing the steps and whether SelectOrg was reached.",
+      "files": []
+    }
+  ]
+}

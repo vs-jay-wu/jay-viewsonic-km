@@ -1,0 +1,101 @@
+---
+description: Project coding architecture and testing rules
+alwaysApply: true
+---
+
+# Project Coding Rules (Architecture + Testing)
+
+## Formatting
+
+- Apply hard wrap at 150 characters for code and comments where practical.
+- Allow exceptions for unavoidable long literals (for example URLs, serialized payloads, generated content, or test fixtures).
+
+## Layering
+
+- Keep responsibilities by layer:
+  - `ui/*`: presentation only (Activity/Fragment/Window/ViewModel).
+  - `manager/*` and `coordinator/*`: business orchestration.
+  - `data/*`: models, parser, datastore/database, protocol contracts.
+  - `service/*`: service lifecycle and binder entry.
+- Do not put business logic directly in UI classes.
+- Keep dependency direction stable (UI -> manager/data, data should not depend on UI).
+
+## DI and Construction
+
+- Register new dependencies in `di/KoinModules.kt`.
+- Prefer constructor injection for new classes.
+- For framework-owned classes (Service/Binder), keep dependencies injectable and avoid hard-coded global coupling.
+- If code is hard to test, apply DIP (interface + injected implementation).
+
+## IPC Structure (MyViewBoard)
+
+- Keep parser/handler/notifier/transport separated:
+  - Parser: JSON to typed message
+  - Handler: message to business result
+  - Notifier: result to protocol event
+  - Transport: callback broadcasting
+  - Binder: auth + orchestration only
+
+## SOLID + Design Patterns
+
+- Follow SOLID for all new code and refactor.
+- Use suitable patterns when needed:
+  - Strategy
+  - Factory Method / Abstract Factory
+  - Adapter
+  - Facade
+  - Decorator
+  - Observer (Publisher-Subscriber)
+  - Command / UseCase
+  - Repository
+
+## Unit Test Policy (Mandatory for Business Logic)
+
+- Every new business logic change must have unit tests.
+- Tests must cover success, failure, and key edge/malformed cases.
+- Every bug fix in business logic must include a regression test.
+- If a part is hard to test, refactor architecture first (DI/DIP/abstraction), then add tests.
+
+## Coroutines and Threading
+
+- Use `viewModelScope` for ViewModel async work.
+- UI/window operations must run on `Dispatchers.Main`.
+- Keep blocking work off the main thread.
+- Avoid fire-and-forget jobs without lifecycle ownership.
+
+## Android View Conventions
+
+- **Window Tag uniqueness**: Every Window class must define its own unique Window Tag. Tags must NOT be shared across different Window classes.
+- **WindowModel uniqueness**: Every Window must have its own dedicated WindowModel (1:1). Do NOT reuse a WindowModel across multiple Windows.
+- **ViewBinding is mandatory**: Always use ViewBinding to access views. Never use `findViewById`.
+- **XML layouts over programmatic UI**: Build UI in XML layout files, not dynamically via code. XML allows preview and is easier to maintain. Exceptions: RecyclerView item inflation, programmatic animations, or truly dynamic content.
+
+## Coding Style
+
+- Use small focused functions and explicit result models for branchy logic.
+- Prefer sealed classes / explicit result objects for parse/command outcomes instead of nullable/implicit states.
+- Keep protocol keys/constants centralized in dedicated constant files.
+- Keep logs via `Timber` with meaningful tags/messages; avoid noisy debug logs in final code.
+
+## Component Patterns
+
+| Component | Usage | Construction |
+|---|---|---|
+| `WindowModel` | Business logic for a specific Window; 1-to-1 with its Window | Koin `factory` (created and destroyed with the Window) |
+| `Coordinator` | Controls a flow with a defined start; used only in specific features | `factory` |
+| `Handler` | Handles events with no flow start control; used only in specific features | `factory` |
+| `Manager` | Shared across many features; no start flow control | Singleton (`single`) |
+| `UiManager` | Contains Context/UI/SDK operations; shared across Windows | Singleton (`single`), used from Window |
+
+- `WindowModel` must be created and destroyed in sync with its corresponding Window.
+- Everything related to business logic (except `CSWindowManager`, Android SDK, and View components) belongs in the Model layer.
+
+## DI Rules
+
+- Register all dependencies in `di/KoinModules.kt`.
+- `Manager` and `UiManager` must use **Koin Lazy Injection** (`by inject()`).
+- Prefer constructor injection for other classes.
+
+## Done Criteria
+
+- Business logic without tests is incomplete unless there is explicit technical justification.

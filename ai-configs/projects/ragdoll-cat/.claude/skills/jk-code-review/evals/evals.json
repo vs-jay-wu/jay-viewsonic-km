@@ -1,0 +1,134 @@
+{
+  "skill_name": "jk-code-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "幫我 review 一下我在 Jacky/develop 這個 branch 上的改動，跟 develop 比較，看看有沒有什麼問題，我等一下要開 PR。",
+      "expected_output": "A structured code review report comparing current branch changes to develop, checking naming conventions, file placement, architecture patterns, Kotlin quality rules, and commit messages. Should include severity-tiered issues table and a PR readiness verdict.",
+      "files": [],
+      "assertions": [
+        {
+          "text": "Output contains a severity-tiered issues section (e.g. BLOCKER/CRITICAL, MAJOR, MINOR headers or a table with severity levels)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output ends with a clear PR readiness verdict — one of: 'Ready for PR', 'Fix before PR', or 'Not ready'",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output reviews at least one named Kotlin file from the diff (e.g. AccountManager.kt, MyClassWindow.kt, SelectOrgWindow.kt)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output checks architecture rules (e.g. MVVM, Manager/ViewModel/Window layer boundaries)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output checks naming conventions (class names, XML IDs, layout names, or similar)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output includes a commit message review section or mentions commit format",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output mentions SonarCloud or Kotlin code quality rules (cognitive complexity, nesting depth, var/val, etc.)",
+          "passed": null,
+          "evidence": null
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "review my changes against develop branch please",
+      "expected_output": "English code review report covering the same dimensions: architecture, naming, file placement, SonarCloud rules, commit messages. Should find any issues and list what looks good.",
+      "files": [],
+      "assertions": [
+        {
+          "text": "Output contains a severity-tiered issues section (e.g. BLOCKER/CRITICAL, MAJOR, MINOR headers or a table with severity levels)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output ends with a clear PR readiness verdict — one of: 'Ready for PR', 'Fix before PR', or 'Not ready'",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output reviews at least one named Kotlin file from the diff",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output checks architecture rules (MVVM, Manager/Window/ViewModel boundaries)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output checks naming conventions",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output includes a commit message review or mentions commit format",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output mentions SonarCloud or Kotlin code quality rules",
+          "passed": null,
+          "evidence": null
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "check my code before I submit the PR — I changed some stuff in AccountManager and a couple of Windows",
+      "expected_output": "Code review focused on the changed files. Should check Manager class patterns (singleton, Koin injection), Window architecture rules (business logic not in view layer), and all naming/placement conventions. Issues table plus readiness verdict.",
+      "files": [],
+      "assertions": [
+        {
+          "text": "Output contains a severity-tiered issues section (e.g. BLOCKER/CRITICAL, MAJOR, MINOR headers or a table)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output ends with a clear PR readiness verdict",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output specifically reviews AccountManager.kt",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output specifically reviews at least one Window file (MyClassWindow.kt or SelectOrgWindow.kt)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output checks Manager architectural pattern (Singleton scope, Koin injection)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output checks Window architectural rules (business logic separation from view layer)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "Output mentions SonarCloud or Kotlin code quality rules",
+          "passed": null,
+          "evidence": null
+        }
+      ]
+    }
+  ]
+}

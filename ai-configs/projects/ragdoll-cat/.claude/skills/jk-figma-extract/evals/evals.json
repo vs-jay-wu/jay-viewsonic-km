@@ -1,0 +1,41 @@
+{
+  "skill_name": "jk-figma-extract",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我要實作這個 Figma 畫面，先幫我把設計規格抓下來 @https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=2636-101307&m=dev",
+      "expected_output": "Structured markdown spec with exact hex values from REST API",
+      "assertions": [
+        {"text": "Output contains a markdown spec file", "type": "file_exists", "pattern": "*.md"},
+        {"text": "Spec contains Structure Tree section", "type": "content_contains", "value": "Structure Tree"},
+        {"text": "Spec contains Color Table with hex values", "type": "content_contains", "value": "Color Table"},
+        {"text": "Spec contains Typography table", "type": "content_contains", "value": "Typography"},
+        {"text": "Reports primary color as #4848F0 (not #3C5AAA)", "type": "content_contains", "value": "#4848F0"},
+        {"text": "Reports plan badge text color as #999999", "type": "content_contains", "value": "#999999"},
+        {"text": "Lists VSDS icon components", "type": "content_contains", "value": "vsds-icon"}
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "幫我 extract 這兩個 Figma 節點的規格，我需要比對 on-going class 和 roster class 的差異",
+      "expected_output": "Two separate specs showing the differences between on-going and roster states",
+      "assertions": [
+        {"text": "Produces two separate spec files", "type": "file_count_gte", "value": 2},
+        {"text": "On-going spec mentions chip/badge/On-going", "type": "content_contains", "value": "On-going"},
+        {"text": "On-going chip color #DB0025 identified", "type": "content_contains", "value": "#DB0025"},
+        {"text": "Roster spec mentions Google Classroom icon", "type": "content_contains_any", "values": ["google", "Google", "classroom", "roster"]}
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "這個 Figma 畫面的 dropdown 展開狀態跟關閉狀態，顏色到底是什麼？幫我確認精確值",
+      "expected_output": "Exact color comparison between closed and opened dropdown states",
+      "assertions": [
+        {"text": "Reports dropdown active border as #4848F0", "type": "content_contains", "value": "#4848F0"},
+        {"text": "Reports plan text color #999999", "type": "content_contains", "value": "#999999"},
+        {"text": "Distinguishes closed vs open state colors", "type": "content_contains_any", "values": ["closed", "open", "Closed", "Open", "idle", "focused", "active", "default"]},
+        {"text": "Produces spec markdown file(s)", "type": "file_exists", "pattern": "*.md"}
+      ]
+    }
+  ]
+}

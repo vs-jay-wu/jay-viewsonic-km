@@ -1,0 +1,15 @@
+{
+  "skill_name": "jk-build-aab",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/jk-build-aab",
+      "expected_output": "Runs ./gradlew bundleEdlaProdReleaseAab, AAB output to ~/Downloads"
+    },
+    {
+      "id": 2,
+      "prompt": "幫我包一個 AAB 放到桌面",
+      "expected_output": "Runs ./gradlew bundleEdlaProdReleaseAab -PoutputDir=~/Desktop, AAB output to ~/Desktop"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "skill_name": "jk-build-apk",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/jk-build-apk stage",
+      "expected_output": "Runs ./gradlew assembleStageApks, APK output to ~/Downloads"
+    },
+    {
+      "id": 2,
+      "prompt": "/jk-build-apk prod",
+      "expected_output": "Runs ./gradlew assembleProductionApks, APK output to ~/Downloads"
+    },
+    {
+      "id": 3,
+      "prompt": "/jk-build-apk rc",
+      "expected_output": "Runs ./gradlew assembleReleaseCandidateApks, APK output to ~/Downloads"
+    }
+  ]
+}

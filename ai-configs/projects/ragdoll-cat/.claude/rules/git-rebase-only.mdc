@@ -1,0 +1,39 @@
+---
+description: Git commit and PR synchronization rules for this repository
+alwaysApply: true
+---
+
+# Git Commit / PR Rule (Rebase Only)
+
+為了避免 PR 出現 merge commit，分支同步 `integration`（目前對應 `develop`）時，統一使用 `rebase`，禁止使用 `merge`。
+
+## 禁止指令（會產生 merge commit）
+
+- `git merge origin/develop`
+- `git pull origin develop`
+
+## 正確流程（rebase）
+
+1. `git fetch origin`
+2. `git rebase origin/develop`
+3. `git push --force-with-lease`
+
+## 建議本機 Git 設定
+
+1. `git config --global pull.rebase true`
+2. `git config --global rebase.autoStash true`
+3. `git config --global pull.ff only`
+
+## Branch Naming Convention
+
+- Personal branches: `{name}/{purpose}` (e.g., `brandon/dev`, `jacky/feature`)
+- Do NOT use department-reserved prefixes: `feature/xxx`, `main/xxx`
+- Department branches: `production`, `rc`, `develop`, `hotfix`
+
+## Commit Message Convention
+
+Format: `<type>[<optional scope>]: <description>`
+
+- `scope` is usually the ticket number (Jira or ClickUp), e.g., `fix[AND-333]: implement something.`
+- Message body must be in English.
+- Common types: `feat`, `fix`, `chore`, `refactor`, `test`, `docs`
