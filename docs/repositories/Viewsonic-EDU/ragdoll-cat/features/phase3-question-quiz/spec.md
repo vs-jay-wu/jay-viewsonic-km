@@ -22,12 +22,72 @@
 
 ---
 
+## VSDS Dialog Box 元件說明
+
+> Figma 來源：[Design-Kit---VSDS node-id=4474-609094](https://www.figma.com/design/T01QmXmsYxEPcZT53UHkco/Design-Kit---VSDS?node-id=4474-609094&m=dev)
+
+本規格中多處提及「確認關閉 dialog」，統一採用 VSDS 設計系統的 `dialog-box` 元件（Size = small）。
+
+### 元件結構
+
+```
+┌─────────────────────────────────────┐
+│ [Banner 圖片區 - 選用]          [X] │
+│                                     │
+│ 🔔 Title                            │
+│ Description 說明文字                │
+│ ┌──────────────────────────────┐   │
+│ │  Content replacement area     │   │  ← 選用自訂內容插槽
+│ └──────────────────────────────┘   │
+│ ─────────────────────────────────  │
+│ [Action3]  ℹ Info  [Action2] [Action1] │
+└─────────────────────────────────────┘
+```
+
+### 各區塊說明
+
+| 區塊 | 說明 |
+| --- | --- |
+| Close [X] | 右上角 ghost icon-only 按鈕（xs size），點擊等同取消 |
+| Banner | 選用頂部圖片，不使用時省略 |
+| Title | 粗體標題（headline/sm bold），可附前置 icon |
+| Description | 說明文字（body/xs regular，色調 text-200 灰色） |
+| Content replacement area | 虛線框自訂內容插槽，不需自訂內容時省略 |
+| Divider | footer 上方的水平分隔線 |
+| Action3（左側） | outlined 次要動作，例如「第三選項」，非必要可省略 |
+| Information（左側） | ℹ icon + 文字說明，非必要可省略 |
+| Action2（右側） | ghost/text 按鈕，通常為「取消（Cancel）」 |
+| Action1（右側） | primary filled 主要動作，通常為「確認（Confirm）」 |
+
+### 本功能的「確認關閉 dialog」配置
+
+適用場景：Question 視窗 / 監控視窗 / 公布答案階段，點擊 \[Cancel question\]、\[X\] 後出現的二次確認 dialog。
+
+| 欄位 | 內容 |
+| --- | --- |
+| Banner | 不顯示 |
+| Icon | 無 |
+| Title | 待 UX/設計確認（參考舊版文案） |
+| Description | 提示「關閉後題目將取消，無法復原」等說明文字 |
+| Content replacement area | 不使用 |
+| Action2 | `Cancel`（ghost，點擊關閉 dialog，保留原視窗） |
+| Action1 | `Confirm`（primary，確認後關閉視窗並重置 toolbar 狀態） |
+
+---
+
 ## Architecture Note
 
 > **Standalone vs MVB UI 分離原則**
 >
 > - **Standalone 模式**（從 ClassSwift class management 等非 MVB 入口開啟）：使用**舊的** quiz edit windows（TrueFalseEditWindow、MultipleChoiceEditWindow、PollQuizEditWindow 等）
 > - **MVB 模式**（從 MVB whiteboard 的 ClassSwift toggle 開啟）：使用**新的** `MvbQuestionWindow`，所有題型（是非、選擇、簡答、聲音、投票）統一進入同一個 Question window，再依題型顯示對應設定區
+
+### 舊 UI Layout 檔案（Poll 投票題）
+
+| 用途 | 檔案 |
+| --- | --- |
+| Edit Window（設定頁） | `window_poll_quiz_edit.xml` |
+| Start Window（派送頁） | `window_poll_start_quiz.xml` |
 
 ---
 
@@ -75,10 +135,12 @@
 | **Given** | **When** | **Then** | **figma link** | **備註** |
 | --- | --- | --- | --- | --- |
 | (-)老師已完成截圖，且選擇的題型為「Multiple choice（選擇題）」 | 截圖上傳成功，Question 視窗顯示選擇題設定區 | 顯示截圖預覽與 \[Capture again\] 按鈕<br>\- 顯示 4 個預設答案選項卡片（編號 1–4）<br>\- 每張卡片右上角有刪除圖示按鈕<br>\- 顯示 \[+\] 新增選項按鈕<br>\- 顯示「Answer types」與「Answer options」下拉選單<br>\- 底部顯示 \[Cancel question\] 與 \[Start question\]（enabled） | [@node-id=3215-35929](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3215-35929&m=dev) | 僅選擇題才出現此設定區 |
+| (-)老師已完成截圖，且選擇的題型為「Poll（投票題）」 | 截圖上傳成功，Question 視窗顯示投票題設定區 | 顯示截圖預覽與 \[Capture again\] 按鈕<br>\- 顯示 4 個預設答案選項卡片（編號 1–4）<br>\- 每張卡片右上角有刪除圖示按鈕<br>\- 顯示 \[+\] 新增選項按鈕<br>\- 顯示「Answer types」與「Answer options」下拉選單<br>\- 底部顯示 \[Cancel question\] 與 \[Start question\]（enabled） | | 投票題設定區與選擇題相同 |
 | 在 Question 視窗選擇題設定區 | 點擊 \[+\] 新增選項按鈕 | 新增一張空白答案選項卡片<br>\- 卡片依序編號遞增 最多 6 張 | [@node-id=3215-35929](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3215-35929&m=dev) | |
 | 在 Question 視窗選擇題設定區，已有多張答案選項卡片 | 點擊某張卡片右上角的刪除按鈕 | 該選項卡片移除<br>\- 剩餘卡片重新排序編號 最少 2 張 | [@node-id=3215-35929](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3215-35929&m=dev) | |
 | (-)在 Question 視窗選擇題設定區 | 點擊「Answer types」下拉選單 | 展開答題類型選項供老師選擇 123/abc | [@node-id=3666-39719](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3666-39719&m=dev) | |
 | 在 Question 視窗選擇題設定區 | 點擊「Answer options」下拉選單 | 展開選項，包含「Single-select」與「Multi-select」供老師選擇 | [@node-id=3666-39719](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3666-39719&m=dev) | |
+| 在 Question 視窗投票題設定區 | 點擊「Answer options」下拉選單 | 展開選項，包含「Single vote」與「Multiple votes」供老師選擇（投票題專屬，非 Single-select / Multi-select） | [@node-id=3271-35185](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3271-35185&m=dev)<br>[@node-id=3271-108963](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3271-108963&m=dev) | |
 | 老師已設定好選項內容與答題類型 | 點擊 \[Start question\] | 題目連同答案選項與答題類型派送給學生<br>\- 老師端進入作答監控視窗 | | |
 
 ---
@@ -172,6 +234,18 @@
 | --- | --- | --- | --- |
 | 在結果頁中 | 顯示長條圖的結果 | 針對答對/答錯/有提交/未提交 UI 顯示符合 WCAG 的設計 | |
 | 在結果頁中 | 顯示圓餅圖的結果 | 針對答對/答錯/有提交/未提交 UI 顯示符合 WCAG 的設計 | |
+
+---
+
+### Feature 1-Poll：截圖題 — 投票題（Poll）
+
+| **Ticket** | **說明** |
+| --- | --- |
+| [VSFT-7597](https://viewsonic-vsi.atlassian.net/browse/VSFT-7597) | Capture Screen & Configure Quiz Settings |
+| [VSFT-7598](https://viewsonic-vsi.atlassian.net/browse/VSFT-7598) | Set Answer Options & Question Type After Screenshot Upload |
+| [VSFT-7599](https://viewsonic-vsi.atlassian.net/browse/VSFT-7599) | Teacher Console — Real-time Class Answer Progress View |
+| [VSFT-7600](https://viewsonic-vsi.atlassian.net/browse/VSFT-7600) | Reveal Correct Answer to Students |
+| [VSFT-7601](https://viewsonic-vsi.atlassian.net/browse/VSFT-7601) | Result Page — Class-wide Answer Statistics |
 
 ---
 
