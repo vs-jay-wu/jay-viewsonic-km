@@ -239,13 +239,13 @@
 
 ### Feature 1-Poll：截圖題 — 投票題（Poll）
 
-| **Ticket** | **說明** |
-| --- | --- |
-| [VSFT-7597](https://viewsonic-vsi.atlassian.net/browse/VSFT-7597) | Capture Screen & Configure Quiz Settings |
-| [VSFT-7598](https://viewsonic-vsi.atlassian.net/browse/VSFT-7598) | Set Answer Options & Question Type After Screenshot Upload |
-| [VSFT-7599](https://viewsonic-vsi.atlassian.net/browse/VSFT-7599) | Teacher Console — Real-time Class Answer Progress View |
-| [VSFT-7600](https://viewsonic-vsi.atlassian.net/browse/VSFT-7600) | Reveal Correct Answer to Students |
-| [VSFT-7601](https://viewsonic-vsi.atlassian.net/browse/VSFT-7601) | Result Page — Class-wide Answer Statistics |
+| **Ticket** | **說明** | **Figma** |
+| --- | --- | --- |
+| [VSFT-7597](https://viewsonic-vsi.atlassian.net/browse/VSFT-7597) | Capture Screen & Configure Quiz Settings | |
+| [VSFT-7598](https://viewsonic-vsi.atlassian.net/browse/VSFT-7598) | Set Answer Options & Question Type After Screenshot Upload | [@node-id=3271-35185](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3271-35185&m=dev) |
+| [VSFT-7599](https://viewsonic-vsi.atlassian.net/browse/VSFT-7599) | Teacher Console — Real-time Class Answer Progress View | [@node-id=3215-33808](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3215-33808&m=dev)（監控）[@node-id=3581-120650](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3581-120650&m=dev)（關閉確認 dialog） |
+| [VSFT-7600](https://viewsonic-vsi.atlassian.net/browse/VSFT-7600) | Reveal Correct Answer to Students | Poll 無正確答案，此階段跳過（End and review → 直接進 QUIZ_RESULTS） |
+| [VSFT-7601](https://viewsonic-vsi.atlassian.net/browse/VSFT-7601) | Result Page — Class-wide Answer Statistics | [@node-id=3271-37303](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3271-37303&m=dev)（Overview tab）[@node-id=4068-61584](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=4068-61584&m=dev)（Student responses tab 版型參考，Poll 無正確答案故無綠/紅色） |
 
 ---
 
