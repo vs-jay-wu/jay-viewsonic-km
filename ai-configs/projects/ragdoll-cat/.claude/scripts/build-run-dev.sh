@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and install edlaStagDebug on connected ADB device
+# Build and install stagDebug on connected ADB device
 
 set -euo pipefail
 
@@ -11,7 +11,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 cd "$PROJECT_ROOT"
 
-VARIANT="${1:-edlaStagDebug}"
+VARIANT="${1:-stagDebug}"
 
 echo "Building and installing $VARIANT..."
 ./gradlew "install${VARIANT^}" 2>&1

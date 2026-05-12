@@ -82,12 +82,18 @@
 > - **Standalone 模式**（從 ClassSwift class management 等非 MVB 入口開啟）：使用**舊的** quiz edit windows（TrueFalseEditWindow、MultipleChoiceEditWindow、PollQuizEditWindow 等）
 > - **MVB 模式**（從 MVB whiteboard 的 ClassSwift toggle 開啟）：使用**新的** `MvbQuestionWindow`，所有題型（是非、選擇、簡答、聲音、投票）統一進入同一個 Question window，再依題型顯示對應設定區
 
-### 舊 UI Layout 檔案（Poll 投票題）
+### 舊 UI 位置（Poll 投票題）
 
-| 用途 | 檔案 |
-| --- | --- |
-| Edit Window（設定頁） | `window_poll_quiz_edit.xml` |
-| Start Window（派送頁） | `window_poll_start_quiz.xml` |
+Standalone 模式（非 MVB）下使用的舊版 Poll 視窗，供參考對照：
+
+| 用途 | Kotlin Class | Layout |
+| --- | --- | --- |
+| Edit Window（設定頁） | `ui/window/quiz/edit/PollQuizEditWindow.kt` | `window_poll_quiz_edit.xml` |
+| Start Window（派送頁，含 Quizzing + Result 兩個 stage） | `ui/window/quiz/start/PollQuizStartWindow.kt` | `window_poll_start_quiz.xml` |
+
+> **PollQuizStartWindow 兩個 stage 的程式碼對應：**
+> - **Quizzing stage**（學生作答中）：`onViewCreated()` → `initUI()` 初始化；右側顯示學生格列（`rvAnswerResultList` 用 `QuizAnsweringAdapter`）
+> - **Result stage**（結果頁）：`initCollection()` 中 collect 到 `QuizState.QUIZ_RESULTS` 時呼叫 `changeUiToQuizResultStage()`；`llVotedSummary`、`tbEye`、`llRandomDraw` 變 VISIBLE，`cslbEndQuiz` 變 GONE，adapter 換成 `QuizAnswerResultAdapter`
 
 ---
 
@@ -239,13 +245,18 @@
 
 ### Feature 1-Poll：截圖題 — 投票題（Poll）
 
+> **投票題與一般題型的流程差異：投票題無「公布答案（US-3-1）」階段。**
+> 投票題沒有正確答案，監控結束後直接進入 Result 頁面（QUIZ_RESULTS）。
+>
+> 流程：截圖設定 → 監控 → **End and review → 直接進 QUIZ_RESULTS**（略過公布答案）
+
 | **Ticket** | **說明** | **Figma** |
 | --- | --- | --- |
 | [VSFT-7597](https://viewsonic-vsi.atlassian.net/browse/VSFT-7597) | Capture Screen & Configure Quiz Settings | |
 | [VSFT-7598](https://viewsonic-vsi.atlassian.net/browse/VSFT-7598) | Set Answer Options & Question Type After Screenshot Upload | [@node-id=3271-35185](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3271-35185&m=dev) |
 | [VSFT-7599](https://viewsonic-vsi.atlassian.net/browse/VSFT-7599) | Teacher Console — Real-time Class Answer Progress View | [@node-id=3215-33808](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3215-33808&m=dev)（監控）[@node-id=3581-120650](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3581-120650&m=dev)（關閉確認 dialog） |
-| [VSFT-7600](https://viewsonic-vsi.atlassian.net/browse/VSFT-7600) | Reveal Correct Answer to Students | Poll 無正確答案，此階段跳過（End and review → 直接進 QUIZ_RESULTS） |
-| [VSFT-7601](https://viewsonic-vsi.atlassian.net/browse/VSFT-7601) | Result Page — Class-wide Answer Statistics | [@node-id=3271-37303](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3271-37303&m=dev)（Overview tab）[@node-id=4068-61584](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=4068-61584&m=dev)（Student responses tab 版型參考，Poll 無正確答案故無綠/紅色） |
+| [VSFT-7600](https://viewsonic-vsi.atlassian.net/browse/VSFT-7600) | ~~Reveal Correct Answer to Students~~ | **不適用** — Poll 無正確答案，此 US-3-1 階段不存在 |
+| [VSFT-7601](https://viewsonic-vsi.atlassian.net/browse/VSFT-7601) | Result Page — Class-wide Answer Statistics | [@node-id=3271-37303](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3271-37303&m=dev)（Overview tab，含 label；icon 參考此 node）[@node-id=3271-108984](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=3271-108984&m=dev)（含 label）[@node-id=4068-61584](https://www.figma.com/design/4C21d9puOZJcUyUR26oibd/-VSDS--UI-Design---ClassSwift-Toggle?node-id=4068-61584&m=dev)（Student responses tab 版型參考，Poll 無正確答案故無綠/紅色） |
 
 ---
 

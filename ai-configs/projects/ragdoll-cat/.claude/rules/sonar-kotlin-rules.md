@@ -1,0 +1,193 @@
+---
+description: SonarCloud Kotlin rules snapshot (vsx-viewsonic)
+alwaysApply: true
+---
+
+# SonarCloud Kotlin Rules
+
+Source: https://sonarcloud.io/organizations/vsx-viewsonic/rules
+Language: kotlin
+Snapshot total: 175
+Generated at: 2026-03-20 09:25:20 +0800
+
+## Enforcement
+- For any Kotlin change, follow these Sonar rules by default.
+- If a rule conflicts with project architecture constraints, refactor while keeping both constraints satisfied.
+- Do not merge known violations unless a documented and approved exception exists.
+
+## Rules
+- `kotlin:ParsingError` [MAJOR/CODE_SMELL]: Kotlin parser failure
+- `kotlin:S100` [MINOR/CODE_SMELL]: Function names should comply with a naming convention
+- `kotlin:S101` [MINOR/CODE_SMELL]: Class names should comply with a naming convention
+- `kotlin:S103` [MAJOR/CODE_SMELL]: Lines should not be too long
+- `kotlin:S104` [MAJOR/CODE_SMELL]: Files should not have too many lines of code
+- `kotlin:S105` [MINOR/CODE_SMELL]: Tabulation characters should not be used
+- `kotlin:S1066` [MAJOR/CODE_SMELL]: Mergeable "if" statements should be combined
+- `kotlin:S1067` [CRITICAL/CODE_SMELL]: Expressions should not be too complex
+- `kotlin:S107` [MAJOR/CODE_SMELL]: Functions should not have too many parameters
+- `kotlin:S108` [MAJOR/CODE_SMELL]: Nested blocks of code should not be left empty
+- `kotlin:S1110` [MAJOR/CODE_SMELL]: Redundant pairs of parentheses should be removed
+- `kotlin:S1125` [MINOR/CODE_SMELL]: Boolean literals should not be redundant
+- `kotlin:S1128` [MINOR/CODE_SMELL]: Unnecessary imports should be removed
+- `kotlin:S1133` [INFO/CODE_SMELL]: Deprecated code should be removed
+- `kotlin:S1134` [MAJOR/CODE_SMELL]: Track uses of "FIXME" tags
+- `kotlin:S1135` [INFO/CODE_SMELL]: Track uses of "TODO" tags
+- `kotlin:S1143` [CRITICAL/BUG]: Jump statements should not occur in "finally" blocks
+- `kotlin:S1144` [MAJOR/CODE_SMELL]: Unused "private" methods should be removed
+- `kotlin:S1145` [MAJOR/BUG]: Useless "if(true) {...}" and "if(false){...}" blocks should be removed
+- `kotlin:S1151` [MAJOR/CODE_SMELL]: "when" clauses should not have too many lines of code
+- `kotlin:S117` [MINOR/CODE_SMELL]: Local variable and function parameter names should comply with a naming convention
+- `kotlin:S1172` [MAJOR/CODE_SMELL]: Unused function parameters should be removed
+- `kotlin:S1186` [CRITICAL/CODE_SMELL]: Functions should not be empty
+- `kotlin:S1192` [CRITICAL/CODE_SMELL]: String literals should not be duplicated
+- `kotlin:S1206` [MINOR/BUG]: "equals(Any?)" and "hashCode()" should be overridden in pairs
+- `kotlin:S122` [MAJOR/CODE_SMELL]: Statements should be on separate lines
+- `kotlin:S125` [MAJOR/CODE_SMELL]: Sections of code should not be commented out
+- `kotlin:S126` [CRITICAL/CODE_SMELL]: "if ... else if" constructs should end with "else" clauses
+- `kotlin:S1313` [MINOR/SECURITY_HOTSPOT]: Using hardcoded IP addresses is security-sensitive
+- `kotlin:S134` [CRITICAL/CODE_SMELL]: Control flow statements "if", "for", "while", "when" and "try" should not be nested too deeply
+- `kotlin:S138` [MAJOR/CODE_SMELL]: Functions should not have too many lines of code
+- `kotlin:S1451` [BLOCKER/CODE_SMELL]: Track lack of copyright and license headers
+- `kotlin:S1479` [MAJOR/CODE_SMELL]: "when" statements should not have too many clauses
+- `kotlin:S1481` [MINOR/CODE_SMELL]: Unused local variables should be removed
+- `kotlin:S1656` [MAJOR/BUG]: Variables should not be self-assigned
+- `kotlin:S1763` [MAJOR/BUG]: All code should be reachable
+- `kotlin:S1764` [MAJOR/BUG]: Identical expressions should not be used on both sides of a binary operator
+- `kotlin:S1821` [CRITICAL/CODE_SMELL]: "when" statements should not be nested
+- `kotlin:S1862` [MAJOR/BUG]: Related "if/else if" statements should not have the same condition
+- `kotlin:S1871` [MAJOR/CODE_SMELL]: Two branches in a conditional structure should not have exactly the same implementation
+- `kotlin:S1874` [MINOR/CODE_SMELL]: Code annotated as deprecated should not be used
+- `kotlin:S1940` [MINOR/CODE_SMELL]: Boolean checks should not be inverted
+- `kotlin:S2053` [CRITICAL/VULNERABILITY]: Password hashing functions should use an unpredictable salt
+- `kotlin:S2068` [BLOCKER/SECURITY_HOTSPOT]: Hard-coded credentials are security-sensitive
+- `kotlin:S2097` [MINOR/BUG]: "equals(other: Any?)" should test the argument's type
+- `kotlin:S2114` [MAJOR/BUG]: Collections should not be passed as arguments to their own methods
+- `kotlin:S2116` [MAJOR/BUG]: "hashCode" and "toString" should not be called on array instances
+- `kotlin:S2122` [CRITICAL/BUG]: "ScheduledThreadPoolExecutor" should not have 0 core threads
+- `kotlin:S2123` [MAJOR/BUG]: Values should not be uselessly incremented
+- `kotlin:S2151` [CRITICAL/BUG]: "runFinalizersOnExit" should not be called
+- `kotlin:S2175` [MAJOR/BUG]: Inappropriate collection calls should not be made
+- `kotlin:S2245` [CRITICAL/SECURITY_HOTSPOT]: Using pseudorandom number generators (PRNGs) is security-sensitive
+- `kotlin:S2695` [BLOCKER/BUG]: "PreparedStatement" and "ResultSet" methods should be called with valid indices
+- `kotlin:S2757` [MAJOR/BUG]: Non-existent operators like "=+" should not be used
+- `kotlin:S3329` [CRITICAL/VULNERABILITY]: Cipher Block Chaining IVs should be unpredictable
+- `kotlin:S3353` [CRITICAL/CODE_SMELL]: "var" should be "val" if local variable is never re-assigned
+- `kotlin:S3776` [CRITICAL/CODE_SMELL]: Cognitive Complexity of functions should not be too high
+- `kotlin:S3923` [MAJOR/BUG]: All branches in a conditional structure should not have exactly the same implementation
+- `kotlin:S3958` [MAJOR/BUG]: Intermediate Sequence and Stream functions should not be left unused
+- `kotlin:S3981` [MAJOR/BUG]: Collection and array sizes comparisons should make sense
+- `kotlin:S4144` [MAJOR/CODE_SMELL]: Functions should not have identical implementations
+- `kotlin:S4347` [CRITICAL/VULNERABILITY]: Secure random number generators should not output predictable values
+- `kotlin:S4423` [CRITICAL/VULNERABILITY]: Weak SSL/TLS protocols should not be used
+- `kotlin:S4426` [CRITICAL/VULNERABILITY]: Cryptographic keys should be robust
+- `kotlin:S4507` [MINOR/SECURITY_HOTSPOT]: Delivering code in production with debug features activated is security-sensitive
+- `kotlin:S4663` [MINOR/CODE_SMELL]: Multi-line comments should not be empty
+- `kotlin:S4738` [MAJOR/CODE_SMELL]: Native features should be preferred to Guava
+- `kotlin:S4790` [CRITICAL/SECURITY_HOTSPOT]: Using weak hashing algorithms is security-sensitive
+- `kotlin:S4830` [CRITICAL/VULNERABILITY]: Server certificates should be verified during SSL/TLS connections
+- `kotlin:S5320` [CRITICAL/SECURITY_HOTSPOT]: Broadcasting intents is security-sensitive
+- `kotlin:S5322` [CRITICAL/SECURITY_HOTSPOT]: Receiving intents is security-sensitive
+- `kotlin:S5324` [CRITICAL/SECURITY_HOTSPOT]: Accessing Android external storage is security-sensitive
+- `kotlin:S5332` [CRITICAL/SECURITY_HOTSPOT]: Using clear-text protocols is security-sensitive
+- `kotlin:S5344` [CRITICAL/VULNERABILITY]: Passwords should not be stored in plaintext or with a fast hashing algorithm
+- `kotlin:S5527` [CRITICAL/VULNERABILITY]: Server hostnames should be verified during SSL/TLS connections
+- `kotlin:S5542` [CRITICAL/VULNERABILITY]: Encryption algorithms should be used with secure mode and padding scheme
+- `kotlin:S5547` [CRITICAL/VULNERABILITY]: Cipher algorithms should be robust
+- `kotlin:S5612` [MAJOR/CODE_SMELL]: Lambdas should not have too many lines
+- `kotlin:S5842` [MINOR/BUG]: Repeated patterns in regular expressions should not match the empty string
+- `kotlin:S5843` [MAJOR/CODE_SMELL]: Regular expressions should not be too complicated
+- `kotlin:S5846` [CRITICAL/CODE_SMELL]: Empty lines should not be tested with regex MULTILINE flag
+- `kotlin:S5850` [MAJOR/BUG]: Alternatives in regular expressions should be grouped when used with anchors
+- `kotlin:S5856` [CRITICAL/BUG]: Regular expressions should be syntactically valid
+- `kotlin:S5857` [MINOR/CODE_SMELL]: Character classes should be preferred over reluctant quantifiers in regular expressions
+- `kotlin:S5867` [MINOR/CODE_SMELL]: Unicode-aware versions of character classes should be preferred
+- `kotlin:S5868` [MAJOR/BUG]: Unicode Grapheme Clusters should be avoided inside regex character classes
+- `kotlin:S5869` [MAJOR/CODE_SMELL]: Character classes in regular expressions should not contain the same character twice
+- `kotlin:S6202` [MAJOR/CODE_SMELL]: Operator "is" should be used instead of "isInstance()"
+- `kotlin:S6207` [MAJOR/CODE_SMELL]: Redundant methods should be avoided in data classes
+- `kotlin:S6218` [MAJOR/BUG]: Equals method should be overridden in data classes containing array fields
+- `kotlin:S6288` [MAJOR/SECURITY_HOTSPOT]: Authorizing non-authenticated users to use keys in the Android KeyStore is security-sensitive
+- `kotlin:S6291` [MAJOR/SECURITY_HOTSPOT]: Using unencrypted databases in mobile applications is security-sensitive
+- `kotlin:S6293` [MAJOR/SECURITY_HOTSPOT]: Using biometric authentication without a cryptographic solution is security-sensitive
+- `kotlin:S6300` [MAJOR/SECURITY_HOTSPOT]: Using unencrypted files in mobile applications is security-sensitive
+- `kotlin:S6301` [MAJOR/VULNERABILITY]: Mobile database encryption keys should not be disclosed
+- `kotlin:S6305` [MAJOR/CODE_SMELL]: "MutableStateFlow" and "MutableSharedFlow" should not be exposed
+- `kotlin:S6306` [MAJOR/CODE_SMELL]: Coroutine usage should adhere to structured concurrency principles
+- `kotlin:S6307` [MAJOR/CODE_SMELL]: Suspending functions should be main-safe
+- `kotlin:S6309` [MAJOR/CODE_SMELL]: Functions returning Flow/Channel should not be suspending
+- `kotlin:S6310` [MAJOR/CODE_SMELL]: Dispatchers should be injectable
+- `kotlin:S6311` [MAJOR/CODE_SMELL]: Suspending functions should not be called on a different dispatcher
+- `kotlin:S6312` [MAJOR/CODE_SMELL]: Extension functions on CoroutineScopes should not be declared as "suspend"
+- `kotlin:S6313` [MAJOR/CODE_SMELL]: ViewModel classes should create coroutines
+- `kotlin:S6314` [MAJOR/BUG]: Flow intermediate operation results should not be left unused
+- `kotlin:S6315` [MAJOR/CODE_SMELL]: The return value of functions returning "Deferred" should be used
+- `kotlin:S6316` [MAJOR/CODE_SMELL]: Kotlin coroutines API for timeouts should be used
+- `kotlin:S6318` [MINOR/CODE_SMELL]: "suspend" modifier should not be redundant
+- `kotlin:S6362` [MAJOR/SECURITY_HOTSPOT]: Enabling JavaScript support for WebViews is security-sensitive
+- `kotlin:S6363` [MAJOR/SECURITY_HOTSPOT]: Enabling file access for WebViews is security-sensitive
+- `kotlin:S6418` [BLOCKER/SECURITY_HOTSPOT]: Hard-coded secrets are security-sensitive
+- `kotlin:S6432` [CRITICAL/VULNERABILITY]: Counter Mode initialization vectors should not be reused
+- `kotlin:S6474` [MINOR/SECURITY_HOTSPOT]: Using remote artifacts without authenticity and integrity checks is security-sensitive
+- `kotlin:S6508` [MAJOR/CODE_SMELL]: "Unit" should be used instead of "Void"
+- `kotlin:S6510` [MAJOR/CODE_SMELL]: "return" statements should be lifted before "if" or "when" statement
+- `kotlin:S6511` [MAJOR/CODE_SMELL]: "when" statements should be used instead of chained "if" statements
+- `kotlin:S6512` [MINOR/CODE_SMELL]: Getter and setter pattern should use property getters and setters
+- `kotlin:S6514` [MAJOR/CODE_SMELL]: Delegator pattern should use "by" clause
+- `kotlin:S6515` [MAJOR/CODE_SMELL]: Singleton pattern should use object declarations or expressions
+- `kotlin:S6516` [MAJOR/CODE_SMELL]: Functional interface implementations should use lambda expressions
+- `kotlin:S6517` [MAJOR/CODE_SMELL]: Single function interfaces should be functional interfaces
+- `kotlin:S6518` [MAJOR/CODE_SMELL]: Element access should use indexed access operators
+- `kotlin:S6519` [MAJOR/CODE_SMELL]: Structural equality tests should use "==" or "!="
+- `kotlin:S6524` [MAJOR/CODE_SMELL]: Collection should be immutable if contents is not changed
+- `kotlin:S6526` [MAJOR/CODE_SMELL]: Abstract class should be interface
+- `kotlin:S6527` [MINOR/CODE_SMELL]: Function chain using "filter" should be simplified
+- `kotlin:S6528` [MINOR/CODE_SMELL]: "find" should be replaced with "any", "none" or "contains"
+- `kotlin:S6529` [MAJOR/CODE_SMELL]: Expression should be simplified with "isEmpty", "isNotEmpty" or "isNullOrEmpty"
+- `kotlin:S6530` [MAJOR/CODE_SMELL]: Type casts and type checks that can never succeed should be removed
+- `kotlin:S6531` [MAJOR/CODE_SMELL]: Redundant type casts should be removed
+- `kotlin:S6532` [MAJOR/CODE_SMELL]: Check for preconditions should be simplified
+- `kotlin:S6558` [MAJOR/CODE_SMELL]: "It" shouldn't be used as a lambda parameter name
+- `kotlin:S6611` [MAJOR/BUG]: "Map" values should be accessed safely
+- `kotlin:S6615` [MAJOR/CODE_SMELL]: Variables assigned values should be read
+- `kotlin:S6619` [MAJOR/CODE_SMELL]: Null checks should be useful
+- `kotlin:S6623` [MAJOR/CODE_SMELL]: "tasks.register()" should be preferred over "tasks.create()"
+- `kotlin:S6624` [MAJOR/CODE_SMELL]: Dependency versions shouldn't be hard-coded
+- `kotlin:S6625` [MAJOR/CODE_SMELL]: "rootProject.name" should always be present in Gradle settings
+- `kotlin:S6626` [MAJOR/CODE_SMELL]: Tasks should define "description" and "group"
+- `kotlin:S6629` [MAJOR/CODE_SMELL]: Dependencies should be grouped by destination
+- `kotlin:S6631` [MAJOR/CODE_SMELL]: Gradle settings file should always be present
+- `kotlin:S6634` [MINOR/CODE_SMELL]: Core plugins IDs should be replaced by their shortcuts
+- `kotlin:S7204` [MAJOR/VULNERABILITY]: Obfuscation should be enabled for release builds
+- `kotlin:S7409` [MAJOR/SECURITY_HOTSPOT]: Exposing native code through JavaScript interfaces is security-sensitive
+- `kotlin:S7410` [MAJOR/VULNERABILITY]: Keyboard cache should be disabled for password inputs
+- `kotlin:S7416` [MINOR/VULNERABILITY]: Android production release targets should not be debuggable
+- `kotlin:S7435` [MINOR/SECURITY_HOTSPOT]: Processing persistent unique identifiers is security-sensitive
+- `kotlin:S899` [MINOR/BUG]: Return values should not be ignored when they contain the operation status code
+- `kotlinsecurity:S2076` [BLOCKER/VULNERABILITY]: OS commands should not be vulnerable to command injection attacks
+- `kotlinsecurity:S2078` [BLOCKER/VULNERABILITY]: LDAP queries should not be vulnerable to injection attacks
+- `kotlinsecurity:S2083` [BLOCKER/VULNERABILITY]: I/O function calls should not be vulnerable to path injection attacks
+- `kotlinsecurity:S2091` [BLOCKER/VULNERABILITY]: XPath expressions should not be vulnerable to injection attacks
+- `kotlinsecurity:S2631` [CRITICAL/VULNERABILITY]: Regular expressions should not be vulnerable to Denial of Service attacks
+- `kotlinsecurity:S3649` [BLOCKER/VULNERABILITY]: Database queries should not be vulnerable to injection attacks
+- `kotlinsecurity:S5131` [BLOCKER/VULNERABILITY]: Endpoints should not be vulnerable to reflected cross-site scripting (XSS) attacks
+- `kotlinsecurity:S5135` [BLOCKER/VULNERABILITY]: Deserialization should not be vulnerable to injection attacks
+- `kotlinsecurity:S5144` [MAJOR/VULNERABILITY]: Server-side requests should not be vulnerable to forging attacks
+- `kotlinsecurity:S5145` [MINOR/VULNERABILITY]: Logging should not be vulnerable to injection attacks
+- `kotlinsecurity:S5146` [BLOCKER/VULNERABILITY]: HTTP request redirections should not be open to forging attacks
+- `kotlinsecurity:S5147` [BLOCKER/VULNERABILITY]: NoSQL operations should not be vulnerable to injection attacks
+- `kotlinsecurity:S5334` [BLOCKER/VULNERABILITY]: Dynamic code execution should not be vulnerable to injection attacks
+- `kotlinsecurity:S5496` [BLOCKER/VULNERABILITY]: Server-side templates should not be vulnerable to injection attacks
+- `kotlinsecurity:S5883` [MINOR/VULNERABILITY]: OS commands should not be vulnerable to argument injection attacks
+- `kotlinsecurity:S6096` [BLOCKER/VULNERABILITY]: Extracting archives should not lead to zip slip vulnerabilities
+- `kotlinsecurity:S6173` [MAJOR/VULNERABILITY]: Reflection should not be vulnerable to injection attacks
+- `kotlinsecurity:S6287` [MAJOR/VULNERABILITY]: Applications should not create session cookies from untrusted input
+- `kotlinsecurity:S6350` [MAJOR/VULNERABILITY]: System command arguments constructed from user input should be validated
+- `kotlinsecurity:S6384` [BLOCKER/VULNERABILITY]: Components should not be vulnerable to intent redirection
+- `kotlinsecurity:S6390` [CRITICAL/VULNERABILITY]: Thread suspensions should not be vulnerable to Denial of Service attacks
+- `kotlinsecurity:S6398` [MAJOR/VULNERABILITY]: JSON operations should not be vulnerable to injection attacks
+- `kotlinsecurity:S6399` [MAJOR/VULNERABILITY]: XML operations should not be vulnerable to injection attacks
+- `kotlinsecurity:S6547` [MAJOR/VULNERABILITY]: Environment variables should not be defined from untrusted input
+- `kotlinsecurity:S6549` [MAJOR/VULNERABILITY]: Accessing files should not lead to filesystem oracle attacks
+- `kotlinsecurity:S7044` [MAJOR/VULNERABILITY]: Server-side requests should not be vulnerable to traversing attacks
+- `kotlinsecurity:S7606` [BLOCKER/VULNERABILITY]: WebViews should not be vulnerable to cross-app scripting attacks
+- `kotlinsecurity:S7610` [MAJOR/VULNERABILITY]: Sensitive information should not be logged in production builds

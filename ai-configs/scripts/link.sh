@@ -24,7 +24,17 @@ for name in "${!MAP[@]}"; do
 
   # symlink .claude
   if [ -e "$target/.claude" ] && [ ! -L "$target/.claude" ]; then
-    echo "[warn] $target/.claude 已存在且非 symlink，跳過"
+    echo "[info] $target/.claude 已存在且非 symlink，逐項建立 symlink"
+    while IFS= read -r -d '' item; do
+      item_name=$(basename "$item")
+      link="$target/.claude/$item_name"
+      if [ -e "$link" ] && [ ! -L "$link" ]; then
+        echo "[warn]   $item_name 已存在且非 symlink，跳過"
+      else
+        ln -sfn "$item" "$link"
+        echo "[ok]   $item_name → $link"
+      fi
+    done < <(find "$src/.claude" -maxdepth 1 -mindepth 1 -print0)
   else
     ln -sfn "$src/.claude" "$target/.claude"
     echo "[ok] .claude → $target/.claude"

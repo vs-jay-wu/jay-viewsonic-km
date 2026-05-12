@@ -112,6 +112,15 @@ ClassSwiftTextView → cstv_layout_xxx.xml
 
 ---
 
+## 多國化（i18n）
+
+**由 RD 自行維護所有語系，不使用 POEditor。**
+
+- 所有語系的翻譯字串直接由工程師撰寫並 commit 進 repo
+- 不透過 POEditor 等外部翻譯平台匯入／匯出
+
+---
+
 ## Kotlin Extension Functions
 
 Extension function 應放在對應類別的 `utils/extension/` 目錄下：

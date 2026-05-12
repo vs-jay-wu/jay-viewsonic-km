@@ -28,7 +28,8 @@ alwaysApply: true
 - Windows: `window_xxx`
 - Dialogs: `dialog_xxx`
 - Widgets: `widget_xxx`
-- Custom views: class acronym prefix (e.g., `cstv_xxx`, `cslb_xxx`).
+- Custom views: `{class acronym}_layout_xxx` (e.g., `cstv_layout_xxx`, `cslb_layout_xxx`).
+- Other / undefined: `view_xxx`
 
 ## Layout Resource Density
 
