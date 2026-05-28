@@ -2,7 +2,7 @@
   "_meta": {
     "description": "ViewSonic EDU GitHub 組織的 repo 概覽，供 AI 快速理解各專案用途",
     "organization": "Viewsonic-EDU",
-    "updated": "2026-04-29",
+    "updated": "2026-05-27",
     "totalRepos": 325
   },
   "products": {
@@ -21,7 +21,7 @@
     },
     "sparrow": {
       "fullName": "myViewBoard for Windows",
-      "aliases": ["sparrow", "mvb windows", "myViewBoard Windows"],
+      "aliases": ["sparrow", "mvbw", "mvb windows", "myViewBoard Windows"],
       "description": "Windows UWP 白板與簡報應用程式，代號 Sparrow"
     },
     "vboard": {
@@ -859,7 +859,9 @@
     {
       "name": "ocelot",
       "product": "classswift",
-      "description": "ClassSwift 平台後端服務，負責課堂管理、群組、任務、AI 整合與即時通訊",
+      "aliases": ["api-swift", "cs backend", "ClassSwift backend"],
+      "hostPrefix": "api-swift",
+      "description": "ClassSwift 平台後端服務（cs 主 backend API），負責課堂管理、群組、任務、AI 整合與即時通訊；User Properties 中 server-side 來源（users / organization 等資料表）由此 service 提供",
       "tech": ["Python", "FastAPI"]
     },
     {
@@ -875,19 +877,30 @@
     {
       "name": "african-golden-cat",
       "product": "classswift",
-      "description": "ClassSwift Hub Web App 前端",
-      "tech": ["TypeScript", "React"]
+      "aliases": ["admin-swift", "cs Hub", "ClassSwift Hub"],
+      "hostPrefix": "admin-swift",
+      "description": "ClassSwift Hub / Admin Web App 前端（React + Vite + nginx）",
+      "tech": ["TypeScript", "React", "Vite"],
+      "dependencies": [
+        { "repo": "ocelot", "product": "classswift", "note": "呼叫 cs backend API" }
+      ]
     },
     {
       "name": "maine-coon-cat",
       "product": "classswift",
-      "description": "ClassSwift 主要前端 Web App（React 18）",
-      "tech": ["React", "TypeScript"]
+      "aliases": ["cs Windows (Electron)", "ClassSwift Desktop"],
+      "description": "ClassSwift 跨平台桌面應用（Electron + React 18 + Vite），目前 cs Windows app 的 Electron 實作版本",
+      "tech": ["Electron", "React", "TypeScript", "Vite"],
+      "dependencies": [
+        { "repo": "ocelot", "product": "classswift", "note": "呼叫 cs backend API" }
+      ]
     },
     {
       "name": "fishing-cat",
       "product": "classswift",
-      "description": "ClassSwift 學生端 Web App",
+      "aliases": ["learn-swift"],
+      "hostPrefix": "learn-swift",
+      "description": "ClassSwift Lesson / 學生端 Web App，host 為 `learn-swift.*`",
       "tech": ["TypeScript", "React"]
     },
     {
@@ -920,7 +933,9 @@
     {
       "name": "margay",
       "product": "classswift",
-      "description": "ClassSwift 產品頁面入口（Portal）",
+      "aliases": ["api-swift-product"],
+      "hostPrefix": "api-swift-product",
+      "description": "ClassSwift 產品相關 backend（host `api-swift-product.*`）。註：先前描述為「產品頁面入口（Portal） / React」，但依 cougar config 是 backend，前端 tech 待覆核",
       "tech": ["React"]
     },
     {
@@ -931,7 +946,9 @@
     {
       "name": "siamese-cat",
       "product": "classswift",
-      "description": "ClassSwift 轉盤抽選系統前端，支援 WebView 多平台整合（Windows / Android / Web）",
+      "aliases": ["swift-tools"],
+      "hostPrefix": "swift-tools",
+      "description": "ClassSwift 轉盤抽選系統前端，支援 WebView 多平台整合（Windows / Android / Web），host 為 `swift-tools.*`",
       "tech": ["TypeScript", "React"]
     },
     {
@@ -948,7 +965,9 @@
     {
       "name": "iriomote-cat",
       "product": "classswift",
-      "description": "Android App-Link 重導向服務，處理登入 / 登出 app-link flow"
+      "aliases": ["app-link"],
+      "hostPrefix": "app-link",
+      "description": "App-Link 重導向服務，處理登入 / 登出 app-link flow（host 為 `app-link.*.classswift.com`，含 prd 別名 `app-link.classswift.com`）"
     },
     {
       "name": "edu-oc-api",
@@ -1343,8 +1362,9 @@
     },
     {
       "name": "cougar",
-      "product": null,
-      "description": "AWS 多環境基礎設施 IaC（CDK v2），管理 VPC、EKS、RDS、Redis、S3、CloudFront 等",
+      "product": "classswift",
+      "aliases": ["cs infra", "ClassSwift IaC"],
+      "description": "AWS 多環境基礎設施 IaC（CDK v2），管理 VPC、EKS、RDS、Redis、S3、CloudFront 等；`config/{prd,stg,dev}.json` 提供 domainNamePrefix ↔ projectName 對應，是 cs 生態系命名反查的權威來源",
       "tech": ["AWS CDK", "TypeScript"]
     },
     {
@@ -1447,8 +1467,10 @@
     },
     {
       "name": "puma",
-      "product": null,
-      "description": "學習平台（Learning Platform）Web 應用",
+      "product": "classswift",
+      "aliases": ["classswift (host)"],
+      "hostPrefix": "classswift",
+      "description": "ClassSwift 主站前端（host 為 `classswift.*.classswift.com`，依 cougar config 的 admin region 配置）。先前描述為「學習平台 Web」，與 host 命名不太吻合，待覆核",
       "tech": ["React", "TypeScript"]
     },
     {
@@ -1741,8 +1763,13 @@
     },
     {
       "name": "balinese-cat",
-      "product": null,
-      "description": "（內容待確認）"
+      "product": "classswift",
+      "aliases": ["cs Windows (WPF)", "SWIFT_WPF"],
+      "description": "ClassSwift Windows app 的 WPF 實作版本（C# / .NET，目錄 `SWIFT_WPF/Swift/ClassSwift/`）。與 maine-coon-cat (Electron) 並存且皆活躍維護中，新舊關係待確認",
+      "tech": ["C#", "WPF", ".NET"],
+      "dependencies": [
+        { "repo": "ocelot", "product": "classswift", "note": "呼叫 cs backend API" }
+      ]
     },
     {
       "name": "black-footed-cat",
