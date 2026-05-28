@@ -1,4 +1,4 @@
-Run `.claude/scripts/build-run-dev.sh` in the background with the argument `$ARGUMENTS` (default: `edlaStagDebug`).
+Run `.claude/scripts/build-run-dev.sh` in the background with the argument `$ARGUMENTS` (default: `stagDebug`).
 
 Steps:
 1. Run the script as a background Bash command: `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" .claude/scripts/build-run-dev.sh $ARGUMENTS`
