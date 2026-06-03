@@ -983,7 +983,8 @@
     {
       "name": "edu-oc-portal-picker",
       "product": "oc",
-      "description": "Originals Content 素材選取器元件"
+      "description": "Originals Content 素材選取器 web app（Next.js，部署於 myviewboard.com/originals/picker/，設計成被 mvb 主站嵌入挑素材）",
+      "tech": ["Next.js", "React", "GraphQL", "pnpm"]
     },
     {
       "name": "edu-originals-game-web",
