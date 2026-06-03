@@ -290,30 +290,6 @@ spec `device brand`（`ViewSonic / Acer`）目的是「識別非 ViewSonic 裝�
 
 ---
 
-## Q14【低優先】mvbf `device type` 分類細緻度 + na vs omit
-
-**背景**
-spec `device type` enum：`ifp / desktop / laptop / tablet / phone`。
-
-**Amplitude 實測**：cs 生態幾乎不送 device type —— cs Web / cs Android 都 `(none)`，只有 sparrow（http/2.0）送過 `desktop`（prod 1、preprod 2 個 user）。spec enum 的 `ifp / laptop / tablet / phone` 在真實資料裡從沒出現。
-
-**mvbf 現況**（`_deviceType()`，反而比 cs 完整）：
-```
-IFP 機型(DeviceModel 非 Undefined) → 'ifp'
-mac / windows                      → 'desktop'
-iOS / Android                      → 'tablet'
-其他                               → 'na'
-```
-
-**決定：採 A（維持現狀）** —— 保留現有邏輯，不改 code。但有兩點仍要跟 Zoe 確認：
-
-1. mvbf 把所有 Android 當 `tablet`，**不分 `phone`**（spec 有 phone）。教育場景多在 IFP/平板，手機佔比可能低 —— 要不要分 phone？
-2. mvbf 未知裝置用 `'na'`（spec enum 沒有 na；cs 是直接不送＝`(none)`）。要對齊 cs 的「不送」嗎？還是 `na` 可接受？
-
-**建議找誰**：Zoe（device type 要多細、na vs omit）
-
----
-
 ## Q15【高優先】mvbf vs cs 事件在 Amplitude 無乾淨的來源區分
 
 **背景**
@@ -515,6 +491,5 @@ mvbf 在 `ifp_account_manager._signInIfNeed`（app 啟動以 saved token 自動�
 | Q11 | 🟡 待調查 | — | — | — |
 | Q12 | 🔴 待回覆 | — | — | — |
 | Q13 | 🟢 已改真實品牌，待 Zoe 確認格式 | — | — | — |
-| Q14 | 🟢 採 A 維持現狀，細節待問 Zoe | — | — | — |
 | Q15 | 🔴 待回覆（建議加 source project 標記） | — | — | — |
 | Q16 | 🔴 待回覆（mvbf code 暫改 `'auto'`，命名對齊 Q1） | — | — | — |

@@ -30,6 +30,7 @@
 mvbf-data-tracking/
 ├── README.md                    ← 本檔（索引）
 ├── user-properties-sources.md   ← mvbf 端 user property 逐欄位來源／現況／落差表
+├── next-actions.md              ← 已決定要做、尚未實作的後續工作
 ├── open-questions.md            ← 需要他人決策的疑問（VSFT-8368 範圍內）
 ├── out-of-scope-suggestions.md  ← 不屬於 VSFT-8368 的後續建議（給其他 team 參考）
 ├── investigation/               ← 調查記錄
@@ -56,6 +57,7 @@ mvbf-data-tracking/
 | [`user-properties-sources.md`](user-properties-sources.md) | mvbf 端 user property 逐欄位來源／現況／落差表 | 📝 本機文件 |
 | [`investigation/role-investigation.md`](investigation/role-investigation.md) | `role` user property 的詳細調查（mvb / cs 多套定義、Amplitude 實測誰在送、`gp:` 前綴真相） | 📝 本機文件 |
 | [`open-questions.md`](open-questions.md) | 需要他人決策的疑問（Zoe / 跨團隊），含背景、選項、影響、AI 建議。**VSFT-8368 範圍內** | 📝 本機文件 |
+| [`next-actions.md`](next-actions.md) | 已決定要做、但尚未實作的後續工作（含決策來源與預估影響） | 📝 本機文件 |
 | [`out-of-scope-suggestions.md`](out-of-scope-suggestions.md) | 調查過程發現的、**不屬於 VSFT-8368** 的後續建議（給其他 team 參考） | 📝 本機文件 |
 
 ## 當前狀態
