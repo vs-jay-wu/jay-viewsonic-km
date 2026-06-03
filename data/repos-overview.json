@@ -2,7 +2,7 @@
   "_meta": {
     "description": "ViewSonic EDU GitHub 組織的 repo 概覽，供 AI 快速理解各專案用途",
     "organization": "Viewsonic-EDU",
-    "updated": "2026-05-27",
+    "updated": "2026-06-03",
     "totalRepos": 325
   },
   "products": {
@@ -51,7 +51,7 @@
     },
     "oc": {
       "fullName": "Originals Content",
-      "aliases": ["oc", "originals", "myViewBoard Originals"],
+      "aliases": ["oc", "originals", "original", "originals content", "myViewBoard Originals"],
       "description": "教育內容管理系統（CMS），提供課程與內容素材管理"
     },
     "swiftai": {
