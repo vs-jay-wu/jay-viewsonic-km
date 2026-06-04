@@ -32,16 +32,19 @@ for arg in "$@"; do
 done
 
 # ─── 專案清單 ─────────────────────────────────────────────────────────────────
-# 格式："專案路徑|專案類型|build 資料夾名稱"
+# 格式："專案路徑|專案類型|build 資料夾名稱|clean 指令"
 #
 # 支援的專案類型：
 #   flutter  → build/
 #   node     → node_modules/
 #
-# Clean 方式：一律 cd 進去執行 make clean
+# clean 指令由各專案自行指定（在該專案目錄下執行），例如：
+#   make clean         # edu-droid-flutter 已有 Makefile
+#   flutter clean      # 一般 Flutter 專案
+#   rm -rf node_modules
 
 PROJECTS=(
-  "/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs/Viewsonic-EDU/edu-droid-flutter|flutter|build"
+  "/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs/Viewsonic-EDU/edu-droid-flutter|flutter|build|make clean"
 )
 
 # ─── 工具函式 ─────────────────────────────────────────────────────────────────
@@ -63,9 +66,10 @@ print_header() {
 
 do_clean() {
   local project_path="$1"
+  local clean_cmd="$2"
   local project_name="$(basename "$project_path")"
-  echo "  🧹 清除 $project_name ..."
-  (cd "$project_path" && make clean)
+  echo "  🧹 清除 $project_name （$clean_cmd） ..."
+  (cd "$project_path" && eval "$clean_cmd")
   echo "  ✅ 清除完成"
 }
 
@@ -84,7 +88,9 @@ for entry in "${PROJECTS[@]}"; do
   local_path="${entry%%|*}"
   rest="${entry#*|}"
   project_type="${rest%%|*}"
-  build_dir="${rest#*|}"
+  rest="${rest#*|}"
+  build_dir="${rest%%|*}"
+  clean_cmd="${rest#*|}"
 
   project_name="$(basename "$local_path")"
   build_path="$local_path/$build_dir"
@@ -103,7 +109,7 @@ for entry in "${PROJECTS[@]}"; do
 
   size="$(human_size "$build_path")"
   label="$(printf '%-35s  %s  (%s)' "$project_name" "$size" "$build_dir/")"
-  dirty_entries+=("$local_path|$size|$label")
+  dirty_entries+=("$local_path|$clean_cmd|$size|$label")
   echo "  📦 $project_name：$size（$build_dir/）"
 done
 
@@ -136,8 +142,9 @@ fi
 # 組成 fzf 輸入
 fzf_input=""
 for entry in "${dirty_entries[@]}"; do
-  label="${entry#*|}"
-  label="${label#*|}"
+  label="${entry#*|}"   # 去掉 path
+  label="${label#*|}"   # 去掉 clean_cmd
+  label="${label#*|}"   # 去掉 size，剩下 label
   fzf_input+="$label\n"
 done
 
@@ -175,13 +182,15 @@ cleaned=0
 while IFS= read -r selected_label; do
   [[ -z "$selected_label" ]] && continue
 
-  # 從 dirty_entries 找出對應的專案路徑
+  # 從 dirty_entries 找出對應的專案路徑與 clean 指令
   for entry in "${dirty_entries[@]}"; do
-    label="${entry#*|}"
-    label="${label#*|}"
+    rest="${entry#*|}"            # 去掉 path
+    entry_clean_cmd="${rest%%|*}" # 取 clean_cmd
+    rest="${rest#*|}"             # 去掉 clean_cmd
+    label="${rest#*|}"            # 去掉 size，剩下 label
     if [[ "$label" == "$selected_label" ]]; then
       project_path="${entry%%|*}"
-      do_clean "$project_path"
+      do_clean "$project_path" "$entry_clean_cmd"
       (( cleaned++ )) || true
       break
     fi
