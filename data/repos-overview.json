@@ -295,7 +295,7 @@
     {
       "name": "edu-vbos-finch",
       "product": "vbos",
-      "description": "ViewBoard OS 子系統（Finch），用途未公開"
+      "description": "ViewBoard OS 右下角懸浮 Avatar 啟動器（GLauncher 入口）；單模組 Android app，FinchService 以 WindowManager overlay 顯示 56dp 圓形圖示，點擊以 LAUNCH_FROM_GLAUNCHER 重啟 MainActivity"
     },
     {
       "name": "edu-vbos-flytrap",
