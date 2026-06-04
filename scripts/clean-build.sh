@@ -45,6 +45,8 @@ done
 
 PROJECTS=(
   "/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs/Viewsonic-EDU/edu-droid-flutter|flutter|build|make clean"
+  "/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs/Viewsonic-EDU/edu-oc-api|node|node_modules|rm -rf node_modules"
+  "/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs/Viewsonic-EDU/edu-oc-portal-picker|node|node_modules|rm -rf node_modules .next"
 )
 
 # ─── 工具函式 ─────────────────────────────────────────────────────────────────
