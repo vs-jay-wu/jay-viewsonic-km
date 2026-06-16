@@ -1,0 +1,127 @@
+diff --git a/app/src/main/java/com/viewsonic/finch/FinchService.kt b/app/src/main/java/com/viewsonic/finch/FinchService.kt
+index b16ffbd5..b35ff156 100644
+--- a/app/src/main/java/com/viewsonic/finch/FinchService.kt
++++ b/app/src/main/java/com/viewsonic/finch/FinchService.kt
+@@ -104,6 +104,12 @@ class FinchService : Service() {
+         private const val NOTIFICATION_ID = 1
+ 
+         const val ACTION_SHOW_GOOGLE_APPS_POPUP = "com.viewsonic.finch.action.SHOW_GOOGLE_APPS_POPUP"
++
++        // DEBUG-only Appium hook (temporary demo aid; do NOT commit). Lets the CLI executor
++        // expand the dashboard straight to the MvbLibrary widget AND make the overlay window
++        // focusable so UiAutomator2 can see/tap it (overlays are FLAG_NOT_FOCUSABLE otherwise).
++        const val ACTION_DEBUG_MVB_LIBRARY = "com.viewsonic.finch.action.DEBUG_MVB_LIBRARY"
++        const val EXTRA_DEBUG_MODE = "mode"
+     }
+ 
+     private var windowManager: WindowManager? = null
+@@ -235,6 +241,37 @@ class FinchService : Service() {
+         startSignIn(this)
+     }
+ 
++    /**
++     * DEBUG-only Appium demo hook (temporary; not committed). `expand` opens the dashboard to
++     * the MvbLibrary widget and makes the overlay focusable so UiAutomator2 can tap an item;
++     * `collapse` restores FLAG_NOT_FOCUSABLE and hides the panel so the launched app is visible.
++     */
++    private fun handleDebugMvbLibrary(mode: String) {
++        val coordinator = dashboardCoordinator
++        val panel = dashboardPanel
++        if (coordinator == null || panel == null) {
++            Log.w(TAG, "DEBUG_MVB_LIBRARY ignored: dashboard not initialised yet")
++            return
++        }
++        when (mode) {
++            "collapse" -> {
++                panel.debugSetFocusable(false)
++                panel.dismiss()
++            }
++            else -> {
++                coordinator.expandWithButton()
++                serviceScope.launch {
++                    delay(450)
++                    panel.enterFull()
++                    delay(450)
++                    panel.debugScrollToBottom()
++                    delay(300)
++                    panel.debugSetFocusable(true)
++                }
++            }
++        }
++    }
++
+     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+         Log.d(TAG, "onStartCommand: intent=$intent")
+         startForeground(NOTIFICATION_ID, buildNotification())
+@@ -246,6 +283,11 @@ class FinchService : Service() {
+             return START_STICKY
+         }
+ 
++        if (BuildConfig.DEBUG && intent?.action == ACTION_DEBUG_MVB_LIBRARY) {
++            handleDebugMvbLibrary(intent.getStringExtra(EXTRA_DEBUG_MODE) ?: "expand")
++            return START_STICKY
++        }
++
+         SystemApi.getInstance(this)
+ 
+         val canOverlay = Settings.canDrawOverlays(this)
+diff --git a/app/src/main/java/com/viewsonic/finch/ui/components/dashboard/ExpandableDashboardPanel.kt b/app/src/main/java/com/viewsonic/finch/ui/components/dashboard/ExpandableDashboardPanel.kt
+index 81d5c966..2b3e6c0a 100644
+--- a/app/src/main/java/com/viewsonic/finch/ui/components/dashboard/ExpandableDashboardPanel.kt
++++ b/app/src/main/java/com/viewsonic/finch/ui/components/dashboard/ExpandableDashboardPanel.kt
+@@ -348,6 +348,28 @@ class ExpandableDashboardPanel(
+         panelAnimator.animateTo(0) { setPanelState(PanelState.FULL) }
+     }
+ 
++    /**
++     * DEBUG-only Appium demo hook (temporary; not committed). Toggles FLAG_NOT_FOCUSABLE so
++     * UiAutomator2 can see/tap this overlay (it is non-focusable by default for touch
++     * pass-through). Re-applies layout in place.
++     */
++    fun debugSetFocusable(focusable: Boolean) {
++        windowParams.flags = if (focusable) {
++            windowParams.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
++        } else {
++            windowParams.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
++        }
++        if (isAttachedToWindow) {
++            windowManager.updateViewLayout(this, windowParams)
++        }
++    }
++
++    /** DEBUG-only Appium demo hook (temporary; not committed). Scrolls content to the bottom so
++     *  the MvbLibrary widget (lowest grid row) is fully in view. */
++    fun debugScrollToBottom() {
++        contentScrollView.post { contentScrollView.fullScroll(View.FOCUS_DOWN) }
++    }
++
+     fun dismiss() {
+         // Slide card off the bottom of the window, then collapse the window to 0.
+         panelAnimator.animateTo(fullHeight) {
+diff --git a/app/src/main/java/com/viewsonic/finch/ui/components/dashboard/mvblibrary/MvbLibraryAdapter.kt b/app/src/main/java/com/viewsonic/finch/ui/components/dashboard/mvblibrary/MvbLibraryAdapter.kt
+index d17842fa..11181dc8 100644
+--- a/app/src/main/java/com/viewsonic/finch/ui/components/dashboard/mvblibrary/MvbLibraryAdapter.kt
++++ b/app/src/main/java/com/viewsonic/finch/ui/components/dashboard/mvblibrary/MvbLibraryAdapter.kt
+@@ -60,6 +60,10 @@ class MvbLibraryAdapter(
+ 
+         fun bind(item: LibraryItem) {
+             currentItem = item
++            // DEBUG-only Appium demo aid (temporary; not committed): expose the normalized
++            // content type as the item's content-desc so UiAutomator2 can target an OLF item
++            // precisely (e.g. resourceId library_item_root + description "OLF").
++            itemView.contentDescription = ContentType.from(item.contentType).name
+             tvTitle.text = item.title.ifBlank { item.contentType }
+             tvTime.text = formatRelativeTime(itemView.context, item.lastActive)
+             bindIcon(item)
+diff --git a/app/src/main/res/layout/item_library.xml b/app/src/main/res/layout/item_library.xml
+index b29d76fe..311b4f91 100644
+--- a/app/src/main/res/layout/item_library.xml
++++ b/app/src/main/res/layout/item_library.xml
+@@ -1,6 +1,7 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+   xmlns:app="http://schemas.android.com/apk/res-auto"
++  android:id="@+id/library_item_root"
+   android:layout_width="match_parent"
+   android:layout_height="wrap_content"
+   android:background="@drawable/bg_library_item"
