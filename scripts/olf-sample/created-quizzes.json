@@ -1,0 +1,30 @@
+[
+  {
+    "quiz_type": "TRUE_FALSE",
+    "id": "127f2097-36cb-498c-b984-614a39746ebf"
+  },
+  {
+    "quiz_type": "SINGLE_SELECT",
+    "id": "8a1a7b94-ac22-4249-a426-5fb1ea8277d4"
+  },
+  {
+    "quiz_type": "MULTIPLE_SELECT",
+    "id": "45a13320-c925-41f3-8a84-20525b7c0a0d"
+  },
+  {
+    "quiz_type": "SHORT_ANSWER",
+    "id": "db6f1dd1-1eb1-4e87-aa42-c84808c4de19"
+  },
+  {
+    "quiz_type": "SINGLE_POLL",
+    "id": "4c54e1b9-4ac3-4c31-a304-b810b911d4a9"
+  },
+  {
+    "quiz_type": "MULTIPLE_POLL",
+    "id": "47c63237-32d1-4e8e-9811-acabc74a6edf"
+  },
+  {
+    "quiz_type": "RECORD",
+    "id": "2eb14f86-30f4-4238-a120-8e3d813841d6"
+  }
+]
