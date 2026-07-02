@@ -10,7 +10,7 @@
       "create-time": "2026/04/27/ 17:03:31",
       "create-version": "3.7.3-S",
       "create-platform": "Whiteboard for Android",
-      "modify-time": "2026/07/02 15:55:29",
+      "modify-time": "2026/07/02 16:21:56",
       "modify-version": "3.9.4-S-Whiteboard for Android / 1.66.0-Hub OlfViewer",
       "modify-platform": "Whiteboard for Android",
       "description": "Viewsonic",
@@ -54,7 +54,7 @@
                         "is_answer": false
                       }
                     ],
-                    "img_url": null,
+                    "img_url": "https://media.aps1.classswift-stg.com/preset_quiz/user_id_539bc98f-dc99-456e-8c9b-cf2e6bff4381/img/8189af7f-ef53-4795-a1ff-3576be774610.png",
                     "source_type": "IMPORT_CONTENT",
                     "standards": []
                   },
@@ -86,7 +86,7 @@
                         "is_answer": false
                       }
                     ],
-                    "img_url": null,
+                    "img_url": "https://media.aps1.classswift-stg.com/preset_quiz/user_id_539bc98f-dc99-456e-8c9b-cf2e6bff4381/img/240f7068-fbdf-4b86-9932-ce31d26e5fc7.png",
                     "source_type": "IMPORT_CONTENT",
                     "standards": []
                   },
@@ -118,7 +118,7 @@
                         "is_answer": false
                       }
                     ],
-                    "img_url": null,
+                    "img_url": "https://media.aps1.classswift-stg.com/preset_quiz/user_id_539bc98f-dc99-456e-8c9b-cf2e6bff4381/img/0328db96-195a-4ddb-99fd-6ef15d108ee7.png",
                     "source_type": "IMPORT_CONTENT",
                     "standards": []
                   },
@@ -132,7 +132,7 @@
                       "answer": "Representational State Transfer",
                       "is_ai_answer": false
                     },
-                    "img_url": null,
+                    "img_url": "https://media.aps1.classswift-stg.com/preset_quiz/user_id_539bc98f-dc99-456e-8c9b-cf2e6bff4381/img/1a957adc-dbc4-4793-9b59-20e20d2eb578.png",
                     "source_type": "IMPORT_CONTENT",
                     "standards": []
                   },
@@ -164,7 +164,7 @@
                         "is_answer": false
                       }
                     ],
-                    "img_url": null,
+                    "img_url": "https://media.aps1.classswift-stg.com/preset_quiz/user_id_539bc98f-dc99-456e-8c9b-cf2e6bff4381/img/47a38b78-877b-40d2-a4aa-82fc5c48c6fe.png",
                     "source_type": "IMPORT_CONTENT",
                     "standards": []
                   },
@@ -196,7 +196,7 @@
                         "is_answer": false
                       }
                     ],
-                    "img_url": null,
+                    "img_url": "https://media.aps1.classswift-stg.com/preset_quiz/user_id_539bc98f-dc99-456e-8c9b-cf2e6bff4381/img/86f2c7fa-7c32-499c-a1cc-019ab5bc9ba5.png",
                     "source_type": "IMPORT_CONTENT",
                     "standards": []
                   },
@@ -206,13 +206,13 @@
                     "content": "請用英文說出你的名字",
                     "quiz_type": "RECORD",
                     "option_list": [],
-                    "img_url": null,
+                    "img_url": "https://media.aps1.classswift-stg.com/preset_quiz/user_id_539bc98f-dc99-456e-8c9b-cf2e6bff4381/img/e4ec7079-f40f-44d0-b3a6-db7f47282b6d.png",
                     "source_type": "IMPORT_CONTENT",
                     "standards": []
                   }
                 ]
               },
-              "source": "https://media.aps1.classswift-stg.com/library/editor_session/0268c150-a8d7-4d43-ab1f-2f0c0e3d3c41/73e64faa-a362-4263-88da-1fab07ae559c/assets/html-activities/9c547edf-e20c-4d1b-bc74-9764a2346c92/index.html"
+              "source": "https://media.aps1.classswift-stg.com/library/editor_session/0268c150-a8d7-4d43-ab1f-2f0c0e3d3c41/c7dec2e8-7c03-48de-8161-bd91528079d0/assets/html-activities/9c547edf-e20c-4d1b-bc74-9764a2346c92/index.html"
             }
           },
           "backgrounds": [
@@ -228,7 +228,7 @@
               "background": {
                 "id": "baa1ac50-7ee0-4e86-a305-ed08d1dd0b07",
                 "type": "image",
-                "image-source": "https://media.aps1.classswift-stg.com/library/editor_session/0268c150-a8d7-4d43-ab1f-2f0c0e3d3c41/73e64faa-a362-4263-88da-1fab07ae559c/assets/images/baa1ac50-7ee0-4e86-a305-ed08d1dd0b07.png",
+                "image-source": "https://media.aps1.classswift-stg.com/library/editor_session/0268c150-a8d7-4d43-ab1f-2f0c0e3d3c41/c7dec2e8-7c03-48de-8161-bd91528079d0/assets/images/baa1ac50-7ee0-4e86-a305-ed08d1dd0b07.png",
                 "opacity": 1
               }
             }
