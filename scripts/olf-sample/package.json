@@ -1,0 +1,13 @@
+{
+  "name": "olf-sample-scripts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "login": "node login.mjs",
+    "capture-token": "node capture-token.mjs"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.61.1",
+    "dotenv": "^16.4.5"
+  }
+}

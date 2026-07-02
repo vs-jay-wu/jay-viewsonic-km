@@ -1,0 +1,9 @@
+node_modules/
+storageState.json
+token.json
+*.olf
+downloads/
+
+# playwright-cli workspace（session state / traces / snapshots）
+.playwright/
+.playwright-cli/
