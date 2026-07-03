@@ -7,3 +7,6 @@ local.workspace.json
 # 瀏覽器 profile（含登入 cookie，各裝置自行登入）
 .browser-profile/
 .gitnexus
+
+# Claude Code 排程任務鎖檔（session 專用，不 commit）
+.claude/scheduled_tasks.lock
