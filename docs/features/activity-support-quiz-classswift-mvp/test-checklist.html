@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>測試清單 — Activity Support 1-2 Quiz ClassSwift MVP</title>
+<link rel="stylesheet" href="assets/style.css" />
+<style>
+  /* 測試清單專用：勾選欄 + row 狀態 */
+  table.checklist td:first-child { text-align: center; width: 34px; }
+  table.checklist input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+  table.checklist th:nth-child(2) { width: 150px; }
+  .step { font-size: 13px; }
+  .exp { font-size: 13px; }
+  .k { font-family: monospace; font-size: 12px; background:#f0f3f7; padding:1px 4px; border-radius:3px; }
+  details.known > summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#how">怎麼用這份清單</a></li>
+      <li><a href="#setup">0. 測試前置設定</a></li>
+      <li><a href="#s1">1. Story 1-1 派題 CTA</a></li>
+      <li><a href="#s12">2. Story 1-2 點擊觸發</a></li>
+      <li><a href="#s2">3. Story 2 喚起 / 登入 / 選班 / 視窗</a></li>
+      <li><a href="#s25">4. Story 2-5 派題（Single / Batch）</a></li>
+      <li><a href="#s31">5. Story 3-1 題型打包（4 型）</a></li>
+      <li><a href="#s41">6. Story 4-1 按鈕狀態</a></li>
+      <li><a href="#s42">7. Story 4-2 失敗處理</a></li>
+      <li><a href="#s43">8. Story 4-3 結束派題</a></li>
+      <li><a href="#extra">9. 額外（跨題型/多語系/亮色）</a></li>
+      <li><a href="#known">10. 已知狀況（別緊張）</a></li>
+      <li><a href="#smoke">11. 快速回歸清單</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>測試清單 — Activity Support 1-2 Quiz ClassSwift MVP</h1>
+    <div class="meta">
+      VSFT-7538（mvbf）&middot; VSFT-9338（CS Android）&middot; Phase 1（MVP）<br>
+      本清單把兩份 spec（Windows 507642708 + Android 567050261）的 User Story / AC，
+      整理成「操作步驟 → 預期結果」，<strong>測的時候不用再翻 spec</strong>。
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="investigation-quiz-types.html">🔎 題型調查報告</a>
+      <a href="findings.html">🛠️ 實作 findings</a>
+      <a href="test-checklist.html" class="active">✅ 測試清單</a>
+      <a href="test-scenarios.html">🧪 測試腳本說明</a>
+    </div>
+
+    <div class="callout ok" id="tc-toolbar" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <span>勾選進度：<strong id="tc-progress">0 / 0</strong></span>
+      <span class="sub" style="font-size:12px">✅ 勾選狀態自動存於此瀏覽器（localStorage），重整不會消失</span>
+      <button id="tc-reset" type="button" style="margin-left:auto;cursor:pointer;padding:4px 12px;border:1px solid #c5221f;color:#c5221f;background:#fff;border-radius:6px;font-size:13px">清除全部勾選</button>
+    </div>
+
+    <h2 id="how">怎麼用這份清單</h2>
+    <ul class="compact">
+      <li>每列一個可驗收點：<strong>操作步驟</strong>照做、比對<strong>預期結果</strong>，通過就勾 ☐。</li>
+      <li>只列 <strong>Phase 1</strong> 範圍。投票（POLL）/ 錄音（RECORD）是 Phase 2，<strong>不在這次測試</strong>。</li>
+      <li>看到怪現象先查 <a href="#known">§10 已知狀況</a>——有些是後端 / 既有行為，不是這次的 bug。</li>
+    </ul>
+
+    <!-- ============ 0. 前置 ============ -->
+    <h2 id="setup">0. 測試前置設定</h2>
+    <table class="checklist">
+      <thead><tr><th>☑</th><th>項目</th><th>步驟 / 說明</th></tr></thead>
+      <tbody>
+        <tr><td><input type="checkbox"></td><td>裝置 &amp; App</td>
+          <td class="step">mvbf（<span class="k">com.viewsonic.droid</span>，flavor edla debug）＋ CS Android（<span class="k">...classswift.stag</span>，stagDebug）皆已安裝於同一台。</td></tr>
+        <tr><td><input type="checkbox"></td><td>登入 mvbf</td>
+          <td class="step">用 <span class="k">debug_credentials.dart</span> 帳號登入（右上角出現帳號）。未登入也可測 <a href="#s2">Story 2-2.B</a>。</td></tr>
+        <tr><td><input type="checkbox"></td><td>匯入測試 OLF</td>
+          <td class="step">開啟 <span class="k">/sdcard/Download/mixed-activity-sample.olf</span>。三頁：<br>
+          ① <strong>遊戲頁</strong>（Activity_GAME，不派題）<br>
+          ② <strong>多題頁</strong>（11 題，含 4 型 → <strong>Batch</strong>）<br>
+          ③ <strong>單題頁</strong>（1 題 SINGLE_SELECT → <strong>Single Dispatch</strong>）</td></tr>
+        <tr><td><input type="checkbox"></td><td>學生端</td>
+          <td class="step">另一支手機或瀏覽器（Playwright）開 <span class="k">s.mvb.fyi/join</span> → 輸入 CS「Join Class」面板顯示的 8 碼 Class ID → 選座位 → 輸入名字加入。</td></tr>
+        <tr><td><input type="checkbox"></td><td>切主題（亮色測試用）</td>
+          <td class="step">要測 <a href="#extra">§9 強制亮色</a> 時，把裝置/或 app 切成 dark mode。</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ============ Story 1-1 ============ -->
+    <h2 id="s1">1. Story 1-1：Quiz 課件頁顯示「開始派題」CTA</h2>
+    <table class="checklist">
+      <thead><tr><th>☑</th><th>測試點</th><th>操作步驟</th><th>預期結果</th></tr></thead>
+      <tbody>
+        <tr><td><input type="checkbox"></td><td>派題入口顯示</td><td class="step">開啟含 quiz 的 OLF，切到多題頁 / 單題頁</td><td class="exp">畫布右下角出現藍色「開始派題」按鈕（activity 正下方、靠右）</td></tr>
+        <tr><td><input type="checkbox"></td><td>入口可見性收斂</td><td class="step">切到非 quiz 頁（遊戲頁 / 空白頁）</td><td class="exp"><strong>不顯示</strong>「開始派題」按鈕</td></tr>
+        <tr><td><input type="checkbox"></td><td>UI 簡化</td><td class="step">在 quiz 頁看 activity 工具列</td><td class="exp">不顯示「帳號 / 編輯 / 刪除頁面 / 解析」CTA</td></tr>
+        <tr><td><input type="checkbox"></td><td>答案揭示</td><td class="step">點 activity 上的「答案」（多選/單選/是非題）</td><td class="exp">切換為顯示正解（highlight）；簡答題不顯示「答案」鈕</td></tr>
+        <tr><td><input type="checkbox"></td><td><strong>Inking 不遮擋按鈕</strong></td><td class="step">在 quiz 頁上用筆書寫，把筆畫劃過「開始派題」按鈕位置</td><td class="exp">按鈕<strong>仍可點</strong>、不被筆畫蓋住（按鈕在 ink 之上；tab 底座在 ink 之下可被寫）</td></tr>
+        <tr><td><input type="checkbox"></td><td>Prepare / Present 一致</td><td class="step">切換編輯 / 簡報模式</td><td class="exp">兩模式下按鈕可見性與行為一致</td></tr>
+        <tr><td><input type="checkbox"></td><td>單題 / 多題視覺一致</td><td class="step">分別看單題頁與多題頁的按鈕</td><td class="exp">按鈕外觀一致（老師端不需感知單/多題差異）</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ============ Story 1-2 ============ -->
+    <h2 id="s12">2. Story 1-2：點擊「開始派題」觸發</h2>
+    <table class="checklist">
+      <thead><tr><th>☑</th><th>測試點</th><th>操作步驟</th><th>預期結果</th></tr></thead>
+      <tbody>
+        <tr><td><input type="checkbox"></td><td>Toggle 觸發</td><td class="step">按鈕可點時點一下</td><td class="exp">按鈕進入 <strong>disabled（單純變灰、無轉圈 spinner）</strong>，同時喚起 ClassSwift toggle</td></tr>
+        <tr><td><input type="checkbox"></td><td>派題類型決策</td><td class="step">單題頁點派題 vs 多題頁點派題</td><td class="exp">單題→走 Single（<span class="k">create_quiz</span>）；多題→走 Batch（<span class="k">batch_quizzes</span>）</td></tr>
+        <tr><td><input type="checkbox"></td><td>15s timeout</td><td class="step">讓喚起卡住 ≥15s（例如拔網路 / CS 無回應）</td><td class="exp">顯示啟動逾時 toast + 按鈕回復可點（enabled）</td></tr>
+        <tr><td><input type="checkbox"></td><td>失敗回復</td><td class="step">任一階段失敗（見 <a href="#s42">§7</a>）</td><td class="exp">按鈕回復 enabled + 錯誤 toast（4s 自動消失）</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ============ Story 2 ============ -->
+    <h2 id="s2">3. Story 2-1 ~ 2-4：喚起 / 登入 / 選班 / 派題視窗</h2>
+    <table class="checklist">
+      <thead><tr><th>☑</th><th>測試點</th><th>操作步驟</th><th>預期結果</th></tr></thead>
+      <tbody>
+        <tr><td><input type="checkbox"></td><td>自動喚起 CS</td><td class="step">CS 未開時點「開始派題」</td><td class="exp">自動喚起 CS（toggle 打開），跑 loading / OTA / token 交換，ready 後自動續派（不用再點一次）</td></tr>
+        <tr><td><input type="checkbox"></td><td><strong>已登入</strong> → 選班（2-2.A）</td><td class="step">已登入 mvbf，點派題</td><td class="exp">取得班級列表並引導選班 / one-time class</td></tr>
+        <tr><td><input type="checkbox"></td><td><strong>未登入</strong> → 直接派（2-2.B）</td><td class="step">未登入 mvbf，點派題</td><td class="exp"><strong>不取班級列表、不進選班，以 guest 直接進派題視窗</strong>（此為 Android spec 行為，與 Windows「引導登入」<strong>不同</strong>）</td></tr>
+        <tr><td><input type="checkbox"></td><td>首次派題視窗 Path A</td><td class="step">首次派題、還沒學生加入時</td><td class="exp">跳出 <strong>Join Class 視窗 + 派題視窗並列</strong>（Join Class 在最上層）；視窗位置由 CS 端控制</td></tr>
+        <tr><td><input type="checkbox"></td><td>Join Class 顯示條件</td><td class="step">已有學生加入 vs 沒學生</td><td class="exp">參考 Spinner 邏輯：<strong>有學生就不顯示 Join Class，沒學生才顯示</strong></td></tr>
+        <tr><td><input type="checkbox"></td><td>Late Join 不 timeout</td><td class="step">Path A 開著、遲遲沒學生加入</td><td class="exp">Join Class 視窗不自動關閉；老師可手動關或繼續等</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn"><strong>Path B（連續派題免重 join）是 Phase 2，不在這次測試。</strong>選班本身（Story 2-3）完全沿用既有 Windows Integration 流程。</div>
+
+    <!-- ============ Story 2-5 ============ -->
+    <h2 id="s25">4. Story 2-5：派題後學生作答（Single / Batch）</h2>
+    <table class="checklist">
+      <thead><tr><th>☑</th><th>測試點</th><th>操作步驟</th><th>預期結果</th></tr></thead>
+      <tbody>
+        <tr><td><input type="checkbox"></td><td>Single Dispatch（N=1）</td><td class="step">在<strong>單題頁</strong>點派題 → 學生端作答</td><td class="exp">走 <span class="k">create_quiz</span>；學生收到 1 題並可作答；老師端即時看到答題狀況</td></tr>
+        <tr><td><input type="checkbox"></td><td>Batch Quiz（2≤N≤20）</td><td class="step">在<strong>多題頁</strong>點派題 → 學生端作答</td><td class="exp">走 <span class="k">POST batch_quizzes</span>；學生收到整批題；OPEN→FINISH→DISCLOSED 生命週期正常</td></tr>
+        <tr><td><input type="checkbox"></td><td>共通邊界</td><td class="step">派題中最小化視窗 / 學生斷網重連 / 老師切頁</td><td class="exp">派題狀態維持不中斷（沿用 Phase 0 + socket reconnect）</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ============ Story 3-1 ============ -->
+    <h2 id="s31">5. Story 3-1：題型打包（Phase 1 四型）</h2>
+    <table class="checklist">
+      <thead><tr><th>☑</th><th>測試點</th><th>操作步驟</th><th>預期結果</th></tr></thead>
+      <tbody>
+        <tr><td><input type="checkbox"></td><td>是非題 TRUE_FALSE</td><td class="step">多題頁派題後看學生端第 7、8 題</td><td class="exp">兩選項 + 正解標記正確</td></tr>
+        <tr><td><input type="checkbox"></td><td>單選 SINGLE_SELECT</td><td class="step">看多題頁第 4~6 題 / 單題頁</td><td class="exp"><span class="k">option_type=ALPHABET</span>，含正解</td></tr>
+        <tr><td><input type="checkbox"></td><td>多選 MULTIPLE_SELECT</td><td class="step">多題頁派題後找「岩質行星多選」那題</td><td class="exp">多個 <span class="k">is_answer=true</span>（Mercury+Mars）、<span class="k">option_type=ALPHABET</span></td></tr>
+        <tr><td><input type="checkbox"></td><td>簡答 SHORT_ANSWER</td><td class="step">看多題頁第 1~3 題</td><td class="exp">學生端顯示作答框（無正解）</td></tr>
+        <tr><td><input type="checkbox"></td><td>混合題型同 batch</td><td class="step">多題頁一次派出</td><td class="exp">同一 batch 內含不同 quiz_type，皆正常</td></tr>
+        <tr><td><input type="checkbox"></td><td>欄位缺漏兜底</td><td class="step">（若有測資）題目缺必要欄位</td><td class="exp">該題標 invalid、於該頁排除，不送 broken payload；不整批失敗</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ============ Story 4-1 ============ -->
+    <h2 id="s41">6. Story 4-1：派題期間按鈕狀態</h2>
+    <table class="checklist">
+      <thead><tr><th>☑</th><th>測試點</th><th>操作步驟</th><th>預期結果</th></tr></thead>
+      <tbody>
+        <tr><td><input type="checkbox"></td><td>派題狀態保留</td><td class="step">派題進行中（status=OPEN）切離該頁再切回</td><td class="exp">「開始派題」按鈕仍為 <strong>disabled</strong>，無法重複派</td></tr>
+        <tr><td><input type="checkbox"></td><td>重派觸發</td><td class="step">該題已 FINISH / DISCLOSED / CLOSE 後再點按鈕</td><td class="exp">直接進入新一輪派題流程</td></tr>
+        <tr><td><input type="checkbox"></td><td>只要派題就 disable</td><td class="step">派題後不換頁 / 換到下一頁再回</td><td class="exp">按鈕都維持 disable（會議補充）</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ============ Story 4-2 ============ -->
+    <h2 id="s42">7. Story 4-2：網路 / API 失敗處理</h2>
+    <div class="callout new"><strong>本次實作：失敗以 reason enum 表達</strong>（<span class="k">QuizDispatchFailure</span>：noQuizzes / connectionLost / launchTimeout / dispatchRejected），i18n 在 widget 層。目前四種 reason 顯示同一句 toast：<br>
+      en「Failed to start questions. Please try again.」/ zh-Hant「派題失敗，請再試一次。」/ zh-Hans「派题失败，请再试一次。」</div>
+    <table class="checklist">
+      <thead><tr><th>☑</th><th>失敗情境（reason）</th><th>怎麼觸發</th><th>預期結果</th></tr></thead>
+      <tbody>
+        <tr><td><input type="checkbox"></td><td>連線異常 <span class="k">connectionLost</span></td><td class="step">mVB↔CS IPC 中斷時點派題（或 sendMessage 失敗）</td><td class="exp">顯示錯誤 toast + abort；<strong>不送</strong> single/batch API；按鈕回復 enabled</td></tr>
+        <tr><td><input type="checkbox"></td><td>啟動逾時 <span class="k">launchTimeout</span></td><td class="step">喚起 CS 卡 ≥15s</td><td class="exp">逾時 toast + 按鈕回復 enabled</td></tr>
+        <tr><td><input type="checkbox"></td><td>CS/後端拒絕 <span class="k">dispatchRejected</span></td><td class="step">後端回 5xx / failed（例如重複派撞到 503）</td><td class="exp">顯示錯誤 toast + abort；不顯示派題進行中 UI</td></tr>
+        <tr><td><input type="checkbox"></td><td>空題 <span class="k">noQuizzes</span></td><td class="step">（防禦）該頁過濾後無可派題目</td><td class="exp">顯示錯誤 toast、不派</td></tr>
+        <tr><td><input type="checkbox"></td><td>異常退出</td><td class="step">派題中強制關閉 mVB 再重開</td><td class="exp">不主動重送；按鈕依當前派題 status 呈現</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ============ Story 4-3 ============ -->
+    <h2 id="s43">8. Story 4-3：結束派題回到簡報</h2>
+    <table class="checklist">
+      <thead><tr><th>☑</th><th>測試點</th><th>操作步驟</th><th>預期結果</th></tr></thead>
+      <tbody>
+        <tr><td><input type="checkbox"></td><td>派題收合</td><td class="step">題目 FINISH + REVEAL/DISCLOSED 後，點 CS 端「結束派題」</td><td class="exp">CS 視窗依 Phase 0 收合；CS Toggle 不會自動關閉</td></tr>
+        <tr><td><input type="checkbox"></td><td>強制結束</td><td class="step">進行中（有學生未答完）主動點「結束派題」</td><td class="exp">沿用 finish/close 轉 FINISH</td></tr>
+        <tr><td><input type="checkbox"></td><td>按鈕復原</td><td class="step">CS 視窗收合後回到課件頁</td><td class="exp">「開始派題」按鈕由 disable 轉回 <strong>enable</strong></td></tr>
+        <tr><td><input type="checkbox"></td><td>內容保留</td><td class="step">回到課件頁</td><td class="exp">課件頁與派題前一致（含 ink、Element）</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ============ 額外 ============ -->
+    <h2 id="extra">9. 額外測試（跨題型 / 多語系 / 強制亮色）</h2>
+    <table class="checklist">
+      <thead><tr><th>☑</th><th>測試點</th><th>操作步驟</th><th>預期結果</th></tr></thead>
+      <tbody>
+        <tr><td><input type="checkbox"></td><td>多語系按鈕文案</td><td class="step">切 en / 繁中 / 簡中，看「開始派題」按鈕</td><td class="exp">en「Start question(s)」/ 繁「開始派題」/ 簡「开始派题」；<strong>不 overflow(紅線)、不換行</strong>（過長會等比縮小）</td></tr>
+        <tr><td><input type="checkbox"></td><td><strong>強制亮色</strong>（activity + 按鈕）</td><td class="step">把 app 切成 <strong>dark mode</strong>，再開 quiz 頁</td><td class="exp">activity 白色容器 / tab 底座 / 藍色按鈕<strong>維持亮色</strong>（不變深）；用 <span class="k">VSLightTheme</span> 強制</td></tr>
+        <tr><td><input type="checkbox"></td><td>卡片陰影</td><td class="step">看 activity + tab 底座整體</td><td class="exp">連體卡片有一體 drop shadow（黑@20%/blur16/offset0,4）；WebView 與 tab 接縫不互相投影</td></tr>
+        <tr><td><input type="checkbox"></td><td>按鈕隨畫布縮放</td><td class="step">縮放 / 平移畫布</td><td class="exp">按鈕跟著 activity 一起縮放位移，貼齊 tab 底座</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ============ 已知狀況 ============ -->
+    <h2 id="known">10. 已知狀況（看到別緊張，不是這次的 bug）</h2>
+    <details class="known" open>
+      <summary>✅ 派題後圖片破圖 = 跨環境不支援（非 bug，與後端確認）</summary>
+      <div class="callout warn">
+        <strong>非 bug、非 mvbf/CS 前端問題——跨環境圖片本就不支援（預期行為）。</strong>
+        來源圖（<span class="k">media-rc.us…</span>，RC 產）在 mvbf activity 頁正常（HTTP 200）；派題後 CS 把 img_url 改寫成
+        <span class="k">media.&lt;派題環境&gt;…/lesson_id_…/img/…</span> 回 403，因為派題是 <strong>S3 同 bucket copy</strong>
+        （非 HTTP 抓公開址），RC 來源不在 stage bucket → copy 不到。
+        <strong>用 RC 圖派到 stage 讀不出來是正常</strong>；同環境產題+派題即正常。詳見
+        <a href="findings.html#img-bug">findings §10</a>。測試時此破圖<strong>不算 fail</strong>。
+      </div>
+    </details>
+    <details class="known">
+      <summary>單題頁 vs 多題頁走不同 API</summary>
+      <div class="step" style="padding:6px 0">單題頁（N=1）走 <span class="k">create_quiz</span>（Single），多題頁（N≥2）走 <span class="k">batch_quizzes</span>（Batch）——這是<strong>預期分流</strong>，不是不一致。</div>
+    </details>
+    <details class="known">
+      <summary>投票 / 錄音題不見了？</summary>
+      <div class="step" style="padding:6px 0">POLL / RECORD 是 <strong>Phase 2</strong>，mvbf parser 會過濾掉不打包。這次<strong>不該</strong>出現在派題結果。</div>
+    </details>
+
+    <!-- ============ 快速回歸 ============ -->
+    <h2 id="smoke">11. 快速回歸清單（5 分鐘 smoke test）</h2>
+    <table class="checklist">
+      <thead><tr><th>☑</th><th>步驟</th></tr></thead>
+      <tbody>
+        <tr><td><input type="checkbox"></td><td>開 OLF → 遊戲頁不顯示按鈕、quiz 頁顯示按鈕</td></tr>
+        <tr><td><input type="checkbox"></td><td>單題頁點派題 → 走 Single、學生收到 1 題</td></tr>
+        <tr><td><input type="checkbox"></td><td>多題頁點派題 → 走 Batch、學生收到整批、含 MULTIPLE_SELECT</td></tr>
+        <tr><td><input type="checkbox"></td><td>派題中按鈕 disable（切頁再回仍 disable）</td></tr>
+        <tr><td><input type="checkbox"></td><td>CS 端結束派題 → 按鈕回 enable、回到課件頁內容不變</td></tr>
+        <tr><td><input type="checkbox"></td><td>失敗情境（拔網路點派題）→ 錯誤 toast、按鈕回 enable</td></tr>
+        <tr><td><input type="checkbox"></td><td>dark mode 開 quiz 頁 → 卡片與按鈕仍亮色</td></tr>
+      </tbody>
+    </table>
+
+    <div class="meta" style="margin-top:24px">
+      測試環境：Pixel Tablet（adb 3629105H804NHC）+ 學生端手機 / Playwright。
+      Join：<span class="k">s.mvb.fyi/join</span> + CS 面板的 8 碼 Class ID（每場不同）。
+    </div>
+  </main>
+</div>
+<script>
+(function () {
+  // 勾選狀態持久化：key = 章節 id + 該列文字（比 index 穩，插列/改順序不會錯位）。
+  var STORAGE_KEY = 'activity-quiz-test-checklist-v1';
+  function load() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+    catch (e) { return {}; }
+  }
+  function save(state) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+  }
+
+  var main = document.querySelector('main');
+  var boxes = [];
+  var section = '';
+  // querySelectorAll 依文件順序回傳 → 邊走邊記錄目前章節 id
+  main.querySelectorAll('h2[id], input[type="checkbox"]').forEach(function (node) {
+    if (node.tagName === 'H2') { section = node.id; return; }
+    var row = node.closest('tr');
+    var label = (row ? row.innerText : node.parentElement.innerText)
+      .replace(/\s+/g, ' ').trim().slice(0, 120);
+    node.dataset.tcKey = section + '::' + label;
+    boxes.push(node);
+  });
+
+  var progressEl = document.getElementById('tc-progress');
+  function updateProgress() {
+    var done = boxes.filter(function (b) { return b.checked; }).length;
+    if (progressEl) progressEl.textContent = done + ' / ' + boxes.length;
+  }
+
+  var state = load();
+  boxes.forEach(function (b) {
+    if (state[b.dataset.tcKey]) b.checked = true;
+    b.addEventListener('change', function () {
+      var s = load();
+      if (b.checked) s[b.dataset.tcKey] = true; else delete s[b.dataset.tcKey];
+      save(s);
+      updateProgress();
+    });
+  });
+  updateProgress();
+
+  var resetBtn = document.getElementById('tc-reset');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', function () {
+      if (!window.confirm('清除全部勾選？此動作無法復原。')) return;
+      save({});
+      boxes.forEach(function (b) { b.checked = false; });
+      updateProgress();
+    });
+  }
+})();
+</script>
+</body>
+</html>

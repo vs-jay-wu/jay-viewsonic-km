@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>調查報告：Quiz Activity 題型 — 誰在生產？支援哪些？</title>
+<link rel="stylesheet" href="assets/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#question">🎯 調查問題</a></li>
+      <li><a href="#tldr">📌 TL;DR</a></li>
+      <li><a href="#concept">🧭 OLF Activity 概念釐清</a></li>
+      <li><a href="#producer">🏭 誰在生產 quiz activity？</a></li>
+      <li><a href="#types">📋 Hub 的 7 種題型定義</a></li>
+      <li><a href="#hub-ui">🖱️ Hub UI 實際可建的題型</a></li>
+      <li><a href="#option-types">🔠 Option Type</a></li>
+      <li><a href="#consumers">🎯 消費端：CS Desktop + CS Android</a></li>
+      <li><a href="#matrix">📊 三端完整對照矩陣</a></li>
+      <li><a href="#other-repos">🔍 其他候選 repo 掃描結果</a></li>
+      <li><a href="#pipeline">🔗 端到端資料流</a></li>
+      <li><a href="#authoring-paths">🛠️ 建題到 OLF 的完整路徑</a>
+        <ul class="sub">
+          <li><a href="#reachable">可達路徑（GUI 3 種）</a></li>
+          <li><a href="#dead-ends">死路（CS Android 全滅）</a></li>
+          <li><a href="#backend-bypass">後端繞道（4 種）</a></li>
+          <li><a href="#sample-recipe">產樣本 OLF recipe</a></li>
+        </ul>
+      </li>
+      <li><a href="#real-flow-attempt">🧪 實測結果 2026-07-02</a></li>
+      <li><a href="#open-questions">❓ 開放問題</a></li>
+      <li><a href="#implications">✅ 對 mvbf 派題實作的意涵</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>調查報告：Quiz Activity 題型（生產端）</h1>
+    <div class="meta">
+      調查日期：2026-07-02 &middot; 對應 feature：<code>activity-support-quiz-classswift-mvp</code> &middot;
+      調查焦點：<strong>誰在生產 quiz activity 的內容？他們的題型 schema 是什麼？</strong>
+      <br>方法：Explore agent read-only 掃過 <code>african-golden-cat</code> / <code>maine-coon-cat</code> /
+      <code>edu-mvb-whiteboard-ui</code> / <code>edu-mvb-embeddedform-ui</code> / <code>edu-mvb-artisan-*</code> /
+      <code>edu-ui-hub-game</code> / <code>edu-vboard-olfspec</code>（未修改任何檔案）
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="investigation-quiz-types.html" class="active">🔎 題型調查報告</a>
+      <a href="findings.html">🛠️ 實作 findings</a>
+      <a href="test-checklist.html">✅ 測試清單</a>
+      <a href="test-scenarios.html">🧪 測試腳本說明</a>
+    </div>
+
+    <h2 id="question">🎯 調查問題（修正後）</h2>
+    <div class="callout">
+      OLF 有一個 annotation 種類是 <code>activity</code>，activity 又分子類（<code>phet</code>、<code>game</code>、<code>quiz</code>…）。
+      一鍵派題 focus 在 <code>quiz</code>。
+      <br><br>
+      <strong>問：哪個服務規範了 quiz 的題型？支援 audio / poll…嗎？哪些服務能產出 quiz activity？他們各自支援哪些題型？</strong>
+    </div>
+    <p>（<strong>不是</strong>問 mvbf/Flutter 端支援什麼 — mvbf 是 pass-through，把 activity 資料轉送 ClassSwift 而已。）</p>
+
+    <h2 id="tldr">📌 TL;DR</h2>
+    <ul class="compact">
+      <li><strong>唯一的 quiz activity 生產者是 <code>african-golden-cat</code>（ClassSwift Hub 前端 React/Vite app）。</strong></li>
+      <li><strong>Hub 前端定義 7 種 <code>quiz_type</code></strong>，<strong>UI 全部都可建立/編輯（包含 RECORD）</strong>：<code>SINGLE_SELECT</code>、<code>MULTIPLE_SELECT</code>、<code>SHORT_ANSWER</code>、<code>TRUE_FALSE</code>、<code>RECORD</code>、<code>SINGLE_POLL</code>、<code>MULTIPLE_POLL</code>
+        — <strong>與 Confluence spec 完全一致</strong>。</li>
+      <li>另外定義 <code>option_type</code> enum（4 種）：<code>TRUE_FALSE</code>、<code>ALPHABET</code>、<code>NUMBER</code>、<code>NO_OPTION</code>。</li>
+      <li><strong>OLF activity <code>category</code> 值是 <code>Activity_HTML_QUIZ</code></strong>（不是簡單的 <code>"quiz"</code>）；同層 sibling 有 <code>Activity_PHET</code>、<code>Activity_GAME</code>。</li>
+      <li><strong>消費端分兩個平台：</strong>
+        <ul class="compact">
+          <li>ClassSwift Desktop（<code>maine-coon-cat</code>）— 用<strong>合併 5 種 enum</strong>（<code>MULTIPLE_CHOICE</code> 併吞 SINGLE/MULTIPLE_SELECT；<code>POLL</code> 併吞 SINGLE/MULTIPLE_POLL）</li>
+          <li>ClassSwift Android（<code>ragdoll-cat</code>）— 用<strong>granular 8 種 + UNSPECIFIED</strong>（與 Hub 對齊、額外多 <code>SKETCH_RESPONSE</code>）</li>
+        </ul>
+      </li>
+      <li><strong>對 mvbf pass-through 的好消息：</strong>CS Android enum 與 Hub 命名一致，mvbf 原封 forward Hub 的 <code>quiz_type</code> 給 CS Android 即可，不需 mapping。</li>
+      <li><strong>候選 repo 掃描</strong>：<code>edu-mvb-whiteboard-ui</code>、<code>edu-mvb-embeddedform-ui</code>、<code>edu-mvb-artisan-*</code>、<code>edu-ui-hub-game</code>
+        <strong>都沒找到 quiz activity 生產程式碼</strong>。</li>
+    </ul>
+
+    <h2 id="concept">🧭 OLF Activity 概念釐清</h2>
+    <div class="diagram">
+      <div class="mermaid">
+flowchart TD
+  OLF([OLF 檔案]) --> ANNO[Annotation Layer]
+  ANNO --> ACT[Activity annotation]:::activity
+  ACT --> HA[html-activity 物件]
+  HA -- category --> C1[Activity_HTML_QUIZ]:::quiz
+  HA -- category --> C2[Activity_PHET]:::other
+  HA -- category --> C3[Activity_GAME]:::other
+  HA -- source --> SRC[HTML URL / 相對路徑]
+  SRC --> HTML[HTML content<br/>內含 quiz JSON manifest]
+  HTML --> Q[quizzes 陣列<br/>每題含 quiz_type / option_list / option_type / …]
+
+  classDef activity fill:#eff6ff,stroke:#2563eb,color:#1e3a8a
+  classDef quiz fill:#dcfce7,stroke:#16a34a,color:#14532d
+  classDef other fill:#f3f4f6,stroke:#9ca3af,color:#6b7280,stroke-dasharray: 5 5
+      </div>
+      <div class="diagram-caption">OLF activity 分類與 quiz 內部結構</div>
+    </div>
+
+    <p><strong>來源：</strong></p>
+    <ul class="compact">
+      <li>OLF spec：<code>/edu-vboard-olfspec/OLF_Appendix.md</code> §4.2.2.2 Activity Layer — 定義 <code>html-activity</code> 結構與 <code>category</code> 欄位</li>
+      <li>類別常數：<code>/african-golden-cat/src/libs/olfViewer/types/viewModel.types.ts:52-56</code>
+        <pre><code>OLF_ACTIVITY_CATEGORY = {
+  Activity_HTML_QUIZ: 'Activity_HTML_QUIZ',
+  Activity_PHET:      'Activity_PHET',
+  Activity_GAME:      'Activity_GAME',
+}</code></pre>
+      </li>
+    </ul>
+    <div class="callout warn">
+      <strong>重要更正：</strong>之前 Confluence spec 描述用 <code>category: "quiz"</code>，實際 OLF wire format 是 <code>Activity_HTML_QUIZ</code>。
+      mvbf 判斷「這頁是 quiz 課件」時要用完整字串比對。
+    </div>
+
+    <h2 id="producer">🏭 誰在生產 quiz activity？</h2>
+    <div class="source-card">
+      <div class="title">🎯 <code>african-golden-cat</code> — ClassSwift Hub 前端（唯一生產者）</div>
+      <div class="id">/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs/Viewsonic-EDU/african-golden-cat</div>
+      <div>Tech stack: React + Vite；扮演 CS Hub 的 slide editor / 內容製作平台</div>
+    </div>
+    <h4>關鍵檔案</h4>
+    <table>
+      <thead><tr><th>檔案</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>src/enums/quiz.ts</code>（line 27-35）</td>
+          <td><code>QUIZ_TYPE</code> enum：7 種題型的規範來源</td>
+        </tr>
+        <tr>
+          <td><code>src/constant/quiz.ts</code>（line 1-38）</td>
+          <td>執行期常數；含 <code>QUIZ_TYPE_I18N_KEY_MAP</code>（每題型對應 i18n key）</td>
+        </tr>
+        <tr>
+          <td><code>src/components/pages/SlideEditor/ActivityQuizEditor/ActivityQuizEditDialog.tsx</code></td>
+          <td>Quiz activity 編輯對話框（老師建立題目的 UI 入口）</td>
+        </tr>
+        <tr>
+          <td><code>src/components/pages/SlideEditor/ActivityQuizEditor/useActivityQuizEditor.ts</code></td>
+          <td>Quiz editor 狀態管理 hook（<code>useQuizEditController</code> 處理題目/選項）</td>
+        </tr>
+        <tr>
+          <td><code>src/libs/olfViewer/services/olf/export/document.exporter.ts</code>（line 626-732）</td>
+          <td>把 view-model quiz 匯出成 OLF <code>html-activity</code> wire format</td>
+        </tr>
+        <tr>
+          <td><code>src/libs/olfViewer/types/viewModel.types.ts</code>（line 52-56）</td>
+          <td><code>OLF_ACTIVITY_CATEGORY</code> 常數（<code>Activity_HTML_QUIZ</code> / <code>Activity_PHET</code> / <code>Activity_GAME</code>）</td>
+        </tr>
+        <tr>
+          <td><code>src/api/services/editorSessionService.ts</code>（line 44-50）</td>
+          <td>API endpoint <code>GET /editor-session/quiz/html-template</code>：後端產生實際 HTML template 的入口</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>匯出到 OLF 的 quiz 欄位（<code>mapViewModelQuizToOlfHtmlQuiz</code>, line 705-732）</h4>
+    <ul class="compact">
+      <li><code>id</code> / <code>seq</code>（順序）</li>
+      <li><code>content</code>（題幹）</li>
+      <li><code>quiz_type</code>（7 種其中之一）</li>
+      <li><code>option_type</code>（4 種其中之一）</li>
+      <li><code>option_list</code>（選項陣列）</li>
+      <li><code>short_answer</code>（簡答題參考解答，含 <code>isAiAnswer</code>）</li>
+      <li><code>img_url</code>（圖片附件 — <strong>存 URL，非 base64</strong>）</li>
+      <li><code>source_type</code></li>
+      <li><code>standards</code>、<code>subject_id</code>、<code>grade</code>（教育標籤 metadata）</li>
+    </ul>
+    <div class="callout ok">
+      <strong>對「圖片題」的答案：</strong>不是獨立 <code>quiz_type</code>，是任何題型都可以帶的 <code>img_url</code> 欄位；
+      Hub 存 URL 而非 base64/path。之前會議的疑問（"URL or Path?"）從 Hub 這端看是 URL。
+    </div>
+
+    <h2 id="types">📋 Hub 定義的 7 種題型</h2>
+    <p>來源：<code>african-golden-cat/src/enums/quiz.ts</code></p>
+    <table>
+      <thead>
+        <tr><th>#</th><th><code>quiz_type</code></th><th>中文</th><th>典型 <code>option_type</code></th><th>特徵</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td><code>SINGLE_SELECT</code></td><td>單選</td><td><code>ALPHABET</code> / <code>NUMBER</code> / <code>TRUE_FALSE</code></td><td>多選項，只有 1 個 <code>is_answer=true</code></td></tr>
+        <tr><td>2</td><td><code>MULTIPLE_SELECT</code></td><td>多選</td><td><code>ALPHABET</code> / <code>NUMBER</code></td><td>多選項，多個 <code>is_answer=true</code></td></tr>
+        <tr><td>3</td><td><code>TRUE_FALSE</code></td><td>是非</td><td><code>TRUE_FALSE</code> / <code>ALPHABET</code> / <code>NUMBER</code></td><td>2 個選項（T/F、A/B、1/2 三種呈現）</td></tr>
+        <tr><td>4</td><td><code>SHORT_ANSWER</code></td><td>簡答</td><td><code>NO_OPTION</code></td><td>無選項，含 <code>short_answer</code> 參考解答，可 AI 判分</td></tr>
+        <tr><td>5</td><td><code>SINGLE_POLL</code></td><td>投票（單）</td><td><code>ALPHABET</code> / <code>NUMBER</code></td><td>單選投票，無正解</td></tr>
+        <tr><td>6</td><td><code>MULTIPLE_POLL</code></td><td>投票（多）</td><td><code>ALPHABET</code> / <code>NUMBER</code></td><td>多選投票，無正解</td></tr>
+        <tr><td>7</td><td><code>RECORD</code></td><td>錄音</td><td>N/A</td><td>語音錄音題（Hub 目前主要在 CS Desktop 播放端出現，Hub 前端 authoring 是否可建 待確認）</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>發現：</strong>Hub 定義的這 7 種 <strong>= Confluence spec 列的 7 種</strong>（Phase 1 前 4 + Phase 2 後 3）。
+      也就是說 Confluence spec 的題型清單，就是直接引用 Hub 前端的 <code>QUIZ_TYPE</code> enum。
+    </div>
+
+    <h2 id="hub-ui">🖱️ Hub UI 實際可建的題型（<strong>全部 7 種都可建</strong>）</h2>
+    <div class="callout ok">
+      <strong>結論：<code>QUIZ_TYPE</code> enum 7 種在 Hub UI 上全部可建立/編輯，包含 RECORD。</strong>
+      沒有「enum 有但 UI 不給建」的情況。
+    </div>
+
+    <h4>證據</h4>
+    <table>
+      <thead><tr><th>檔案</th><th>證據</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>src/enums/quiz.ts</code>（line 27-35）</td>
+          <td>7 種 <code>QUIZ_TYPE</code> enum 定義</td>
+        </tr>
+        <tr>
+          <td><code>src/constant/quiz.ts</code>（line 30-38）</td>
+          <td><code>QUIZ_TYPE_I18N_KEY_MAP</code> — 7 種都有 i18n key（<code>quizTrueFalse</code>、<code>quizMultipleSelect</code>、<code>quizRecord</code>、<code>quizShortAnswer</code>、<code>quizPoll</code>）代表 UI 都會呈現</td>
+        </tr>
+        <tr>
+          <td><code>src/components/pages/SlideEditor/ActivityQuizEditor/activityQuiz.mapper.ts</code>（line 23-30）</td>
+          <td>各題型的驗證規則 — RECORD 屬於「<code>QUIZ_TYPES_WITHOUT_OPTIONS</code>」與「<code>QUIZ_TYPES_WITHOUT_REQUIRED_ANSWER</code>」，仍算合法可儲存</td>
+        </tr>
+        <tr>
+          <td><code>src/components/pages/SlideEditor/QuizObjectCard/useQuizEditController.ts</code></td>
+          <td>Quiz editor controller 處理全部 7 種的建立/編輯</td>
+        </tr>
+        <tr>
+          <td><code>src/enums/quiz.ts</code>（line 41-48）</td>
+          <td><code>COLLECTION_QUIZ_CATEGORY</code> filter — 含 <code>TrueFalse</code> / <code>MultipleChoice</code> / <code>Record</code> / <code>ShortAnswer</code> / <code>Poll</code> 五類，代表題庫可篩選 RECORD</td>
+        </tr>
+        <tr>
+          <td><code>src/components/pages/QuizCollection/QuizDetail/useQuizEditForm.ts</code></td>
+          <td>Quiz Collection detail editor 對 7 種都有驗證規則</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout warn">
+      <strong>特殊觀察：</strong><code>QUIZ_TYPE_I18N_KEY_MAP</code> 把 <code>SINGLE_SELECT</code> 與 <code>MULTIPLE_SELECT</code> 共用 <code>quizMultipleSelect</code>，把 <code>SINGLE_POLL</code> 與 <code>MULTIPLE_POLL</code> 共用 <code>quizPoll</code>。
+      也就是說在 <strong>UI 顯示名稱層級</strong>，Hub 已經把單/多視為同一群（跟 Desktop 的合併類似）；
+      但 wire format / OLF 匯出時仍保留 7 種原始值。
+    </div>
+
+    <h2 id="option-types">🔠 Option Type（獨立 enum）</h2>
+    <p>來源：<code>african-golden-cat/src/enums/quiz.ts</code>（<code>OPTION_TYPE</code>）</p>
+    <table>
+      <thead><tr><th>值</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><code>TRUE_FALSE</code></td><td>是非題的 T/F 兩選項</td></tr>
+        <tr><td><code>ALPHABET</code></td><td>A / B / C / D…（單選、多選、投票的預設）</td></tr>
+        <tr><td><code>NUMBER</code></td><td>1 / 2 / 3 / 4…</td></tr>
+        <tr><td><code>NO_OPTION</code></td><td>簡答題等無選項題型使用</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>命名衝突注意：</strong><code>TRUE_FALSE</code> 同時是 <code>quiz_type</code> 與 <code>option_type</code> 的合法值。
+      判斷時要看欄位而非只看值。
+    </div>
+
+    <h2 id="consumers">🎯 消費端：CS Desktop 與 CS Android</h2>
+
+    <div class="source-card">
+      <div class="title">🖥️ <code>maine-coon-cat</code> — ClassSwift Desktop（Electron）</div>
+      <div class="id">/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs/Viewsonic-EDU/maine-coon-cat/src/renderer/enums/quizEnum.ts（line 10-16）</div>
+    </div>
+    <pre><code>enum QuizType {
+  TRUE_FALSE       = 'TRUE_FALSE',
+  MULTIPLE_CHOICE  = 'MULTIPLE_CHOICE',  // 合併 SINGLE_SELECT + MULTIPLE_SELECT
+  RECORD           = 'RECORD',
+  SHORT_ANSWER     = 'SHORT_ANSWER',
+  POLL             = 'POLL',             // 合併 SINGLE_POLL + MULTIPLE_POLL
+}</code></pre>
+    <ul class="compact">
+      <li><strong>5 種合併型</strong>：把 Hub 的單/多選合併，把 Hub 的單/多投票合併。</li>
+      <li>單/多的區分要靠 <code>option_list</code> 中 <code>is_answer=true</code> 的個數判斷。</li>
+    </ul>
+
+    <div class="source-card">
+      <div class="title">📱 <code>ragdoll-cat</code> — ClassSwift Android（Kotlin）</div>
+      <div class="id">/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs/Viewsonic-EDU/ragdoll-cat/app/src/main/java/com/viewsonic/classswift/data/quiz/QuizType.kt（line 7-8）</div>
+    </div>
+    <pre><code>enum class QuizType {
+  UNSPECIFIED, TRUE_FALSE, SINGLE_SELECT, MULTIPLE_SELECT,
+  RECORD, SHORT_ANSWER, SINGLE_POLL, MULTIPLE_POLL,
+  SKETCH_RESPONSE;
+}</code></pre>
+    <ul class="compact">
+      <li><strong>8 種 active + <code>UNSPECIFIED</code> fallback</strong>。</li>
+      <li>與 Hub 完全 granular 對齊（單/多分開；投票單/多分開）— <strong>比 Desktop 更完整</strong>。</li>
+      <li><strong>額外多一個 <code>SKETCH_RESPONSE</code></strong>（Android 獨有）— Hub 沒定義、Desktop 沒定義；可能是 Android 特有的手寫回答題型（Flutter 版 mvbf enum 也有 <code>SKETCH_RESPONSE</code>，與 Android 一致）。</li>
+    </ul>
+
+    <div class="callout ok">
+      <strong>關鍵發現：mvbf 派題到 CS Android 時 pass-through 沒有 mapping 問題。</strong><br>
+      因為 Hub authoring 7 種（<code>SINGLE_SELECT</code> / <code>MULTIPLE_SELECT</code> / <code>SINGLE_POLL</code> / <code>MULTIPLE_POLL</code> …）
+      在 CS Android 側完全對應（同樣的字串），mvbf 只需原封 forward。
+      Desktop 的合併對映是 Desktop 內部的事，與 Android 派題流程無關。
+    </div>
+
+    <h2 id="matrix">📊 三端完整對照矩陣</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>題型</th>
+          <th>🏭 Hub（生產）<br><code>african-golden-cat</code></th>
+          <th>🖥️ CS Desktop（消費）<br><code>maine-coon-cat</code></th>
+          <th>📱 CS Android（消費）<br><code>ragdoll-cat</code></th>
+          <th>📝 Confluence spec</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>是非</td>
+          <td><code>TRUE_FALSE</code></td>
+          <td><code>TRUE_FALSE</code></td>
+          <td><code>TRUE_FALSE</code></td>
+          <td><code>TRUE_FALSE</code>（Phase 1）</td>
+        </tr>
+        <tr>
+          <td>單選</td>
+          <td><code>SINGLE_SELECT</code></td>
+          <td rowspan="2"><code>MULTIPLE_CHOICE</code><br>（合併）</td>
+          <td><code>SINGLE_SELECT</code></td>
+          <td><code>SINGLE_SELECT</code>（Phase 1）</td>
+        </tr>
+        <tr>
+          <td>多選</td>
+          <td><code>MULTIPLE_SELECT</code></td>
+          <td><code>MULTIPLE_SELECT</code></td>
+          <td><code>MULTIPLE_SELECT</code>（Phase 1）</td>
+        </tr>
+        <tr>
+          <td>簡答</td>
+          <td><code>SHORT_ANSWER</code></td>
+          <td><code>SHORT_ANSWER</code></td>
+          <td><code>SHORT_ANSWER</code></td>
+          <td><code>SHORT_ANSWER</code>（Phase 1）</td>
+        </tr>
+        <tr>
+          <td>投票（單）</td>
+          <td><code>SINGLE_POLL</code></td>
+          <td rowspan="2"><code>POLL</code><br>（合併）</td>
+          <td><code>SINGLE_POLL</code></td>
+          <td><code>SINGLE_POLL</code>（Phase 2）</td>
+        </tr>
+        <tr>
+          <td>投票（多）</td>
+          <td><code>MULTIPLE_POLL</code></td>
+          <td><code>MULTIPLE_POLL</code></td>
+          <td><code>MULTIPLE_POLL</code>（Phase 2）</td>
+        </tr>
+        <tr>
+          <td>錄音</td>
+          <td><code>RECORD</code></td>
+          <td><code>RECORD</code></td>
+          <td><code>RECORD</code></td>
+          <td><code>RECORD</code>（Phase 2）</td>
+        </tr>
+        <tr>
+          <td>手寫回答</td>
+          <td>—</td>
+          <td>—</td>
+          <td><code>SKETCH_RESPONSE</code> <span class="badge badge-warn">Android 獨有</span></td>
+          <td>—（spec 未收）</td>
+        </tr>
+        <tr>
+          <td>fallback</td>
+          <td>—</td>
+          <td>—</td>
+          <td><code>UNSPECIFIED</code></td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout new">
+      <strong>觀察：</strong>
+      <ul style="margin: 6px 0 0 20px">
+        <li><strong>Hub ↔ CS Android 命名 100% 對齊</strong>（連 <code>SINGLE_POLL</code> / <code>MULTIPLE_POLL</code> / <code>RECORD</code> 都一致）</li>
+        <li><strong>Desktop 是唯一做合併的</strong>（把 SINGLE/MULTIPLE 併吞）— 與 mvbf 派題流程無關</li>
+        <li><strong><code>SKETCH_RESPONSE</code></strong> 只在 CS Android 存在 — 也沒在 Hub 產出的 OLF 中出現（Hub 不建這種）；預期只會在 CS Android 內部場景使用，OLF activity 派題流程用不到</li>
+      </ul>
+    </div>
+
+    <h2 id="other-repos">🔍 其他候選 repo 掃描結果</h2>
+    <table>
+      <thead><tr><th>Repo</th><th>結果</th><th>結論</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>edu-mvb-whiteboard-ui</code></td>
+          <td>沒找到 quiz 生產程式碼</td>
+          <td>myViewBoard whiteboard/hub UI 不生產 quiz activity</td>
+        </tr>
+        <tr>
+          <td><code>edu-mvb-embeddedform-ui</code></td>
+          <td>沒找到 quiz 生產程式碼</td>
+          <td>命名有「form」但與 CS quiz activity 無關</td>
+        </tr>
+        <tr>
+          <td><code>edu-mvb-artisan-web</code></td>
+          <td>沒找到 quiz / activity 相關實作</td>
+          <td>非 quiz 生產者</td>
+        </tr>
+        <tr>
+          <td><code>edu-mvb-artisan-ai</code></td>
+          <td>沒找到</td>
+          <td>非 quiz 生產者</td>
+        </tr>
+        <tr>
+          <td><code>edu-ui-hub-game</code></td>
+          <td>沒找到 quiz 相關（可能是 <code>Activity_GAME</code> 這一支）</td>
+          <td>屬 activity 兄弟類別，非 quiz</td>
+        </tr>
+        <tr>
+          <td><code>edu-mvb-hub-testcase</code></td>
+          <td>只有測試場景 metadata，沒實際 OLF 樣本</td>
+          <td>不是生產者，是 QA 資料</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout ok">
+      <strong>結論：quiz activity 的生產完全集中在 <code>african-golden-cat</code>（CS Hub 前端）。</strong>
+      沒有第二個服務會產出 <code>Activity_HTML_QUIZ</code> 的 activity。
+    </div>
+
+    <h2 id="pipeline">🔗 端到端資料流</h2>
+    <div class="diagram">
+      <div class="mermaid">
+flowchart LR
+  A[老師在 CS Hub 建題<br/><code>african-golden-cat</code>]:::hub
+  A --> B[Hub 前端<br/>QUIZ_TYPE enum 7 種]
+  B --> C[POST 存至後端<br/>編輯 session]
+  C --> D[GET quiz/html-template<br/>後端渲染 HTML]:::backend
+  D --> E[OLF 匯出<br/>document.exporter.ts]
+  E --> F[OLF 檔<br/>activity-layer<br/>category=Activity_HTML_QUIZ<br/>source=HTML url]:::olf
+  F --> G[老師開檔於 mVBW / mVBA]:::mvb
+  G --> H{切到 quiz 課件頁}
+  H --> I[點「開始派題」]
+  I --> J[mvbf 解析 activity JSON]:::mvb
+  J -- AIDL forward --> K[CS Android<br/><code>ragdoll-cat</code><br/>8 種 granular enum]:::csa
+  K --> M[派題 API<br/>Single / Batch]
+  F -. mVBW 桌面派題 .-> D2[CS Desktop<br/><code>maine-coon-cat</code><br/>5 種合併 enum]:::csd
+  D2 --> M
+
+  classDef csa fill:#cffafe,stroke:#0891b2,color:#164e63
+  classDef csd fill:#e0e7ff,stroke:#6366f1,color:#312e81
+
+  classDef hub fill:#dcfce7,stroke:#16a34a,color:#14532d
+  classDef backend fill:#e0e7ff,stroke:#6366f1,color:#312e81
+  classDef olf fill:#fef9c3,stroke:#ca8a04,color:#78350f
+  classDef mvb fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
+  classDef cs fill:#cffafe,stroke:#0891b2,color:#164e63
+      </div>
+      <div class="diagram-caption">Quiz 從 CS Hub 建立 → OLF → mvbf 讀取 → AIDL → CS Android 派題</div>
+    </div>
+
+    <h2 id="authoring-paths">🛠️ 建題到 OLF 的完整路徑（跨 repo 追程式碼結果）</h2>
+    <div class="callout new">
+      <strong>結論（略過 CS Desktop）：GUI 只能建 3 種題型；其餘 4 種必須直接打 <code>ocelot</code> 後端 API。</strong>
+    </div>
+
+    <h3>可達性總表</h3>
+    <table>
+      <thead><tr><th>題型</th><th>GUI 可達</th><th>路徑</th></tr></thead>
+      <tbody>
+        <tr><td><code>SINGLE_SELECT</code></td><td><span class="badge badge-ok">✅</span></td><td>Hub AI 上傳生題</td></tr>
+        <tr><td><code>TRUE_FALSE</code></td><td><span class="badge badge-ok">✅</span></td><td>Hub AI 上傳生題</td></tr>
+        <tr><td><code>SHORT_ANSWER</code></td><td><span class="badge badge-ok">✅</span></td><td>Hub AI 上傳生題</td></tr>
+        <tr><td><code>MULTIPLE_SELECT</code></td><td><span class="badge badge-err">❌</span></td><td>需 curl ocelot <code>POST /quizzes/collection/quiz</code></td></tr>
+        <tr><td><code>SINGLE_POLL</code></td><td><span class="badge badge-err">❌</span></td><td>需 curl ocelot</td></tr>
+        <tr><td><code>MULTIPLE_POLL</code></td><td><span class="badge badge-err">❌</span></td><td>需 curl ocelot</td></tr>
+        <tr><td><code>RECORD</code></td><td><span class="badge badge-err">❌</span></td><td>需 curl ocelot</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="reachable">✅ GUI 可達路徑（3 種）</h3>
+    <div class="diagram">
+      <div class="mermaid">
+flowchart TD
+  U([老師登入 Hub Web]) --> QC[Quiz Collection page]
+  QC --> UP[點「上傳檔案」<br/>Upload File]
+  UP --> API1[POST /quizzes/collection/resources<br/>取 S3 upload URL]:::api
+  API1 --> S3[S3 upload]
+  S3 --> API2[POST /quizzes/collection/drafts/ai_analyzation]:::api
+  API2 --> LLM[ocelot: create_quiz_collection_draft<br/>LLM 產題 <em>僅限 3 種</em>]:::llm
+  LLM --> DRAFT[draft rows in DB]
+  DRAFT --> EDIT[ImportContent card<br/>老師逐題編輯]
+  EDIT --> API3[PUT /drafts/{draftId}/results/{quizId}]:::api
+  EDIT --> SAVE[點「儲存至題庫」]
+  SAVE --> API4[POST /drafts/{draftId}/save]:::api
+  API4 --> LIB[(Quiz Collection library<br/>持久化)]:::db
+  LIB --> SE[Slide Editor 建新頁]
+  SE --> PICK[點「從資源庫選取」]
+  PICK --> IMPORT[handleImportSelectedQuizzes<br/>SlideEditorContent.tsx:391]
+  IMPORT --> VM[quizToOlfQuizItemViewModel<br/>activityQuiz.mapper.ts:116]
+  VM --> PAGE[toQuizPage<br/>page.reducer.ts:208<br/>page.quizContent 建立]
+  PAGE --> EXPORT[匯出 OLF]
+  EXPORT --> EX1[extractActivityLayer<br/>document.exporter.ts:621]
+  EX1 --> EX2[category = Activity_HTML_QUIZ<br/>line 616]:::olf
+  EX2 --> EX3[mapViewModelQuizToOlfHtmlQuiz<br/>line 705<br/>quiz_type <strong>原字串直傳</strong>]:::olf
+  EX3 --> OLF[.olf 檔<br/>manifest.quizzes[]]:::olf
+
+  classDef api fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+  classDef llm fill:#fef9c3,stroke:#ca8a04,color:#78350f
+  classDef db fill:#e0e7ff,stroke:#6366f1,color:#312e81
+  classDef olf fill:#dcfce7,stroke:#16a34a,color:#14532d
+      </div>
+      <div class="diagram-caption">Hub AI 上傳生題 → 題庫 → Slide Editor → OLF（唯一 GUI 建題路徑）</div>
+    </div>
+
+    <div class="callout ok">
+      <strong>關鍵發現：</strong>OLF exporter 對 <code>quiz_type</code> 是 <strong>pass-through</strong>（<code>mapViewModelQuizToOlfHtmlQuiz</code> 直接 emit 原字串），
+      只要 Quiz Collection 裡有 7 種，Hub 匯出 OLF 就會有 7 種。<strong>gate 完全在上游 authoring 端，不在 export 端。</strong>
+    </div>
+
+    <h3 id="dead-ends">❌ 死路：CS Android 完全沒有入庫路徑</h3>
+    <table>
+      <thead><tr><th>路徑</th><th>結果</th><th>證據</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>CS Android QuizMenuWindow → 5 個 EditWindow</td>
+          <td>是「當下派題」，非入庫</td>
+          <td>submit 到 <code>POST /api/v3/lessons/{lesson_id}/quizzes</code>（<code>QuizApiService.kt:29</code>）— 這是 per-lesson dispatch，Hub 題庫讀不到</td>
+        </tr>
+        <tr>
+          <td>CS Android「Preset Quiz」按鈕</td>
+          <td>是佔位符，<strong>未實作</strong></td>
+          <td><code>CSToolbarIconButtonDataFactory.kt:148,155,170,178</code> — 綁到 <code>ComingSoonPromptWindow</code>（付費）或 <code>UpgradePromptWindow</code>（非付費），按鈕 state 硬編碼為 <code>DISABLED</code></td>
+        </tr>
+        <tr>
+          <td>CS Android <code>QuizCollectionApiService</code></td>
+          <td>沒任何入庫 API</td>
+          <td>只有 <code>POST /quizzes/collection/folder</code>（folder 建立）和 GET reads；沒 <code>saveToCollection</code> / <code>addToLibrary</code> / <code>insertQuiz</code></td>
+        </tr>
+        <tr>
+          <td>Hub Web「從資源庫選取」</td>
+          <td>read-only browse</td>
+          <td>只能選現成題</td>
+        </tr>
+        <tr>
+          <td>Hub Web <code>QuizDetailEdit</code></td>
+          <td>UI 沒有題型 dropdown</td>
+          <td><code>useQuizEditForm.ts</code> 只暴露 content / optionList / shortAnswer / optionType；schema 允許改 <code>quizType</code> 但 UI 沒開</td>
+        </tr>
+        <tr>
+          <td>Hub Web AI 上傳其他 4 種</td>
+          <td>LLM prompt 限制</td>
+          <td>推測是 prompt 層限制而非 validation 擋（<code>QuizCollectionBase</code> schema 允許全 7 種）</td>
+        </tr>
+        <tr>
+          <td>其他 mVB 後端</td>
+          <td>沒 quiz collection endpoint</td>
+          <td><code>/quizzes/collection</code> 只在 ocelot；<code>edu-mvb-api-core</code> 等不管題庫</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 id="backend-bypass">🔧 後端繞道：<code>POST /quizzes/collection/quiz</code>（4 種）</h3>
+
+    <div class="source-card">
+      <div class="title">Endpoint 存在但 GUI 沒呼叫（legacy from WPF migration）</div>
+      <div class="id">ocelot/app/routes/quiz_collection/quiz_collection_router.py:124 <code>add_quiz_to_folder</code></div>
+    </div>
+
+    <ul class="compact">
+      <li><strong>Validator</strong>：<code>ocelot/app/validation/quiz_collection.py:91-106</code> <code>Request.AddQuizToFolder</code> → <code>List[QuizCollection]</code> → <code>QuizBaseContent</code>（line 51）— 接受全 7 種 <code>quiz_type</code></li>
+      <li><strong>QuizType enum</strong>：<code>ocelot/app/lib/constants.py:279</code> — 全 7 種都在</li>
+      <li><strong>各題型分支驗證</strong>（<code>validate_quiz_options</code> line 390）：
+        <ul class="compact">
+          <li><code>RECORD</code> → <code>option_type=NO_OPTION</code> + 空 <code>option_list</code></li>
+          <li><code>SHORT_ANSWER</code> → 需 <code>short_answer</code></li>
+          <li><code>SINGLE_SELECT</code> / <code>MULTIPLE_SELECT</code> / <code>SINGLE_POLL</code> / <code>MULTIPLE_POLL</code> / <code>TRUE_FALSE</code> → 需 <code>option_list</code></li>
+          <li><code>MANUAL</code> 來源需 <code>img_key</code>；<code>IMPORT_CONTENT</code> 不需要</li>
+        </ul>
+      </li>
+      <li><strong>驗證邏輯：</strong><code>validate_ai_quiz</code> / <code>validate_content</code> / <code>validate_quiz_options</code>（<code>validation/quiz_collection.py:372-449</code>）</li>
+      <li><strong>來源標註：</strong>附近有 deprecated GET（line 262）明列 "for WPF v1.49.6 and below" — 這組 endpoint 是舊 WPF client 遷移遺留，現在沒 client 呼叫</li>
+    </ul>
+
+    <h3 id="sample-recipe">🎁 產全 7 種樣本 OLF 的 recipe</h3>
+
+    <div class="callout warn">
+      <strong>建議作法：GUI 產 3 種 + curl 補 4 種</strong>
+    </div>
+
+    <ol>
+      <li><strong>先用 GUI 產 3 種</strong>（測 happy path）：
+        <ul class="compact">
+          <li>Hub Web → Quiz Collection → 上傳含單選/是非/簡答的 doc → AI 生題 → 存進 Collection</li>
+        </ul>
+      </li>
+      <li><strong>取 Bearer token</strong>（自己在瀏覽器 DevTools 拿，不用給我）：
+        <ul class="compact">
+          <li>Chrome DevTools → Network → 找任一 <code>/quizzes/collection/*</code> request → Headers 的 <code>Authorization: Bearer ...</code> 複製起來</li>
+        </ul>
+      </li>
+      <li><strong>curl 打 <code>POST /quizzes/collection/quiz</code></strong> 補 4 種：
+        <ul class="compact">
+          <li><code>MULTIPLE_SELECT</code>（多選）</li>
+          <li><code>SINGLE_POLL</code>（單投票）</li>
+          <li><code>MULTIPLE_POLL</code>（多投票）</li>
+          <li><code>RECORD</code>（錄音，<code>option_type=NO_OPTION</code>）</li>
+        </ul>
+      </li>
+      <li><strong>回 Hub Web</strong> → Slide Editor 建頁 → 從資源庫拉全 7 種 → 匯出 OLF</li>
+    </ol>
+
+    <div class="callout new">
+      <strong>curl payload schema 需要驗證的細節</strong>（<code>validation/quiz_collection.py:372-449</code>）：
+      <ul style="margin: 6px 0 0 20px">
+        <li><code>option_list</code> 每個 option 的 fields（<code>content</code> / <code>option_id</code> / <code>is_answer</code> / <code>is_ai_answer</code>）</li>
+        <li><code>img_key</code> 怎麼取（MANUAL 來源需要，可能要另外先呼叫 S3 upload URL endpoint）</li>
+        <li><code>source_type</code> 差異（<code>MANUAL</code> vs <code>IMPORT_CONTENT</code>）</li>
+        <li><code>chirp_id</code> / <code>subject</code> / <code>country</code> 等 metadata 是否必填</li>
+      </ul>
+      Jay 若需要，可以另外請我拼完整 curl / <code>.http</code> template。
+    </div>
+
+    <h2 id="real-flow-attempt">🧪 實際跑一次業務流程的結果（2026-07-02）</h2>
+    <div class="callout warn">
+      <strong>目標：</strong>在 stage 環境用真實業務流程產一份含全 7 種題型的 OLF fixture 給 mvbf。<br>
+      <strong>結果：</strong>Quiz Collection 7 題全部建成功；OLF sample 因 Hub Web UI 限制無法透過 GUI 產出。
+    </div>
+
+    <h3>✅ 已做到的（stage）</h3>
+    <ul class="compact">
+      <li>SSO 登入 stage Hub（<code>hub.stage.myviewboard.com</code>）成功（playwright-cli 驅動 Chrome）</li>
+      <li>取得 Bearer token 與 org id <code>0268c150-a8d7-4d43-ab1f-2f0c0e3d3c41</code></li>
+      <li>建 NORMAL folder <code>mvbf-sample-quiz-fixture</code>（id <code>47e9a247-aa3e-4163-8a40-c3a79ada1d51</code>）</li>
+      <li>curl <code>POST /quizzes/collection/quiz</code> 建全 7 種題目成功
+        <pre><code>{
+  "TRUE_FALSE":      "127f2097-36cb-498c-b984-614a39746ebf",
+  "SINGLE_SELECT":   "8a1a7b94-ac22-4249-a426-5fb1ea8277d4",
+  "MULTIPLE_SELECT": "45a13320-c925-41f3-8a84-20525b7c0a0d",
+  "SHORT_ANSWER":    "db6f1dd1-1eb1-4e87-aa42-c84808c4de19",
+  "SINGLE_POLL":     "4c54e1b9-4ac3-4c31-a304-b810b911d4a9",
+  "MULTIPLE_POLL":   "47c63237-32d1-4e8e-9811-acabc74a6edf",
+  "RECORD":          "2eb14f86-30f4-4238-a120-8e3d813841d6"
+}</code></pre>
+      </li>
+      <li>驗證 payload 規則：
+        <ul class="compact">
+          <li><code>source_type: IMPORT_CONTENT</code> 可繞過 <code>img_key</code> 必填</li>
+          <li><code>subject</code> 與 <code>country</code> 對 IMPORT_CONTENT 必須為<strong>空字串</strong>（有值會被拒 <code>"My content does not have subject and country"</code>）</li>
+          <li>各 option 必填 <code>option_id</code>（整數）</li>
+        </ul>
+      </li>
+    </ul>
+
+    <h3>❌ 卡住的（無 GUI 路徑）</h3>
+    <ul class="compact">
+      <li>Hub Web 的「Add activity → Question(s)」dialog <strong>只暴露「Upload File (AI 生題)」</strong>；<code>pickFromLibrary</code> i18n key 存在但實際是 <code>slideEditor.<em>addGame</em>.pickFromLibrary</code>（只 for Game，非 Quiz）</li>
+      <li>Slide preview / editor 頁的「More actions」選單只有 Rename / Duplicate / Delete，<strong>沒有 Download / Export OLF</strong> 按鈕</li>
+      <li>Library API（<code>GET /organizations/{org}/libraries/{id}</code>）不回傳 OLF 檔位置；OLF 檔可能只由 ClassSwift App 透過「Play in App」deep-link 存取</li>
+      <li>已建的 7 題留在 Quiz Collection folder，但沒有 GUI 能把它們掛進 slide activity</li>
+    </ul>
+
+    <h3>🔧 可行的後續路徑</h3>
+    <ol>
+      <li><strong>AI upload flow 拿 3 種 OLF</strong>：跑真實 AI 上傳流程（PDF/DOCX 含單選/是非/簡答）→ SelectQuizDialog → import → Save；截取 client 上傳 S3 的 OLF binary。<em>限 3 種題型，但流程完整真實。</em></li>
+      <li><strong>Redux/state runtime 注入</strong>：進 editor 用 JS eval 直接把 7 題塞進 slide 的 <code>page.quizContent.quizzes[]</code>，再觸發匯出/儲存。<em>已離開「實際業務流程」的框架。</em></li>
+      <li><strong>等 CS Android Preset Quiz 上線</strong>：Roadmap 上有（<code>R.string.preset_quiz_title</code> 已定義），未實作。實作後 CS Android 就能把題目寫入 Quiz Collection。</li>
+      <li><strong>找 QA 索一份含混合題型的實測 OLF</strong>：<code>edu-mvb-hub-testcase</code> 只有測試 metadata；找 <code>african-golden-cat</code> owner 或 QA team 索實測樣本。</li>
+    </ol>
+
+    <h3>📁 產出檔案（scripts/olf-sample）</h3>
+    <ul class="compact">
+      <li><code>capture-token.mjs</code> — @playwright/test 版 OIDC 登入 + Bearer token 擷取（備用）</li>
+      <li><code>create-quizzes.py</code> — 用 stored token 呼叫 <code>POST /quizzes/collection/quiz</code> 建 6 種題目</li>
+      <li><code>created-quizzes.json</code>（gitignored）— 7 題型的 quiz id 對照</li>
+      <li><code>token.json</code>（gitignored）— 當前 stage bearer token（約 24h 有效）</li>
+      <li><code>.claude/skills/playwright-cli/</code> — playwright-cli skill 檔（driving 瀏覽器用）</li>
+    </ul>
+
+    <h3>⚠️ zsh 陷阱</h3>
+    <div class="callout new">
+      <strong>zsh 內建變數 <code>$USERNAME</code> 是綁定 OS user 的 read-only 變數</strong>（macOS 上等於 <code>whoami</code>）。
+      <br>寫 script 讀 <code>.env</code> 的 <code>VS_STAGE_USERNAME</code> 時，
+      <code>USERNAME=$(...)</code> 會被 zsh 忽略、變數保持為 OS user 名。改用其他變數名（如 <code>STAGE_EMAIL</code>）即可。
+    </div>
+
+    <h2 id="open-questions">❓ 開放問題</h2>
+    <ol>
+      <li><strong>AI draft 3 種限制在哪一層？</strong>
+        推測是 LLM prompt 限制（<code>services/quiz_collection/quiz_collection_draft_service.py</code> 或 prompt template），非 route validation。
+        若能改 prompt 或直接偽造 draft body → save，或許能透過 draft 路徑產全 7 種（未實測）。</li>
+      <li><strong><code>PUT /quizzes/collection/quiz/{id}</code> 改 <code>quiz_type</code> 實際會不會過？</strong>
+        schema 允許，UI 沒開；<code>validate_quiz_options</code> 可能會擋非法 <code>quiz_type</code> × <code>option_list</code> 組合。實測後可作為第二繞道路徑。</li>
+      <li><strong><code>chirp_id</code> 欄位背後的 Chirp AI pipeline：</strong>
+        每個 collection quiz row 可帶 <code>chirp_id</code>（<code>repositories/quiz_collection/quiz_collection_repository.py:623</code>）；可能還有另一條 backend job 寫入題庫（e.g. AI 產題自動 mint rows）。<code>grep</code> 沒看到 route-level create outside <code>AddQuizToFolder</code>，但欄位存在暗示有 writer。</li>
+      <li><strong>OLF category 字串：</strong>
+        <code>Activity_HTML_QUIZ</code>（Hub 匯出用）與 Confluence spec 提的 <code>category: "quiz"</code> 有落差；mvbf 判斷 quiz 頁時要用完整字串 <code>Activity_HTML_QUIZ</code>（大小寫敏感）。</li>
+      <li><strong><code>SKETCH_RESPONSE</code>：</strong>
+        Hub 不建、Desktop 沒有，只有 CS Android 有此 enum；OLF activity 內不會出現（Hub 是唯一生產者），mvbf 遇到可標 invalid。</li>
+      <li><strong><code>img_url</code> / <code>img_key</code>：</strong>
+        Hub 存 <code>img_url</code>（URL 字串），但 <code>POST /quizzes/collection/quiz</code> 用 <code>img_key</code>（S3 key）— 兩者轉換點在哪？MANUAL 來源必填 <code>img_key</code>，可能要先呼叫 <code>POST /quizzes/collection/resources</code> 取上傳 URL、傳完拿 key。</li>
+      <li><strong>OLF 內 quiz JSON schema：</strong>
+        Hub 匯出的 <code>html-activity</code> 內 HTML 檔的 JSON 結構，與 CS Android 派題 API 收的 payload schema 是否完全對應？mvbf 是否只需原封 forward，或要重新打包？</li>
+      <li><strong><code>edu-mvb-olf-js</code>：</strong>
+        本次未深查；若有 quiz-writing 工具在此 repo，可能提供另一個 scriptable OLF 產樣本路徑。</li>
+      <li><strong>Preset Quiz 在 CS Android 的 roadmap：</strong>
+        <code>R.string.preset_quiz_title</code> 存在、UPGRADE/COMING_SOON hook 已接好 — 未來版本可能會實作。目前完全未實作（非 feature-flag gated）。</li>
+    </ol>
+
+    <h2 id="implications">✅ 對 mvbf 派題實作的意涵</h2>
+    <div class="callout ok">
+      <strong>核心洞察：</strong>
+      <ul style="margin: 6px 0 0 20px">
+        <li>Confluence spec 列的 7 種題型 = Hub authoring 的 <code>QUIZ_TYPE</code> enum。</li>
+        <li><strong>Hub ↔ CS Android 命名 100% 對齊</strong>；mvbf 只需原封 forward，<strong>沒有 mapping 問題</strong>。</li>
+        <li>CS Desktop 的合併對映（5 種）與 mvbf 派題流程無關 — 那是 Desktop 內部的事。</li>
+      </ul>
+    </div>
+
+    <ol>
+      <li><strong>Phase 1 白名單（照 spec）：</strong><code>SINGLE_SELECT</code> / <code>MULTIPLE_SELECT</code> / <code>TRUE_FALSE</code> / <code>SHORT_ANSWER</code>。其他標為 invalid、於該 batch 排除。</li>
+      <li><strong>Category 字串比對：</strong>mvbf 判斷「這頁是 quiz 課件」時比對 <code>Activity_HTML_QUIZ</code>（大小寫敏感）。</li>
+      <li><strong>資料 forward 原則：</strong>不要在 mvbf 做題型改名或合併；把 Hub 產出的 <code>quiz_type</code> 原字串傳給 CS Android。</li>
+      <li><strong>圖片欄位：</strong><code>img_url</code> 是 URL，直接 forward；不需要 base64 轉換。</li>
+      <li><strong>Phase 2 擴充：</strong>把白名單擴大到 7 種（加 <code>SINGLE_POLL</code> / <code>MULTIPLE_POLL</code> / <code>RECORD</code>）— CS Android 已支援，不需另外協調。</li>
+      <li><strong><code>SKETCH_RESPONSE</code>：</strong>Hub 不會產出這個 type，mvbf parser 可視為「不會遇到」；若真的遇到就標 invalid。</li>
+      <li><strong>取樣品：</strong>找 <code>african-golden-cat</code> team 要一份含混合題型的 OLF 檔作為 fixture。</li>
+    </ol>
+
+    <hr style="margin: 40px 0; border: none; border-top: 1px solid var(--c-border)" />
+    <div class="meta">
+      本文件由 Explore agent read-only 掃 workspace 各 repo 後整理；未修改任何檔案（含 mvbf）。
+      調查焦點修正為「quiz activity 的生產端」；如需擴大到後端 HTML template 服務或更多 orgs，請額外指示。
+    </div>
+  </main>
+</div>
+<script src="assets/mermaid-init.js"></script>
+</body>
+</html>

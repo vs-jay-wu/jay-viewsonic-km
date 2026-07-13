@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>Activity Support 1-2 Quiz ClassSwift MVP — 文件整合總覽</title>
+<link rel="stylesheet" href="assets/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#sources">1. 六份原始文件</a></li>
+      <li><a href="#relation">2. 文件關係</a></li>
+      <li><a href="#background">3. Background</a></li>
+      <li><a href="#solution">4. Solution Overview</a>
+        <ul class="sub">
+          <li><a href="#stages">7 階段流程</a></li>
+          <li><a href="#dispatch-branch">派題類型分流</a></li>
+          <li><a href="#path-ab">Path A / Path B</a></li>
+          <li><a href="#design-goals">核心設計目標</a></li>
+        </ul>
+      </li>
+      <li><a href="#stories">5. User Stories &amp; AC</a>
+        <ul class="sub">
+          <li><a href="#story-summary">Story 摘要</a></li>
+          <li><a href="#story-1-1">1-1 Quiz CTA</a></li>
+          <li><a href="#story-1-2">1-2 點擊觸發</a></li>
+          <li><a href="#story-2-1">2-1 自動喚起 CS</a></li>
+          <li><a href="#story-2-2">2-2 登入/班級</a></li>
+          <li><a href="#story-2-3">2-3 選班</a></li>
+          <li><a href="#story-2-4">2-4 派題視窗</a></li>
+          <li><a href="#story-2-5">2-5 Single/Batch</a></li>
+          <li><a href="#story-3-1">3-1 題型對應</a></li>
+          <li><a href="#story-4-1">4-1 按鈕狀態</a></li>
+          <li><a href="#story-4-2">4-2 錯誤處理</a></li>
+          <li><a href="#story-4-3">4-3 結束派題</a></li>
+        </ul>
+      </li>
+      <li><a href="#quiz-types">6. 題型對應表</a></li>
+      <li><a href="#android-diff">7. Android 版差異</a></li>
+      <li><a href="#meetings">8. 會議記錄與 Task 拆解</a></li>
+      <li><a href="#scope">9. Scope / Phase 分層</a></li>
+      <li><a href="#jira">10. Jira 對照</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Activity Support 1-2 Quiz ClassSwift MVP</h1>
+    <div class="meta">
+      六份 Confluence / Jira 原始文件整合總覽 &middot; clone 於 2026-07-02（Phase 0 視窗交互頁 2026-07-10 補入）&middot;
+      對應 feature 資料夾 <code>docs/features/activity-support-quiz-classswift-mvp/</code>
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html" class="active">📘 總覽 (overview)</a>
+      <a href="investigation-quiz-types.html">🔎 題型調查報告</a>
+      <a href="findings.html">🛠️ 實作 findings</a>
+      <a href="test-checklist.html">✅ 測試清單</a>
+      <a href="test-scenarios.html">🧪 測試腳本說明</a>
+    </div>
+
+    <div class="callout ok">
+      <strong>✅ 實作狀態（2026-07-03）：</strong>mVB 側（VSFT-7538）與 CS 側（VSFT-9338）皆已完成並在
+      Pixel Tablet 真機通過 end-to-end 回歸（batch / 單題 / 冷啟動 / 未進班 pending / 按鈕狀態 / end-and-review）。
+      兩支 ticket 現皆由 <strong>Jay</strong> 執行。詳見 <a href="findings.html">findings</a>。
+    </div>
+
+    <div class="callout warn">
+      <strong>目的：</strong>當老師切到 Quiz 課件頁時，在畫布右下角出現「開始派題」按鈕，
+      點擊後自動喚起 ClassSwift，並依該頁題目數自動分流（N=1 走 Single Dispatch、2 ≤ N ≤ 20 走 Batch Quiz），
+      派題結束後自動收合 ClassSwift 回到課件頁。<br>
+      <strong>本 spec 為 Phase 1 MVP</strong>，主 spec 針對 Windows；本 repo 對應的實作為
+      <strong>Android (Flutter) 平台</strong>，行為與 Windows 一致但另有一份 Android spec。
+    </div>
+
+    <!-- 1. Sources -->
+    <h2 id="sources">1. 六份原始文件</h2>
+    <div class="source-card">
+      <div class="title"><span class="badge badge-mvb">Confluence</span> [Activity Support] 1-2 切到 Quiz 課件頁可喚起 ClassSwift 並進行一鍵派題 (MVP) — <em>主 spec</em></div>
+      <div class="id">page_id 507642708 &middot; space <code>myViewboar</code> &middot; v88</div>
+      <div>Driver: @zoe.ay.yeh &middot; Designer: @Hsuan Lee &middot;
+        <a href="https://viewsonic-vsi.atlassian.net/wiki/spaces/myViewboar/pages/507642708" target="_blank">Confluence 原頁</a> &middot;
+        <a href="confluence/myViewboar/activity-support-1-2-quiz-classswift-mvp.md">本地 clone</a>
+      </div>
+    </div>
+    <div class="source-card">
+      <div class="title"><span class="badge badge-mvb">Confluence</span> Android [Activity Support] 1-2 切到 Quiz 課件頁可喚起 ClassSwift 並進行一鍵派題 (MVP)</div>
+      <div class="id">page_id 567050261 &middot; space <code>myViewboar</code> &middot; v2</div>
+      <div>Driver: @Fred &middot; Designer: @Hsuan Lee &middot;
+        <a href="https://viewsonic-vsi.atlassian.net/wiki/spaces/myViewboar/pages/567050261" target="_blank">Confluence 原頁</a> &middot;
+        <a href="confluence/myViewboar/android-activity-support-1-2-quiz-classswift-mvp.md">本地 clone</a>
+      </div>
+    </div>
+    <div class="source-card">
+      <div class="title"><span class="badge badge-cs">Confluence</span> [Task][Activity Support] 1-2 切到 Quiz 喚起 ClassSwift 並進行一鍵派題 (等支援 batch quiz) — <em>會議記錄</em></div>
+      <div class="id">page_id 568492207 &middot; space <code>V</code> (URL alias <code>clsft</code>) &middot; v2</div>
+      <div>
+        <a href="https://viewsonic-vsi.atlassian.net/wiki/spaces/clsft/pages/568492207" target="_blank">Confluence 原頁</a> &middot;
+        <a href="confluence/V/task-activity-support-1-2-quiz-classswift-batch-quiz.md">本地 clone</a>
+      </div>
+    </div>
+    <div class="source-card">
+      <div class="title"><span class="badge badge-cs">Confluence</span> [Android] Phase 0 - 視窗交互行為 — <em>Story 4-3 remark 引用（CS overlay 視窗交互／收合定義）</em></div>
+      <div class="id">page_id 482148681 &middot; space <code>myViewboar</code> &middot; v10 &middot; clone 2026-07-10</div>
+      <div>Driver: @Fred &middot; Designer: @Hsuan Lee &middot;
+        <a href="https://viewsonic-vsi.atlassian.net/wiki/spaces/myViewboar/pages/482148681" target="_blank">Confluence 原頁</a> &middot;
+        <a href="confluence/myViewboar/android-phase-0-window-interaction.md">本地 clone</a>
+      </div>
+      <div class="id">※ remark 顯示文字「[Ｗindows Integration]」中的 Windows 指 CS 的 overlay <strong>視窗（windows）</strong>，非 Windows 平台。</div>
+    </div>
+    <div class="source-card">
+      <div class="title"><span class="badge badge-cs">Jira</span> VSFT-9338 — 故事（CS 側）</div>
+      <div class="id">Status: KICK-OFF &middot; Assignee: Jay Wu（原 ingrid.ys.wang，2026-07-03 改） &middot; Reporter: Fred &middot; Created: 2026-06-30</div>
+      <div>
+        <a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9338" target="_blank">Jira 原 issue</a> &middot;
+        <a href="jira/VSFT-9338.md">本地 clone</a>
+      </div>
+    </div>
+    <div class="source-card">
+      <div class="title"><span class="badge badge-mvb">Jira</span> VSFT-7538 — 故事</div>
+      <div class="id">Status: KICK-OFF &middot; Assignee: Jay Wu &middot; Reporter: Fred &middot; Created: 2026-04-27</div>
+      <div>
+        <a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-7538" target="_blank">Jira 原 issue</a> &middot;
+        <a href="jira/VSFT-7538.md">本地 clone</a> &middot;
+        含 Ingrid 的注意事項留言
+      </div>
+    </div>
+
+    <!-- 2. Relation -->
+    <h2 id="relation">2. 文件關係</h2>
+    <table>
+      <thead>
+        <tr><th>文件</th><th>角色</th><th>指向 / 被指向</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Confluence 507642708 (主 spec)</td>
+          <td>Windows 平台完整 spec；User Stories、AC、Phase 分層皆源自此頁</td>
+          <td>被 Android spec、VSFT-9338 / VSFT-7538 引用；QA 已在 v3.4.8.435-s / v3.4.11.403-s 測過</td>
+        </tr>
+        <tr>
+          <td>Confluence 567050261 (Android spec)</td>
+          <td>Android/Flutter 平台的 delta：AC 較簡略，聚焦 mVB Android 側行為</td>
+          <td>被 VSFT-9338、VSFT-7538 description 引用（<code>SPEC: Android ...</code>）</td>
+        </tr>
+        <tr>
+          <td>Confluence 568492207 (會議記錄)</td>
+          <td>2026-06-30、2026-07-01 兩次會議的討論與 Task 拆解（Jay / Ingrid）</td>
+          <td>綁定 VSFT-9338</td>
+        </tr>
+        <tr>
+          <td>VSFT-9338 (Ingrid)</td>
+          <td>ClassSwift 側 story（Android）；由 Ingrid 執行</td>
+          <td>SPEC 指向 Android spec；跟 VSFT-7538 為姊妹 issue（同標題）</td>
+        </tr>
+        <tr>
+          <td>VSFT-7538 (Jay)</td>
+          <td>myViewBoard 側 story（Android）；由 Jay 執行；此 repo 對應此 issue</td>
+          <td>SPEC 指向 Android spec；含 Ingrid 的協作 notes</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout new">
+      <strong>本次功能 Jay 端範圍（VSFT-7538 + 會議記錄）：</strong>myViewBoard 端解析原檔 → 打包 JSON → 用 AIDL 傳遞給 ClassSwift；
+      派題結束 / 失敗事件從 ClassSwift 回傳給 mVB；並確認圖片題與 Audio 題的檔案格式（URL vs Path）。
+    </div>
+
+    <!-- 3. Background -->
+    <h2 id="background">3. Background</h2>
+    <h3>Objective</h3>
+    <ul>
+      <li>Quiz 課件頁畫布右下角新增「開始派題」按鈕，引導使用 ClassSwift 互動功能。</li>
+      <li>點擊後自動喚起 ClassSwift，依登入 / 班級狀態決定是否登入或選班。</li>
+      <li>該頁全部題目自動成為派題範圍，不需手動勾選：
+        <ul>
+          <li><strong>N = 1</strong> → Single Dispatch（<code>create_quiz</code> socket）</li>
+          <li><strong>2 ≤ N ≤ 20</strong> → Batch Quiz（<code>POST /lessons/{lesson_id}/quizzes/batch_quizzes</code>）</li>
+        </ul>
+      </li>
+      <li>派題結束後 ClassSwift 視窗收回，老師回到 mVB 原課件頁繼續授課。</li>
+    </ul>
+
+    <h3>Why we need to do this</h3>
+    <ul>
+      <li><strong>降低操作摩擦力：</strong>自動串接 Quiz 頁 → ClassSwift 派題，達到「隨切隨派」。</li>
+      <li><strong>延伸 Activity Layer 價值：</strong>把 Activity Layer 既有題目直接當成派題素材，靜態課件轉互動資源。</li>
+      <li><strong>零 regression：</strong>只走既有 Single / Batch Quiz API，不新增 endpoint、不動 ClassSwift 既有邏輯。</li>
+    </ul>
+
+    <!-- 4. Solution -->
+    <h2 id="solution">4. Solution Overview</h2>
+
+    <h3>主流程圖（Mermaid）</h3>
+    <div class="diagram">
+      <div class="mermaid">
+flowchart TD
+  A([1 開啟 OLF 檔案]):::stage --> B{切到 Quiz 課件頁?}
+  B -- 否 --> B1[其他課件頁<br/>不顯示 CTA]:::note
+  B -- 是 --> C[2 顯示「開始派題」CTA]:::stage
+  C --> D[老師點擊「開始派題」]
+  D --> D1[按鈕進入 loading / disabled]
+  D1 --> D2{Parser 取得 N}:::decision
+  D2 -- N = 1 --> D3[記錄: Single Dispatch]
+  D2 -- 2 ≤ N ≤ 20 --> D4[記錄: Batch Quiz]
+  D3 --> E[3 喚起 ClassSwift<br/>OTA / token 交換 / ready]:::stage
+  D4 --> E
+  E -- 15s timeout --> ERR1[顯示啟動逾時<br/>toast + 重試按鈕]:::error
+  ERR1 --> D0[按鈕回復 enabled]
+  E --> F{4 登入 / 班級狀態}:::decision
+  F -- 未登入 --> F1["Windows spec: 引導登入<br/>★ Android 實作: 未登入直接派題(guest)<br/>不取班級列表、不進選班"]:::android
+  F1 -- 取消 --> D0
+  F1 -- 成功 --> F
+  F -- 已登入無班級 --> F2[引導建立班級]
+  F2 -- 取消 --> D0
+  F2 -- 成功 --> F
+  F -- 已登入有班級 --> G[選擇班級<br/>Story 2-3]:::stage
+  G --> H{Path A / Path B?<br/>MVP 只走 Path A}:::decision
+  H -- Path A<br/>首次 / 學生未加入 --> I[5 join class + 派題視窗並列<br/>join class 在最上層]:::stage
+  H -- Path B<br/>Phase 2 才實作 --> I2[僅派題視窗<br/>跳過 join class]:::phase2
+  I --> J{派題類型}:::decision
+  I2 --> J
+  J -- N = 1 --> K1[Single Dispatch<br/>create_quiz socket]:::single
+  J -- N ≥ 2 --> K2[Batch Quiz<br/>POST batch_quizzes]:::batch
+  K1 --> L[學生作答<br/>OPEN → FINISH]:::stage
+  K2 --> L
+  L --> M[6 REVEAL / DISCLOSED<br/>檢討題目]:::stage
+  M --> N1[老師點 CS 端「結束派題」]
+  N1 --> O[7 CS 視窗收合<br/>按鈕回復 enabled]:::stage
+  O --> P([回到 mVB 課件頁繼續授課]):::stage
+
+  classDef stage fill:#eff6ff,stroke:#2563eb,color:#1e3a8a
+  classDef decision fill:#fef3c7,stroke:#ca8a04,color:#78350f
+  classDef error fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+  classDef note fill:#f3f4f6,stroke:#9ca3af,color:#374151
+  classDef single fill:#dcfce7,stroke:#16a34a,color:#14532d
+  classDef batch fill:#e0e7ff,stroke:#6366f1,color:#312e81
+  classDef phase2 fill:#f5d0fe,stroke:#a855f7,color:#581c87,stroke-dasharray: 5 5
+  classDef android fill:#fff7ed,stroke:#ea580c,color:#7c2d12
+      </div>
+      <div class="diagram-caption">依 Confluence 507642708（Windows）§Solution Overview 繪製，MVP 只走 Path A；★ 橘色節點 = Android 實作與 Windows spec 不同之處</div>
+    </div>
+
+    <h3 id="stages">7 階段流程對應</h3>
+    <table>
+      <thead>
+        <tr><th style="width:60px">階段</th><th>說明</th><th>對應 Story</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>開啟檔案</td><td>前置條件</td></tr>
+        <tr><td>2</td><td>Quiz 課件頁，點選「開始派題」<br><em>（派題類型決策點）</em></td><td>Story 1-1, 1-2</td></tr>
+        <tr><td>3</td><td>啟用 ClassSwift（含 updating loading 畫面）</td><td>Story 2-1</td></tr>
+        <tr><td>4</td><td>選擇班級（未登入 / 已登入兩分支）</td><td>Story 2-2, 2-3</td></tr>
+        <tr><td>5</td><td>學生加入並開始作答（join class + 派題視窗並列）</td><td>Story 2-4, 2-5</td></tr>
+        <tr><td>6</td><td>結束問答並 review 檢討</td><td>Story 2-5</td></tr>
+        <tr><td>7</td><td>結束派題 → 回到簡報</td><td>Story 4-3</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="dispatch-branch">派題類型分流（Single Dispatch vs Batch Quiz）</h3>
+    <table>
+      <thead>
+        <tr><th>該頁題目數 N</th><th>派題類型</th><th>觸發 API / Socket</th><th>來源規則</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>N = 1</td><td><span class="badge badge-phase">Single Dispatch</span></td><td><code>create_quiz</code> socket</td><td>Single Quiz spec</td></tr>
+        <tr><td>2 ≤ N ≤ 20</td><td><span class="badge badge-phase">Batch Quiz</span></td><td><code>POST /lessons/{lesson_id}/quizzes/batch_quizzes</code></td><td>Batch Quiz spec（題目 ≥ 2 且 ≤ 20）</td></tr>
+        <tr><td>N = 0 / N &gt; 20</td><td>—</td><td>—</td><td>Editor 會擋，App 端不會遇到</td></tr>
+      </tbody>
+    </table>
+    <ul class="compact">
+      <li><strong>判定時機</strong> = 階段 2 點擊當下：由 Activity Layer parser 解析 N 即決策。</li>
+      <li><strong>執行時機</strong> = 階段 5 派題視窗呈現：依 N 對應的 API 送出。</li>
+    </ul>
+
+    <div class="diagram">
+      <div class="mermaid">
+flowchart LR
+  START(["老師點擊「開始派題」"]) --> P["Activity Layer parser<br/>解析該頁題目數 N"]
+  P --> D{"N = ?"}
+  D -->|"N = 1"| S["Single Dispatch<br/>create_quiz socket"]:::single
+  D -->|"2 ≤ N ≤ 20"| B["Batch Quiz<br/>POST /lessons/:id/quizzes/batch_quizzes"]:::batch
+  D -->|"N = 0"| X1["Editor 會擋<br/>App 端不會遇到"]:::skip
+  D -->|"N &gt; 20"| X2["Editor 會擋<br/>App 端不會遇到"]:::skip
+  S --> R["Single Quiz UI"]
+  B --> R2["Batch Quiz UI"]
+
+  classDef single fill:#dcfce7,stroke:#16a34a,color:#14532d
+  classDef batch fill:#e0e7ff,stroke:#6366f1,color:#312e81
+  classDef skip fill:#f3f4f6,stroke:#9ca3af,color:#6b7280,stroke-dasharray: 5 5
+      </div>
+      <div class="diagram-caption">派題類型分流決策（點擊當下判定，階段 5 執行）</div>
+    </div>
+
+    <h3 id="path-ab">階段 5 Path A / Path B（Phase 2 才會處理 Path B）</h3>
+    <table>
+      <thead><tr><th>條件（全部 AND 成立 → Path B；任一不成立 → Path A）</th><th>判斷依據</th></tr></thead>
+      <tbody>
+        <tr><td>同份 OLF 未關閉</td><td>OLF session lifecycle</td></tr>
+        <tr><td>已完成選班且 lesson 未變</td><td>ClassSwift <code>lesson_id</code></td></tr>
+        <tr><td>學生已 join 過該 lesson <em>或</em> 已派過 ≥ 1 輪題目</td><td>ClassSwift 班級 + 派題狀態</td></tr>
+      </tbody>
+    </table>
+    <ul class="compact">
+      <li><strong>Path A</strong>：首次派題 / 條件不成立 → join class + 派題視窗並列（join class 在最上層）。</li>
+      <li><strong>Path B</strong>：條件全部成立 → 跳過 join class，直接顯示派題視窗。</li>
+      <li><strong>Session 重設：</strong>OLF 關閉、CS 端切到另一 lesson → invalidate，下次回 Path A。</li>
+    </ul>
+    <div class="callout">
+      <strong>MVP 簡化（主 spec Refinement）：</strong>MVP 不會有 Path B 情境；不管有沒有名單都喚起 join class + 派題視窗，
+      完全 follow Spinner 流程。
+    </div>
+
+    <div class="diagram">
+      <div class="mermaid">
+flowchart TD
+  START([派題觸發]) --> C1{同份 OLF 未關閉?}:::decision
+  C1 -- 否 --> PA[Path A<br/>join class + 派題視窗並列]:::pathA
+  C1 -- 是 --> C2{已完成選班<br/>且 lesson 未變?}:::decision
+  C2 -- 否 --> PA
+  C2 -- 是 --> C3{學生已 join 過該 lesson<br/>或 已派過 ≥ 1 輪?}:::decision
+  C3 -- 否 --> PA
+  C3 -- 是 --> PB[Path B<br/>跳過 join class<br/>直接派題視窗]:::pathB
+
+  PA --> RESET[Session 重設條件<br/>OLF 關閉 / 切另一 lesson<br/>→ invalidate，回 Path A]:::note
+  PB --> RESET
+
+  classDef decision fill:#fef3c7,stroke:#ca8a04,color:#78350f
+  classDef pathA fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+  classDef pathB fill:#f5d0fe,stroke:#a855f7,color:#581c87,stroke-dasharray: 5 5
+  classDef note fill:#f3f4f6,stroke:#9ca3af,color:#374151
+      </div>
+      <div class="diagram-caption">Path A / Path B 判斷（三條件 AND；MVP 只實作 Path A，Path B 為 Phase 2 scope）</div>
+    </div>
+
+    <h3 id="design-goals">核心設計目標</h3>
+    <ul>
+      <li><strong>單一入口：</strong>Quiz 課件頁固定顯示「開始派題」，與 Activity Layer 的 <code>quiz</code> 標記綁定。</li>
+      <li><strong>零手動步驟：</strong>該頁全部題目自動成為派題範圍。</li>
+      <li><strong>題數感知分流：</strong>N=1 → single、N≥2 → batch，老師端體驗一致。</li>
+      <li><strong>狀態感知 Path A/B：</strong>依班級啟用與學生加入狀態自動判斷（MVP 只走 Path A）。</li>
+      <li><strong>沿用既有 API：</strong>Single Quiz / Batch Quiz API + 既有 socket events，不新增 endpoint。</li>
+      <li><strong>跨平台一致：</strong>Windows / Flutter (Android) 行為一致。</li>
+    </ul>
+
+    <!-- 5. Stories -->
+    <h2 id="stories">5. User Stories &amp; AC</h2>
+
+    <h3 id="story-summary">Story 摘要</h3>
+    <table>
+      <thead><tr><th>Story</th><th>Phase 1 處理範圍</th><th>類型</th></tr></thead>
+      <tbody>
+        <tr><td>1-1 — Quiz CTA</td><td>必出現於 Quiz 課件頁，UI 簡化、答案揭示、單/多題視覺一致</td><td><span class="badge badge-new">🔴 完全新增</span></td></tr>
+        <tr><td>1-2 — 點擊觸發</td><td>toggle 觸發、Loading、派題類型決策、流程交棒、15s timeout、失敗回復</td><td><span class="badge badge-new">🔴 完全新增</span></td></tr>
+        <tr><td>2-1 — 自動喚起 CS</td><td>mVB 呼叫 protocol handler，沿用 CS 喚起既有行為</td><td><span class="badge badge-mostly">🟡 主要沿用</span></td></tr>
+        <tr><td>2-2 — 登入 / 班級判斷</td><td>mVB 端依 CS status 判斷分支</td><td><span class="badge badge-partial">🟠 部分沿用</span></td></tr>
+        <tr><td>2-3 — 選擇組織 / 班級</td><td>完全沿用 Windows Integration Phase 1</td><td><span class="badge badge-reuse">🟢 完全沿用</span></td></tr>
+        <tr><td>2-4 — 派題視窗呈現（Path A）</td><td>Path A × Single + Path A × Batch</td><td><span class="badge badge-partial">🟠 部分沿用</span></td></tr>
+        <tr><td>2-5.A — Single Dispatch</td><td>完全沿用 Single Quiz spec</td><td><span class="badge badge-reuse">🟢 完全沿用</span></td></tr>
+        <tr><td>2-5.B — Batch Quiz</td><td>完全沿用 Batch Quiz spec</td><td><span class="badge badge-reuse">🟢 完全沿用</span></td></tr>
+        <tr><td>2-5.C — 共通邊界</td><td>完全沿用 socket reconnect + Phase 0</td><td><span class="badge badge-reuse">🟢 完全沿用</span></td></tr>
+        <tr><td>3-1 — 題型對應（4 種）</td><td>mVB 端打包邏輯</td><td><span class="badge badge-partial">🟠 部分沿用</span></td></tr>
+        <tr><td>4-1 — 按鈕狀態</td><td>派題狀態保留 + 重派觸發</td><td><span class="badge badge-new">🔴 完全新增</span></td></tr>
+        <tr><td>4-2 — 錯誤處理</td><td>顯示錯誤後 abort，不做 retry</td><td><span class="badge badge-partial">🟠 部分沿用</span></td></tr>
+        <tr><td>4-3 — 結束派題</td><td>派題收合沿用 Phase 0；對話框 + 按鈕復原為新增</td><td><span class="badge badge-partial">🟠 部分沿用</span></td></tr>
+      </tbody>
+    </table>
+
+    <!-- Story cards -->
+    <div class="story-card" id="story-1-1">
+      <h3>Story 1-1：App 切到 Quiz 課件頁顯示「開始派題」CTA <span class="badge badge-new">🔴 完全新增</span></h3>
+      <div class="quote">As a 老師 / I want 在切換到 Quiz 課件頁時，畫布上自動出現「開始派題」按鈕 / So that 我能立即認知到這是一個可互動派題的課件</div>
+
+      <div class="callout" style="border-left:4px solid #d97706;background:#fffbeb;">
+        <strong>🖊️ 本機補充 AC（Jay 提出、PM Fred 已確認 2026-07-09）：</strong>
+        <ul style="margin:6px 0 0;">
+          <li><strong>不支援 ClassSwift 時，Quiz 課件頁不顯示「開始派題」按鈕、且活動區維持全高</strong>
+            （渲染等同非 quiz 課件頁）。「不支援」= 與 main toolbar 的 ClassSwift toggle 同條件：
+            <code>kClassSwiftEnabled</code>（flavor 為 IFP/EDLA）<strong>且</strong>
+            <code>RegionGateService.isEnabled(quizTool)</code>（region gate 開啟）。</li>
+          <li><strong>理由</strong>：無法派題時，派題按鈕不該出現、更不該為它讓出底部 tab 高度而壓縮活動內容——
+            應與一般（非 quiz）課件頁一致地鋪滿版面。</li>
+          <li><strong>實作</strong>：共用判斷 <code>isQuizDispatchSupported(context)</code>
+            （<code>canvas_overlay_layer.dart</code>）；<code>CanvasOverlayLayer</code>（按鈕層）不支援即早退不畫，
+            <code>BackgroundActivityOverlayLayer</code>（活動/高度層）的 <code>isQuiz</code> 併入此條件 →
+            不支援時 <code>activityRect = layoutRect</code>（全高、無 tab 底座）。</li>
+        </ul>
+      </div>
+
+      <h4>🎨 Figma 設計稿</h4>
+      <figure style="margin:12px 0">
+        <img src="assets/figma/quiz-page-cta.png" alt="Quiz 課件頁初始 CTA 狀態"
+             style="width:100%;max-width:900px;border:1px solid var(--c-border);border-radius:8px;display:block" />
+        <figcaption style="font-size:12.5px;color:var(--c-muted);margin-top:6px">
+          Quiz 課件頁初始狀態：右下角藍色「Start question(s)」CTA、左下「Answer」按鈕、右下頁碼導覽。
+          來源 <a href="https://www.figma.com/design/AucsvzyEE5bD0NEuL8lvD3/-temp--UI-Design---myViewBoard-3.0--Windows-?node-id=44-528" target="_blank">Figma — Start question from slide</a>（node 44-528 / 40008618:90799）。
+        </figcaption>
+      </figure>
+      <figure style="margin:12px 0">
+        <img src="assets/figma/start-question-button.png" alt="開始派題按鈕（enabled）"
+             style="width:100%;max-width:360px;border:1px solid var(--c-border);border-radius:8px;display:block" />
+        <figcaption style="font-size:12.5px;color:var(--c-muted);margin-top:6px">
+          「開始派題」按鈕 enabled 態（node 40008676-80515 / action bar 40008669:37554）。
+        </figcaption>
+      </figure>
+      <details style="margin:8px 0 4px">
+        <summary style="cursor:pointer;font-weight:600">按鈕視覺規格（從 Figma 量測，供 Flutter 實作對齊）</summary>
+        <table style="margin-top:8px">
+          <thead><tr><th>屬性</th><th>值</th><th>Flutter 實作對應</th></tr></thead>
+          <tbody>
+            <tr><td>高度 / padding</td><td>56 / 28,14</td><td><code>SizedBox(height:56)</code> + <code>Padding(horizontal:28)</code> + <code>Center(widthFactor:1)</code>（皆 canvas 邏輯單位，由 matrix 縮放）</td></tr>
+            <tr><td>圓角</td><td>9.33</td><td><code>BorderRadius.circular(9.33)</code></td></tr>
+            <tr><td>背景色</td><td><code>#377DF7</code></td><td><code>vsColors.actionButtonBackgroundPrimary</code>（= accentBlue500）；disabled = accentBlue200</td></tr>
+            <tr><td>icon</td><td><strong>無</strong></td><td>Figma icon layer <code>visible=false</code>、sparrow Content 只綁文字 → 不放 icon</td></tr>
+            <tr><td>文字</td><td>18.67 / w500 / 白</td><td><code>fontSize 18.67, FontWeight.w500</code></td></tr>
+            <tr><td>錨點</td><td>activity 正下方、靠右</td><td>白色 tab 底座（固定 260×80、下圓角 16、右邊距 70）由 activity overlay 畫在<strong>內容層</strong>（可被書寫），與 WebView 連體（一體 drop shadow：union path 單一陰影，採 DS 卡片 token 黑@20%/blur16/offset(0,4)；Figma REST API 取不到 library effects，設計確有陰影）；按鈕本體（212×56）由 <code>CanvasOverlayLayer</code> 疊在 <strong>ink 之上</strong>的相同位置（幾何契約 <code>QuizDispatchTabMetrics</code> 兩層共用）→ 滿足「Inking 不遮擋按鈕」AC</td></tr>
+            <tr><td>縮放</td><td><strong>跟隨畫布</strong></td><td>兩層同用 <code>backgroundImageMatrix</code>；chrome 層同時訂閱 <code>notifier</code>+<code>movingNotifier</code>（畫布 transform 的完整觸發集合）→ 縮放/平移/zoom-to-center 不分離</td></tr>
+            <tr><td>busy 狀態</td><td>單純 disabled</td><td>底色 <code>#D7E5FD</code>（accentBlue200，由 <code>VSElevatedButton</code> theme token 自動處理），無轉圈（對齊 Figma disabled 變體 node 40008676-38157）</td></tr>
+          </tbody>
+        </table>
+      </details>
+
+      <h4>Quiz 課件頁 UI 變更</h4>
+      <ul class="compact">
+        <li><strong>新增</strong>：切到 Quiz 課件頁時顯示「開始派題」CTA</li>
+        <li><strong>移除</strong>：「帳號」、「編輯」、「刪除頁面」、「解析」等 CTA 不顯示（Phase 1 不提供）</li>
+        <li><strong>保留</strong>：「答案」按鈕（多選 / 單選 / 是非顯示；簡答不顯示）</li>
+      </ul>
+      <h4>Acceptance Criteria</h4>
+      <table>
+        <thead><tr><th>Topic</th><th>Given / When / Then</th></tr></thead>
+        <tbody>
+          <tr><td>派題入口顯示</td><td>已開啟含 Quiz 課件的 OLF → 切到 Quiz 課件頁 → 顯示「開始派題」按鈕</td></tr>
+          <tr><td>入口可見性收斂</td><td>切到非 Quiz 課件頁（Phet / 純內容）→ 不顯示按鈕</td></tr>
+          <tr><td>UI 簡化</td><td>Quiz 課件頁的右上角工具列不顯示帳號/編輯/刪除/解析 CTA</td></tr>
+          <tr><td>答案揭示</td><td>老師點擊「答案」CTA → 切換顯示正解模式（含 highlight）</td></tr>
+          <tr><td>與圖層規格對齊</td><td>Inking / Element 不會遮擋「開始派題」按鈕</td></tr>
+          <tr><td>Prepare / Present Mode 一致</td><td>Edit / Present 兩模式行為一致</td></tr>
+          <tr><td>單題分流</td><td>N = 1 時視覺與多題一致；點擊走 Single Dispatch</td></tr>
+          <tr><td>多題分流</td><td>N &gt; 1 時按鈕始終可見；點擊走 Batch Quiz（該頁 N 題 = 一個 batch）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="story-card" id="story-1-2">
+      <h3>Story 1-2：點擊「開始派題」開啟 ClassSwift toggle <span class="badge badge-new">🔴 完全新增</span></h3>
+      <div class="quote">As a 老師 / I want 點擊按鈕後系統能立即回饋並開啟 ClassSwift 派題流程 / So that 我能確定點擊已被接收</div>
+      <h4>Acceptance Criteria（本平台實作）</h4>
+      <table>
+        <thead><tr><th>Topic</th><th>行為</th><th>AC 來源</th></tr></thead>
+        <tbody>
+          <tr><td>Toggle 觸發</td><td>按鈕可點 → 點擊後<strong>單純 disable（無轉圈 spinner，對齊設計稿）</strong>，觸發 CS Toggle 開啟</td><td><span class="badge badge-cs">Android spec</span></td></tr>
+          <tr><td>失敗回復</td><td>任一階段失敗 → 按鈕回復 enabled + toast/dialog 錯誤（<strong>4s auto-dismiss</strong>）</td><td><span class="badge badge-cs">Android spec</span></td></tr>
+          <tr><td>派題類型決策</td><td>parser 取得 N，記錄 Single / Batch 決策，交給 Story 2-5 執行</td><td><span class="badge badge-mvb">參考 Windows</span></td></tr>
+          <tr><td>Loading 上限（15s timeout）</td><td>喚起達 <strong>15s</strong> 仍未 ready → 顯示啟動逾時 toast + 重試按鈕；按鈕回復 enabled</td><td><span class="badge badge-mvb">參考 Windows</span></td></tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        <strong>Android spec 只列 2 條</strong>（Toggle 觸發、失敗回復）；其餘標「<span class="badge badge-mvb">參考 Windows</span>」者為
+        <strong>Android spec 未明列、實作時參考 Windows spec (507642708) 補上</strong>：
+        <ul class="compact" style="margin-top:6px">
+          <li><strong>派題類型決策</strong>：Android/Windows §2 分流表兩邊都有，但 Android Story 1-2 未列為 AC，故補。</li>
+          <li><strong>15s timeout</strong>：Android spec 僅註「flutter 原本定義」未給數值；實作採 Windows 的 15s + 重試按鈕。</li>
+          <li><strong>去除</strong>了 Windows 的「Loading 視覺規格 / 流程交棒」兩條 spinner 相關 AC — 本平台按鈕<strong>單純 disable、不轉圈</strong>（設計稿即如此），故不套用。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="story-card" id="story-2-1">
+      <h3>Story 2-1：自動喚起 ClassSwift <span class="badge badge-mostly">🟡 主要沿用</span></h3>
+      <div class="quote">As a 老師 / I want 點擊後 mVB 能自動喚起 ClassSwift / So that 我不需要手動切換 App</div>
+      <ul class="compact">
+        <li><strong>Windows：</strong>透過 protocol handler 喚起 CS（toggle 同步自動打開），等待 ready</li>
+        <li><strong>Android：</strong>不論是否登入，喚起 CS 時「打開 loading 視窗，完成 OTA、token 交換、等相關判斷」</li>
+      </ul>
+    </div>
+
+    <div class="story-card" id="story-2-2">
+      <h3>Story 2-2：登入狀態與班級列表判斷 <span class="badge badge-partial">🟠 部分沿用</span></h3>
+      <h4>主 spec（合併結構）</h4>
+      <table>
+        <thead><tr><th>分支</th><th>行為</th></tr></thead>
+        <tbody>
+          <tr><td>未登入</td><td>引導完成 CS 登入 → 回判斷階段</td></tr>
+          <tr><td>已登入無班級</td><td>引導建立班級 → 回判斷階段</td></tr>
+          <tr><td>已登入有班級</td><td>進入 Story 2-3 選班</td></tr>
+          <tr><td>API 失敗</td><td>顯示錯誤 + 重試按鈕</td></tr>
+          <tr><td>未登入 / 無班級取消</td><td>中止派題，按鈕回復 enabled</td></tr>
+          <tr><td>承接 event</td><td>用戶登入完成 / 建立班級完成 → CS 推送 ready event，mVB 自動繼續，不需再點</td></tr>
+        </tbody>
+      </table>
+      <h4>Android spec 拆分寫法</h4>
+      <ul class="compact">
+        <li><strong>2-2.A</strong>：已登入 → 取得班級列表並選班（含 API 失敗處理）</li>
+        <li><strong>2-2.B</strong>：未登入 → <strong>不取班級列表、不進選班</strong>，直接進入派題視窗</li>
+      </ul>
+      <div class="callout new">
+        <strong>✅ 實作已定（2026-07-03，Jay）：採 Android spec 2-2.B「未登入直接派題」。</strong>
+        mvbf <code>_onDispatchQuiz</code> 不做登入分支判斷：CS 未 ready 時 pending 派題並 <code>ClassSwiftTurnOnEvent</code> 喚起，
+        CS 以 <code>isGuestMode</code> guest 身分啟動即可派題（不強制登入、不取班級列表、不進選班）。
+        <br><strong>與 Windows spec 不同</strong>：主 spec (Windows) 未登入是「引導完成登入後再判斷」；本平台<strong>不採用</strong>。
+      </div>
+    </div>
+
+    <div class="story-card" id="story-2-3">
+      <h3>Story 2-3：選擇組織 / 班級 <span class="badge badge-reuse">🟢 完全沿用</span></h3>
+      <div>完全沿用 [Windows Integration] Phase 1 的 select class / join class 流程。</div>
+    </div>
+
+    <div class="story-card" id="story-2-4">
+      <h3>Story 2-4：首次派題視窗呈現（Path A） <span class="badge badge-partial">🟠 部分沿用</span></h3>
+      <div class="quote">As a 老師 / I want 首次派題時系統能同時呈現 join class 視窗與派題視窗（並列）</div>
+      <table>
+        <thead><tr><th>Topic</th><th>行為</th></tr></thead>
+        <tbody>
+          <tr><td>Path A 觸發</td><td>首次派題 / 學生未加入過 → 跳出 join class + 派題視窗，join class 在最上層</td></tr>
+          <tr><td>Path A × Single</td><td>N = 1 → join class + Single Quiz 視窗並列</td></tr>
+          <tr><td>Path A × Batch</td><td>2 ≤ N ≤ 20 → join class + Batch Quiz 視窗並列</td></tr>
+          <tr><td>視窗佈局</td><td>join class 前景、派題視窗後景；位置由 CS 端控制</td></tr>
+          <tr><td>Late Join 時長</td><td>無學生加入時 join class 視窗不自動 timeout；老師可主動關閉</td></tr>
+          <tr><td>加入過程不切 path</td><td>第一位學生加入後 join class 視窗保留（不跳到 Path B）</td></tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        <strong>Android spec 差異：</strong>Join Class 視窗顯示條件依「學生清單已加入 &gt; 1」判斷（<em>會議記錄補充：參考 Spinner 邏輯，有學生就不顯示，反之亦然</em>）；
+        Quizzing 視窗依單題 / 多題分別顯示。
+      </div>
+    </div>
+
+    <div class="story-card" id="story-2-5">
+      <h3>Story 2-5：派題後 ClassSwift 接手 UI 與後台同步 <span class="badge badge-reuse">🟢 完全沿用</span></h3>
+      <ul class="compact">
+        <li><strong>2-5.A Single Dispatch (N = 1)：</strong>完全走 Single Quiz spec，含 <code>create_quiz</code> / <code>finish_quiz</code> / <code>close_quiz</code> / <code>reveal_quiz_answers</code>。</li>
+        <li><strong>2-5.B Batch Quiz (2 ≤ N ≤ 20)：</strong>走 Batch Quiz spec，含 OPEN → FINISH → DISCLOSED lifecycle、child quiz、<code>batch_quizzes_created</code> / <code>batch_quizzes_student_submitted</code>。</li>
+        <li><strong>2-5.C 共通邊界：</strong>視窗最小化 / 前景化 / 跨 App 切換沿用 Phase 0；socket reconnect 沿用既有清單。</li>
+      </ul>
+    </div>
+
+    <div class="story-card" id="story-3-1">
+      <h3>Story 3-1：題型對應（Phase 1 前 4 種） <span class="badge badge-partial">🟠 部分沿用</span></h3>
+      <div>詳見 <a href="#quiz-types">§6 題型對應表</a>。<strong>欄位缺漏兜底：</strong>該題標記 invalid、於該頁排除，不送 broken payload 給 CS。</div>
+    </div>
+
+    <div class="story-card" id="story-4-1">
+      <h3>Story 4-1：派題期間的按鈕狀態管理 <span class="badge badge-new">🔴 完全新增</span></h3>
+      <table>
+        <thead><tr><th>Topic</th><th>行為</th><th>AC 來源</th></tr></thead>
+        <tbody>
+          <tr><td>派題狀態保留</td><td>Single / Batch 進行中（<code>status = OPEN</code>）→ 切離再切回該頁，按鈕 disabled，無法重派</td><td><span class="badge badge-cs">Android spec</span></td></tr>
+          <tr><td>重派觸發</td><td>Single / Batch 已 FINISH / DISCLOSED / CLOSE → 再次點擊按鈕直接進入新一輪派題</td><td><span class="badge badge-mvb">參考 Windows</span></td></tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        <strong>「重派觸發」為 Android spec 未列、參考 Windows spec (507642708 Story 4-1) 補上</strong>；Android spec Story 4-1 僅有「派題狀態保留」一條。
+      </div>
+      <div class="callout new">
+        <strong>會議補充：</strong>只要有派題，派題按鈕就會 disable，無論是否切到下一頁。
+      </div>
+      <div class="callout" style="border-left:4px solid #d97706;background:#fffbeb;">
+        <strong>🖊️ 本機補充（Jay 自行新增，非官方 AC — 依程式碼與實機觀察整理，待官方確認）：</strong>
+        <ul style="margin:6px 0 0;">
+          <li><strong>disable 是「全域、跨檔案」，不只跨頁。</strong>
+            程式碼 <code>isStartQuizDispatchEnabled = quizDispatchPhase == idle &amp;&amp; !isMissionOngoing</code>，
+            其中 <code>isMissionOngoing</code> 來自 CS 的 <code>EventMissionStatus</code> 廣播、是 ClassSwiftBloc 的<strong>全域狀態</strong>，
+            與 mvbf 開哪個檔案/分頁無關。→ 只要有一個 ongoing 派題，<strong>任何檔案、任何頁</strong>的「開始派題」都 disabled。
+            官方 AC 只明寫到「跨頁」（無論切到下一頁），<strong>「跨檔」尚未寫入 AC</strong>，但為同一全域狀態的必然結果。</li>
+          <li><strong>是「一次一個 ongoing 派題」，不是「一輩子只能派一題」。</strong>
+            batch 一次可含多題（如 11 題）；當前 mission 結束（CLOSED）後即可再派下一個。這是 CS「一堂課一次一個 mission」模型，mvbf 忠實反映（並非 mvbf 未對齊 CS）。</li>
+          <li><strong>Story 4-3「結束後恢復 enable」的前提是 mission 真正走到 CLOSED。</strong>
+            實機觀察：按「End and review question」只會<strong>公布答案 → 進 review</strong>，
+            送出 <code>EventWindowStateChanged: MVB_BATCH_START_QUIZ = CLOSED</code> 但<strong>不一定送 <code>EventMissionStatus = CLOSED</code></strong>；
+            若尚有學生未作答，還會跳「End and push task」確認框，需再按確認才真正結束。
+            未走到 CLOSED 前，<code>isMissionOngoing</code> 仍為 true → 按鈕不會恢復。
+            <br><em>（2026-07-12 更新，B 修法後已改）：CS 已改為 End and review 成功時送
+            <code>EventMissionStatus = FINISHED</code>，mvbf 以新增的 <code>isMissionFinished</code> 放行按鈕 →
+            現在 End and review 後按鈕<strong>立即恢復 enabled</strong>，不需等 CLOSED、與視窗收合無關
+            （PM Fred 2026-07-10 定案「結束就能重派」）。詳見 findings §12。</em></li>
+          <li><strong>（本機釐清 — Jay，2026-07-12，與 PM 討論後定調）派題進行中「手動關閉 ClassSwift toggle」= <code>all_hide</code>（隱藏，非結束）→「開始派題」按鈕<strong>維持 disabled</strong>。</strong>
+            依 <strong>Story 2-5.C</strong>「派題中最小化/隱藏 → 狀態維持、不中斷」：關 toggle 只是把 CS 視窗藏起來，
+            後端 quiz 仍 OPEN、mission 仍在 → 按鈕維持 disabled 才正確（一次一個 mission）。
+            <br>按鈕要恢復 enabled，應走「<strong>正確結束派題</strong>」（mission 走到 FINISHED/DISCLOSED/CLOSE，見 Story 4-1 重派觸發 / 4-3 按鈕復原），而非靠關 toggle。
+            CS 端要「真正結束」是按派題視窗的 <strong>[X]</strong>（跳 <code>quiz_disclose_close_confirm_title</code> =「Close question」確認框 → CANCEL），或走 End and review。
+            <br><strong>對測試的影響</strong>：每支 7538 scenario 的 teardown 必須「好好 end 派題」（而非只關 toggle），下一輪才會是乾淨 enabled 狀態。
+            <br><em>（過程備註：曾一度改 <code>_onTurnOff</code> 讓關 toggle 也清 mission→按鈕 enabled，但與此 hide 語意衝突，已還原。）</em></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="story-card" id="story-4-2">
+      <h3>Story 4-2：網路與 API 失敗處理 <span class="badge badge-partial">🟠 部分沿用</span></h3>
+      <table>
+        <thead><tr><th>Topic</th><th>行為</th></tr></thead>
+        <tbody>
+          <tr><td>連線異常</td><td>mVB ↔ CS 通訊中斷 → 顯示連線錯誤 + abort；不送 single / batch API</td></tr>
+          <tr><td>Single API 失敗</td><td><code>create_quiz</code> socket 失敗 → 顯示錯誤 + abort，不顯示派題進行中 UI</td></tr>
+          <tr><td>Batch 後端錯誤</td><td>Batch API 5xx → 顯示伺服器忙碌 + abort</td></tr>
+          <tr><td>異常退出處理</td><td>mVB 異常退出後重啟 → 不主動重送；按鈕依當前派題 status 決定</td></tr>
+        </tbody>
+      </table>
+      <div class="callout new">
+        <strong>會議補充：</strong>失敗要傳送事件給 MyViewBoard 用於顯示 error（事件傳遞由 CS → mVB）。
+      </div>
+    </div>
+
+    <div class="story-card" id="story-4-3">
+      <h3>Story 4-3：結束派題回到簡報 <span class="badge badge-partial">🟠 部分沿用</span></h3>
+      <table>
+        <thead><tr><th>Topic</th><th>行為（主 spec）</th></tr></thead>
+        <tbody>
+          <tr><td>派題收合</td><td>Single / Batch 已 FINISH + REVEAL/DISCLOSED → 老師點 CS 端「結束派題」→ CS 視窗依 Phase 0 收合，CS Toggle 不會自動關閉</td></tr>
+          <tr><td>強制結束確認</td><td>進行中有學生未答完，老師主動結束 → 沿用 <code>finish_quiz</code> / <code>close_quiz</code> 轉 FINISH</td></tr>
+          <tr><td>按鈕復原</td><td>CS 視窗收合 → mVB 端接收 → 「開始派題」按鈕回復 enabled</td></tr>
+          <tr><td>內容保留</td><td>回到課件頁時 Inking / Element 與派題前一致</td></tr>
+          <tr><td>跨頁一致</td><td>切到下一頁依 Activity Layer 標記顯示對應 UI</td></tr>
+          <tr><td>學生端通知</td><td>學生尚未看完檢討 → 老師結束 → 學生 CS 端同步顯示「老師已結束派題」</td></tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        <strong>Android spec 簡化：</strong>Android 只列「派題收合」與「強制結束確認」兩條，
+        且 Then 都是「mVB 活動頁上的開始派題按鈕由 disable 轉變成 enable」。
+      </div>
+    </div>
+
+    <!-- 6. Quiz types -->
+    <h2 id="quiz-types">6. 題型對應表</h2>
+    <table>
+      <thead>
+        <tr><th>課件題型</th><th><code>quiz_type</code></th><th><code>option_list</code></th><th>Phase</th><th>備註</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>是非題</td><td><code>TRUE_FALSE</code></td><td>兩個選項 + <code>is_answer</code></td><td>Phase 1 ✅</td><td></td></tr>
+        <tr><td>單選題</td><td><code>SINGLE_SELECT</code></td><td>含正解</td><td>Phase 1 ✅</td><td><code>option_type = ALPHABET</code></td></tr>
+        <tr><td>多選題</td><td><code>MULTIPLE_SELECT</code></td><td>多個 <code>is_answer = true</code></td><td>Phase 1 ✅</td><td><code>option_type = ALPHABET</code></td></tr>
+        <tr><td>簡答</td><td><code>SHORT_ANSWER</code></td><td><code>null</code></td><td>Phase 1 ✅</td><td>無正解</td></tr>
+        <tr><td>投票（單）</td><td><code>SINGLE_POLL</code></td><td>不需 <code>is_answer</code></td><td>Phase 2</td><td>無正解</td></tr>
+        <tr><td>投票（多）</td><td><code>MULTIPLE_POLL</code></td><td>不需 <code>is_answer</code></td><td>Phase 2</td><td>無正解</td></tr>
+        <tr><td>錄音</td><td><code>RECORD</code></td><td><code>null</code></td><td>Phase 2</td><td>無參考答案</td></tr>
+      </tbody>
+    </table>
+    <div class="callout new">
+      <strong>會議補充（2026-07-01）：</strong>題目種類含<strong>圖片題、是非題、多選、單選、投票、聲音題、簡答</strong>；
+      圖片題與 Audio 題需確認檔案格式（URL vs Path），由 Jay 負責釐清。
+    </div>
+
+    <h3>📊 題型規範來源（調查摘要）</h3>
+    <p>詳細調查（生產端角度：誰在建 quiz activity、支援哪些題型、OLF wire format）請看
+    <a href="investigation-quiz-types.html"><strong>🔎 題型調查報告</strong></a>。以下為關鍵發現：</p>
+
+    <div class="callout ok">
+      <strong>結論：</strong>
+      <ul style="margin: 6px 0 0 20px">
+        <li>唯一的 quiz activity 生產者是 <code>african-golden-cat</code>（CS Hub 前端 React app），Confluence spec 的 7 種題型 = Hub <code>QUIZ_TYPE</code> enum。</li>
+        <li><strong>Hub UI 全部 7 種都可建立/編輯，包含 <code>RECORD</code></strong>（有 i18n key <code>quizRecord</code>、Collection filter 可篩、驗證規則允許儲存）。</li>
+        <li>消費端有兩個平台：<strong>CS Desktop（合併 5 種）</strong>、<strong>CS Android（granular 8 種）</strong>。</li>
+        <li><strong>Hub ↔ CS Android 命名 100% 對齊</strong>，mvbf pass-through 沒有 mapping 問題。</li>
+      </ul>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>題型</th>
+          <th>🏭 Hub 生產<br><code>african-golden-cat</code></th>
+          <th>🖥️ CS Desktop<br><code>maine-coon-cat</code></th>
+          <th>📱 CS Android<br><code>ragdoll-cat</code></th>
+          <th>Phase</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>是非</td><td><code>TRUE_FALSE</code></td><td><code>TRUE_FALSE</code></td><td><code>TRUE_FALSE</code></td><td>1</td></tr>
+        <tr><td>單選</td><td><code>SINGLE_SELECT</code></td><td rowspan="2"><code>MULTIPLE_CHOICE</code>（合併）</td><td><code>SINGLE_SELECT</code></td><td>1</td></tr>
+        <tr><td>多選</td><td><code>MULTIPLE_SELECT</code></td><td><code>MULTIPLE_SELECT</code></td><td>1</td></tr>
+        <tr><td>簡答</td><td><code>SHORT_ANSWER</code></td><td><code>SHORT_ANSWER</code></td><td><code>SHORT_ANSWER</code></td><td>1</td></tr>
+        <tr><td>投票（單）</td><td><code>SINGLE_POLL</code></td><td rowspan="2"><code>POLL</code>（合併）</td><td><code>SINGLE_POLL</code></td><td>2</td></tr>
+        <tr><td>投票（多）</td><td><code>MULTIPLE_POLL</code></td><td><code>MULTIPLE_POLL</code></td><td>2</td></tr>
+        <tr><td>錄音</td><td><code>RECORD</code></td><td><code>RECORD</code></td><td><code>RECORD</code></td><td>2</td></tr>
+        <tr><td>手寫回答</td><td>—</td><td>—</td><td><code>SKETCH_RESPONSE</code> <span class="badge badge-warn">Android 獨有</span></td><td>—</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size: 12.5px; color: var(--c-muted); margin-top: -6px">
+      詳細調查（各檔案路徑 line number、Hub UI 證據、CS 兩端 enum 完整定義）看
+      <a href="investigation-quiz-types.html">🔎 題型調查報告</a>。
+    </p>
+
+    <div class="callout warn">
+      <strong>OLF wire format 精確字串（<code>african-golden-cat/src/libs/olfViewer/types/viewModel.types.ts:52-56</code>）：</strong>
+      quiz 頁的 activity <code>category</code> 值為 <strong><code>Activity_HTML_QUIZ</code></strong>（不是簡單的 <code>"quiz"</code>）；
+      同層的兄弟類別為 <code>Activity_PHET</code>、<code>Activity_GAME</code>。mvbf 判斷 quiz 頁時要用完整字串比對。
+    </div>
+
+    <div class="callout new">
+      <strong>對 mvbf 實作的關鍵意涵：</strong>
+      <ol style="margin: 6px 0 0 20px">
+        <li>mvbf 是 <strong>pass-through</strong>：把 Hub 產出的 activity JSON 原封 forward 給 CS Android，不要在 mvbf 端改名或合併題型。</li>
+        <li><strong>Hub 命名與 CS Android 完全對齊</strong>（連 <code>SINGLE_POLL</code> / <code>MULTIPLE_POLL</code> / <code>RECORD</code> 都同名）— 沒有 mapping 問題。</li>
+        <li><strong>對 quiz 頁的判斷</strong>用 <code>category === "Activity_HTML_QUIZ"</code>。</li>
+        <li><strong>圖片</strong>是任何題型都可帶的 <code>img_url</code>（存 URL）；不是獨立 <code>quiz_type</code>。</li>
+        <li><strong>CS Desktop 的合併對映與 mvbf 無關</strong> — 那是 Desktop 內部的事。</li>
+        <li>Phase 1 只需支援前 4 種（<code>TRUE_FALSE</code>/<code>SINGLE_SELECT</code>/<code>MULTIPLE_SELECT</code>/<code>SHORT_ANSWER</code>），其他標 invalid 排除。</li>
+        <li><code>SKETCH_RESPONSE</code> Hub 不會產出，mvbf 視為「不會遇到」；若真的遇到就標 invalid。</li>
+      </ol>
+    </div>
+
+    <div class="callout">
+      <strong>OLF spec（<code>edu-vboard-olfspec</code> §4.2.2.2）補充：</strong>
+      每一頁最多一個 activity-layer，但一個 quiz activity 內部可以放<strong>混合題型</strong>（Confluence Story 3-1「混合題型」AC 已 Pass）。
+      也就是說 <em>「Hub 建立一頁多題、多題內含多種題型」</em>是明確支援的情境。
+    </div>
+
+    <!-- 7. Android diff -->
+    <h2 id="android-diff">7. Android 版本 spec 差異</h2>
+    <table>
+      <thead><tr><th>面向</th><th>主 spec (Windows, 507642708)</th><th>Android spec (567050261)</th></tr></thead>
+      <tbody>
+        <tr><td>Driver</td><td>@zoe.ay.yeh</td><td>@Fred</td></tr>
+        <tr><td>版本狀態</td><td>v88，多數 AC 已 Pass（v3.4.8.435-s / v3.4.11.403-s）</td><td>v2，尚未有 QA 結果</td></tr>
+        <tr><td>Refinement 補充</td><td>Define MVP Scope；MVP 不會有 Path B；完全 follow Spinner 流程</td><td>無</td></tr>
+        <tr><td>1-2 Loading 15s / toast 4s</td><td>明列</td><td>「flutter 原本定義」（未明列）</td></tr>
+        <tr><td>2-2 未登入分支</td><td>引導登入 → 回判斷</td><td>不取班級列表，直接派題</td></tr>
+        <tr><td>2-4 Join Class 顯示條件</td><td>Path A 固定 join class + 派題視窗</td><td>Join Class 依「已加入學生 &gt; 1」判斷</td></tr>
+        <tr><td>Story 2-3 / 2-5 / 3-1</td><td>完整章節</td><td>Android spec 未列出（沿用主 spec）</td></tr>
+        <tr><td>4-3 按鈕復原</td><td>詳列 CS 視窗收合、Toggle 不自動關等 6 條</td><td>只列「按鈕由 disable → enable」2 條</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>建議：</strong>Android spec 是主 spec 的濃縮 delta；實作時遇到 AC 未明列的情境（loading timeout 秒數、
+      未登入行為分支、Story 2-5 lifecycle 細節），以<strong>主 spec 為準</strong>，同時與 Ingrid 對齊 CS 側行為。
+    </div>
+
+    <!-- 8. Meetings -->
+    <h2 id="meetings">8. 會議記錄與 Task 拆解</h2>
+
+    <h3>2026-06-30 會議</h3>
+    <h4>注意事項</h4>
+    <ul class="compact">
+      <li>是否要跳起 Join Class 視窗參考 Spinner 邏輯（有學生就不顯示，反之亦然）</li>
+      <li>只要有派題，派題按鈕就 disable（無論是否切到下一頁）</li>
+      <li>題目數量由 <strong>ClassSwift</strong> 判斷；送派題 API 無論單題 / 多題都用過去相同 API</li>
+    </ul>
+    <h4>待討論項目</h4>
+    <ul class="compact">
+      <li>單題 / 多題派題的 data 串接：mVB team 解析原檔格式 → 把 HTML 中的 JSON 丟給 CS 解析</li>
+      <li>派題結束後要送事件給 mVB</li>
+      <li>失敗要送事件給 mVB 顯示 error</li>
+    </ul>
+
+    <h3>2026-07-01 會議</h3>
+    <h4>事前準備</h4>
+    <ul class="compact">
+      <li>OLF 檔案</li>
+      <li>CS 的單題與多題流程結果（題目種類：圖片題、是非題、多選、單選、投票、聲音題、簡答）</li>
+    </ul>
+
+    <h4>Task 拆解</h4>
+    <div class="callout new">
+      <strong>拆解更新（2026-07-03）：</strong>原會議把 mVB 側（VSFT-7538）與 CS 側（VSFT-9338）分給 Jay / Ingrid，
+      現在<strong>兩張 ticket 皆由 Jay 執行</strong>。下方仍依「mVB 側 / CS 側」呈現，但同一人負責兩端。
+      實作與真機驗證狀態見 <a href="findings.html">findings</a>。
+    </div>
+    <div class="grid2">
+      <div>
+        <h4 style="color: var(--c-mvb)">mVB 側（VSFT-7538 · Jay）</h4>
+        <ol class="compact">
+          <li>解析原檔格式 → 打包 JSON → 用 <strong>AIDL</strong> 傳給 CS <span class="badge badge-reuse">✅ 完成</span></li>
+          <li>派題結束事件回傳 mVB（複用 <code>EventMissionStatus</code>）<span class="badge badge-reuse">✅</span></li>
+          <li>失敗事件回傳 mVB（<code>EventCommandResult</code> + 15s timeout → toast）<span class="badge badge-reuse">✅</span></li>
+          <li>圖片題檔案格式：<strong>URL</strong>（<code>img_url</code> = S3 URL）<span class="badge badge-reuse">✅ 已釐清</span></li>
+          <li>Audio 題檔案格式：樣本無 audio；待有樣本再確認 <span class="badge badge-warn">待補</span></li>
+        </ol>
+      </div>
+      <div>
+        <h4 style="color: var(--c-cs)">CS 側（VSFT-9338 · Jay）</h4>
+        <ol class="compact">
+          <li>收到 JSON（<code>MessageDispatchQuiz</code>）→ 未進班 pending → 單/多題分流派題 <span class="badge badge-reuse">✅</span></li>
+          <li>傳送派題結束資訊給 mVB（<code>EventMissionStatus</code> CLOSED）<span class="badge badge-reuse">✅</span></li>
+          <li>傳送失敗資訊給 mVB（<code>EventCommandResult</code> failed）<span class="badge badge-reuse">✅</span></li>
+          <li>圖片題正確顯示（<code>collection_id=null</code> FK 修正後 batch/summary 正常）<span class="badge badge-reuse">✅</span></li>
+          <li>Audio 題檔案格式 <span class="badge badge-warn">待補</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- 9. Scope -->
+    <h2 id="scope">9. Scope / Phase 分層</h2>
+    <table>
+      <thead>
+        <tr><th></th><th>Phase 1（MVP）</th><th>Phase 2（留存體驗）</th><th>Phase 3（市場擴張）</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>核心目標</strong></td>
+          <td>Windows 跑通 Quiz 課件頁 → CTA → CS 派題 → 學生作答 → 揭示 → 結束回 mVB 完整 happy path</td>
+          <td>連續使用與異常處境：反覆派題、網路抖動、跨頁切換、長時間 Late Join 不掉鏈</td>
+          <td>擴大題型與平台覆蓋（更多裝置）</td>
+        </tr>
+        <tr>
+          <td><strong>範圍</strong></td>
+          <td>
+            <ul class="compact">
+              <li>mVB 端整合 + CTA 入口</li>
+              <li>Single / Batch 自動分流</li>
+              <li>4 種題型打包</li>
+              <li>N=1 與 N≥2 皆支援</li>
+              <li>沿用現行 CS / Quiz 視窗交互</li>
+            </ul>
+          </td>
+          <td>
+            <ul class="compact">
+              <li>Path B shortcut</li>
+              <li>完整 retry 機制</li>
+              <li>多頁狀態獨立</li>
+              <li>Late Join 長時間驗證</li>
+              <li>部分 invalid UX</li>
+            </ul>
+          </td>
+          <td>
+            <ul class="compact">
+              <li>投票（單/多）、錄音題型</li>
+              <li>Android Flutter 平台</li>
+              <li>跨裝置同步</li>
+            </ul>
+          </td>
+        </tr>
+        <tr>
+          <td><strong>成功驗證</strong></td>
+          <td>4 週內出可用版本，種子學校試用，測量老師從 Quiz 頁直接派題的真實使用率</td>
+          <td>連續派題完成率、Late Join 成功率、retry 觸發率</td>
+          <td>新題型使用分布、Android 安裝與留存、跨裝置同步成功率</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>注意：</strong>主 spec 定義 <em>Android Flutter 平台屬 Phase 3</em>，但實際上目前
+      已由 VSFT-7538 / VSFT-9338 兩支 Android 側 Jira 開跑，並有獨立的 Android spec（v2）。
+      即 Phase 分層是主 spec 的 Windows 視角；Android 版本實作已同步啟動。
+    </div>
+
+    <!-- 10. Jira -->
+    <h2 id="jira">10. Jira 對照</h2>
+    <table>
+      <thead>
+        <tr><th>Issue</th><th>Summary</th><th>Assignee</th><th>Status</th><th>Created</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9338" target="_blank">VSFT-9338</a></td>
+          <td>[Activity Support] 1-2 切到 Quiz 喚起 ClassSwift 並進行一鍵派題 (等支援 batch quiz)</td>
+          <td>Jay Wu <span class="badge badge-warn">改由 Jay</span></td>
+          <td>KICK-OFF</td>
+          <td>2026-06-30</td>
+        </tr>
+        <tr>
+          <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-7538" target="_blank">VSFT-7538</a></td>
+          <td>[Activity Support] 1-2 切到 Quiz 喚起 ClassSwift 並進行一鍵派題 (等支援 batch quiz)</td>
+          <td>Jay Wu</td>
+          <td>KICK-OFF</td>
+          <td>2026-04-27</td>
+        </tr>
+      </tbody>
+    </table>
+    <ul class="compact">
+      <li>兩支 issue 標題相同、都指向同一份 Android spec（page 567050261）。</li>
+      <li>VSFT-7538 代表 <strong>myViewBoard 側</strong>（mvbf / edu-droid-flutter）；VSFT-9338 代表 <strong>ClassSwift 側</strong>（CS Android / ragdoll-cat）。</li>
+      <li><strong>2026-07-03 更新：兩支 issue 皆由 Jay 執行</strong>（原 VSFT-9338 為 Ingrid）；即同一人同時負責 mVB 與 CS 兩端。</li>
+      <li>兩端實作已完成並真機驗證，狀態與 AC 對照見 <a href="findings.html">findings</a>。</li>
+    </ul>
+
+    <hr style="margin: 40px 0; border: none; border-top: 1px solid var(--c-border)" />
+    <div class="meta">
+      本文件為 6 份原始文件的整合視圖，<strong>不修改原始 clone</strong>；
+      如需最新原始資料，請重新從 Confluence / Jira 拉取，並更新對應 <code>*.md</code> 的 SOURCE TRACKING 版號。
+    </div>
+  </main>
+</div>
+<script src="assets/mermaid-init.js"></script>
+</body>
+</html>

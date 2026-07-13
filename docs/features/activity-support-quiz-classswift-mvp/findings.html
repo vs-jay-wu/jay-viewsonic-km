@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>實作 findings — mvbf ↔ CS Android 一鍵派題（VSFT-7538 / VSFT-9338）</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#impl">1. 完整版實作（2026-07-03）</a>
+        <ul class="sub">
+          <li><a href="#impl-mvbf">mvbf — VSFT-7538</a></li>
+          <li><a href="#impl-cs">CS Android — VSFT-9338</a></li>
+          <li><a href="#impl-regression">真機回歸結果</a></li>
+          <li><a href="#impl-scope-out">範圍外</a></li>
+        </ul>
+      </li>
+      <li><a href="#test-0702">2. 實測結果（2026-07-02）</a>
+        <ul class="sub">
+          <li><a href="#fk-bug">collection_id 外鍵違反</a></li>
+        </ul>
+      </li>
+      <li><a href="#tldr">3. TL;DR — 無硬技術卡點</a></li>
+      <li><a href="#audio">4. Audio open-question 結論</a></li>
+      <li><a href="#sample">5. 樣本 OLF 實測結構</a></li>
+      <li><a href="#contract">6. 線路契約（定案）</a></li>
+      <li><a href="#spike-scope">7. Spike 改動範圍</a></li>
+      <li><a href="#mvbw">8. mvbw 參考實作對照</a></li>
+      <li><a href="#todo">9. 已知限制 / 待辦</a></li>
+      <li><a href="#img-bug">10. ✅ 派題圖片跨環境不支援（非 bug，與後端確認）</a></li>
+      <li><a href="#coldstart-race">11. 🔴 冷啟動派題競態 — pending 被 abort（已修 + E2E 驗證）</a></li>
+      <li><a href="#btn-enable-state">12. 🐛 派題按鈕 enable 狀態 — spec 兩條規則矛盾（PM 已定案）</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Findings — mvbf ↔ CS Android 一鍵派題</h1>
+    <div class="meta">
+      <strong>VSFT-7538</strong>（mvbf 端）&middot; <strong>VSFT-9338</strong>（CS Android 端）&middot;
+      同一份 spec：Android Activity Support 1-2 Quiz ClassSwift MVP（confluence page 567050261）<br>
+      調查 + spike：2026-07-02 &middot; 完整版實作：2026-07-03<br>
+      目標：mvbf 從 OLF quiz activity 解析題目 → 交給 CS Android 走既有派題能力派發。
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="investigation-quiz-types.html">🔎 題型調查報告</a>
+      <a href="findings.html" class="active">🛠️ 實作 findings</a>
+      <a href="test-checklist.html">✅ 測試清單</a>
+      <a href="test-scenarios.html">🧪 測試腳本說明</a>
+    </div>
+
+    <!-- 1. 完整版實作 -->
+    <h2 id="impl">1. 完整版實作（2026-07-03，未 commit）</h2>
+
+    <h3 id="impl-mvbf">mvbf（edu-droid-flutter）— VSFT-7538</h3>
+    <table>
+      <thead>
+        <tr><th>Story</th><th>實作</th><th>檔案</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1-1 CTA</td>
+          <td><strong>雙層架構（滿足「ink 不遮擋按鈕」AC + 連體不分離）</strong>：<br/>
+          ① <strong>內容層</strong>（activity overlay，ink 之下、可被書寫）：WebView（ClipRRect 16）＋白色 tab 底座（固定 260×80、下圓角 16、右邊距 70，<strong>底座內不放按鈕</strong>）連體同 Stack，<strong>一體 drop shadow</strong>（<code>_QuizBundleShadowPainter</code> 以 WebView 圓角矩形 ∪ tab 下圓角矩形的 union path 畫單一陰影，兩塊不互相投影；採 app design-system 卡片陰影 token：黑 @20% / blur 16 / offset (0,4)，見 <code>vs_dropdown</code>）。<br/><em>註：Figma REST API 對此 instance 取不到 library component 的 effects，故採 DS token 值；設計確有陰影。</em><br/>
+          ② <strong>chrome 層</strong>（<code>CanvasOverlayLayer</code>，ink 之上）：藍色按鈕本體＝design-system <code>VSElevatedButton</code>（<strong>只覆寫 size = 212×56</strong>，其餘 primary/disabled 底色、圓角 <code>RadiusTokens.v200</code>=8、字級 <code>body1</code> 16/w400、padding、elevation 全部沿用 theme <code>ElevatedButtonThemeData</code>；<strong>無 icon</strong>）疊在 tab 底座位置；文字以 <code>FittedBox(scaleDown)</code> 包住 → 多語系（en「Start question(s)」/ zh_Hant「開始派題」/ zh_Hans「开始派题」）過長時等比縮小，<strong>不 overflow(紅線)、不換行</strong>（已實測三語系＋超長字串）；跟隨畫布（同 <code>backgroundImageMatrix</code>、同時訂閱 <code>notifier</code>+<code>movingNotifier</code> 兩個觸發）。幾何契約 <code>QuizDispatchTabMetrics</code> 兩層共用 → 永遠重合。<br/>
+          busy 時<strong>單純 disabled</strong>（<code>#D7E5FD</code>=accentBlue200，無轉圈，對齊 Figma disabled 變體 node 40008676-38157）。真機驗證：筆畫畫在卡片/tab 上、被按鈕蓋住、按鈕穿透筆畫仍可點。<br/>
+          <code>CanvasOverlayLayer</code> 為<strong>通用 canvas chrome 層</strong>（跟隨畫布、在 stroke 之上、非 annotation 非持久化），日後同類控制項直接加入 <code>_buildChildren</code>，不另闢定位路徑。</td>
+          <td><code>canvas_overlay_layer.dart</code>（新，chrome 層+幾何契約）、<code>start_quiz_dispatch_button.dart</code>（按鈕本體）、<code>background_activity_overlay_layer.dart</code>（tab 底座）、<code>whiteboard.dart</code>（掛載）</td>
+        </tr>
+        <tr>
+          <td>1-2 點擊觸發</td>
+          <td><code>QuizDispatchPhase</code>(idle/launching/dispatching) 狀態機；點擊→disabled+loading；CS 未開→pending+<code>TurnOnEvent</code>（沿用 loading/OTA/token=Story 2-1）；ready 後 <code>_consumePendingDispatchIfAny</code> 自動送（3 個 emit-on 點，仿 VSFT-8429 pending window 模式）；15s timeout</td>
+          <td><code>classswift_state.dart</code>、<code>classswift_bloc.dart</code>、<code>classswift_event.dart</code></td>
+        </tr>
+        <tr>
+          <td>3-1 題型打包</td>
+          <td><code>OlfQuizManifestReader.readQuizzes</code>：Phase 1 四題型過濾（TRUE_FALSE/SINGLE_SELECT/MULTIPLE_SELECT/SHORT_ANSWER）+ cap 20</td>
+          <td><code>helper/olf_file/olf_quiz_manifest_reader.dart</code></td>
+        </tr>
+        <tr>
+          <td>4-1 按鈕狀態</td>
+          <td><code>isStartQuizDispatchEnabled = phase==idle &amp;&amp; !isMissionOngoing</code>；mission ONGOING（EventMissionStatus，既有）→ disabled，跨頁保持（bloc 全域）</td>
+          <td><code>classswift_state.dart</code></td>
+        </tr>
+        <tr>
+          <td>4-2 錯誤處理</td>
+          <td>sendMessage 失敗 / EventCommandResult failed / 15s timeout → settled(false) → 按鈕復原 + toast；TurnOn 失敗路徑（<code>_clearPendingWindow</code>）一併 abort pending 派題</td>
+          <td><code>classswift_bloc.dart</code></td>
+        </tr>
+        <tr>
+          <td>4-3 結束派題</td>
+          <td>mission CLOSED → <code>isMissionOngoing=false</code> → 按鈕復原（既有 EventMissionStatus 流免費）；防禦：ONGOING 先到時收斂 in-flight 狀態</td>
+          <td><code>classswift_bloc.dart</code></td>
+        </tr>
+        <tr>
+          <td>i18n</td>
+          <td><code>classswift_start_questions</code> key（en/zh_Hant_TW/zh_Hans_CN，命名對齊既有 <code>classswift_*</code> 前綴慣例）+ intl_utils regenerate；<strong>正式需把詞條加進 POEditor</strong>（其餘語言 fallback en）；bloc 內錯誤 toast 依 codebase 慣例英文 hardcode + TODO i18n</td>
+          <td><code>l10n/intl_*.arb</code>、<code>generated/</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 id="impl-cs">CS Android（ragdoll-cat）— VSFT-9338</h3>
+    <table>
+      <thead>
+        <tr><th>Story</th><th>實作</th><th>檔案</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>協定</td>
+          <td><code>MessageDispatchQuiz</code>：type/message/parser（<code>payload.quizzes</code> → <code>List&lt;QuizInCollectionData&gt;</code>，Moshi <code>fromJsonValue</code>）</td>
+          <td><code>MyViewBoardMessageType/Message/MessageParser.kt</code></td>
+        </tr>
+        <tr>
+          <td>2-2/2-4 未進班</td>
+          <td>lessonId 空 → 派題 closure 存 <code>pendingClassEntryWindowManager</code>（VSFT-8429 機制），<code>handleCreateLessonSuccess</code> 進班時自動派；先回 success=「已受理」，之後失敗以 toast 呈現</td>
+          <td><code>MyViewBoardMessageHandler.kt</code></td>
+        </tr>
+        <tr>
+          <td>2-4 Path A</td>
+          <td>派題成功開視窗後 <code>openJoinClassIfNoStudents()</code>：<code>studentManager.getCurrentAttendantList()</code> 空 → JoinClass 並列 + bringToTop；≥1 不開（= Spinner 邏輯）</td>
+          <td>同上</td>
+        </tr>
+        <tr>
+          <td>2-5.A 單題</td>
+          <td><code>dispatchSingleQuiz</code>：鏡射 <code>performSingleDispatch</code>（UNSPECIFIED guard → <code>createQuizCancellingOngoingIfNeeded</code> → <code>QuizSharedUiInfo</code> → <code>MvbQuizDetailViewFactory.resolveStartWindow</code> 依題型開 start window）</td>
+          <td>同上</td>
+        </tr>
+        <tr>
+          <td>2-5.B batch</td>
+          <td><code>dispatchBatchQuiz</code>：<code>createBatchQuiz</code> → 開 <code>MvbBatchQuizStartWindow</code>（公布答案/結束派題入口）</td>
+          <td>同上</td>
+        </tr>
+        <tr>
+          <td>collection_id</td>
+          <td>OLF 匯入題 <code>id=""</code> → <code>collection_id=null</code>（FK 修正）；4 個 response model 的 <code>collectionId</code> 改 nullable（Create/UpdateStatus/Summary/Latest）</td>
+          <td><code>CreateQuizBody.kt</code> + 4 responses</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 id="impl-regression">真機回歸結果（2026-07-03，Pixel Tablet，adb 自動化實測）</h3>
+    <table>
+      <thead>
+        <tr><th>情境</th><th>結果</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>非 quiz 頁（Activity_GAME）不顯示按鈕</td><td><span class="badge badge-ok">✅</span></td></tr>
+        <tr><td>quiz 頁顯示 Figma 樣式按鈕（"Start question(s)" i18n，無 icon）</td><td><span class="badge badge-ok">✅</span>（design review 後改為錨在 activity 下方右對齊、隨 canvas 縮放、移除 icon —— 對齊 sparrow）</td></tr>
+        <tr><td>冷啟動：CS off 點派題 → 自動喚起 → 選班窗（Story 2-1/2-2.A）</td><td><span class="badge badge-ok">✅</span></td></tr>
+        <tr><td>未進班 pending：Enter Class 後自動派出 batch（200, EventCommandResult success）</td><td><span class="badge badge-ok">✅</span></td></tr>
+        <tr><td>Story 2-4：batch 控制視窗 + Join Class 並列（class ID/QR/學生名單）</td><td><span class="badge badge-ok">✅</span></td></tr>
+        <tr><td>mission ONGOING → 按鈕 disabled（點擊無反應）</td><td><span class="badge badge-ok">✅</span></td></tr>
+        <tr><td>End and review：finish/disclose/summary 全 200、10 題 review grid（collection_id 修正生效）</td><td><span class="badge badge-ok">✅</span></td></tr>
+        <tr><td>關 review → mission CLOSED → 按鈕復原（亮藍）</td><td><span class="badge badge-ok">✅</span></td></tr>
+        <tr><td>重派：復原後再點 → 新一輪 batch success（Story 4-1）</td><td><span class="badge badge-ok">✅</span></td></tr>
+        <tr><td>單題 N=1：mission_type=quiz、依題型開 MvbTextMultipleChoiceStartWindow、Responses 學生名單</td><td><span class="badge badge-ok">✅</span></td></tr>
+        <tr><td>單題強制結束確認對話框（Story 4-3）→ CLOSED</td><td><span class="badge badge-ok">✅</span></td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout warn">
+      <strong>已知觀察（非阻斷）：</strong>
+      <ul class="compact">
+        <li>單題 start window 的選項文字顯示原始 LaTeX（<code>$1\text{ cm}$</code>）— CS 原生視窗不渲染 KaTeX，quiz HTML/學生端才渲染；內容格式 vs CS 顯示的既有議題。</li>
+        <li>不同 OLF 若用相同 activity id，暫存目錄（<code>temp/html-activities/&lt;id&gt;/</code>）會互相覆蓋 manifest — 既有暫存機制行為，屬 OLF 生產端 id 唯一性假設。</li>
+        <li>Join Class 並列判斷用 <code>getCurrentAttendantList()</code>：rejoin lesson 當下學生清單可能尚未同步完成 → 已有 1 學生仍短暫開出 Join Class；AC 字面（&gt;1 才不顯示）下可接受。</li>
+        <li>15s timeout / sendMessage 失敗路徑未在真機演練（需人工製造斷線），邏輯已 code review + 與既有 pattern 一致。</li>
+      </ul>
+    </div>
+
+    <h3 id="impl-scope-out">範圍外（依 spec 明列 Phase 2/3）</h3>
+    <ul class="compact">
+      <li>Path B shortcut（連續派題免重 join）、完整 retry、多頁狀態獨立、Late Join 長驗證</li>
+      <li>Phase 2 題型（POLL/RECORD）—— 已在 mvbf 端過濾</li>
+      <li>已知次要 TODO：POEditor 詞條（<code>classswift_start_questions</code> 目前僅本地 arb）；pending-until-class-entry 期間 mvbf 按鈕可能短暫 enabled（mission ONGOING 到才鎖，選班中老師不可及、風險低）；按鈕在 activity 底部貼齊螢幕下緣時可能被切（sparrow 有 <code>GetActivityVisibleBottomLimit</code> 會壓縮 activity 讓出 button row，本次未實作該收斂，縮放/捲動可見）</li>
+    </ul>
+
+    <!-- 2. 實測結果 -->
+    <h2 id="test-0702">2. 實測結果（2026-07-02，Pixel Tablet，stag/edla debug）</h2>
+    <div class="callout ok">
+      <strong>End-to-end 全通，學生端收得到題。</strong>
+    </div>
+    <p>完整鏈路：</p>
+    <pre><code>點「開始派題」→ mvbf 送 MessageDispatchQuiz(10題)
+  → CS 解析成 List&lt;QuizInCollectionData&gt; → POST /lessons/{id}/quizzes/batch_quizzes
+  → 200 OK batch_quizzes_id → EventCommandResult status=success 回 mvbf</code></pre>
+
+    <h3 id="fk-bug">過程中踩到的唯一實錯：<code>collection_id</code> 外鍵違反（已修）</h3>
+    <ul class="compact">
+      <li><strong>症狀：</strong>batch API 回 <span class="badge badge-err">500</span>，body：<br>
+        <code>ForeignKeyViolationError: quiz_collection_id_fkey — Key (collection_id)=(&lt;OLF題id&gt;) is not present in table "quiz_collection"</code></li>
+      <li><strong>原因：</strong>CS 既有 <code>CreateQuizBody.fromQuizInCollectionData()</code> 把每題 <code>id</code> 塞進 <code>collection_id</code>；正常「題庫派題」那 id 是真 collection row，但 <strong>OLF 匯入的題目 id 不是本後端 quiz_collection 成員</strong> → FK 爆。</li>
+      <li><strong>修正（皆在 CS 端）：</strong>
+        <ol>
+          <li><code>CreateQuizBody.fromQuizInCollectionData</code>：<code>collectionId = id.ifBlank { null }</code></li>
+          <li><code>dispatchQuiz</code>：OLF 題目 <code>.copy(sourceType="IMPORT_CONTENT", id="")</code> → <code>collection_id</code> 送 null</li>
+        </ol>
+      </li>
+      <li><strong>驗證：</strong>curl 重打 <code>collection_id=null</code> → 200；app 重跑 → 200 success。</li>
+    </ul>
+    <div class="callout warn">
+      ⚠️ 註：sample OLF 的題目是 RC 環境所產（img_url=media-rc、org/quiz id 皆 RC），派到 staging 後端。<code>img_key</code> 照樣寫入沒問題（圖片非阻因）；真正阻因純粹是 <code>collection_id</code> FK。<strong>同環境作者 → 派同環境後端時該 id 可能存在</strong>，但送 null（imported content 語意）最穩健。
+    </div>
+
+    <!-- 3. TL;DR -->
+    <h2 id="tldr">3. TL;DR — 沒有硬技術卡點</h2>
+    <p>整條路都落在<strong>既有基礎設施</strong>上，不需要新的傳輸機制、不需要傳檔案：</p>
+    <ul class="compact">
+      <li><strong>傳輸層已存在</strong>：mvbf ↔ CS 之間本來就有 AIDL 綁定（<code>IMyViewBoardBinder.send(String jsonMsg)</code> / <code>IMyViewBoardCallback.onEvent</code>），且雙方<strong>同簽章</strong>、<code>android:permission</code> 保護。</li>
+      <li><strong>資產是 URL、不是檔案</strong>：quiz 由 CS Hub（african-golden-cat）生產，<code>img_url</code> 存 S3 HTTPS URL。mvbf 只需把 manifest 的 JSON 轉發，CS/學生端自行抓圖。<strong>pfd / ContentProvider / 複製檔案全部用不到。</strong></li>
+      <li><strong>派題能力已存在</strong>：CS 端 <code>QuizManager.createQuizCancellingOngoingIfNeeded()</code>（單題）/ <code>BatchQuizManager.createBatchQuiz()</code>（多題）就是「既有派題 API」，單/多題由 CS 依題數分流。</li>
+      <li><strong>欄位對齊</strong>：OLF manifest 的 quiz 欄位與 CS <code>QuizInCollectionData</code> 幾乎 1:1（<code>quiz_type</code> / <code>option_type</code> / <code>option_list</code> / <code>short_answer</code> / <code>img_url</code>），enum 值也一致（Hub ↔ CS Android granular 對齊，無 mapping）。</li>
+    </ul>
+
+    <!-- 4. Audio -->
+    <h2 id="audio">4. Audio open-question 的結論</h2>
+    <p>會議（VSFT-9338）留的疑問「Audio / 圖片是 URL 還是本地路徑」：</p>
+    <ul class="compact">
+      <li><strong>圖片</strong>：<code>img_url</code> = HTTPS URL（<code>media-rc.us.classswift.com/...</code>）。確定是 URL。</li>
+      <li><strong>Audio</strong>：本 spike 的樣本 OLF（<code>fixtures/mixed-activity-sample.olf</code>）<strong>完全沒有 audio / RECORD 題</strong>。所以在此樣本語境下「audio 檔案傳輸」問題<strong>不存在</strong>。
+        <ul class="compact">
+          <li>待補：若日後出現「題目自帶音訊」的 OLF，需確認它是 URL 還是封包內本地檔。
+            <ul class="compact">
+              <li>URL → 同圖片，塞進 JSON 即可。</li>
+              <li>本地檔 → 才需要「一次性 ParcelFileDescriptor 派題當下讀取上傳」機制（派題是一次性、派完上 backend、不回頭讀 mvbf，故 pfd 最乾淨）。</li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+
+    <!-- 5. 樣本 OLF -->
+    <h2 id="sample">5. 樣本 OLF 實測結構</h2>
+    <p><code>fixtures/mixed-activity-sample.olf</code>（zip）：</p>
+    <table>
+      <thead>
+        <tr><th>項目</th><th>內容</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Page 1</td><td><code>Activity_GAME</code>，source = 外部 HTTPS（jeopardy），<strong>不在派題範圍</strong></td></tr>
+        <tr><td>Page 2（多題 → Batch）</td><td><code>Activity_HTML_QUIZ</code>（<code>03d49337…</code>），source = 本地相對路徑 + <code>manifest.json</code>。<strong>11 題</strong>：<code>SHORT_ANSWER</code>×3、<code>SINGLE_SELECT</code>×4（含 1 題 LaTeX 範例）、<code>TRUE_FALSE</code>×3、<code>MULTIPLE_SELECT</code>×1 → N≥2 走 <strong>Batch Quiz</strong>。<br><em>註：<code>manifest.json</code> 與內嵌 <code>index.html</code> <strong>已對齊為同 11 題（同順序 seq 1-11）</strong>；顯示與派題數一致。<br>（原始 mvBW 匯出檔曾有 index 9 / manifest 10 的不一致——LaTeX 範例題只在 manifest 未進 index，2026-07-07 已把該題補進 index 並補上 MULTIPLE_SELECT，兩邊同步為 11。）</em></td></tr>
+        <tr><td>Page 3（單題 → Single）<span class="badge badge-new">2026-07-03 新增</span></td><td><code>Activity_HTML_QUIZ</code>（<code>c586d756…</code>），<strong>manifest 僅 1 題</strong>（<code>SINGLE_SELECT</code>「Which planet is closest to the Sun?」無圖）→ N=1 走 <strong>Single Dispatch</strong>（<code>create_quiz</code> socket）。專供驗證單題分流。</td></tr>
+        <tr><td>圖片</td><td>Batch 頁 4 題帶 <code>img_url</code>（HTTPS）；Single 頁無圖（避免破圖干擾單題測試）</td></tr>
+        <tr><td>Audio/RECORD</td><td>無</td></tr>
+      </tbody>
+    </table>
+
+    <!-- 6. 線路契約 -->
+    <h2 id="contract">6. 線路契約（本次定案）</h2>
+    <p>新訊息型別 <code>MessageDispatchQuiz</code>（沿用既有 envelope：<code>type</code> / <code>request_id</code> / <code>app_version</code> / <code>payload</code>）：</p>
+    <pre><code>{
+  "type": "MessageDispatchQuiz",
+  "request_id": "&lt;uuid&gt;",
+  "app_version": "...",
+  "payload": {
+    "quizzes": [ /* OLF manifest 的 quizzes[]，原樣轉發，欄位不轉換 */ ]
+  }
+}</code></pre>
+    <ul class="compact">
+      <li><strong>mvbf = pass-through</strong>：不轉換欄位、不 mapping enum。</li>
+      <li><strong>CS 端反序列化</strong> <code>payload.quizzes</code> → <code>List&lt;QuizInCollectionData&gt;</code>；<code>source_type</code> 由 CS 補為 <code>IMPORT_CONTENT</code>。</li>
+      <li><strong>單/多題分流由 CS 決定</strong>（會議：「題目判斷數量由 ClassSwift 實作」）：N=1 → <code>QuizManager</code>，N≥2 → <code>BatchQuizManager</code>。</li>
+      <li><strong>前置條件</strong>：老師須已在課堂中（<code>lessonId</code> 非空），否則派題 API 無法建題 → 回 <code>EventCommandResult</code> failed。</li>
+      <li><strong>回傳</strong>：成功/失敗走既有 <code>EventCommandResult</code>（<code>response_to = MessageDispatchQuiz</code>）；「派題結束」複用既有 <code>EventMissionStatus</code>（走 managers 自動送）。</li>
+    </ul>
+
+    <!-- 7. Spike 改動範圍 -->
+    <h2 id="spike-scope">7. Spike 改動範圍（未 commit）</h2>
+
+    <h3>CS Android（ragdoll-cat，Kotlin）— 收端 <span class="badge badge-ok">✅ 編譯通過</span></h3>
+    <ul class="compact">
+      <li><code>MyViewBoardMessageType.kt</code>：+ <code>MESSAGE_DISPATCH_QUIZ</code></li>
+      <li><code>MyViewBoardMessage.kt</code>：+ <code>DispatchQuiz</code> sealed 子類、<code>PAYLOAD_KEY_QUIZZES</code>、requestId/responseTo/<code>MyViewBoardResponseTo</code></li>
+      <li><code>MyViewBoardMessageParser.kt</code>：+ <code>quizzesAdapter</code>（Moshi <code>fromJsonValue</code>）+ <code>parseDispatchQuiz</code></li>
+      <li><code>MyViewBoardMessageHandler.kt</code>：注入 <code>QuizManager</code>/<code>BatchQuizManager</code>、+ <code>DispatchQuiz</code> 分支、+ <code>dispatchQuiz()</code>（N 分流 + lessonId gate + <code>source_type=IMPORT_CONTENT</code>）</li>
+    </ul>
+
+    <h3>mvbf（edu-droid-flutter，Dart）— 發端 <span class="badge badge-ok">✅ analyze 通過</span></h3>
+    <ul class="compact">
+      <li><code>classswift_types.dart</code>：+ <code>messageDispatchQuiz</code>、<code>keyQuizzes</code></li>
+      <li><code>classswift_event.dart</code>：+ <code>ClassSwiftDispatchQuizEvent</code></li>
+      <li><code>classswift_bloc.dart</code>：註冊 + <code>_onDispatchQuiz</code> + <code>_buildDispatchQuizMessage</code></li>
+      <li><code>helper/olf_file/olf_quiz_manifest_reader.dart</code>（新）：從暫存目錄讀 <code>manifest.json</code> 的 quizzes[]（source 同層）</li>
+      <li><code>background_activity_overlay_layer.dart</code>：quiz 頁右下角疊「開始派題」按鈕（spike 觸發）</li>
+    </ul>
+
+    <!-- 8. mvbw 對照 -->
+    <h2 id="mvbw">8. mvbw（Windows / edu-sparrow-app）參考實作對照</h2>
+    <div class="callout ok">
+      mvbw 已上線一鍵派題。核對結論：<strong>Android 的職責切分與 Windows 完全一致。</strong>
+    </div>
+    <ul class="compact">
+      <li><strong>mvbw = 純 transport</strong>：<code>StartQuizButtonViewModel.OnClick</code>（<code>src/Sparrow.UWP/Controls/Quiz/StartQuizButtonViewModel.cs:50-114</code>）讀 manifest、<code>TryParseQuizzes</code> 取整個 <code>quizzes</code> array、包成 <code>{"quizzes":[...]}</code>、走 UWP AppService IPC（action <code>host.command.session.startQuiz</code>）送 CS。<strong>不解析欄位、不決定單/多題、不建 REST body、不碰 collection_id / source_type。</strong></li>
+      <li><strong>ClassSwift 端才建 payload</strong>：collection_id / source_type / 單多題分流 / 呼叫後端全在 CS repo（不在 sparrow）。</li>
+      <li><strong>對 Android 的印證：</strong>
+        <ul class="compact">
+          <li>mvbf 只轉發 <code>{"quizzes":[...]}</code> → 對應 mvbw 的 transport 角色。<span class="badge badge-ok">✅</span></li>
+          <li>CS Android 端 <code>dispatchQuiz</code> 建 body + 修 <code>collection_id</code> → 對應 mvbw「ClassSwift 端負責」。<span class="badge badge-ok">✅</span> 修正放對邊。</li>
+          <li>命名差異：Windows <code>startQuiz</code> = 派 manifest；Android 既有 <code>MessageStartQuiz</code> = 截圖開編輯窗（語意不同），故 Android 另立 <code>MessageDispatchQuiz</code> 正確。</li>
+          <li>回報差異：mvbw fire-and-forget + CS 非同步 <code>CREATE_QUIZ_FAILED</code> 通知；Android 走既有同步 <code>EventCommandResult</code>。皆為平台慣例差異。</li>
+        </ul>
+      </li>
+    </ul>
+    <p class="meta">
+      參考檔：<code>StartQuizButtonViewModel.cs</code>、<code>OLFActivityLayer.cs</code>（manifest 讀取，路徑 <code>html-activities/{id}/manifest.json</code>）、<code>MyviewboardActions.cs:30</code>、<code>docs/plan/archive/Story1-2_OLF_Quiz_SendManifestToClassSwift_Implementation_Plan.md</code>（明載 mvbw = transport only）。
+    </p>
+
+    <!-- 9. 待辦 -->
+    <h2 id="todo">9. 已知限制 / 待辦（非技術卡點）</h2>
+    <ul class="compact">
+      <li>「開始派題」按鈕為 spike 最小版，非 Figma 規格 UI（按鈕狀態機、loading、error toast 皆未做）。<span class="badge badge-ok">已於完整版補齊</span></li>
+      <li>未處理派題狀態保留 / 重派 / Path A/B（Phase 2 scope）。</li>
+      <li>未接 <code>EventCommandResult</code> 回派題結果到 UI（bloc 目前只 log + 失敗顯示 paused dialog）。<span class="badge badge-ok">已於完整版補齊</span></li>
+      <li>audio 「題目自帶音訊」的 wire format 待有樣本再確認。</li>
+    </ul>
+
+    <!-- 10. 圖片破圖 — 跨環境不支援（非 bug） -->
+    <h2 id="img-bug">10. ✅ 派題圖片跨環境不支援（<strong>非 bug</strong>，2026-07-09 與後端確認）</h2>
+
+    <div class="callout" style="border-left:4px solid #137333;background:#f0fdf4;">
+      <strong>✅ 結論（2026-07-09，與後端 RD 確認 + code-level 復驗 origin/main）：這不是 bug，是「跨環境圖片本來就不支援」的預期行為。</strong>
+      <ul style="margin:6px 0 0;">
+        <li>本樣本 OLF 的 quiz 圖是 <strong>RC 產</strong>（<code>media-rc.us.classswift.com/quiz_collection_ai_draft/…</code>），
+          <strong>派到 stage 後端讀不出來是預期正常</strong>，不用修。</li>
+        <li><strong>為何跨環境不行（by design）</strong>：派題時後端做 <strong>S3-to-S3「同一個 bucket」CopyObject</strong>
+          （<code>_copy_img_to_lesson_folder</code> → <code>s3_helper.copy_file_from_src_to_dest</code>：
+          <code>CopySource.Bucket = target_bucket</code>），<strong>不是</strong>用 HTTP 去下載那個公開 URL。
+          所以「圖片公開、知道網址就能開」≠「能跨 bucket 被 S3 copy」——來源物件不在派題環境的 bucket 裡就 copy 不到。</li>
+        <li><strong>img_url 是環境烙印</strong>：URL base <code>S3_URL_PREFIX_OBJECT</code> 由各環境設定（rc→<code>media-rc</code>…），
+          quiz 只存 <code>img_key</code>、URL 在產出當下用該環境 base 組好；Hub 匯出 OLF 又原封嵌入
+          → env X 產的 OLF 派到 env Y（X≠Y）必失敗。</li>
+        <li><strong>正確測法</strong>：同環境產題 + 派題（stage 產 → stage 派，或 rc 產 → rc 派）。同環境時來源 key 就在該 bucket → copy 成功、圖片正常。</li>
+        <li>下方「原始調查」當初把它當成「後端轉存 bug」，<strong>結論已修正為上述</strong>；調查內容保留供脈絡。</li>
+      </ul>
+    </div>
+
+    <div class="meta">
+      <strong>症狀：</strong>同一批含圖題目，在 <strong>mvbf activity 頁（第 2 頁 WebView）圖片正常顯示</strong>，
+      但<strong>派題後在 CS 老師端題卡、學生端、end-lesson 結果都破圖</strong>（灰色佔位符）。
+      本次樣本 10 題中有 4 題帶圖（第 1、2 短答；第 7、8 是非題），4 張全破。
+    </div>
+
+    <h3>關鍵澄清：兩端載入的<strong>不是同一個 URL</strong></h3>
+    <p class="compact">
+      直覺以為「mvbf 和 CS 抓的是同一張圖同一個網址」，其實檔名（uuid）相同、但 <strong>host 與路徑不同</strong>：
+    </p>
+    <table>
+      <thead><tr><th>載入方</th><th>實際 URL</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>mvbf</strong><br>activity WebView</td>
+          <td class="u">OLF <code>index.html</code> 內嵌 <span style="color:#137333;font-weight:700">media-rc.us.classswift.com</span><code>/quiz_collection_ai_draft/…/docs/&lt;uuid&gt;.jpg</code>（<strong>來源原址</strong>）</td>
+          <td><span class="badge badge-ok">200 → 圖正常</span></td>
+        </tr>
+        <tr>
+          <td><strong>CS</strong><br>題卡 / 學生端 / 結果</td>
+          <td class="u">後端改寫後 <span style="color:#c5221f;font-weight:700">media.aps1.classswift-stg.com</span><code>/lesson_id_&lt;lesson&gt;/img/&lt;uuid&gt;.jpg</code>（<strong>轉存路徑</strong>）</td>
+          <td><span class="badge badge-err">403 AccessDenied → 破圖</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Playwright 並排驗證（真瀏覽器同時請求兩個 URL）</h3>
+    <p class="compact">
+      同一頁面用 <code>&lt;img&gt;</code> 實際載入 + <code>fetch()</code> 取 HTTP status，4 組 uuid 全部：
+      左欄來源 <strong>4/4 RENDERED（HTTP 200）</strong>，右欄轉存 <strong>4/4 BROKEN（HTTP 403）</strong>。
+    </p>
+    <p><img src="assets/investigation/quiz-image-url-comparison.png" alt="mvbf 來源 URL vs CS 轉存 URL 並排驗證" style="max-width:100%;border:1px solid #ddd;border-radius:6px"></p>
+    <p class="compact">
+      補充：同網域的 <code>media.aps1…/avatar/12.svg</code> 回 <strong>200</strong> → 網域/CDN 本身正常，
+      只有「這個 lesson 的題目圖物件」缺席；且過數分鐘、加 Referer 重測仍 403 → 排除時間差與授權因素。
+    </p>
+
+    <h3>斷點定位</h3>
+    <ol class="compact">
+      <li>mvbf → CS 的 IPC，<code>img_url</code> 傳的是<strong>來源</strong> <code>media-rc.us…</code>（logcat 已抓到完整 payload，正確）。</li>
+      <li>CS 原樣 POST 給後端 <code>POST /lessons/{id}/quizzes/batch_quizzes</code>。</li>
+      <li><strong>後端在回應把 <code>img_url</code> 改寫成 lesson media 路徑（<code>media.aps1/lesson_id_…/img/&lt;uuid&gt;.jpg</code>），但「抓來源→複製到自家 bucket」這步沒成功</strong>，回了一個死 URL 且未回報錯誤。</li>
+    </ol>
+    <p class="compact">
+      → <strong>mvbf 與 CS Android 兩端前端皆無問題；斷點在 CS 後端的圖片轉存（server-side copy）。</strong>
+    </p>
+
+    <h3>最可能原因與建議</h3>
+    <ul class="compact">
+      <li><strong>跨區/跨環境</strong>：來源在 <code>media-rc.<strong>us</strong>.classswift.com</code>（美國 prod bucket），課堂後端在 <code>api-swift.<strong>aps1</strong>.classswift-<strong>stg</strong>.com</code>（亞太 staging）；staging 複製 worker 很可能抓不到 US prod 來源 → 靜默失敗。可解釋「有些圖出得來、有些出不來」（視來源後端是否抓得到）。</li>
+      <li><del>建議開 CS backend bug…</del>　<strong>✎ 更正（2026-07-09）：非 bug，無需開單。</strong>
+        與後端確認後結論為「跨環境圖片本就不支援」（見本節頂端結論框）。當初這條把它當後端轉存缺陷是誤判：
+        跨環境 copy 失敗是預期，因為派題是 S3 同 bucket copy、非 HTTP 抓公開址。<strong>同環境產題+派題即正常。</strong></li>
+      <li><strong>驗證跨區假設</strong>：拿「來源就在 aps1/stg 網域」的題目圖派派看，若成功即坐實。</li>
+      <li><strong>mvbf 端可選防禦</strong>：派題前確認 <code>img_url</code> 為後端可 ingest 來源；或改走 presign 上傳（CS 已有 <code>ImageUploadView</code> / <code>awsPreSignedUrl.s3GetUrl</code>，Sketch 題即是先上傳進自家 media 再用）。</li>
+    </ul>
+    <p class="compact"><em>驗證環境：Pixel Tablet（adb）+ Playwright headless Chromium；join 連結 <code>s.mvb.fyi/join</code>、class ID <code>65257528</code>。</em></p>
+
+    <!-- 11. 冷啟動派題競態 -->
+    <h2 id="coldstart-race">11. 🔴 冷啟動派題競態 — pending 派題被 abort（2026-07-08，已修 + E2E 驗證）</h2>
+
+    <div class="meta">
+      <strong>症狀：</strong>ClassSwift <strong>尚未啟動</strong>時（例如一節課第一次）點「開始派題」，
+      CS 會正常啟動、顯示 Join Class，但<strong>那批題永遠沒送出去</strong>——學生端收不到、老師端無任何錯誤提示（靜默丟失）。
+      CS 已 warm（isOn=true）時則正常。以 jay-poc-cli-executor 的冷啟動 E2E scenario 揪出並定位。
+    </div>
+
+    <h3>根因：既有的「MvbToken 冷啟動暫時失敗 → toggle off」誤殺了 pending 派題</h3>
+    <p class="compact">派題流程本身<strong>設計正確</strong>：CS 未 ready 時派題存為 pending，於 <code>_onReady</code>（收到 <code>EventLoginStatus=success</code>）由 <code>_consumePendingDispatchIfAny</code> 送出。問題出在啟動握手的另一條路徑：</p>
+    <ol class="compact">
+      <li>冷啟動時 mvbf 送 <code>MessageMvbToken</code>（token 交握），CS service 尚未起完 → 回 <code>failed / reason_code=<strong>invalid_mvb_token</strong></code>（"mvb_token is required."）。</li>
+      <li>bloc 既有邏輯把 <code>MessageMvbToken</code> 失敗當<strong>關鍵指令致命失敗</strong> → <code>ClassSwiftTurnOffEvent</code> → 連帶 <code>_abortPendingDispatch</code>（<strong>靜默丟掉 pending 派題</strong>）。</li>
+      <li>但約 3 秒後 CS 其實 <code>EventLoginStatus=success</code> → ready；此時 pending 早已被丟 → <code>_consumePendingDispatchIfAny</code> 無題可送 → CS 從未收到派題。</li>
+    </ol>
+
+    <div class="callout warn">
+      <strong>責任歸屬（git 查證）：</strong>「MvbToken 失敗 → toggle off」是 <strong>committed HEAD 既有邏輯</strong>（非本次新增）；
+      但 pending 派題機制（<code>_abortPendingDispatch</code> / <code>_pendingDispatchQuizzes</code> / <code>_consumePendingDispatchIfAny</code>）是 <strong>VSFT-7538 本次新增</strong>，HEAD 不存在。
+      即：<strong>race 本身既有（原本只讓 toggle 閃一下 off→on，無害），但本功能把 pending 派題掛上該 toggle-off 路徑，才使它放大成「派題靜默丟失」的使用者可見 bug。</strong>
+    </div>
+
+    <h3>修正（mvbf，未 commit）</h3>
+    <p class="compact">把 <code>MessageMvbToken</code> 的<strong>冷啟動暫時性失敗</strong>與真失敗區分：reason_code 屬 <code>transientMvbTokenFailReasons</code>（<code>invalid_mvb_token</code> / <code>service_not_started</code>）時<strong>不 toggle-off、不 abort pending</strong>，交由 <code>_onReady</code>（consume）或派題 <strong>15s timeout</strong>（真失敗 → CS 不會 ready → 逾時顯示錯誤 toast）收斂。改於 <code>classswift_bloc.dart</code> 的 EventCommandResult 處理 + <code>classswift_types.dart</code> 新增常數。順帶讓既有 toggle 冷啟動行為更穩（不再無謂閃動）。</p>
+
+    <table>
+      <thead><tr><th>冷啟動同一路徑</th><th>修正前</th><th>修正後</th></tr></thead>
+      <tbody>
+        <tr><td>MvbToken <code>invalid_mvb_token</code></td><td><code>_abortPendingDispatch</code>（丟派題）</td><td>視為暫時、不 abort</td></tr>
+        <tr><td>CS ready 後</td><td>pending 已空 → CS 收不到</td><td><code>_consumePendingDispatch send quizzes=11</code></td></tr>
+        <tr><td>結果</td><td>❌ 派題靜默丟失</td><td>✅ CS <code>POST batch_quizzes</code> → 200 → mission ONGOING</td></tr>
+      </tbody>
+    </table>
+
+    <h3>E2E 驗證（jay-poc-cli-executor，冷啟動路徑）</h3>
+    <p class="compact"><code>scenarios/vsft-7538-batch-e2e.yaml</code>：開 OLF → 導到多題頁 → <strong>不預先暖機 CS</strong> → 點派題（<code>isOn=false</code> 走 pending）→ 斷言。<strong>PASSED</strong>，logcat 實證：</p>
+    <ul class="compact">
+      <li>① mvbf：<code>_onDispatchQuiz quizzes=11</code></li>
+      <li>② <code>_consumePendingDispatch send quizzes=11</code>（pending 被 consume，<strong>非 abort</strong>）</li>
+      <li>③ CS：<code>--&gt; POST .../quizzes/batch_quizzes</code> → <code>&lt;-- 200 OK</code>（<code>batch_quizzes_id</code>）→ <code>EventMissionStatus batch_quizzes ONGOING</code></li>
+    </ul>
+    <p class="compact"><em>另附 3 條自動化 scenario：<code>vsft-7538-batch-dispatch</code>（送 11）、<code>vsft-7538-single-dispatch</code>（送 1）、<code>vsft-7538-batch-e2e</code>（冷啟動全鏈）。前置：mvbf debug + <code>kEnableAppiumIntegration</code>、按鈕 ValueKey/semanticsId；CS 版本 ≥ OTA 要求（本機 bump 到 1.14.0）。</em></p>
+
+    <div class="callout warn">
+      <strong>待評估：</strong><code>invalid_mvb_token</code> 在「使用者真的無 token（未登入）」時也可能出現；本修正在該情況會靠派題 15s timeout 收斂（顯示錯誤 toast），但 toggle 可能短暫停在 on。若要更嚴謹，可改用「launch 進行中才視為暫時」的狀態判斷，而非只看 reason_code。
+    </div>
+
+    <h2 id="btn-enable-state">12. 🐛 派題按鈕 enable 狀態 — spec 兩條規則矛盾（PM 已定案）</h2>
+
+    <div class="meta">
+      <strong>症狀：</strong>「End and review question」後，若 CS 的 result/檢視視窗（<code>MVB_BATCH_QUIZ_RESULT</code>）還開著，mvbf 課件頁的「開始派題」按鈕維持 <strong>disabled</strong>；把該視窗<strong>縮小</strong>→變 enabled；<strong>還原</strong>→又變 disabled。跟著視窗開合跳動，直覺上很怪。
+    </div>
+
+    <h3>✅ PM 定案（2026-07-10，Fred）</h3>
+    <div class="callout ok">
+      <strong>結束派題後，就是可以重新派題，跟視窗收合狀態無關。</strong>
+      （即按鈕 enable 應綁 <strong>quiz 生命週期是否已結束</strong>，而非 CS 視窗可不可見。文件敘述易讓人誤會，以此為準。）
+    </div>
+
+    <h3>spec 兩條規則在「檢視中」互相矛盾</h3>
+    <table>
+      <thead><tr><th>來源</th><th>gate 依據</th><th>「End and review 後、result 視窗還開著」時</th></tr></thead>
+      <tbody>
+        <tr><td><strong>主 spec Story 4-1</strong>「派題期間的按鈕狀態管理」</td><td>quiz <strong>STATUS</strong>：<code>OPEN</code>→disable；<code>FINISH/DISCLOSED/CLOSE</code>→enable（重派觸發）</td><td>DISCLOSED → <strong>應 enable</strong></td></tr>
+        <tr><td><strong>主 spec Story 4-3</strong>「結束派題回到簡報」</td><td>「ClassSwift <strong>視窗已收合</strong> → 按鈕回復可點」</td><td>視窗未收合 → <strong>應 disable</strong></td></tr>
+      </tbody>
+    </table>
+    <p class="compact">兩條打架 → 這就是實作與體感矛盾的根源。依 PM 定案，<strong>以 Story 4-1（status-based）為準</strong>；Story 4-3「視窗收合」敘述需修正/澄清。</p>
+
+    <h3>根因：CS 的 <code>EventMissionStatus</code> 沒帶 quiz 生命週期 status</h3>
+    <p class="compact">mvbf 現行 gate（<code>classswift_state.dart</code>）：</p>
+    <ul class="compact">
+      <li><code>isStartQuizDispatchEnabled = quizDispatchPhase == idle &amp;&amp; !isMissionOngoing</code></li>
+      <li><code>isMissionOngoing = (EventMissionStatus.status == ONGOING || == VISIBLE)</code>；<code>MINIMIZED</code>→false；quiz 視窗 <code>CLOSED</code>→清除。</li>
+    </ul>
+    <p class="compact">而 CS <code>EventMissionStatus.payload = { mission_type, status }</code>，status 常數（<code>classswift_types.dart</code>）<strong>只有</strong> <code>ONGOING / VISIBLE / MINIMIZED / CLOSED</code>——<strong>全是視窗呈現態，沒有 <code>FINISH/DISCLOSED/OPEN</code> 這種 quiz 生命週期狀態</strong>。所以 End and review 後 result 視窗還開著時 CS 只送 <code>VISIBLE</code>，mvbf <strong>分不出「OPEN+可見」與「DISCLOSED+可見」</strong>，兩者都當 ongoing → disable。</p>
+    <div class="callout warn">
+      <strong>結論：這不是純 mvbf 寫錯，是 CS 沒把「quiz 已結束」的資訊傳過來。</strong>目前唯一會 enable 的訊號是 <code>MINIMIZED</code>（縮小）或 <code>CLOSED</code>（關窗）——正好對應 Story 4-3「視窗收合」，而非 Story 4-1「quiz 已結束」。
+    </div>
+
+    <h3>修法選項</h3>
+    <table>
+      <thead><tr><th></th><th>修在哪</th><th>做法</th><th>備註</th></tr></thead>
+      <tbody>
+        <tr><td><strong>A</strong></td><td>mvbf（edu-droid-flutter）</td><td>監聽 <code>EventWindowStateChanged</code> 的 <code>MVB_BATCH_QUIZ_RESULT</code> 視窗——它一出現即代表 quiz 已結束進檢視 → 視為 ended → enable（不再受 <code>VISIBLE</code> 壓成 disable）</td><td>mvbf 已收到此事件（log 有），現未用於派題 gate。client-side 可修，屬 heuristic（靠 result 視窗 tag 推斷）</td></tr>
+        <tr><td><strong>B</strong> <span class="badge badge-ok">✅ 採用</span></td><td>CS（ragdoll-cat）+ mvbf</td><td>quiz 結束時 CS 多送 <code>FINISHED</code> status，mvbf 用它 gate</td><td>契約最乾淨、Windows(sparrow) 也受惠</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout ok">
+      <strong>✅ B 已實作 + 上機驗證通過（2026-07-10，未 commit）。</strong>
+      3 支 scenario 全 PASS：<strong>end-lesson</strong>（B 核心：End and review 後派題按鈕正確 enable）、<strong>batch-dispatch</strong>、<strong>single-dispatch</strong>（皆無回歸）。
+      <br>測試中另抓到並修掉一個 mvbf UI bug：<code>start_quiz_dispatch_button.dart</code> 的 <code>buildWhen</code> 原本只比對 <code>isMissionOngoing</code>，但 FINISHED 時它維持 true（不變）→ 按鈕不 rebuild、停在 disabled；已補比對 <code>isMissionFinished</code>。
+      <ul class="compact" style="margin-bottom:0">
+        <li><strong>CS（ragdoll-cat）</strong>：<code>EventMissionStatus.Status</code> 新增 <code>FINISHED</code>；<code>UnclosedMissionUiManager</code> 加 <code>finishedMissionSet</code> + <code>notifyMissionFinishedIfNeeded()</code>（發 FINISHED 但不動 ongoingMissionSet，故關窗仍會發 CLOSED；檢視中最小化→還原時 <code>bringOngoingMissionToTop</code> 重發 FINISHED 而非 ONGOING，避免還原後又 disable）。注入點：batch = <code>MvbBatchQuizStartWindow.handleEndResult</code>；single = <code>QuizStartWindowModel.changeQuizState</code>(QUIZ_RESULTS) + <code>TrueFalseWindowModel</code> / <code>MultipleChoiceWindowModel</code>.triggerQuizResultState。<code>compileRcDebugKotlin</code> ✅。</li>
+        <li><strong>mvbf（edu-droid-flutter）</strong>：<code>classswift_types.dart</code> 加 <code>statusFinished='FINISHED'</code>；<code>classswift_state.dart</code> 加 <code>isMissionFinished</code>，gate 改 <code>isStartQuizDispatchEnabled = idle &amp;&amp; !(isMissionOngoing &amp;&amp; !isMissionFinished)</code>（FINISHED 時 isMissionOngoing 仍 true → toolbar Quiz 維持 Selected，只放行 CTA）；<code>_onMissionStatusChanged</code> 處理 FINISHED；4 個 session 重置點一併清 <code>isMissionFinished</code>。<code>dart analyze</code> ✅（僅既有 warning）。</li>
+        <li><strong>harness</strong>：已移除 <code>cs-tap-end-and-review</code> 的第 2 步 workaround，<code>end-lesson</code> 斷言＝「End and review 後直接 enable」——B 修好後應直接 PASS。</li>
+      </ul>
+    </div>
+
+    <h3>對 E2E harness 的影響（jay-poc-cli-executor）</h3>
+    <p class="compact">先前 <code>cs-tap-end-and-review</code> 加了「再關 result 視窗（<code>iv_mbqr_close</code>）」的第 2 步 workaround，讓 <code>vsft-7538-end-lesson</code> 配合<strong>現行（視窗收合才 enable）</strong>行為過關。依 PM 定案，此 workaround 應<strong>移除</strong>，<code>end-lesson</code> 斷言改回「End and review 後直接 enable」——修好產品（A 或 B）前此斷言會 fail，正好標示此 bug。</p>
+
+  </main>
+</div>
+</body>
+</html>

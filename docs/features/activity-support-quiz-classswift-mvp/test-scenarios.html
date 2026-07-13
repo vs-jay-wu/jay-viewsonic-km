@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>自動化測試腳本說明（白話版）— Activity Support 1-2 Quiz ClassSwift MVP</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#what">1. 這些測試在驗什麼</a></li>
+      <li><a href="#scenarios">2. 每個腳本在做什麼</a>
+        <ul class="sub">
+          <li><a href="#s-batch-dispatch">batch-dispatch（完整閉環）</a></li>
+          <li><a href="#s-single-dispatch">single-dispatch</a></li>
+          <li><a href="#s-end-lesson">end-lesson</a></li>
+        </ul>
+      </li>
+      <li><a href="#setup-teardown">3. 開頭與收尾</a></li>
+      <li><a href="#run">4. 怎麼跑</a></li>
+      <li><a href="#status">5. 目前狀態</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>自動化測試腳本說明（白話版）</h1>
+    <div class="meta">
+      對應 VSFT-7538（mvbf 送出端）+ VSFT-9338（ClassSwift 接收端）「一鍵派題」·
+      腳本位置 <code>jay-poc-cli-executor/scenarios/vsft-7538-*.yaml</code>
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="investigation-quiz-types.html">🔎 題型調查報告</a>
+      <a href="findings.html">🛠️ 實作 findings</a>
+      <a href="test-checklist.html">✅ 測試清單</a>
+      <a href="test-scenarios.html" class="active">🧪 測試腳本說明</a>
+    </div>
+
+    <div class="callout warn">
+      <strong>這份文件用人話</strong>說明自動化測試在測什麼、怎麼測、過了代表什麼。
+      技術細節（YAML 步驟、resource-id）不寫在這，只講「一個真人照著做會看到什麼」。
+    </div>
+
+    <h2 id="what">1. 這些測試在驗什麼</h2>
+    <p>一句話：<strong>老師在 myViewBoard（白板 App，簡稱 mvbf）打開一份含題目的教材，按下「開始派題」，
+      題目要能正確送到 ClassSwift（簡稱 CS），學生用瀏覽器就能收到題目作答。</strong></p>
+    <pre><code>老師開教材 → 按「開始派題」 → mvbf 把題目送給 CS → CS 建立一場派題 → 學生瀏覽器收到題目</code></pre>
+    <p>不同腳本各自負責驗證這條路上的「某一段」，從最單純（只驗 mvbf 有送出）到最完整（驗學生真的收到）。</p>
+
+    <h2 id="scenarios">2. 每個腳本在做什麼</h2>
+
+    <div class="story-card" id="s-batch-dispatch">
+      <h3>1. <code>batch-dispatch</code> — 多題派題「完整閉環」（一條到底）</h3>
+      <ul>
+        <li><strong>情境：</strong>教材多題頁（11 題）按「開始派題」，一路測到學生真的收到。</li>
+        <li><strong>驗什麼（整段）：</strong>
+          <ol>
+            <li>mvbf 判斷「題目 ≥ 2 → Batch」並送出 <strong>11 題</strong>；</li>
+            <li>CS 被喚起、冷啟動、建立批次派題；</li>
+            <li>學生用訪客瀏覽器加入 → 答題頁顯示「<strong>X of 11</strong>」（真的收到 11 題）；</li>
+            <li>收尾在 CS 按「End and review question」收掉 ongoing batch。</li>
+          </ol>
+        </li>
+        <li><strong>過了代表：</strong>老師派題 → CS → 學生收到，整條打通。</li>
+        <li>（此隻已合併原本分開的 <code>batch-e2e</code> / <code>student-receive</code>——一次測整段，不再拆兩份重疊跑。學生瀏覽器預設 headless，本機除錯可加 <code>--headed</code>。）</li>
+      </ul>
+    </div>
+
+    <div class="story-card" id="s-single-dispatch">
+      <h3>2. <code>single-dispatch</code> — 單題派</h3>
+      <ul>
+        <li><strong>情境：</strong>翻到只有 1 題的那一頁，按「開始派題」。</li>
+        <li><strong>驗什麼：</strong>mvbf 判斷「題目 = 1 → 走單題派題（Single）」，只送 <strong>1 題</strong>。</li>
+        <li><strong>過了代表：</strong>單題頁的派題決策 + 送出數量正確。</li>
+      </ul>
+    </div>
+
+    <div class="story-card" id="s-end-lesson">
+      <h3>3. <code>end-lesson</code> — 派題中按鈕變灰、結束後恢復</h3>
+      <ul>
+        <li><strong>情境：</strong>派題後，「開始派題」按鈕的狀態變化。</li>
+        <li><strong>驗什麼：</strong>
+          <ol>
+            <li>正在派題時，「開始派題」按鈕應該是<strong>灰的（不能再按）</strong>；</li>
+            <li>老師在 CS 按「End and review question（結束並檢視）」結束後，按鈕<strong>恢復可按</strong>。</li>
+          </ol>
+        </li>
+        <li><strong>過了代表：</strong>派題進行中/結束的狀態同步正確（避免重複派題）。</li>
+        <li class="warn-inline"><strong>⚠️ 注意：</strong>「按鈕恢復可按」的前提是 mission 真正走到 CLOSED。實測發現按「End and review question」
+          只會公布答案、進 review，若還有學生沒作答會再跳「End and push task」確認框——要按到確認、mission 真正結束，
+          按鈕才會恢復。詳見 <a href="overview.html#story-4-1">overview Story 4-1 的本機補充</a>。</li>
+      </ul>
+    </div>
+
+    <h2 id="setup-teardown">3. 每次跑腳本的「開頭」與「收尾」</h2>
+    <p>為了讓每次測試都從乾淨狀態開始、結束後不留垃圾，會派題的腳本都包了固定的前置與收尾：</p>
+    <h3>開頭（把環境清乾淨）</h3>
+    <ul>
+      <li>關掉會擋住操作的彈窗（新手教學、歡迎頁、更新提示…）。</li>
+      <li><strong>把白板收斂成單一乾淨空白分頁：</strong>App 跨次執行會保留分頁，若上一輪的教材還開著、還停在某一頁，
+        下一輪的翻頁步驟就會對不上而失敗。這一步讓「開檔」永遠是全新流程。</li>
+    </ul>
+    <h3>收尾（把這場派題收掉）</h3>
+    <ul>
+      <li><strong>結束這批派題（End and review question）：</strong>每次派題都會在後端開一場，不結束會一直累積。
+        收尾會先關掉蓋在上層的「Join Class」視窗（否則系統只看得到最上層那個視窗、找不到結束按鈕），
+        再按「End and review question」把這批派題結束。</li>
+      <li>刪掉推到裝置上的測試教材檔。</li>
+    </ul>
+
+    <h2 id="run">4. 怎麼跑</h2>
+    <pre><code># 單一腳本（headless）
+npx tsx src/cli/index.ts scenario vsft-7538-batch-dispatch --headless --udid &lt;裝置序號&gt;
+
+# 想看畫面就把 --headless 改成 --headed（學生瀏覽器那隻才有差）</code></pre>
+    <p>前提：裝置上的 mvbf 是 debug build 且開了測試整合旗標、CS 是含本功能的最新 build。</p>
+
+    <h2 id="status">5. 目前狀態（最近一次全部重測）</h2>
+    <table>
+      <thead><tr><th>腳本</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr><td>batch-dispatch（完整閉環）</td><td>✅ 派題+CS+學生 11 題（已合併原 batch-e2e / student-receive）；<strong>需同環境 OLF↔後端，否則圖片破圖為預期</strong></td></tr>
+        <tr><td>single-dispatch</td><td>✅ 純送出快檢（N=1 → Single）</td></tr>
+        <tr><td>end-lesson</td><td>⚠️ 待補：收尾需接「End and push task」確認框才會真正結束 mission、按鈕才恢復</td></tr>
+      </tbody>
+    </table>
+    <div class="callout new">
+      <strong>本次重測前修掉的關鍵問題：</strong>
+      <ol>
+        <li>裝置上的 CS 是舊 build、不認得新的派題訊息名稱（重建後解決）；</li>
+        <li>更新提示會在測試跑到一半跳出擋住流程（測試 build 已關閉更新提示）；</li>
+        <li>收尾沒真的結束派題（Join Class 視窗擋住結束按鈕，已修正為先關它再按結束）。</li>
+      </ol>
+    </div>
+  </main>
+</div>
+</body>
+</html>
