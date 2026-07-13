@@ -1,8 +1,80 @@
+diff --git a/app/src/debug/AndroidManifest.xml b/app/src/debug/AndroidManifest.xml
+index c4cf105e..59c53d34 100644
+--- a/app/src/debug/AndroidManifest.xml
++++ b/app/src/debug/AndroidManifest.xml
+@@ -72,5 +72,23 @@
+             android:name="com.viewsonic.classswift.ui.quizclose.MvbNonTextQuizOfflineCloseTestActivity"
+             android:exported="false"
+             android:theme="@style/Theme.MaterialComponents.Light.NoActionBar" />
++
++        <!--
++          測試用 receiver（debug-only；原本誤置於 stag flavor，改由 build type=debug 涵蓋所有 flavor）。
++          切換 CS overlay 的 FLAG_NOT_FOCUSABLE，讓 UIAutomator2/Appium 看得見 CS elements。
++          以 explicit 元件 broadcast 觸發（避開 Android 8+ implicit broadcast 限制）：
++            adb shell am broadcast
++              -n {applicationId}/com.viewsonic.classswift.testing.TestFocusableReceiver
++              -a com.viewsonic.classswift.TEST_SET_FOCUSABLE
++              (帶 boolean extra) remove_focusable=true
++          onReceive 會檢查 action；exported=true 讓 adb(shell uid) 能投遞。
++        -->
++        <receiver
++            android:name="com.viewsonic.classswift.testing.TestFocusableReceiver"
++            android:exported="true">
++            <intent-filter>
++                <action android:name="com.viewsonic.classswift.TEST_SET_FOCUSABLE" />
++            </intent-filter>
++        </receiver>
+     </application>
+ </manifest>
+diff --git a/app/src/debug/java/com/viewsonic/classswift/testing/TestFocusableReceiver.kt b/app/src/debug/java/com/viewsonic/classswift/testing/TestFocusableReceiver.kt
+new file mode 100644
+index 00000000..41873d97
+--- /dev/null
++++ b/app/src/debug/java/com/viewsonic/classswift/testing/TestFocusableReceiver.kt
+@@ -0,0 +1,38 @@
++package com.viewsonic.classswift.testing
++
++import android.content.BroadcastReceiver
++import android.content.Context
++import android.content.Intent
++import android.os.Handler
++import android.os.Looper
++import com.viewsonic.classswift.windowframework.core.CSWindowManager
++import timber.log.Timber
++
++/**
++ * 測試用 BroadcastReceiver（debug-only，src/debug → 涵蓋所有 debug flavor：stag/rc…）。
++ *
++ * 接收 adb broadcast：
++ *   adb shell am broadcast -a com.viewsonic.classswift.TEST_SET_FOCUSABLE \
++ *     --ez remove_focusable <true|false>
++ *
++ * remove_focusable=true  → 移除 FLAG_NOT_FOCUSABLE，讓 UIAutomator2 看見 CS elements
++ * remove_focusable=false → 還原 FLAG_NOT_FOCUSABLE（正常狀態）
++ */
++class TestFocusableReceiver : BroadcastReceiver() {
++
++    override fun onReceive(context: Context, intent: Intent) {
++        if (intent.action != ACTION) return
++
++        val removeFocusable = intent.getBooleanExtra(EXTRA_REMOVE_FOCUSABLE, true)
++        Timber.d("[TestFocusableReceiver] remove_focusable=$removeFocusable")
++
++        Handler(Looper.getMainLooper()).post {
++            CSWindowManager.setFocusable(focusable = removeFocusable)
++        }
++    }
++
++    companion object {
++        const val ACTION = "com.viewsonic.classswift.TEST_SET_FOCUSABLE"
++        const val EXTRA_REMOVE_FOCUSABLE = "remove_focusable"
++    }
++}
 diff --git a/app/src/main/java/com/viewsonic/classswift/windowframework/core/CSWindowManager.kt b/app/src/main/java/com/viewsonic/classswift/windowframework/core/CSWindowManager.kt
-index f475284f..37cca76e 100644
+index 9714ca5f..b9a244ab 100644
 --- a/app/src/main/java/com/viewsonic/classswift/windowframework/core/CSWindowManager.kt
 +++ b/app/src/main/java/com/viewsonic/classswift/windowframework/core/CSWindowManager.kt
-@@ -519,6 +519,27 @@ object CSWindowManager {
+@@ -524,6 +524,27 @@ object CSWindowManager {
          onCSWindowChangedListeners.remove(onCSWindowChangedListener)
      }
  
@@ -30,57 +102,3 @@ index f475284f..37cca76e 100644
      enum class WindowState{
          VISIBLE,
          HIDDEN,
-diff --git a/app/src/stag/AndroidManifest.xml b/app/src/stag/AndroidManifest.xml
-new file mode 100644
-index 00000000..53db121f
---- /dev/null
-+++ b/app/src/stag/AndroidManifest.xml
-@@ -0,0 +1,4 @@
-+<?xml version="1.0" encoding="utf-8"?>
-+<!-- TestFocusableReceiver is registered dynamically in ClassSwiftApplication via reflection.
-+     No manifest receiver needed (Android 8+ background implicit broadcast restriction). -->
-+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />
-diff --git a/app/src/stag/java/com/viewsonic/classswift/testing/TestFocusableReceiver.kt b/app/src/stag/java/com/viewsonic/classswift/testing/TestFocusableReceiver.kt
-new file mode 100644
-index 00000000..a20464bd
---- /dev/null
-+++ b/app/src/stag/java/com/viewsonic/classswift/testing/TestFocusableReceiver.kt
-@@ -0,0 +1,38 @@
-+package com.viewsonic.classswift.testing
-+
-+import android.content.BroadcastReceiver
-+import android.content.Context
-+import android.content.Intent
-+import android.os.Handler
-+import android.os.Looper
-+import com.viewsonic.classswift.windowframework.core.CSWindowManager
-+import timber.log.Timber
-+
-+/**
-+ * 測試用 BroadcastReceiver（僅 stag build）。
-+ *
-+ * 接收 adb broadcast：
-+ *   adb shell am broadcast -a com.viewsonic.classswift.TEST_SET_FOCUSABLE \
-+ *     --ez remove_focusable <true|false>
-+ *
-+ * remove_focusable=true  → 移除 FLAG_NOT_FOCUSABLE，讓 UIAutomator2 看見 CS elements
-+ * remove_focusable=false → 還原 FLAG_NOT_FOCUSABLE（正常狀態）
-+ */
-+class TestFocusableReceiver : BroadcastReceiver() {
-+
-+    override fun onReceive(context: Context, intent: Intent) {
-+        if (intent.action != ACTION) return
-+
-+        val removeFocusable = intent.getBooleanExtra(EXTRA_REMOVE_FOCUSABLE, true)
-+        Timber.d("[TestFocusableReceiver] remove_focusable=$removeFocusable")
-+
-+        Handler(Looper.getMainLooper()).post {
-+            CSWindowManager.setFocusable(focusable = removeFocusable)
-+        }
-+    }
-+
-+    companion object {
-+        const val ACTION = "com.viewsonic.classswift.TEST_SET_FOCUSABLE"
-+        const val EXTRA_REMOVE_FOCUSABLE = "remove_focusable"
-+    }
-+}
