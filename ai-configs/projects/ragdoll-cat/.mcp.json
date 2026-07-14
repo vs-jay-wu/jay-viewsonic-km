@@ -49,10 +49,6 @@
           "POEDITOR_API_TOKEN": "${POEDITOR_API_TOKEN}",
           "POEDITOR_PROJECT_ID": "754682"
         }
-      },
-      "gitnexus": {
-        "command": "/opt/homebrew/bin/gitnexus",
-        "args": ["mcp"]
       }
     }
   }
