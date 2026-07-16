@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>VSFT-9208 Flutter Text Fallback (pre-install) — 文件整合總覽</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#sources">1. 原始 tickets</a></li>
+      <li><a href="#relation">2. Ticket 關係</a></li>
+      <li><a href="#background">3. Background（Spike 由來）</a></li>
+      <li><a href="#scope">4. Scope / Phase 分層</a></li>
+      <li><a href="#ac">5. Acceptance Criteria</a></li>
+      <li><a href="#fonts">6. 字體盤點清單（20 套）</a>
+        <ul class="sub">
+          <li><a href="#tier1">Tier 1 — metric-compatible</a></li>
+          <li><a href="#tier2">Tier 2 — Google Fonts</a></li>
+        </ul>
+      </li>
+      <li><a href="#windows">7. Windows 版做法（VSFT-9154）</a></li>
+      <li><a href="#flutter">8. Flutter 實作方向</a></li>
+      <li><a href="#questions">9. 已收斂 / 待討論</a></li>
+      <li><a href="#jira">10. Jira 對照</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>VSFT-9208 · [Text] Flutter Text fallback Solution (pre-install)</h1>
+    <div class="meta">
+      Jira tickets 整合總覽 &middot; clone 於 2026-07-16 &middot;
+      對應 feature 資料夾 <code>features/text-flutter-font-fallback-preinstall/</code> &middot;
+      Assignee: Jay Wu &middot; Sprint 24（你說的都隊）&middot; 8 pts
+    </div>
+
+    <div class="callout warn">
+      <strong>目前狀態：討論階段（尚未動 code）。</strong>
+      本 Story 僅涵蓋 <strong>Phase 1 — 預裝 20 套字體</strong>，從源頭減少需要 fallback 的情境。
+      <strong>Phase 2（fallback 機制）與 Phase 3（fallback 後跑版修正）不在範圍內。</strong>
+    </div>
+
+    <div class="callout">
+      <strong>一句話：</strong>外部 Google Slides / PPT 匯入 myViewBoard 時，若原始字體 App 沒有，Flutter 會 fallback 到別的字體，
+      因字寬 / 行高不同造成文字框被撐大、內容溢出。解法先把「生態系最常用的前 20 套字體」預先 bundle 進 App，
+      讓大多數檔案能以原字體或 metric-compatible 替代正常顯示。
+    </div>
+
+    <!-- 1. Sources -->
+    <h2 id="sources">1. 原始 tickets</h2>
+    <div class="source-card">
+      <div class="title"><span class="badge badge-mvb">Jira 故事</span> VSFT-9208 — Flutter Text fallback (pre-install) — <em>本 feature 主票</em></div>
+      <div class="id">Jira ID 92264 &middot; Status: KICK-OFF &middot; Assignee: Jay Wu &middot; Reporter: Gina Lu &middot; 8 pts &middot; Sprint 24</div>
+      <div>
+        <a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9208" target="_blank">Jira 原 issue</a> &middot;
+        <a href="jira/VSFT-9208.md">本地 clone</a>
+      </div>
+    </div>
+    <div class="source-card">
+      <div class="title"><span class="badge badge-cs">Jira Spike</span> VSFT-8753 — Windows 字體 fallback 的 metric 對應與自適應渲染 — <em>來源 spike（已關閉）</em></div>
+      <div class="id">Jira ID 89236 &middot; Assignee: William Lin</div>
+      <div>
+        <a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-8753" target="_blank">Jira 原 issue</a> &middot;
+        <a href="jira/VSFT-8753.md">本地 clone</a> &middot; 含 Rush–Henrietta 客戶案例
+      </div>
+    </div>
+    <div class="source-card">
+      <div class="title"><span class="badge badge-mvb">Jira 故事</span> VSFT-9154 — Windows Text fallback (pre-install) — <em>本票 clone 來源（已關閉）</em></div>
+      <div class="id">Jira ID 91918</div>
+      <div>
+        <a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9154" target="_blank">Jira 原 issue</a> &middot;
+        <a href="jira/VSFT-9154.md">本地 clone</a> &middot; 同內容，差別在平台
+      </div>
+    </div>
+    <div class="source-card">
+      <div class="title"><span class="badge badge-phase">Jira 大型工作</span> VSFT-8916 — Text Fallback — <em>parent</em></div>
+      <div class="id">Jira ID 90750 &middot; Status: KICK-OFF</div>
+      <div>
+        <a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-8916" target="_blank">Jira 原 issue</a> &middot;
+        <a href="jira/VSFT-8916.md">本地 clone</a>
+      </div>
+    </div>
+    <div class="source-card">
+      <div class="title"><span class="badge badge-cs">Jira Spike</span> VSFT-8898 — (Hub)Editor Content Area &amp; Textbox 處理 — <em>Phase 3，範圍外</em></div>
+      <div class="id">Jira ID 90679 &middot; Status: KICK-OFF</div>
+      <div>
+        <a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-8898" target="_blank">Jira 原 issue</a> &middot;
+        <a href="jira/VSFT-8898.md">本地 clone</a>
+      </div>
+    </div>
+    <div class="callout new">
+      <strong>取用不到：</strong> VSFT-8915（Finding 處理）與 VSFT-8917（App 有既有支援字體則不 fallback）在描述中被引用，
+      但目前 MCP 查詢回 <code>not found</code>（無存取權限或尚未建立）。兩者皆為後續延伸，非本 Story 範圍。
+    </div>
+
+    <!-- 2. Relation -->
+    <h2 id="relation">2. Ticket 關係</h2>
+    <table>
+      <thead><tr><th>Ticket</th><th>角色</th><th>狀態</th><th>關係</th></tr></thead>
+      <tbody>
+        <tr><td>VSFT-8916</td><td>大型工作「Text Fallback」</td><td>KICK-OFF</td><td>parent，收斂以下所有票</td></tr>
+        <tr><td>VSFT-8753</td><td>Spike：跨平台字體一致性 + metric fallback 研究</td><td>已關閉</td><td>結論轉實作 → VSFT-9154</td></tr>
+        <tr><td>VSFT-9154</td><td>Story：<strong>Windows</strong> 預裝字體</td><td>已關閉</td><td>VSFT-9208 clone 自此</td></tr>
+        <tr><td><strong>VSFT-9208</strong></td><td>Story：<strong>Flutter</strong> 預裝字體</td><td>KICK-OFF（Jay）</td><td>本 feature 主票，Phase 1 only</td></tr>
+        <tr><td>VSFT-8898</td><td>Spike：Editor Content Area &amp; Textbox</td><td>KICK-OFF</td><td>Phase 3（跑版修正），範圍外</td></tr>
+        <tr><td>VSFT-8915 / 8917</td><td>Finding / 既有字體不 fallback</td><td>取用不到</td><td>延伸，範圍外</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      演進脈絡：<strong>客戶跑版案例 → Spike (8753) → Windows 實作 (9154, 完成) → Flutter 實作 (9208, 本票)</strong>。
+      Windows 版靠 OS 內建字體 + 預裝補齊；Flutter 版無 OS 系統字體可依賴，字體必須 App 自帶。
+    </div>
+
+    <!-- 3. Background -->
+    <h2 id="background">3. Background（Spike 由來）</h2>
+    <p>客戶 <strong>Rush–Henrietta Central School District</strong> 使用 Amplify 課程教材（Google Slides 格式），在 IFP52 匯入 myViewBoard 後，因字體不支援導致文字框被撐大、內容超出可視範圍，影響課堂體驗。</p>
+    <p>Spike VSFT-8753 定義了「<strong>不跑版</strong>」的驗收語意：</p>
+    <ul class="compact">
+      <li><strong>版面不位移</strong>：文字位置與大小維持原樣，不撐大、不溢出、不擠壓周邊元素。</li>
+      <li><strong>內容完整</strong>：所有文字可見，不被裁切、遮擋。</li>
+      <li><strong>閱讀體驗一致</strong>：行數與換行位置盡量與原稿一致，避免大幅重排。</li>
+    </ul>
+
+    <!-- 4. Scope -->
+    <h2 id="scope">4. Scope / Phase 分層</h2>
+    <table>
+      <thead><tr><th>Phase</th><th>項目</th><th>本 Story 範圍</th></tr></thead>
+      <tbody>
+        <tr><td>Phase 1</td><td>預裝生態系最常用前 20 套字體，減少需要 fallback 的情境</td><td><span class="badge badge-ok">✅ 是</span></td></tr>
+        <tr><td>Phase 2 (TBC)</td><td>找不到對應字體時的 fallback 機制</td><td><span class="badge badge-na">❌ 否</span></td></tr>
+        <tr><td>Phase 3 (TBC)</td><td>fallback 後跑版（撐大 / 溢出 / 裁切）修正（VSFT-8898）</td><td><span class="badge badge-na">❌ 否</span></td></tr>
+        <tr><td>延伸 (TBC)</td><td>App 已有既有支援字體則不 fallback（VSFT-8917）</td><td><span class="badge badge-na">❌ 否</span></td></tr>
+      </tbody>
+    </table>
+
+    <!-- 5. AC -->
+    <h2 id="ac">5. Acceptance Criteria</h2>
+    <table>
+      <thead><tr><th>Given</th><th>When</th><th>Then</th></tr></thead>
+      <tbody>
+        <tr><td>myViewBoard 預安裝字體完成</td><td>檢視已安裝字體</td><td>預裝下列 20 套字體，已安裝字體含該字體集且 <strong>font-family 名稱正確</strong></td></tr>
+        <tr><td>使用「已預裝字體」的 Slides / PPT 檔</td><td>匯入開啟</td><td>文字以原字體或其 metric-compatible 替代正常顯示，<strong>不跑版</strong></td></tr>
+        <tr><td>使用「未預裝 / 找不到字體」的檔</td><td>匯入開啟</td><td>fallback 機制與跑版處理<strong>不在本 Story 範圍</strong></td></tr>
+      </tbody>
+    </table>
+
+    <!-- 6. Fonts -->
+    <h2 id="fonts">6. 字體盤點清單（20 套）</h2>
+    <p>策略：<strong>生態系（微軟 + Google）最常用前 20</strong> = metric-compatible 替代字體（打底、解決跑版）＋ Slides 常見 Google Fonts（補齊）。授權皆為開源（OFL / Apache 2.0），可自由商用並內嵌 / 預裝於軟體。</p>
+
+    <h3 id="tier1">Tier 1 — metric-compatible 替代（打底，字寬度量相容）</h3>
+    <table>
+      <thead><tr><th>#</th><th>字體</th><th>font-family</th><th>對應專有字體</th><th>授權</th><th>字重 / 樣式</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Arimo</td><td><code>'Arimo'</code></td><td>Arial / Helvetica</td><td>Apache 2.0</td><td>400–700 + Italic（變體）</td></tr>
+        <tr><td>2</td><td>Tinos</td><td><code>'Tinos'</code></td><td>Times New Roman</td><td>Apache 2.0</td><td>400/700 + Italic</td></tr>
+        <tr><td>3</td><td>Cousine</td><td><code>'Cousine'</code></td><td>Courier New</td><td>Apache 2.0</td><td>400/700 + Italic</td></tr>
+        <tr><td>4</td><td>Carlito</td><td><code>'Carlito'</code></td><td>Calibri</td><td>OFL</td><td>400/700 + Italic</td></tr>
+        <tr><td>5</td><td>Caladea</td><td><code>'Caladea'</code></td><td>Cambria</td><td>OFL</td><td>400/700 + Italic</td></tr>
+        <tr><td>6</td><td>Gelasio</td><td><code>'Gelasio'</code></td><td>Georgia</td><td>OFL</td><td>400–700 + Italic（變體）</td></tr>
+        <tr><td>7</td><td>Comic Relief</td><td><code>'Comic Relief'</code></td><td>Comic Sans MS</td><td>OFL</td><td>400/700</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="tier2">Tier 2 — Slides 常見 Google Fonts（補齊）</h3>
+    <table>
+      <thead><tr><th>#</th><th>字體</th><th>font-family</th><th>類型</th><th>授權</th><th>字重 / 樣式</th></tr></thead>
+      <tbody>
+        <tr><td>8</td><td>Roboto</td><td><code>'Roboto'</code></td><td>Sans-serif</td><td>Apache 2.0</td><td>100–900 + Italic（變體）</td></tr>
+        <tr><td>9</td><td>Open Sans</td><td><code>'Open Sans'</code></td><td>Sans-serif</td><td>OFL</td><td>300–800 + Italic（變體）</td></tr>
+        <tr><td>10</td><td>Lato</td><td><code>'Lato'</code></td><td>Sans-serif</td><td>OFL</td><td>100/300/400/700/900 + Italic</td></tr>
+        <tr><td>11</td><td>Montserrat</td><td><code>'Montserrat'</code></td><td>Sans-serif</td><td>OFL</td><td>100–900 + Italic（變體）</td></tr>
+        <tr><td>12</td><td>Poppins</td><td><code>'Poppins'</code></td><td>Sans-serif</td><td>OFL</td><td>100–900 + Italic</td></tr>
+        <tr><td>13</td><td>Oswald</td><td><code>'Oswald'</code></td><td>Sans-serif</td><td>OFL</td><td>200–700（變體）</td></tr>
+        <tr><td>14</td><td>Raleway</td><td><code>'Raleway'</code></td><td>Sans-serif</td><td>OFL</td><td>100–900 + Italic（變體）</td></tr>
+        <tr><td>15</td><td>Nunito</td><td><code>'Nunito'</code></td><td>Sans-serif</td><td>OFL</td><td>200–1000 + Italic（變體）</td></tr>
+        <tr><td>16</td><td>Merriweather</td><td><code>'Merriweather'</code></td><td>Serif</td><td>OFL</td><td>300–900 + Italic（變體）</td></tr>
+        <tr><td>17</td><td>Playfair Display</td><td><code>'Playfair Display'</code></td><td>Serif</td><td>OFL</td><td>400–900 + Italic（變體）</td></tr>
+        <tr><td>18</td><td>Inter</td><td><code>'Inter'</code></td><td>Sans-serif</td><td>OFL</td><td>100–900 + Italic（變體）</td></tr>
+        <tr><td>19</td><td>Noto Sans</td><td><code>'Noto Sans'</code></td><td>Sans-serif</td><td>OFL</td><td>100–900 + Italic（變體）</td></tr>
+        <tr><td>20</td><td>PT Sans</td><td><code>'PT Sans'</code></td><td>Sans-serif</td><td>OFL</td><td>400/700 + Italic</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>備註（來自 ticket）：</strong>
+      <ul class="compact">
+        <li>Verdana / Tahoma / Trebuchet MS 目前無良好的免費 metric-compatible 替代，若教材常見需另外處理。</li>
+        <li>標「變體」者為 variable font，單一檔案即涵蓋整段字重，節省檔案數與容量。</li>
+        <li>備註 2 針對 Windows 問「是否直讀系統字體」；<strong>Flutter 版此問無意義</strong>——Flutter 不吃 OS 系統字體，字體一定要 App 自帶。</li>
+      </ul>
+    </div>
+
+    <!-- 7. Windows 版做法 -->
+    <h2 id="windows">7. Windows 版做法（VSFT-9154 · Sparrow）</h2>
+    <div class="callout ok">
+      <strong>✅ 已查證（2026-07-16）：</strong>Windows 版在 <code>edu-sparrow-app</code>（C#/.NET UWP，MSIX 打包），
+      commit <code>2e6dddae7</code> <em>[VSFT-9154] [Text] Windows Text fallback Solution (pre-install) (#277)</em>，作者 William Lin。
+    </div>
+    <p><strong>做法（3 步）：</strong></p>
+    <ol class="compact">
+      <li>20 套字體 ttf 放進 <code>src/Sparrow.Package/Assets/FontFamily/&lt;Family&gt;/</code>。</li>
+      <li>在 <code>Package.appxmanifest</code> 用 <code>&lt;uap4:SharedFonts&gt;</code> 逐檔 <code>&lt;uap4:Font File="..."/&gt;</code> 註冊
+        → 安裝為 <strong>系統共享字體</strong>，Windows 文字引擎即可用「字體自己的 family 名」解析到。</li>
+      <li>有變體者用 variable font（Arimo / Gelasio / Inter / Merriweather / Montserrat / NotoSans / Nunito / OpenSans / Oswald / PlayfairDisplay / Raleway / Roboto…），
+        其餘用靜態多檔（Caladea / Carlito / ComicRelief / Cousine / Lato / PTSans / Poppins / Tinos）。manifest 內確認為 <strong>20 套</strong>，與 ticket 一致。</li>
+    </ol>
+    <div class="callout warn">
+      <strong>兩個關鍵洞察：</strong>
+      <ul class="compact">
+        <li>🔑 <strong>pre-install ≠ 字體對照。</strong>此 commit 只讓 20 套字體「用自己的名字可被查到」，
+          <strong>沒有做 Arial→Arimo 之類的映射</strong>。Sparrow 的「找不到字體→替換」是另一個獨立功能
+          （<code>MissingFontDialog</code>、PBI 95611「Font replacement / automatic regulation」）——對應本票的
+          <strong>Phase 2 / Phase 3，範圍外</strong>。</li>
+        <li>⚠️ <strong>踩雷 VSFT-9501：</strong>pre-install 後發現 Arimo / Open Sans 實際沒裝上系統，又補了一次 appxmanifest。
+          教訓 → 光宣告不夠，<strong>要驗證「裝完後引擎真的查得到該字體」</strong>，這會是本票的驗收重點。</li>
+      </ul>
+    </div>
+
+    <!-- 8. Flutter 實作方向 -->
+    <h2 id="flutter">8. Flutter 實作方向</h2>
+    <div class="callout ok">
+      範圍已收斂：<strong>只做 Phase 1 — 純 bundle 20 套字體</strong>，用正確 family 名可被解析；
+      <strong>不做</strong>任何原始字體名映射 / fallback（那是 Phase 2/3，範圍外）。
+    </div>
+    <p><strong>平台對照：</strong></p>
+    <table>
+      <thead><tr><th></th><th>Windows (Sparrow)</th><th>Flutter (本票 VSFT-9208)</th></tr></thead>
+      <tbody>
+        <tr><td>註冊方式</td><td>OS 系統字體（appxmanifest <code>SharedFonts</code>）</td><td>❌ 不能註冊系統字體 → <strong>bundle 進 <code>pubspec.yaml</code> 的 <code>fonts:</code> assets</strong>（Q1 定案）</td></tr>
+        <tr><td>現況</td><td>全 20 套新增</td><td>repo 已內建 <strong>Roboto / Lato / Open Sans</strong>（3/20），機制現成</td></tr>
+        <tr><td>本票工作</td><td>—</td><td>沿用現有 <code>fonts/</code> + pubspec 機制，補其餘 <strong>17 套</strong>，family 名正確即可</td></tr>
+      </tbody>
+    </table>
+    <ul class="compact">
+      <li><strong>骨架清楚：</strong>把缺的 17 套字體檔放進 <code>fonts/</code>，於 <code>pubspec.yaml</code> 依正確 family 名宣告；不動 OLF/匯入的 resolve 邏輯。</li>
+      <li><strong>離線：</strong>Q1 已定 bundle，<strong>不走 <code>google_fonts</code> runtime fetch</strong>（IFP 常無網路）——即使 pubspec 已有 <code>google_fonts</code> 套件，字體也要落地成 asset。</li>
+      <li><strong>variable font：</strong>Flutter 支援，可壓縮字重檔案數；需確認 pubspec 宣告與 weight 對應正確。</li>
+      <li><strong>驗收（呼應 VSFT-9501 教訓）：</strong>bundle 後要實測「該 family 在 App 內真的解析得到、顯示正確」，
+        並用「使用已預裝字體的 Slides/PPT 樣本」匯入目視文字框不撐大。樣本可放 <code>fixtures/</code>。</li>
+    </ul>
+
+    <h3>字體選單（text editor font picker）差異</h3>
+    <div class="callout warn">
+      <strong>Sparrow 的選單「自動」有這 20 套；Flutter「不會」。</strong>
+      Sparrow 選單動態列舉系統字體（<code>CanvasTextFormat.GetSystemFontFamilies()</code> 減 <code>HiddenFont</code> 黑名單），
+      預裝即出現、免改 code。<strong>Flutter 的選單是寫死清單</strong>
+      <code>FONT_FAMILIES</code>（<code>lib/annotation_model/text_annotation.dart:69</code>）+ flutter_quill patch
+      <code>google_text_style.dart</code> 對照，bundle 不會自動進選單。
+    </div>
+    <p>20 套 vs 現有 <code>FONT_FAMILIES</code>：</p>
+    <ul class="compact">
+      <li><span class="badge badge-ok">已在選單（7）</span> Roboto、open_sans、Lato、Montserrat、Poppins、Noto Sans、PT Sans</li>
+      <li><span class="badge badge-na">不在選單（13）</span> Arimo、Tinos、Cousine、Carlito、Caladea、Gelasio、Comic Relief、Oswald、Raleway、Nunito、Merriweather、Playfair Display、Inter</li>
+    </ul>
+    <div class="callout ok">
+      <strong>定案（Q7 = 選項 B）：</strong>20 套全部要在選單看得到，且全部 <strong>bundle 離線可用</strong>。
+      模型 = <strong>20 套離線 bundled ＋ 其餘字體維持 <code>google_fonts</code> 動態下載</strong>。
+    </div>
+
+    <h3>google_fonts 共存分析（會不會衝突？）</h3>
+    <p><strong>結論：不會硬衝突，可共存。</strong><code>google_fonts: ^6.2.1</code> 跑<strong>預設 runtime-fetch 模式</strong>
+      （無 <code>GoogleFonts.config</code> / <code>allowRuntimeFetching</code> 覆寫、無 <code>google_fonts/</code> asset 目錄）：</p>
+    <ul class="compact">
+      <li>google_fonts <strong>不 ship 字體二進位</strong>（runtime 抓後快取）→ 我們用 pubspec <code>fonts:</code> bundle ttf <strong>不重複、不撞名</strong>。</li>
+      <li>命名空間不同：google_fonts 註冊<strong>改寫名</strong>（<code>Montserrat_regular</code>），pubspec 用<strong>字面名</strong>（<code>Montserrat</code>）。</li>
+      <li>路由開關 = <code>google_text_style.dart</code> 的 <code>_FONT_FAMILIES</code> map：<strong>在 map → 走 google_fonts；不在 map → 走 bundled 字面名</strong>。</li>
+    </ul>
+
+    <h3>修正後範圍（3 個動作）</h3>
+    <table>
+      <thead><tr><th>動作</th><th>檔案</th><th>對象 / 效果</th></tr></thead>
+      <tbody>
+        <tr><td>① 加 ttf + 宣告 family</td><td><code>fonts/</code> + <code>pubspec.yaml</code> <code>fonts:</code></td><td>缺的 <strong>17 套</strong>（13 全新 + 4 目前走 google_fonts）落地成 asset → 離線</td></tr>
+        <tr><td>② 加進選單清單</td><td><code>text_annotation.dart</code> <code>FONT_FAMILIES</code></td><td>缺的 <strong>13 套</strong>加入 → 選單看得到（Q7=B）</td></tr>
+        <tr><td>③ 移出路由 map</td><td><code>google_text_style.dart</code> <code>_FONT_FAMILIES</code></td><td><strong>4 套</strong>（Montserrat / Poppins / PT Sans / Noto Sans）移除 → 從 google_fonts 動態改成 bundled 離線</td></tr>
+      </tbody>
+    </table>
+    <p class="meta">已 bundled 免動：Roboto / Lato / open_sans（3 套，本來就不在 map）。13 全新的字體<strong>不要</strong>加進 <code>_FONT_FAMILIES</code> map，維持 bundled。</p>
+
+    <div class="callout warn">
+      <strong>明確排除（不在本票範圍）：字體選單「下拉預覽字樣」的離線化。</strong>
+      <code>text_font_button.dart</code> 的預覽對每個 item 無條件呼叫 <code>GoogleFonts.getFont()</code>，
+      這是 google_fonts 預覽機制的<strong>既有行為</strong>（現有 bundled 的 open_sans/Lato/Roboto 今天預覽就已 fallback）。
+      本票只保證<strong>套用 / 渲染</strong>離線正確；13 套新項目的「預覽字樣」離線時可能 fallback（選下去套用仍離線正確），
+      與現狀一致，<strong>有意識地接受、不處理</strong>（要處理是另一張優化單）。
+    </div>
+
+    <!-- 9. 已收斂 / 待討論 -->
+    <h2 id="questions">9. 已收斂 / 待討論</h2>
+    <table>
+      <thead><tr><th>#</th><th>問題</th><th>結論</th></tr></thead>
+      <tbody>
+        <tr><td>Q1</td><td>bundle 進 App 還是動態下載？</td><td><span class="badge badge-ok">已定</span> bundle 進 APK，體積增加可接受（離線情境多）</td></tr>
+        <tr><td>Q2</td><td>需不需要 Arial→Arimo 對照表？</td><td><span class="badge badge-ok">已定</span> 不需要。Phase 1 只做預裝；映射是 Phase 2（範圍外），Windows 也是分開做的</td></tr>
+        <tr><td>Q3</td><td>Phase 1 是否只做預裝、不碰 resolve/fallback？</td><td><span class="badge badge-ok">已定</span> 是。VSFT-9208 只有 Phase 1</td></tr>
+        <tr><td>Q4</td><td>Windows VSFT-9154 做法可否參考？</td><td><span class="badge badge-ok">已查</span> 見上節；機制不同（OS 註冊 vs bundle），但字體清單與「純預裝」邊界可完全沿用</td></tr>
+        <tr><td>Q5</td><td>variable font 在 Flutter 的字重支援？</td><td><span class="badge badge-mostly">待實測</span> 宣告後驗證各字重顯示正確</td></tr>
+        <tr><td>Q6</td><td>驗收樣本由誰提供 / 沿用 Spike 檔？</td><td><span class="badge badge-mostly">待確認</span> 需要一份已預裝字體的 Slides/PPT 樣本</td></tr>
+        <tr><td>Q7</td><td>20 套要不要進 text editor 字體選單？</td><td><span class="badge badge-ok">已定</span> 選項 B：20 套全部要在選單看得到（補 13 套進 <code>FONT_FAMILIES</code>）</td></tr>
+        <tr><td>Q8</td><td>Montserrat/Poppins/PT Sans/Noto Sans 目前靠 google_fonts runtime，要不要改 bundle？</td><td><span class="badge badge-ok">已定</span> 20 套一律 bundle 離線；此 4 套移出 <code>_FONT_FAMILIES</code> map。google_fonts 共存無衝突</td></tr>
+        <tr><td>Q9</td><td>選單「預覽字樣」離線化？</td><td><span class="badge badge-na">範圍外</span> google_fonts 既有行為，有意識接受</td></tr>
+      </tbody>
+    </table>
+
+    <!-- 10. Jira -->
+    <h2 id="jira">10. Jira 對照</h2>
+    <table>
+      <thead><tr><th>Ticket</th><th>本地 clone</th><th>Jira</th></tr></thead>
+      <tbody>
+        <tr><td>VSFT-9208（主票）</td><td><a href="jira/VSFT-9208.md">jira/VSFT-9208.md</a></td><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9208" target="_blank">開啟</a></td></tr>
+        <tr><td>VSFT-8753（Spike）</td><td><a href="jira/VSFT-8753.md">jira/VSFT-8753.md</a></td><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-8753" target="_blank">開啟</a></td></tr>
+        <tr><td>VSFT-9154（Windows）</td><td><a href="jira/VSFT-9154.md">jira/VSFT-9154.md</a></td><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9154" target="_blank">開啟</a></td></tr>
+        <tr><td>VSFT-8916（parent）</td><td><a href="jira/VSFT-8916.md">jira/VSFT-8916.md</a></td><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-8916" target="_blank">開啟</a></td></tr>
+        <tr><td>VSFT-8898（Phase 3）</td><td><a href="jira/VSFT-8898.md">jira/VSFT-8898.md</a></td><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-8898" target="_blank">開啟</a></td></tr>
+      </tbody>
+    </table>
+  </main>
+</div>
+</body>
+</html>
