@@ -11,13 +11,15 @@
   <nav class="toc" aria-label="目錄">
     <h2>目錄</h2>
     <ul>
+      <li><a href="#decision">0. 🚦 決策：等 VSFT-9586 完成再開工</a></li>
       <li><a href="#tldr">1. TL;DR</a></li>
       <li><a href="#key-format">2. attribution key 現況：規格未定義</a></li>
-      <li><a href="#editor">3. Editor 端現況（african-golden-cat）</a></li>
+      <li><a href="#editor">3. Hub 端現況（前端 agc + 後端 ocelot）</a></li>
       <li><a href="#sparrow">4. sparrow（mvbw）現況</a></li>
       <li><a href="#mvbf">5. mvbf 實作切入點</a></li>
       <li><a href="#roundtrip">6. ⚠️ Round-trip 風險：存檔會洗掉 key</a></li>
       <li><a href="#open">7. Open Questions / 待決事項</a></li>
+      <li><a href="#resume">8. 重啟條件（resume checklist）</a></li>
     </ul>
   </nav>
 
@@ -31,6 +33,16 @@
     <div class="doc-nav">
       <a href="overview.html">📘 總覽 (overview)</a>
       <a href="findings.html" class="active">🛠️ 調查 findings</a>
+    </div>
+
+    <h2 id="decision">0. 🚦 決策：等 VSFT-9586 完成再開工 <span class="badge badge-warn">擱置中</span></h2>
+    <div class="callout warn">
+      <p><strong>2026-07-28 決策（Jay）：VSFT-9647 暫緩，等 Hub editor 端（VSFT-9586）完成打包後再開始 mvbf 實作。</strong></p>
+      <ul class="compact">
+        <li><strong>理由</strong>：上游完全未動工（VSFT-9586 KICK-OFF、Unassigned），attribution key 的名稱／層級／segments 結構／語言標記欄位都未定案。現在先做，等格式定案後很可能要重工。</li>
+        <li><strong>Hub stage 已查證（前端 + 後端，2026-07-28 pull 最新）</strong>：stage 上沒有 CC-BY 打包 — 前端 <code>african-golden-cat</code>（main <code>7c5857138</code>）與後端 <code>ocelot</code>（main <code>96f53897c</code>、<code>rc/1.67.0</code>、<code>stage/1.67.0</code>）均無 attribution 寫入 .olf 的程式碼，詳見 §3。</li>
+        <li><strong>重啟時</strong>：按 §8 checklist 確認後再開工；實作切入點已在 §5 定位好，不用重查。</li>
+      </ul>
     </div>
 
     <h2 id="tldr">1. TL;DR</h2>
@@ -51,15 +63,18 @@
       <li><strong>結論</strong>：播放端可先按「<code>html-activity.attribution.segments[]</code>（text + 可選 url）+ 語言標記」設計並以假資料開發，但 key 名稱／層級／語言欄位需與 editor（VSFT-9586 owner）定案後才能對接。</li>
     </ul>
 
-    <h2 id="editor">3. Editor 端現況（african-golden-cat / Hub） <span class="badge badge-partial">僅 picker UI</span></h2>
+    <h2 id="editor">3. Hub 端現況（前端 african-golden-cat + 後端 ocelot） <span class="badge badge-partial">僅 picker UI</span></h2>
     <ul>
-      <li>main 分支僅在 <strong>PhET picker 對話框</strong>顯示 attribution（加入前的挑選畫面，非 canvas、非 .olf）：
+      <li><strong>前端 <code>african-golden-cat</code></strong>（main <code>7c5857138</code>，2026-07-28 pull）僅在 <strong>PhET picker 對話框</strong>顯示 attribution（加入前的挑選畫面，非 canvas、非 .olf）：
         <ul class="compact">
           <li><code>src/components/pages/SlideEditor/PhetPickerDialog/PhetSimulationDetail/PhetSimulationDetail.tsx:198-200</code> — <code>&lt;p className={styles.detailAttribution}&gt;</code> + <code>i18nKey='library:slideEditor.phetPicker.attribution'</code></li>
           <li><code>public/locales/en/library.json</code> / <code>zh/library.json</code> — <code>slideEditor.phetPicker.attribution</code>，含 <code>&lt;WebsiteLink&gt;</code> / <code>&lt;TermsLink&gt;</code> / <code>&lt;PrivacyLink&gt;</code> 三個連結 tag（即 POC segments 的六段結構來源）</li>
+          <li>寫出 <code>activity-layer.html-activity</code> 的匯出程式 <code>src/libs/olfViewer/services/olf/export/document.exporter.ts</code>（+ <code>mappers/document.mapper.ts</code>）<strong>無 attribution 欄位</strong> — VSFT-9586 前端側的落點應在這裡。</li>
         </ul>
       </li>
-      <li>全 repo（含所有 remote 分支、commit log）查無「把 attribution 寫進 content.json / .olf」的程式碼或 POC 分支。</li>
+      <li><strong>後端 <code>ocelot</code></strong>（Hub backend；PhET catalog API <code>app/routes/phet/phet_router.py</code> 所在 repo）：main <code>96f53897c</code>、<code>rc/1.67.0</code>、<code>stage/1.67.0</code> 及所有近期分支均<strong>無 attribution 打包</strong>（grep 僅誤中 logger docstring 與下載註解）。</li>
+      <li><strong>打包位置（重啟時要找的 owner）</strong>：PhET sim HTML 是由 <strong>ocelot 的 asset worker</strong> 從 phet.colorado.edu 下載後打包進 .olf 的 — <code>app/worker/redis_stream/asset_worker.py:476, 1266</code>。VSFT-9586 的 attribution 打包很可能動 ocelot asset worker 或 agc document.exporter，<strong>key 格式定案要找這兩邊的 owner</strong>。</li>
+      <li>全部 repo（含所有 remote 分支、commit log、stage 部署分支）查無「把 attribution 寫進 content.json / .olf」的程式碼或 POC 分支 → <strong>Hub stage 環境確定沒有 CC-BY 打包</strong>。</li>
       <li>對照 VSFT-9586（KICK-OFF、Unassigned）：editor 打包功能<strong>確定尚未開始</strong>。VSFT-9647 票上 Feedback 寫「editor 已將 CC-BY 標註打包進 .olf 副本」是描述<strong>相依票完成後</strong>的狀態，不是現況。</li>
     </ul>
 
@@ -124,9 +139,24 @@
       </tbody>
     </table>
 
+    <h2 id="resume">8. 重啟條件（resume checklist）</h2>
+    <p>重新開工前逐項確認；任一項未滿足就代表格式仍可能變動，先別動手。</p>
+    <table>
+      <thead><tr><th>#</th><th>條件</th><th>怎麼確認</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>VSFT-9586 已完成（或至少 key 格式已定案並文件化）</td><td>看 Jira 狀態；問 zoe / editor owner。格式定案的落點應是 OLF+HTML 規格頁（468615756）更新或 9586 票上定稿</td></tr>
+        <tr><td>2</td><td>Hub stage 可產出含 attribution key 的 .olf</td><td>stage 建 PhET activity → 下載 .olf → 解 zip 看 content.json 的 <code>activity-layer.html-activity</code> 有無 attribution；或 grep <code>ocelot</code> / <code>african-golden-cat</code> 新 code（asset_worker.py / document.exporter.ts）</td></tr>
+        <tr><td>3</td><td>拿到真實 .olf 樣本存進 <code>fixtures/</code></td><td>比照 activity-support-quiz 的 <code>fixtures/mixed-activity-sample.olf</code> 做法；有真樣本前不要只靠假資料收尾</td></tr>
+        <tr><td>4</td><td>UXUI 標註元件規格已出（字體、對比襯底/描邊、padding）</td><td>「樣式對齊 editor 產出」已失效，需 UXUI 提供 mvbf/mvbw 共用規格（VSFT-9586 open item）</td></tr>
+        <tr><td>5</td><td>round-trip 保留 key 是否入 AC 已有結論</td><td>問 PM（zoe）；無論是否入票，實作 PR 都要涵蓋 pass-through + round-trip 測試（§6）</td></tr>
+      </tbody>
+    </table>
+    <p>重啟後直接從 §5 的切入點開始：model（<code>olf_page_activity.dart</code>）→ 解析（<code>olf_reader.dart</code>）→ 呈現（<code>background_activity_overlay_layer.dart</code>）→ 連結（url_launcher external browser）。</p>
+
     <div class="meta" style="margin-top:32px">
       調查方法：Jira MCP（VSFT-9647/9586/9648/9531）、Confluence MCP（468615756 v7、495059253 v12）、
-      git fetch + 全分支 grep（african-golden-cat、edu-sparrow-app、edu-droid-flutter、edu-vboard-olfspec）。
+      git fetch/pull + 全分支 grep（african-golden-cat、ocelot、edu-sparrow-app、edu-droid-flutter、edu-vboard-olfspec）。
+      2026-07-28 決策：擱置等 VSFT-9586（§0）。
     </div>
   </main>
 </div>

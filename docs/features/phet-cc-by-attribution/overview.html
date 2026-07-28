@@ -36,6 +36,12 @@
       <a href="findings.html">🛠️ 調查 findings</a>
     </div>
 
+    <div class="callout warn">
+      <strong>🚦 2026-07-28 決策：本票（VSFT-9647）擱置，等 VSFT-9586（Hub editor 打包）完成再開工。</strong>
+      上游未動工、attribution key 格式未定案，現在先做恐重工。Hub stage 前後端（african-golden-cat + ocelot，含 stage/1.67.0）已查證確無 CC-BY 打包。
+      重啟條件與細節見 <a href="findings.html#decision">findings §0</a>、<a href="findings.html#resume">§8 重啟 checklist</a>。
+    </div>
+
     <h2 id="sources">1. 原始文件</h2>
     <table>
       <thead><tr><th>類型</th><th>文件</th><th>本機 clone</th><th>版本</th><th>角色</th></tr></thead>
@@ -173,9 +179,9 @@ flowchart LR
       <thead><tr><th>端</th><th>Repo</th><th>現況</th></tr></thead>
       <tbody>
         <tr>
-          <td>Hub Editor</td>
-          <td><code>african-golden-cat</code></td>
-          <td><span class="badge badge-partial">未打包</span> attribution 字串目前只出現在 PhET picker 的 UI（i18n key <code>slideEditor.phetPicker.attribution</code>）；<strong>尚未打包進 .olf</strong>。VSFT-9586 KICK-OFF、Unassigned。</td>
+          <td>Hub（前端 + 後端）</td>
+          <td><code>african-golden-cat</code><br/><code>ocelot</code></td>
+          <td><span class="badge badge-partial">未打包</span> attribution 字串目前只出現在 PhET picker 的 UI（i18n key <code>slideEditor.phetPicker.attribution</code>）；<strong>尚未打包進 .olf</strong>（前端 olfViewer exporter 與後端 ocelot asset worker 皆無，含 stage 部署分支）。VSFT-9586 KICK-OFF、Unassigned。</td>
         </tr>
         <tr>
           <td>mVB Windows（sparrow）</td>
