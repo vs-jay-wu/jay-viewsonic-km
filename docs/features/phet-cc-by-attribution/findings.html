@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>Findings — PhET CC-BY 標註 VSFT-9647 調查</title>
+<link rel="stylesheet" href="assets/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#tldr">1. TL;DR</a></li>
+      <li><a href="#key-format">2. attribution key 現況：規格未定義</a></li>
+      <li><a href="#editor">3. Editor 端現況（african-golden-cat）</a></li>
+      <li><a href="#sparrow">4. sparrow（mvbw）現況</a></li>
+      <li><a href="#mvbf">5. mvbf 實作切入點</a></li>
+      <li><a href="#roundtrip">6. ⚠️ Round-trip 風險：存檔會洗掉 key</a></li>
+      <li><a href="#open">7. Open Questions / 待決事項</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Findings — PhET CC-BY 標註（VSFT-9647）調查</h1>
+    <div class="meta">
+      調查日期 2026-07-28 &middot; 調查範圍：<code>african-golden-cat</code>（Hub Editor）、
+      <code>edu-sparrow-app</code>（mvbw）、<code>edu-droid-flutter</code>（mvbf）、
+      <code>edu-vboard-olfspec</code>、Confluence OLF/PhET 規格頁 &middot; 各 repo 均已 fetch 最新 remote
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="findings.html" class="active">🛠️ 調查 findings</a>
+    </div>
+
+    <h2 id="tldr">1. TL;DR</h2>
+    <div class="callout warn">
+      <ul class="compact">
+        <li><strong>上游未動工</strong>：editor（VSFT-9586）還沒把 attribution 打包進 .olf — 目前 attribution 字串只存在 Hub picker 的 UI i18n。<strong>mvbf 播放端沒有真實 .olf 樣本可對接</strong>，key 格式（名稱／層級／語言標記）也未定案。</li>
+        <li><strong>sparrow 沒有 CC-BY 標註 POC</strong>：全分支查無 attribution 程式碼。使用者記憶中的「sparrow POC」應是 <strong>Activity Layer POC</strong>（PhET/HTML activity 播放分層架構，已 merge main），是播放基礎、不是標註功能。</li>
+        <li><strong>mvbf 切入點已定位</strong>：<code>olf_page_activity.dart</code>（model）→ <code>olf_reader.dart</code>（解析）→ <code>background_activity_overlay_layer.dart</code>（呈現）；<code>url_launcher</code> 已在依賴中。</li>
+        <li><strong>發現 round-trip 風險</strong>：mvbf 存檔會以白名單欄位重寫 html-activity JSON，未知的 attribution key 會被<strong>洗掉</strong> — 實作時必須一併處理（見 §6）。</li>
+      </ul>
+    </div>
+
+    <h2 id="key-format">2. attribution key 現況：OLF 規格尚未定義 <span class="badge badge-err">未定案</span></h2>
+    <ul>
+      <li><a href="confluence/V/olf-html-phet-game-quiz.md">OLF + HTML 規格頁</a>（Confluence 468615756，v7，2026-04-02，Integrated Draft v1.0）：全文<strong>無任何 attribution / license / CC-BY 字樣</strong>。html-activity 目前欄位：<code>id / x / y / width / height / matrix / category / source</code>（PhET 為 <code>category: "Activity_PHET"</code>、<code>source</code> = PhET all-locales URL）。</li>
+      <li><code>edu-vboard-olfspec</code>（OLF 正式 spec repo，僅 main）：同樣無 phet / attribution 內容。</li>
+      <li>唯一的格式線索 = VSFT-9586 Remark 的 <strong>POC segments JSON</strong>（見 overview §6）。該 JSON 的字串<strong>逐字等於</strong> Hub picker 的 i18n 字串（見 §3）— 推斷「POC 格式」是把 picker 現有文案直接轉成 segments，而票上已判定該文案不合 PhET 規範、僅 segments 結構可參考。</li>
+      <li><strong>結論</strong>：播放端可先按「<code>html-activity.attribution.segments[]</code>（text + 可選 url）+ 語言標記」設計並以假資料開發，但 key 名稱／層級／語言欄位需與 editor（VSFT-9586 owner）定案後才能對接。</li>
+    </ul>
+
+    <h2 id="editor">3. Editor 端現況（african-golden-cat / Hub） <span class="badge badge-partial">僅 picker UI</span></h2>
+    <ul>
+      <li>main 分支僅在 <strong>PhET picker 對話框</strong>顯示 attribution（加入前的挑選畫面，非 canvas、非 .olf）：
+        <ul class="compact">
+          <li><code>src/components/pages/SlideEditor/PhetPickerDialog/PhetSimulationDetail/PhetSimulationDetail.tsx:198-200</code> — <code>&lt;p className={styles.detailAttribution}&gt;</code> + <code>i18nKey='library:slideEditor.phetPicker.attribution'</code></li>
+          <li><code>public/locales/en/library.json</code> / <code>zh/library.json</code> — <code>slideEditor.phetPicker.attribution</code>，含 <code>&lt;WebsiteLink&gt;</code> / <code>&lt;TermsLink&gt;</code> / <code>&lt;PrivacyLink&gt;</code> 三個連結 tag（即 POC segments 的六段結構來源）</li>
+        </ul>
+      </li>
+      <li>全 repo（含所有 remote 分支、commit log）查無「把 attribution 寫進 content.json / .olf」的程式碼或 POC 分支。</li>
+      <li>對照 VSFT-9586（KICK-OFF、Unassigned）：editor 打包功能<strong>確定尚未開始</strong>。VSFT-9647 票上 Feedback 寫「editor 已將 CC-BY 標註打包進 .olf 副本」是描述<strong>相依票完成後</strong>的狀態，不是現況。</li>
+    </ul>
+
+    <h2 id="sparrow">4. sparrow（mvbw / edu-sparrow-app）現況 <span class="badge badge-new">標註未開工</span></h2>
+    <ul>
+      <li><strong>CC-BY 標註</strong>：全部 remote 分支（含 <code>Kenneth/POC/*</code> 系列）查無 attribution / CC-BY / colorado 標註相關程式碼；VSFT-9648 KICK-OFF、Unassigned。</li>
+      <li><strong>「他們做過 POC」的正解</strong>：sparrow 做過的是 <strong>Activity Layer POC</strong> — PhET/HTML activity 的<strong>播放分層架構</strong>（WebView2 hit-test 穿透），非 CC-BY 標註：
+        <ul class="compact">
+          <li><code>docs/plan/Activity_Layer/Activity_Layer_POC.md</code> — Kenneth 的 V1→V5 迭代紀錄，定案 V2-B（Background Transparent/null 動態切換），POC 分支 <code>Kenneth/POC/NewActivityLayer_3</code></li>
+          <li><code>docs/plan/Activity_Layer/OLF_ActivityLayer_Integration_Plan.md</code>、<code>Activity_Layer_Manual_Test_Cases.md</code> — OLF 整合與手測案例（PhET absolute URL 直接作為 WebView2.Source）</li>
+          <li>已 merge main；近期相關開發：<code>SlideActivityModeScale</code>（PhET strict 16:9）、<code>William/Feature/ActivityAutoFitLayout</code>、<code>Kellly/Feature/VSFT-9519-rust-olfparser</code>（Rust olfparser 播放管線）</li>
+        </ul>
+      </li>
+      <li><strong>對 9647 的意義</strong>：sparrow 的標註呈現會疊在其 Activity Layer 上，與 mvbf 的 activity overlay 是對稱位置；兩平台可共用同一份 UXUI 標註元件規格（見 §7）。</li>
+    </ul>
+
+    <h2 id="mvbf">5. mvbf（edu-droid-flutter）實作切入點 <span class="badge badge-ok">已定位</span></h2>
+    <div class="callout">本機 <code>master</code> 落後 <code>origin/master</code>，以下皆以 <code>origin/master</code> 為準（已 fetch）。尚未動任何 mvbf 程式碼。</div>
+    <table>
+      <thead><tr><th>層</th><th>檔案</th><th>現況 / 要做的事</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Model</td>
+          <td><code>lib/olf/olf_page_activity.dart</code></td>
+          <td><code>HtmlActivity</code> 只解析 <code>id/x/y/width/height/matrix/category/source</code>，<strong>無 attribution 欄位</strong> → 新增 attribution（segments 陣列 + 語言標記）解析；壞資料防禦比照既有 <code>olfStringKeyedMapFrom</code> / NH-6 defensive cast 慣例（graceful fallback AC）。</td>
+        </tr>
+        <tr>
+          <td>解析</td>
+          <td><code>lib/helper/olf_file/olf_reader.dart</code></td>
+          <td><code>_parseAndAttachPageActivity</code> 解析 activity-layer（含 VSFT-7557 layer-key recognition：認得 <code>activity-layer</code>/舊 <code>activity</code> 才 render，不認得走 fallback textarea）→ attribution 跟著 html-activity 一起進 model 即可。</td>
+        </tr>
+        <tr>
+          <td>呈現</td>
+          <td><code>lib/widget/whiteboard_page/widgets/background_activity_overlay_layer.dart</code></td>
+          <td>activity WebView（<code>MvbWebView</code> / flutter_inappwebview）的 overlay 層 → 標註 widget 疊在 activity 區域<strong>左上</strong>、字級 10、襯底/描邊確保對比；layout 幾何可參考 <code>helpers/activity_overlay_layout_helper.dart</code>。僅 <code>category == "Activity_PHET"</code> 且有 attribution 時顯示。</td>
+        </tr>
+        <tr>
+          <td>連結</td>
+          <td><code>pubspec.yaml</code></td>
+          <td><code>url_launcher: ^6.3.1</code> 已存在 → segments 帶 <code>url</code> 的段落用 <code>launchUrl(mode: LaunchMode.externalApplication)</code> 開 external browser。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="roundtrip">6. ⚠️ Round-trip 風險：mvbf 存檔會洗掉 attribution key <span class="badge badge-err">必須處理</span></h2>
+    <ul>
+      <li>mvbf 存 .olf 時（<code>FileOLFSaveHelper</code> → <code>PageActivity.toOlfJson</code> → <code>HtmlActivity.toJson/toOlfJson</code>）是<strong>白名單重建</strong> JSON：只寫出已知欄位（id/x/y/width/height/matrix/category/source），未知欄位一律丟棄。</li>
+      <li>後果：老師在 mvbf 開啟 Hub 派來的 .olf → 寫筆記 → 存檔，<strong>attribution key 就從副本裡消失</strong>，之後再播放（mvbf 或轉給 mvbw）都不再顯示標註 → 合規閉環被 app 自己打破。</li>
+      <li>解法方向：<code>HtmlActivity</code> 解析時保留 attribution 原始 JSON（或未知欄位 pass-through），<code>toJson/toOlfJson</code> 時原樣寫回。這點票上 AC 沒有明寫，<strong>建議補進票或至少在實作 PR 內涵蓋 + 測 round-trip</strong>。</li>
+      <li>同理可檢查 sparrow 的存檔路徑（<code>BridgeClient.AppendStagedResourcesToOlf</code> patch ZIP 的方式對 content.json 的影響）— 屬 VSFT-9648 範圍，先記著。</li>
+    </ul>
+
+    <h2 id="open">7. Open Questions / 待決事項</h2>
+    <table>
+      <thead><tr><th>#</th><th>事項</th><th>需要誰</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>attribution key 定案：名稱、層級（html-activity 下？）、segments 結構、語言標記欄位名。播放端可先以假資料開發，對接需等定案。</td><td>VSFT-9586 owner（editor）+ 9647/9648 三方</td></tr>
+        <tr><td>2</td><td>「樣式對齊 editor 產出」失效（editor 不渲染）→ 需 UXUI 出標註元件規格：字體、襯底/描邊對比做法、與 activity 邊界的 padding，供 mvbf/mvbw 共用。</td><td>UXUI</td></tr>
+        <tr><td>3</td><td>採官方字串（單一 URL）則 segments 只會有 1 個連結；POC 的服務條款/隱私政策連結是否保留，依最終字串定案。</td><td>PM / PhET 合規確認</td></tr>
+        <tr><td>4</td><td>round-trip 保留 attribution（§6）是否補進 9647 AC。</td><td>PM（zoe）</td></tr>
+        <tr><td>5</td><td>測試樣本：editor 未打包前，需自製含 attribution key 的 .olf fixture（可仿 activity-support-quiz 的 <code>fixtures/</code> 做法）。</td><td>本票開發時自備</td></tr>
+      </tbody>
+    </table>
+
+    <div class="meta" style="margin-top:32px">
+      調查方法：Jira MCP（VSFT-9647/9586/9648/9531）、Confluence MCP（468615756 v7、495059253 v12）、
+      git fetch + 全分支 grep（african-golden-cat、edu-sparrow-app、edu-droid-flutter、edu-vboard-olfspec）。
+    </div>
+  </main>
+</div>
+<script src="assets/mermaid-init.js"></script>
+</body>
+</html>

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>PhET CC-BY 合規標註 — 文件整合總覽</title>
+<link rel="stylesheet" href="assets/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#sources">1. 原始文件</a></li>
+      <li><a href="#relation">2. 三票分工與相依</a></li>
+      <li><a href="#background">3. Background</a></li>
+      <li><a href="#scope">4. Solution Scope（VSFT-9647）</a></li>
+      <li><a href="#strings">5. 定版字串（官方指定）</a></li>
+      <li><a href="#format">6. attribution 資料格式</a></li>
+      <li><a href="#ac">7. Acceptance Criteria</a></li>
+      <li><a href="#status">8. 平台現況摘要</a></li>
+      <li><a href="#open">9. Open Questions</a></li>
+      <li><a href="#jira">10. Jira 對照</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>PhET CC-BY 合規標註（播放端呈現）</h1>
+    <div class="meta">
+      VSFT-9647 [mVB Flutter][播放端] 讀取 .olf 內 PhET CC-BY 合規標註 key 並於播放呈現 &middot;
+      clone 於 2026-07-28 &middot;
+      對應 feature 資料夾 <code>docs/features/phet-cc-by-attribution/</code>
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html" class="active">📘 總覽 (overview)</a>
+      <a href="findings.html">🛠️ 調查 findings</a>
+    </div>
+
+    <h2 id="sources">1. 原始文件</h2>
+    <table>
+      <thead><tr><th>類型</th><th>文件</th><th>本機 clone</th><th>版本</th><th>角色</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-mvb">Jira</span></td>
+          <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9647">VSFT-9647</a> [mVB Flutter][播放端]</td>
+          <td><a href="jira/VSFT-9647.md"><code>jira/VSFT-9647.md</code></a></td>
+          <td>v1 (2026-07-28)</td>
+          <td><strong>本票</strong> — mvbf 播放端讀 key 並呈現</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-cs">Jira</span></td>
+          <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9586">VSFT-9586</a> [Editor][Hub]</td>
+          <td><a href="jira/VSFT-9586.md"><code>jira/VSFT-9586.md</code></a></td>
+          <td>v1 (2026-07-28)</td>
+          <td><strong>相依票</strong> — editor 定版語言、產生 attribution 資料、打包進 .olf</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-cs">Jira</span></td>
+          <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9648">VSFT-9648</a> [mVB Windows][播放端]</td>
+          <td><a href="jira/VSFT-9648.md"><code>jira/VSFT-9648.md</code></a></td>
+          <td>v1 (2026-07-28)</td>
+          <td>同內容對應票 — sparrow（mvbw）播放端</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-na">Jira</span></td>
+          <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9531">VSFT-9531</a> [UX][Hub]</td>
+          <td><a href="jira/VSFT-9531.md"><code>jira/VSFT-9531.md</code></a></td>
+          <td>v1 (2026-07-28)</td>
+          <td>參考 — 舊版 app fallback 提示的背景對比問題（同類 UX 課題）</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-phase">Confluence</span></td>
+          <td><a href="https://viewsonic-vsi.atlassian.net/wiki/spaces/V/pages/468615756">OLF + HTML (PhET, Game, Quiz)</a></td>
+          <td><a href="confluence/V/olf-html-phet-game-quiz.md"><code>confluence/V/olf-html-phet-game-quiz.md</code></a></td>
+          <td>v7 (2026-04-02)</td>
+          <td>OLF html-activity 規格（Integrated Draft v1.0）— attribution key 將落在此結構</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-phase">Confluence</span></td>
+          <td><a href="https://viewsonic-vsi.atlassian.net/wiki/spaces/V/pages/495059253">[Editor] PhET API Spec</a></td>
+          <td><a href="confluence/V/editor-phet-api-spec.md"><code>confluence/V/editor-phet-api-spec.md</code></a></td>
+          <td>v12 (2026-04-24)</td>
+          <td>PhET catalog API — 定義 <code>Activity_PHET</code> category 與 <code>html-activity.source</code> 的來源</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="relation">2. 三票分工與相依</h2>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart LR
+  subgraph HUB["Hub Editor（african-golden-cat）"]
+    E9586["VSFT-9586<br/>依 Hub 語言定版標註字串<br/>產生 attribution 資料<br/>打包進 .olf"]
+  end
+  OLF[(".olf 副本<br/>activity-layer.html-activity<br/>+ attribution key")]
+  subgraph PLAY["播放端"]
+    F9647["VSFT-9647（本票）<br/>mVB Flutter（edu-droid-flutter）<br/>讀 key → 左上呈現 · 字級 10<br/>連結開 external browser"]
+    W9648["VSFT-9648<br/>mVB Windows（edu-sparrow-app）<br/>內容一致"]
+  end
+  R9531["VSFT-9531（參考）<br/>舊版 app fallback 提示<br/>背景對比問題"]
+  E9586 --> OLF
+  OLF --> F9647
+  OLF --> W9648
+  R9531 -. 舊 app 相容性參考 .-> F9647
+      </pre>
+      <div class="diagram-caption">editor 端為 single source of truth：標註字串在建立時定版並內嵌 .olf；兩個播放端只如實呈現，不做 i18n。</div>
+    </div>
+
+    <h2 id="background">3. Background</h2>
+    <ul>
+      <li>PhET 於 <strong>2026/3/29</strong> 起將新發布模擬的授權由 CC BY 4.0 改為 <strong>CC BY-NC</strong>；之前發布的 historical 模擬維持 CC BY 4.0。</li>
+      <li>CC BY 要求：內容需在<strong>使用處</strong>明確標註來源（attribution），須「盡可能靠近使用點並人類可讀」。</li>
+      <li>目前合規缺口：PhET activity 副本能打包進 .olf，但來源標註<strong>沒有內嵌進副本</strong>，播放端無從取得、也未顯示 → 課堂派發的副本不符 PhET 使用規範。</li>
+      <li>依 PhET 官方規定：歸屬文字<strong>僅可翻譯、其他修改不允許</strong>；品牌條款要求完整包含「PhET Interactive Simulations, University of Colorado Boulder」與官網 URL。</li>
+      <li>editor <strong>不在 canvas 渲染標註</strong>（編輯階段看不到）；視覺呈現全由播放端負責 — 這是 refinement 後的分工修正。</li>
+    </ul>
+
+    <h2 id="scope">4. Solution Scope（VSFT-9647，mvbf 播放端）</h2>
+    <ul>
+      <li>播放 PhET activity 時，讀取 .olf 內嵌的 CC-BY 合規標註 key。</li>
+      <li>如實<strong>逐字</strong>呈現已定版字串（中或英，由 Hub editor 建立時定版）；app 端不做語言判斷、不 i18n、不重新翻譯。</li>
+      <li>於 PhET activity <strong>左上方</strong>呈現，<strong>字級 10</strong>。</li>
+      <li>播放時標註維持可見：不可被其他物件覆蓋、不被裁切或移動。</li>
+      <li>與背景維持足夠對比（建議 ≥ 4.5:1，WCAG AA 小字），必要時襯底或描邊；需在 IFP 投影距離下可讀。</li>
+      <li>標註內連結可點擊，以 <strong>external browser</strong> 開啟（不用 app 內嵌視窗）。</li>
+      <li>舊版副本無此 key → <strong>graceful fallback</strong>：不顯示、不報錯。</li>
+    </ul>
+
+    <h2 id="strings">5. 定版字串（PhET 官方指定，僅可翻譯）</h2>
+    <table>
+      <thead><tr><th>語言</th><th>字串（逐字呈現）</th></tr></thead>
+      <tbody>
+        <tr><td>EN</td><td><code>Simulation by PhET Interactive Simulations, University of Colorado Boulder, licensed under CC BY 4.0 (https://phet.colorado.edu).</code></td></tr>
+        <tr><td>ZH</td><td><code>模擬由 PhET Interactive Simulations, University of Colorado Boulder 提供，依 CC BY 4.0 授權 (https://phet.colorado.edu).</code></td></tr>
+        <tr><td>其他</td><td>Hub 語言非中／英 → fallback 英文版</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      語言於建立／儲存當下定版，之後不隨 Hub 語言或派送對象改變。app 介面語言與 .olf 字串語言不同時，一律以 .olf 字串為準（預期行為、非 bug）。
+    </div>
+
+    <h2 id="format">6. attribution 資料格式（POC，未定案）</h2>
+    <p>VSFT-9586 Remark 給出的 POC 形狀：<code>attribution</code> 為 <strong>segments 陣列</strong>，各段含 <code>text</code>、可選 <code>url</code>；播放端依序串接呈現，帶 <code>url</code> 的段落渲染為可點擊連結。</p>
+<pre><code>"attribution": {
+  "segments": [
+    { "text": "模擬由科羅拉多大學波德分校 PhET Interactive Simulations 提供（" },
+    { "text": "https://phet.colorado.edu/", "url": "https://phet.colorado.edu/" },
+    { "text": "），依 " },
+    { "text": "PhET 服務條款", "url": "https://phet.colorado.edu/en/licensing/html" },
+    { "text": " 以 CC-BY 4.0 授權 | " },
+    { "text": "隱私政策", "url": "https://phet.colorado.edu/en/licensing/html#agreement-IV" }
+  ]
+}</code></pre>
+    <div class="callout warn">
+      <strong>Open item（VSFT-9586）：</strong>POC 字串與官方定稿字串<strong>不一致</strong> — POC 版加入額外連結、改寫授權說法並中譯品牌名，屬 PhET 不允許之 modification。票上建議：<strong>字串以官方版為準，POC 僅參考 segments 資料結構</strong>。最終 key 名稱、位置（html-activity 層級）與語言標記欄位需與播放端一併定案 — 目前 OLF 規格頁（v7）尚未定義 attribution key（見 <a href="findings.html">findings</a>）。
+    </div>
+
+    <h2 id="ac">7. Acceptance Criteria（VSFT-9647）</h2>
+    <table>
+      <thead><tr><th>Given</th><th>When</th><th>Then</th><th>Remark</th></tr></thead>
+      <tbody>
+        <tr><td>.olf 含英文版標註 key</td><td>播放該 PhET activity</td><td>左上逐字呈現英文官方字串（字級 10）</td><td>不重新翻譯</td></tr>
+        <tr><td>.olf 含中文版標註 key</td><td>播放該 PhET activity</td><td>左上逐字呈現中文官方字串（字級 10）</td><td>即使 app 介面為英文仍依 .olf 字串；品牌名與 URL 保留英文</td></tr>
+        <tr><td>標註含可點擊連結</td><td>播放中點擊連結</td><td>external browser 開啟</td><td>不在 app 內嵌視窗開啟；全螢幕授課切換體驗為 open item</td></tr>
+        <tr><td>標註已顯示</td><td>其他物件疊加該區域</td><td>維持可見，不被覆蓋/裁切/移動</td><td>播放端「不可被遮擋」保證</td></tr>
+        <tr><td>模擬背景深/淺/變化</td><td>標註呈現其上</td><td>對比可辨識（建議 ≥ 4.5:1），必要時襯底/描邊</td><td>IFP 投影距離下可讀</td></tr>
+        <tr><td>舊版 .olf 無 key</td><td>播放該 activity</td><td>不顯示、不報錯</td><td>graceful fallback</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="status">8. 平台現況摘要（2026-07-28 調查）</h2>
+    <table>
+      <thead><tr><th>端</th><th>Repo</th><th>現況</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Hub Editor</td>
+          <td><code>african-golden-cat</code></td>
+          <td><span class="badge badge-partial">未打包</span> attribution 字串目前只出現在 PhET picker 的 UI（i18n key <code>slideEditor.phetPicker.attribution</code>）；<strong>尚未打包進 .olf</strong>。VSFT-9586 KICK-OFF、Unassigned。</td>
+        </tr>
+        <tr>
+          <td>mVB Windows（sparrow）</td>
+          <td><code>edu-sparrow-app</code></td>
+          <td><span class="badge badge-new">未開工</span> 全分支查無 attribution/CC-BY 程式碼；已有 Activity Layer 播放基礎（Kenneth 的 POC 已 merge main）。VSFT-9648 KICK-OFF、Unassigned。</td>
+        </tr>
+        <tr>
+          <td>mVB Flutter（本票）</td>
+          <td><code>edu-droid-flutter</code></td>
+          <td><span class="badge badge-new">未開工</span> <code>HtmlActivity</code> 模型無 attribution 欄位；已定位實作切入點與 round-trip 風險，見 <a href="findings.html">findings</a>。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="open">9. Open Questions</h2>
+    <ul>
+      <li><strong>key 格式未定案</strong>：OLF 規格頁 v7 無 attribution 定義；segments 結構、key 名稱、語言標記欄位需 editor 與兩播放端一併定案（VSFT-9586 open item）。</li>
+      <li><strong>UXUI 規格缺口</strong>：票上「樣式對齊 editor 產出」已失效（editor 不渲染標註），需 UXUI 提供標註元件規格（含對比度做法）供兩平台共用。</li>
+      <li><strong>連結點擊體驗</strong>：全螢幕授課中點連結跳 external browser 的切換體驗，連結數量依最終字串定案。</li>
+      <li><strong>CC BY-NC 新模擬</strong>：2026/3/29 後發布之模擬非本案範圍，Hub 收錄／阻擋策略另案處理。</li>
+    </ul>
+
+    <h2 id="jira">10. Jira 對照</h2>
+    <table>
+      <thead><tr><th>票</th><th>平台</th><th>Status</th><th>Assignee</th><th>Sprint</th></tr></thead>
+      <tbody>
+        <tr><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9647">VSFT-9647</a></td><td>mVB Flutter</td><td>KICK-OFF</td><td>Jay Wu</td><td>星期六浩克 sprint 25（2026-07-28 ~ 08-11）</td></tr>
+        <tr><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9586">VSFT-9586</a></td><td>Hub Editor</td><td>KICK-OFF</td><td>Unassigned</td><td>—</td></tr>
+        <tr><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9648">VSFT-9648</a></td><td>mVB Windows</td><td>KICK-OFF</td><td>Unassigned</td><td>—</td></tr>
+        <tr><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9531">VSFT-9531</a></td><td>Hub / UX</td><td>KICK-OFF</td><td>zoe.ay.yeh</td><td>—</td></tr>
+      </tbody>
+    </table>
+
+    <div class="meta" style="margin-top:32px">
+      SOURCE：Jira VSFT-9647 / VSFT-9586 / VSFT-9648 / VSFT-9531（2026-07-28 clone）&middot;
+      Confluence 468615756 v7、495059253 v12 &middot; 調查細節見 <a href="findings.html">findings.html</a>
+    </div>
+  </main>
+</div>
+<script src="assets/mermaid-init.js"></script>
+</body>
+</html>
