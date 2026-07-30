@@ -11,7 +11,7 @@
   <nav class="toc" aria-label="目錄">
     <h2>目錄</h2>
     <ul>
-      <li><a href="#decision">0. 🚦 決策：等 VSFT-9586 完成再開工</a></li>
+      <li><a href="#decision">0. 🚦 決策沿革：擱置 → 方向變更後開工</a></li>
       <li><a href="#tldr">1. TL;DR</a></li>
       <li><a href="#key-format">2. attribution key 現況：規格未定義</a></li>
       <li><a href="#editor">3. Hub 端現況（前端 agc + 後端 ocelot）</a></li>
@@ -35,8 +35,19 @@
       <a href="findings.html" class="active">🛠️ 調查 findings</a>
     </div>
 
-    <h2 id="decision">0. 🚦 決策：等 VSFT-9586 完成再開工 <span class="badge badge-warn">擱置中</span></h2>
+    <h2 id="decision">0. 🚦 決策沿革 <span class="badge badge-ok">已開工（2026-07-30）</span></h2>
+    <div class="callout">
+      <p><strong>2026-07-30 更新：方向變更，擱置解除，VSFT-9647 轉「進行中」、先行開發標註 layout。</strong></p>
+      <ul class="compact">
+        <li><strong>觸發</strong>：May Lee 接手 VSFT-9586（PENDING）並於 07-30 10:51 留言：「因需符合 phet 規範，不可改寫文案，故變動性不高。<strong>評估直接將文字加在 myViewboard 顯示端即可</strong>。此 ticket 中，Hub 僅更新現有文案。」（附 PhET 官方 Attribution Requirements 截圖，見 <a href="jira/VSFT-9586.md">jira/VSFT-9586.md</a> Comments）</li>
+        <li><strong>意涵</strong>：attribution 很可能<strong>不會打包進 .olf</strong> — 播放端改為偵測 PhET activity（<code>category == "Activity_PHET"</code>，現有 .olf 已具備，見 §2）後直接顯示 app 內建的官方字串。原「等 key 格式定案」的擱置理由不成立。</li>
+        <li><strong>連帶失效／變動</strong>：§2 key 格式（可能永不存在）、§6 round-trip 洗 key 風險（無 key 可洗，消失）、§8 resume checklist（多數條件不適用）。</li>
+        <li><strong>新增待決</strong>：hardcode 方向下<strong>語言由誰決定</strong>（建議一律英文官方字串，PhET 僅「允許」翻譯）；9647 票面 Description/AC 仍是「讀 .olf key」舊版，待 PM（zoe）依新方向改票；9648（mvbw）需同步同一字串。</li>
+        <li><strong>Jay 決策（2026-07-30）</strong>：先做標註 layout（overlay 呈現、對比、連結），暫不做 .olf 讀取；測試樣本已備 — <code>jay-poc-cli-executor/fixtures/mixed-activity-sample.olf</code> 含真實 <code>Activity_PHET</code> 頁（Hub OlfViewer 產出，無 attribution key，正好對應新方向）。</li>
+      </ul>
+    </div>
     <div class="callout warn">
+      <p><em>以下為 2026-07-28 原決策，保留作沿革：</em></p>
       <p><strong>2026-07-28 決策（Jay）：VSFT-9647 暫緩，等 Hub editor 端（VSFT-9586）完成打包後再開始 mvbf 實作。</strong></p>
       <ul class="compact">
         <li><strong>理由</strong>：上游完全未動工（VSFT-9586 KICK-OFF、Unassigned），attribution key 的名稱／層級／segments 結構／語言標記欄位都未定案。現在先做，等格式定案後很可能要重工。</li>
@@ -56,6 +67,7 @@
     </div>
 
     <h2 id="key-format">2. attribution key 現況：OLF 規格尚未定義 <span class="badge badge-err">未定案</span></h2>
+    <div class="callout"><strong>2026-07-30 更新：</strong>依 May Lee 評估（§0），此 key <strong>可能永遠不會定義</strong> — 改由播放端直接顯示內建字串，偵測依據即下列現有欄位 <code>category: "Activity_PHET"</code>，不需等新 key。以下保留原調查。</div>
     <ul>
       <li><a href="confluence/V/olf-html-phet-game-quiz.md">OLF + HTML 規格頁</a>（Confluence 468615756，v7，2026-04-02，Integrated Draft v1.0）：全文<strong>無任何 attribution / license / CC-BY 字樣</strong>。html-activity 目前欄位：<code>id / x / y / width / height / matrix / category / source</code>（PhET 為 <code>category: "Activity_PHET"</code>、<code>source</code> = PhET all-locales URL）。</li>
       <li><code>edu-vboard-olfspec</code>（OLF 正式 spec repo，僅 main）：同樣無 phet / attribution 內容。</li>
@@ -92,6 +104,7 @@
     </ul>
 
     <h2 id="mvbf">5. mvbf（edu-droid-flutter）實作切入點 <span class="badge badge-ok">已定位</span></h2>
+    <div class="callout"><strong>2026-07-30 更新（hardcode 新方向下的調整）：</strong>呈現層（<code>background_activity_overlay_layer.dart</code>）與連結（url_launcher）切入點<strong>不變</strong>；Model／解析層從「新增 attribution 欄位解析」簡化為「以既有 <code>HtmlActivity.category == "Activity_PHET"</code> 判斷顯示」，字串內建於 app。測試樣本：<code>jay-poc-cli-executor/fixtures/mixed-activity-sample.olf</code>（含真實 Activity_PHET 頁）。以下表格為舊方向（讀 key）版本，保留備查。</div>
     <div class="callout">本機 <code>master</code> 落後 <code>origin/master</code>，以下皆以 <code>origin/master</code> 為準（已 fetch）。尚未動任何 mvbf 程式碼。</div>
     <table>
       <thead><tr><th>層</th><th>檔案</th><th>現況 / 要做的事</th></tr></thead>
@@ -120,6 +133,7 @@
     </table>
 
     <h2 id="roundtrip">6. ⚠️ Round-trip 風險：mvbf 存檔會洗掉 attribution key <span class="badge badge-err">必須處理</span></h2>
+    <div class="callout"><strong>2026-07-30 更新：</strong>hardcode 新方向（§0）下 .olf 內沒有 attribution key，此風險<strong>整段消失</strong>——標註由偵測 <code>category</code> 動態顯示，存檔不影響。惟 <code>category</code> 本身屬白名單欄位、round-trip 會保留，方向定案前先保留本節備查。</div>
     <ul>
       <li>mvbf 存 .olf 時（<code>FileOLFSaveHelper</code> → <code>PageActivity.toOlfJson</code> → <code>HtmlActivity.toJson/toOlfJson</code>）是<strong>白名單重建</strong> JSON：只寫出已知欄位（id/x/y/width/height/matrix/category/source），未知欄位一律丟棄。</li>
       <li>後果：老師在 mvbf 開啟 Hub 派來的 .olf → 寫筆記 → 存檔，<strong>attribution key 就從副本裡消失</strong>，之後再播放（mvbf 或轉給 mvbw）都不再顯示標註 → 合規閉環被 app 自己打破。</li>
@@ -139,7 +153,8 @@
       </tbody>
     </table>
 
-    <h2 id="resume">8. 重啟條件（resume checklist）</h2>
+    <h2 id="resume">8. 重啟條件（resume checklist）<span class="badge badge-warn">已失效大半</span></h2>
+    <div class="callout"><strong>2026-07-30 更新：</strong>本 checklist 基於「等 .olf key 格式」舊方向，已於 07-30 開工，逐條狀態：#1 不再等 9586（改顯示端 hardcode）；#2 不適用（.olf 不會有 key）；#3 <strong>已滿足</strong>（fixtures 已有真實 Activity_PHET 樣本）；#4 <strong>仍有效</strong>（UXUI 標註元件規格仍缺）；#5 不適用（無 key 可保）。</div>
     <p>重新開工前逐項確認；任一項未滿足就代表格式仍可能變動，先別動手。</p>
     <table>
       <thead><tr><th>#</th><th>條件</th><th>怎麼確認</th></tr></thead>
@@ -157,6 +172,7 @@
       調查方法：Jira MCP（VSFT-9647/9586/9648/9531）、Confluence MCP（468615756 v7、495059253 v12）、
       git fetch/pull + 全分支 grep（african-golden-cat、ocelot、edu-sparrow-app、edu-droid-flutter、edu-vboard-olfspec）。
       2026-07-28 決策：擱置等 VSFT-9586（§0）。
+      2026-07-30 更新：方向變更（顯示端 hardcode）、擱置解除、開工做 layout（§0）；Jira clone 同步至 v2。
     </div>
   </main>
 </div>

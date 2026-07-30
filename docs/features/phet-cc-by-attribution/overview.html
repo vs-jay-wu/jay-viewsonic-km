@@ -37,9 +37,11 @@
     </div>
 
     <div class="callout warn">
-      <strong>🚦 2026-07-28 決策：本票（VSFT-9647）擱置，等 VSFT-9586（Hub editor 打包）完成再開工。</strong>
-      上游未動工、attribution key 格式未定案，現在先做恐重工。Hub stage 前後端（african-golden-cat + ocelot，含 stage/1.67.0）已查證確無 CC-BY 打包。
-      重啟條件與細節見 <a href="findings.html#decision">findings §0</a>、<a href="findings.html#resume">§8 重啟 checklist</a>。
+      <strong>🚦 2026-07-30 方向變更：attribution 可能不打包進 .olf，改由播放端直接顯示內建官方字串；本票已開工（進行中），先做標註 layout。</strong>
+      May Lee 接手 VSFT-9586（PENDING）並於 07-30 留言評估「直接將文字加在 myViewboard 顯示端即可，Hub 僅更新現有文案」——
+      播放端改為偵測 <code>category == "Activity_PHET"</code>（現有 .olf 已具備）後顯示 app 內建字串。
+      本頁 §4/§6/§7 仍為「讀 .olf key」舊方向內容，票面改寫待 PM；決策沿革與影響見 <a href="findings.html#decision">findings §0</a>。
+      <em>（2026-07-28 原決策「擱置等 9586」已解除。）</em>
     </div>
 
     <h2 id="sources">1. 原始文件</h2>
@@ -50,14 +52,14 @@
           <td><span class="badge badge-mvb">Jira</span></td>
           <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9647">VSFT-9647</a> [mVB Flutter][播放端]</td>
           <td><a href="jira/VSFT-9647.md"><code>jira/VSFT-9647.md</code></a></td>
-          <td>v1 (2026-07-28)</td>
+          <td>v2 (2026-07-30)</td>
           <td><strong>本票</strong> — mvbf 播放端讀 key 並呈現</td>
         </tr>
         <tr>
           <td><span class="badge badge-cs">Jira</span></td>
           <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9586">VSFT-9586</a> [Editor][Hub]</td>
           <td><a href="jira/VSFT-9586.md"><code>jira/VSFT-9586.md</code></a></td>
-          <td>v1 (2026-07-28)</td>
+          <td>v2 (2026-07-30)</td>
           <td><strong>相依票</strong> — editor 定版語言、產生 attribution 資料、打包進 .olf</td>
         </tr>
         <tr>
@@ -146,6 +148,7 @@ flowchart LR
     </div>
 
     <h2 id="format">6. attribution 資料格式（POC，未定案）</h2>
+    <div class="callout"><strong>2026-07-30 更新：</strong>依方向變更（見頁首），此格式<strong>可能不會實作</strong>——.olf 不打包 attribution，播放端 hardcode 顯示。以下保留備查。</div>
     <p>VSFT-9586 Remark 給出的 POC 形狀：<code>attribution</code> 為 <strong>segments 陣列</strong>，各段含 <code>text</code>、可選 <code>url</code>；播放端依序串接呈現，帶 <code>url</code> 的段落渲染為可點擊連結。</p>
 <pre><code>"attribution": {
   "segments": [
@@ -208,15 +211,15 @@ flowchart LR
     <table>
       <thead><tr><th>票</th><th>平台</th><th>Status</th><th>Assignee</th><th>Sprint</th></tr></thead>
       <tbody>
-        <tr><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9647">VSFT-9647</a></td><td>mVB Flutter</td><td>KICK-OFF</td><td>Jay Wu</td><td>星期六浩克 sprint 25（2026-07-28 ~ 08-11）</td></tr>
-        <tr><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9586">VSFT-9586</a></td><td>Hub Editor</td><td>KICK-OFF</td><td>Unassigned</td><td>—</td></tr>
+        <tr><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9647">VSFT-9647</a></td><td>mVB Flutter</td><td>進行中（2026-07-30）</td><td>Jay Wu</td><td>星期六浩克 sprint 25（2026-07-28 ~ 08-11）</td></tr>
+        <tr><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9586">VSFT-9586</a></td><td>Hub Editor</td><td>PENDING（2026-07-30）</td><td>May Lee</td><td>—</td></tr>
         <tr><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9648">VSFT-9648</a></td><td>mVB Windows</td><td>KICK-OFF</td><td>Unassigned</td><td>—</td></tr>
         <tr><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9531">VSFT-9531</a></td><td>Hub / UX</td><td>KICK-OFF</td><td>zoe.ay.yeh</td><td>—</td></tr>
       </tbody>
     </table>
 
     <div class="meta" style="margin-top:32px">
-      SOURCE：Jira VSFT-9647 / VSFT-9586 / VSFT-9648 / VSFT-9531（2026-07-28 clone）&middot;
+      SOURCE：Jira VSFT-9647 / VSFT-9586（2026-07-30 v2）、VSFT-9648 / VSFT-9531（2026-07-28 clone）&middot;
       Confluence 468615756 v7、495059253 v12 &middot; 調查細節見 <a href="findings.html">findings.html</a>
     </div>
   </main>
