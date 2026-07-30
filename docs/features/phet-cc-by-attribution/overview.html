@@ -40,7 +40,7 @@
       <strong>🚦 2026-07-30 方向變更：attribution 可能不打包進 .olf，改由播放端直接顯示內建官方字串；本票已開工（進行中），先做標註 layout。</strong>
       May Lee 接手 VSFT-9586（PENDING）並於 07-30 留言評估「直接將文字加在 myViewboard 顯示端即可，Hub 僅更新現有文案」——
       播放端改為偵測 <code>category == "Activity_PHET"</code>（現有 .olf 已具備）後顯示 app 內建字串。
-      本頁 §4/§6/§7 仍為「讀 .olf key」舊方向內容，票面改寫待 PM；決策沿革與影響見 <a href="findings.html#decision">findings §0</a>。
+      本頁 §4/§6/§7 仍為「讀 .olf key」舊方向內容；<strong>票面已於 07-30 由 zoe 改寫定案</strong>（播放端 hardcode、統一英文，見 <a href="jira/VSFT-9647.md">clone v3</a>），實作 PR <a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/207">#207</a> 已進 code review。決策沿革見 <a href="findings.html#decision">findings §0</a>。
       <em>（2026-07-28 原決策「擱置等 9586」已解除。）</em>
     </div>
 
@@ -52,7 +52,7 @@
           <td><span class="badge badge-mvb">Jira</span></td>
           <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9647">VSFT-9647</a> [mVB Flutter][播放端]</td>
           <td><a href="jira/VSFT-9647.md"><code>jira/VSFT-9647.md</code></a></td>
-          <td>v2 (2026-07-30)</td>
+          <td>v3 (2026-07-30)</td>
           <td><strong>本票</strong> — mvbf 播放端讀 key 並呈現</td>
         </tr>
         <tr>
@@ -211,7 +211,7 @@ flowchart LR
     <table>
       <thead><tr><th>票</th><th>平台</th><th>Status</th><th>Assignee</th><th>Sprint</th></tr></thead>
       <tbody>
-        <tr><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9647">VSFT-9647</a></td><td>mVB Flutter</td><td>進行中（2026-07-30）</td><td>Jay Wu</td><td>星期六浩克 sprint 25（2026-07-28 ~ 08-11）</td></tr>
+        <tr><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9647">VSFT-9647</a></td><td>mVB Flutter</td><td>IN CODE REVIEW（2026-07-30，PR <a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/207">#207</a>）</td><td>Jay Wu</td><td>星期六浩克 sprint 25（2026-07-28 ~ 08-11）</td></tr>
         <tr><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9586">VSFT-9586</a></td><td>Hub Editor</td><td>PENDING（2026-07-30）</td><td>May Lee</td><td>—</td></tr>
         <tr><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9648">VSFT-9648</a></td><td>mVB Windows</td><td>KICK-OFF</td><td>Unassigned</td><td>—</td></tr>
         <tr><td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9531">VSFT-9531</a></td><td>Hub / UX</td><td>KICK-OFF</td><td>zoe.ay.yeh</td><td>—</td></tr>

@@ -42,7 +42,7 @@
         <li><strong>觸發</strong>：May Lee 接手 VSFT-9586（PENDING）並於 07-30 10:51 留言：「因需符合 phet 規範，不可改寫文案，故變動性不高。<strong>評估直接將文字加在 myViewboard 顯示端即可</strong>。此 ticket 中，Hub 僅更新現有文案。」（附 PhET 官方 Attribution Requirements 截圖，見 <a href="jira/VSFT-9586.md">jira/VSFT-9586.md</a> Comments）</li>
         <li><strong>意涵</strong>：attribution 很可能<strong>不會打包進 .olf</strong> — 播放端改為偵測 PhET activity（<code>category == "Activity_PHET"</code>，現有 .olf 已具備，見 §2）後直接顯示 app 內建的官方字串。原「等 key 格式定案」的擱置理由不成立。</li>
         <li><strong>連帶失效／變動</strong>：§2 key 格式（可能永不存在）、§6 round-trip 洗 key 風險（無 key 可洗，消失）、§8 resume checklist（多數條件不適用）。</li>
-        <li><strong>新增待決</strong>：hardcode 方向下<strong>語言由誰決定</strong>（建議一律英文官方字串，PhET 僅「允許」翻譯）；9647 票面 Description/AC 仍是「讀 .olf key」舊版，待 PM（zoe）依新方向改票；9648（mvbw）需同步同一字串。</li>
+        <li><strong>新增待決</strong>：hardcode 方向下<strong>語言由誰決定</strong>（建議一律英文官方字串，PhET 僅「允許」翻譯）；9647 票面 Description/AC 仍是「讀 .olf key」舊版，待 PM（zoe）依新方向改票；9648（mvbw）需同步同一字串。<br/><em>→ 2026-07-30 已解決：zoe 改寫票面為「播放端 hardcode、統一英文」（clone v3），實作 PR <a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/207">#207</a> 已進 code review。</em></li>
         <li><strong>Jay 決策（2026-07-30）</strong>：先做標註 layout（overlay 呈現、對比、連結），暫不做 .olf 讀取；測試樣本已備 — <code>jay-poc-cli-executor/fixtures/mixed-activity-sample.olf</code> 含真實 <code>Activity_PHET</code> 頁（Hub OlfViewer 產出，無 attribution key，正好對應新方向）。</li>
       </ul>
     </div>
