@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>Manager 讀取 MVB Instance ID — Open Questions</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#q1">Q1. entity name 的定義與來源</a></li>
+      <li><a href="#q2">Q2. dmagent 的簽章 key</a></li>
+      <li><a href="#q3">Q3. 未 enroll 時 provider 行為</a></li>
+      <li><a href="#q4">Q4. Provider contract 細節</a></li>
+      <li><a href="#q5">Q5. 兩票都未指派</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Open Questions</h1>
+    <div class="meta">
+      建立 2026-07-30 &middot; 開工前需要 PM（Peja）/ Stephen / Manager team（VB-1399）回答的問題
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="findings.html">🛠️ 調查 findings</a>
+      <a href="open-questions.html" class="active">❓ open questions</a>
+      <a href="contract-proposal.html">📐 contract 草案</a>
+    </div>
+
+    <h2 id="q1">Q1. entity name 的定義與來源？</h2>
+    <p><span class="badge badge-mvb">問誰</span> Peja / Stephen</p>
+    <p>Stephen comment 說 provider 要提供「entity name」，但 codebase 裡 entity 有三種語意，且<strong>目前沒有任何一處持久化 entity name 字串</strong>（詳見 <a href="findings.html#entity">findings §2</a>）：</p>
+    <ul>
+      <li>(a) 裝置 enroll 的 entity——目前只存 <code>app_entityID</code>，沒有 name</li>
+      <li>(b) 從 Manager agent / Activator 讀來的 entityName——transient，不落地；而且<strong>這個值本來就是 Manager 給的</strong>，若票要的是這個，Manager 自己就有，不合理</li>
+      <li>(c) 登入帳號的 entity——帳號層概念，跟「裝置 ↔ instance 對應」無關</li>
+    </ul>
+    <p>推測是 (a)，但需要確認：</p>
+    <ul>
+      <li>後端 <code>GET /api/v1/application/viewboard/{uid}/entity</code> 的 response 是否已含 entity name？（若有，只需擴充解析；若無，要請後端加或另打 API）</li>
+    </ul>
+    <div class="callout warn">2026-07-30 本機實驗補強：dmagent 端 <code>DMService</code> 從 DataStore 收 <code>enrollEntityFlow</code>（含 <code>entityName</code> + <code>deviceName</code>）——<strong>agent 自己就持有 entity name</strong>，要 MVB provider 回 entity name 的目的更需釐清（見 <a href="findings.html#experiment">findings §7</a>）。</div>
+    <div class="callout ok"><strong>✅ 目的已釐清（Aaron Chang，2026-07-31）</strong>：entity name 是<strong>授權護欄（tenancy guard）</strong>，不是識別資料的重複——
+      (1) entity name 不會重複，可作識別；
+      (2) dm 拿 MVB 的 entity name 與<strong>自己持有的</strong>比對，<strong>不同就不對該 MVB 做事</strong>；
+      (3) 「MVB 註冊 entity A、Manager 註冊 entity B」雖少見，但同一台裝置上不同 entity ≠ 該 Manager 有權管理。
+      <br /><strong>仍待解</strong>：MVB 端 entity name 的<strong>來源</strong>（後端 <code>/{uid}/entity</code> 是否回 name）與持久化——且回傳字串必須與 Manager 雲端的 entity name <strong>逐字元一致</strong>（大小寫/空白正規化要跟 dm 對齊），否則護欄會誤攔。</div>
+    <div class="callout ok"><strong>✅ 來源已查證（2026-07-31，edu-mvb-api-core）：後端不用改。</strong>
+      <code>GET /{instance_id}/entity</code> 的 response（<code>InstanceEntityObj</code>，<code>apps/mvb-app-api/src/module/whiteboard/dto/res-body.dto.ts:35-46</code>）<strong>已含</strong> <code>entity_id</code> / <code>organization</code> / <code>name</code> / <code>beta_program</code>——MVB 目前只解析 <code>entity_id</code>（<code>mvb_activator.dart:433</code>），其餘丟掉。只需擴充解析並持久化。
+      <br /><strong>該用哪個欄位</strong>：dm 的 entityName 在 auto-enroll 走 <code>POST /install/inspect</code> body <code>{organization: entityName}</code> → 後端 <code>Entity.findOne({where:{organization}})</code>（<code>entity.service.ts:53-57</code>）<strong>精確等值比對 <code>organization</code></strong> → provider 的 <code>entity_name</code> 應回 <code>organization</code>；後端是逐字元等值，MVB 原樣存、原樣回即可，無自訂正規化空間。會議上與 Manager team 確認 dm 端比對邏輯同為精確等值。</div>
+
+    <h2 id="q2">Q2. Manager agent（com.viewsonic.dmagent）用哪把簽章 key？</h2>
+    <p><span class="badge badge-cs">問誰</span> Manager team（VB-1399）</p>
+    <p>決定存取控制方案：</p>
+    <ul>
+      <li>若與 MVB ifp/edla 同為 <code>MVBA_PlatForm.jks</code> → 可用 <code>protectionLevel="signature"</code> 的自訂 permission，但 open/store flavor（Google Play key）會失效</li>
+      <li>若不同 key、或需支援所有 flavor → provider 內做 runtime 檢查：<code>getCallingPackage()</code> + <code>GET_SIGNING_CERTIFICATES</code> 比對 SHA-256 allowlist</li>
+    </ul>
+    <p>也需確認：這個 provider 是否只需要 ifp/edla flavor 提供？（Manager agent 場景應該只有 IFP 裝置，若確定，open/store 可直接不註冊 provider，signature permission 方案就成立）</p>
+    <div class="callout">2026-07-30 本機實驗補強：dmagent repo 的 <code>keystore.properties</code> 用的正是 <code>MVBA_PlatForm.jks</code>（alias <code>platform</code>）——與 MVB ifp/edla 同 key，signature 方案可行性高，待與 Manager team 確認正式包板也是同把 key。</div>
+    <div class="callout ok"><strong>✅ 範圍已確認（Jay，2026-07-31）：dm 只需要 ifp/edla，open/store 不管。</strong>
+      → 存取控制定向為 <strong>signature permission</strong>（<code>protectionLevel="signature"</code>），provider 註冊移到 flavor 專屬 manifest（<code>src/ifp/</code>、<code>src/edla/</code>），main manifest 不註冊——open/store 連 provider 都不存在。
+      剩餘確認項只剩：dmagent <strong>正式包板</strong>是否同為 <code>MVBA_PlatForm.jks</code>（本機證據已支持，會議上一句話確認即可）。詳見 <a href="contract-proposal.html#access">contract 草案 §2</a>。</div>
+
+    <h2 id="q3">Q3. 未 enroll 時 provider 該回什麼？</h2>
+    <p><span class="badge badge-cs">問誰</span> Manager team + Stephen</p>
+    <p>instance ID 在首次啟動 <code>ensureInitialized()</code> 才產生；entity ID/name 要 enroll 成功後才有。情境：</p>
+    <ul>
+      <li>MVB 已安裝但從未啟動 → instance ID 不存在</li>
+      <li>已啟動但未 enroll → 有 instance ID、無 entity</li>
+    </ul>
+    <p>Provider 應回空 cursor？null？部分欄位？Manager 端的 retry/polling 策略是什麼？</p>
+    <div class="callout ok">2026-07-31 已有完整方案比較與建議（含舊版相容狀態機、<code>ContentObserver</code> 訂閱機制），見 <a href="contract-proposal.html#empty-handling">contract 草案 §8</a>。待與 Manager team 確認採納。</div>
+
+    <h2 id="q4">Q4. Provider contract 細節</h2>
+    <p><span class="badge badge-cs">問誰</span> 與 VB-1399 共同定義（工程師討論）</p>
+    <ul>
+      <li>authority 命名（參考對向：<code>com.viewsonic.dmagent.provider</code>；MVB 側 applicationId 因 flavor 而異，authority 建議用 <code>${applicationId}.xxx</code> 還是固定字串？固定字串在多 flavor 同裝置共存時會衝突）</li>
+      <li>URI path 與 column 名（對向 dmagent 是單欄 cursor 無 column 名慣例）</li>
+      <li>是否需要 query 單欄或一次回兩值</li>
+      <li>版本演進策略（之後要加欄位怎麼辦）</li>
+    </ul>
+    <div class="callout ok">草案已成形：key-value cursor + 版本演進策略方案比較（Stephen 傾向 key 版本制），見 <a href="contract-proposal.html">contract 草案</a> §1 / §7。POC 已依草案打通 end-to-end（<a href="findings.html#poc">findings §8</a>）。</div>
+
+    <h2 id="q5">Q5. 兩張票都未指派</h2>
+    <p>VSFT-9654 已進 Sprint 25（7/30–8/10）但 assignee 是 Unassigned，VB-1399 也未指派。需確認雙方窗口，contract 才有人拍板。</p>
+  </main>
+</div>
+</body>
+</html>

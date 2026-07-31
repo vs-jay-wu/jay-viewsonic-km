@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>Manager 讀取 MVB Instance ID — 調查 findings</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#current">0. 現況：instance ID 怎麼給 Manager</a></li>
+      <li><a href="#instance-id">1. Instance ID 現況</a></li>
+      <li><a href="#entity">2. Entity 現況（三種語意）</a></li>
+      <li><a href="#provider">3. ContentProvider / permission 現況</a></li>
+      <li><a href="#agent">4. Manager agent 整合現況</a></li>
+      <li><a href="#signing">5. 簽章配置</a></li>
+      <li><a href="#native">6. Native ↔ Flutter 與資料可及性</a></li>
+      <li><a href="#experiment">7. Manager agent 本機實驗</a></li>
+      <li><a href="#poc">8. POC 實作與結果</a>
+        <ul><li><a href="#poc-v2">8.1 v2：即時更新 + Pigeon 解耦</a></li></ul>
+      </li>
+      <li><a href="#conclusion">9. 實作方向結論</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>調查結果（findings）</h1>
+    <div class="meta">
+      VSFT-9654 [Manager integration] &middot; 調查 2026-07-30、POC 2026-07-30 &middot;
+      Codebase：<code>Orgs/Viewsonic-EDU/edu-droid-flutter</code>（Android myViewBoard, Flutter）
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="findings.html" class="active">🛠️ 調查 findings</a>
+      <a href="open-questions.html">❓ open questions</a>
+      <a href="contract-proposal.html">📐 contract 草案</a>
+    </div>
+
+    <h2 id="current">0. 現況：instance ID 是怎麼給 Manager 的（= 缺口本身）</h2>
+    <div class="callout ok"><strong>結論：裝置端目前完全沒有給，這正是本票要補的缺口。</strong></div>
+    <ul>
+      <li><strong>雲端側（Manager 看得到 instance ID 的原因）</strong>：MVB enroll 時把 instance ID 當 <code>uid</code> 上報 myViewBoard 後端（<code>POST /api/v2/application/whiteboard</code>，<code>mvb_activator.dart:177-204</code>）。裝置 enroll 進 entity 後，Manager 雲端「Software Instances」頁即可列出該 entity 下所有 instance ID 並套設定（票面附圖的列表就是這個）。所以 Manager <strong>知道有哪些 instance</strong>。</li>
+      <li><strong>裝置側（缺口）</strong>：Manager agent（<code>com.viewsonic.dmagent</code>）在裝置上管理本機，但 MVB 沒有任何對外介面提供本機的 instance ID，agent <strong>無從得知本機 MVB 是哪個 instance</strong>。結果是雲端有一排 instance ID，卻對不上「哪個 ID 是哪台裝置」。</li>
+      <li><strong>既有跨 app 通道只有反方向</strong>：裝置上 MVB ↔ Manager agent 唯一的整合，是 MVB 去讀 agent 的 provider <code>content://com.viewsonic.dmagent.provider/entity</code> 拿 entity name 做 auto-enroll（<code>MainActivity.java:1855-1906</code>）——資料方向 Manager → MVB，沒有 MVB → Manager。</li>
+      <li>本票即是把方向反過來：MVB 開對稱的 ContentProvider 讓 agent 讀 instance ID（+ entity name），agent 回報雲端後，Manager 才能建立「instance ID ↔ 裝置」對應。</li>
+    </ul>
+
+    <h2 id="instance-id">1. Instance ID 現況</h2>
+    <h3>命名與擁有者</h3>
+    <p>Codebase 內叫 <strong>instanceID</strong>（後端 API 欄位名 <code>uid</code>；SSO URL query 為 <code>instance_id</code>），核心擁有者是 <code>MvbActivator</code>。</p>
+    <table>
+      <thead><tr><th>角色</th><th>位置</th></tr></thead>
+      <tbody>
+        <tr><td>Public getter</td><td><code>lib/mvb_activator/mvb_activator.dart:149-151</code> <code>getInstanceID()</code></td></tr>
+        <tr><td>產生邏輯</td><td><code>lib/mvb_activator/mvb_activator.dart:116-139</code> <code>_generateInstanceID()</code></td></tr>
+        <tr><td>初始化（首啟產生並寫入）</td><td><code>lib/mvb_activator/mvb_activator.dart:94-104</code> <code>ensureInitialized()</code></td></tr>
+        <tr><td>儲存實作</td><td><code>lib/mvb_activator/secure_data_storage.dart</code></td></tr>
+      </tbody>
+    </table>
+
+    <h3>產生方式</h3>
+    <p><code>md5(timestampMillis + androidId + uuidV4)</code>，androidId 來自 <code>AndroidUtilityHelperPlatformService().androidID</code>（底層 <code>DeviceInfoVs.getAndroidID</code>）。只在 <code>getInstanceID().isEmpty</code> 時產生一次，之後永久沿用。</p>
+
+    <h3>儲存位置（⚠️ 實作關鍵）</h3>
+    <p>存在 <strong>Hive</strong>，不是 SharedPreferences：</p>
+    <ul>
+      <li><code>Hive.initFlutter('activate_db')</code>（<code>secure_data_storage.dart:26</code>），box name <code>activate</code>（line 16）</li>
+      <li>key <code>app_instanceID</code>（line 131 寫、143 讀）</li>
+      <li>同 box 還有：<code>app_entityID</code>、<code>app_whiteboardName</code>、<code>app_email</code>、<code>app_activated</code>、<code>StartupCount</code>、<code>native_analytics</code></li>
+      <li>class 名為 <code>SecureDataStorage</code> 但<strong>未加密</strong>（無 <code>HiveCipher</code>），檔案在 app documents dir 下 <code>activate_db/activate.hive</code></li>
+    </ul>
+    <div class="callout warn"><strong>Hive 是 Dart 專有 binary 格式，Kotlin/Java 側（ContentProvider）讀不到</strong>——這是本票最大的實作障礙。</div>
+
+    <h3>後端使用（instanceID = 裝置 identity key）</h3>
+    <table>
+      <thead><tr><th>API</th><th>用途</th><th>位置（mvb_activator.dart）</th></tr></thead>
+      <tbody>
+        <tr><td><code>POST /api/v2/application/whiteboard</code></td><td>auto enroll，body <code>{'uid': instanceID, ...}</code></td><td>42-48, 177-204, 401-412</td></tr>
+        <tr><td><code>POST /api/v2/application/whiteboard/entity/enrollment</code></td><td>manual enroll by email</td><td>51-57, 206-247</td></tr>
+        <tr><td><code>PUT /api/v1/application/viewboard/{uid}?key=</code></td><td>analytics</td><td>59-66, 448-474</td></tr>
+        <tr><td><code>GET /api/v1/application/viewboard/{uid}/entity</code></td><td>以 instanceID 換 entity_id</td><td>77-84, 419-441</td></tr>
+        <tr><td><code>GET .../auth/serviceType?...&amp;instance_id=</code></td><td>SSO（<code>lib/vs_urls.dart:72-79</code>）</td><td>—</td></tr>
+      </tbody>
+    </table>
+    <p>其他用途：<code>x-vs-key</code>/<code>x-vs-session</code> 認證 header、MQTT remote control client id/topic（<code>lib/remote_control_manager.dart</code>）、WebView 注入（<code>MvbAppInfo.java</code>）、Cast、登入/啟用 QR code、IT Admin settings 抓取、Settings &gt; About 顯示。</p>
+
+    <h2 id="entity">2. Entity 現況（三種語意，⚠️ 需釐清票要哪個）</h2>
+    <h3>(a) 裝置層 entity ID — 最可能是票要的</h3>
+    <ul>
+      <li><code>mvb_activator.dart:153-155 getEntityID()</code> / <code>419-441 _getEntityID()</code></li>
+      <li>來源 <code>GET /api/v1/application/viewboard/{uid}/entity</code> → response <code>entity_id</code>（line 433）</li>
+      <li>存 Hive <code>app_entityID</code>（<code>secure_data_storage.dart:132,144</code>）</li>
+      <li><strong>只有 ID，沒有 name——目前 codebase 沒有任何地方持久化 entity name</strong></li>
+    </ul>
+    <h3>(b) 從 Manager agent / Activator 讀來的 entity name（transient）</h3>
+    <ul>
+      <li><code>lib/entity_info_fetcher.dart:20-58</code>：先問 Manager agent，fallback 問 Activator apk</li>
+      <li>拿到後打 <code>POST /api/v1/application/viewboard/install/inspect</code> body <code>{'organization': entityName}</code> 換 <code>alias_email</code>；entityName 本身不儲存</li>
+    </ul>
+    <h3>(c) 登入使用者的 entity（帳號層）</h3>
+    <ul>
+      <li><code>lib/model/user_data.dart:51 entityId</code>（login response <code>default_entity</code>），存 <code>VSSharedPreferences</code></li>
+      <li>name 要另打 <code>GET /me/entity</code>（<code>lib/helper/rest_api_helper.dart:1170-1200</code>，model <code>lib/model/mvb_entity.dart</code>），只用於 Amplitude user properties，不常駐儲存</li>
+    </ul>
+
+    <h2 id="provider">3. ContentProvider / permission 現況：零先例</h2>
+    <ul>
+      <li><code>android/app/src/main/AndroidManifest.xml</code> 只有兩個 <code>androidx.core.content.FileProvider</code>（line 306-325），皆 <code>exported=false</code>；全 repo 無自訂 ContentProvider 子類別</li>
+      <li>無任何自訂 <code>&lt;permission&gt;</code> 宣告、無 <code>protectionLevel</code>、無 component 掛 <code>android:permission=</code></li>
+      <li>無任何 runtime signature 檢查（<code>GET_SIGNING_CERTIFICATES</code> / <code>getCallingPackage</code> 等全數 0 hit）</li>
+      <li>有 <code>exported=true</code> 的 MainActivity / FileOpenActivity / 兩個 receiver，都未加 permission 保護</li>
+    </ul>
+
+    <h2 id="agent">4. Manager agent 整合現況（最佳參考範本）</h2>
+    <p>MVB <strong>已經是</strong> Manager agent provider 的 client——本票就是做對稱的反向 provider：</p>
+    <pre><code>// MainActivity.java:1855-1906, method "getManagerEnrolledEntity"
+Uri uri = Uri.parse("content://com.viewsonic.dmagent.provider/entity");
+Cursor cursor = getContentResolver().query(uri, null, null, null, null);
+String entity = cursor.getString(0);  // 單欄 cursor，column 0 = entity name</code></pre>
+    <ul>
+      <li>Manager agent package = <strong><code>com.viewsonic.dmagent</code></strong>，已在 manifest <code>&lt;queries&gt;</code> 白名單（<code>AndroidManifest.xml:329</code>）</li>
+      <li>另一路徑 <code>getActivatorEnrolledEntity</code>：讀 <code>com.viewsonic.myviewboardactivator</code> 的 <code>string/organization</code> 資源</li>
+      <li>其他跨 app 先例：ClassSwift AIDL 雙向整合（<code>android/app/src/main/aidl/</code>、<code>ClassSwiftServiceManager.java</code>）</li>
+    </ul>
+
+    <h2 id="signing">5. 簽章配置（⚠️「限制 signed key」的 flavor 陷阱）</h2>
+    <p><code>android/app/build.gradle:122-166</code>：</p>
+    <table>
+      <thead><tr><th>flavor</th><th>signingConfig</th><th>key</th></tr></thead>
+      <tbody>
+        <tr><td>ifp / edla</td><td><code>ifpRrelease</code></td><td><code>MVBA_PlatForm.jks</code>（平台簽章；ifp 另有 <code>sharedUserId="android.uid.system"</code>）</td></tr>
+        <tr><td>open / store</td><td><code>googlePlayRrelease</code></td><td>Google Play key</td></tr>
+      </tbody>
+    </table>
+    <p>→ 若用 <code>android:protectionLevel="signature"</code>，只在 Manager agent 與 MVB 同 key 的 flavor 成立；跨 key 需在 provider 內用 <code>getCallingPackage()</code> + SHA-256 簽章 allowlist 做 runtime 檢查。</p>
+
+    <h2 id="native">6. Native ↔ Flutter 與資料可及性</h2>
+    <ul>
+      <li>溝通模式：MethodChannel（主流，集中在 <code>MainActivity.java</code> <code>configureFlutterEngine</code>；Dart wrapper 在 <code>lib/native_plugins/</code>）與 Pigeon（<code>pigeons/</code>）並存</li>
+      <li>最相關 channel：<code>com.viewsonic.droid/auto_enroll</code>（entity 相關）</li>
+    </ul>
+    <table>
+      <thead><tr><th>資料</th><th>儲存</th><th>Java 可直接讀？</th></tr></thead>
+      <tbody>
+        <tr><td>instanceID / entityID / activated 等</td><td>Hive box <code>activate</code></td><td>❌</td></tr>
+        <tr><td>Flutter 一般設定 / user token</td><td><code>FlutterSharedPreferences</code>（key 前綴 <code>flutter.</code>）/ <code>VSSharedPreferences</code></td><td>✅</td></tr>
+      </tbody>
+    </table>
+    <p>Java 讀 Flutter prefs 既有先例：<code>BootReceiver.java:10</code></p>
+    <pre><code>context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        .getBoolean("flutter.app_startAppAtBootUp", false);</code></pre>
+
+    <h2 id="experiment">7. Manager agent 本機實驗（2026-07-30，Pixel Tablet）</h2>
+    <p>為加深對 Manager agent 的理解，實際 build <code>Viewsonic-EDU/edu-dm-agent-monorepo</code>（<code>develop</code> @ <code>d2e892e1</code>）並跑在非 IFP 裝置（Pixel Tablet）上。</p>
+    <h3>Build 需求</h3>
+    <ul>
+      <li>monorepo 內 <code>app_aosp</code>（system app、<code>sharedUserId="android.uid.system"</code>，只能裝真 IFP）與 <code>app_edla</code>（Device Owner 模式，<strong>一般裝置可裝</strong>），共用 applicationId <code>com.viewsonic.dmagent</code></li>
+      <li>簽章：repo 根目錄 <code>keystore.properties</code>（debug 也要），用 <code>MVBA_PlatForm.jks</code>（alias <code>platform</code>）——<strong>與 mvbf ifp flavor 同一把 key</strong>，密碼可沿用 mvbf 的 <code>key.properties</code></li>
+      <li>VSApi / systemapi 皆為 <code>compileOnly</code> AAR（<code>function/build.gradle.kts:18-24</code>），執行期預期由 IFP 韌體提供</li>
+      <li>Build：<code>./gradlew :app_edla:syncVersion</code> → <code>:app_edla:assembleDevDebug</code></li>
+    </ul>
+    <h3>在非 IFP 裝置跑起來的三個障礙（依序遇到）</h3>
+    <table>
+      <thead><tr><th>#</th><th>障礙</th><th>處理（本地 hack，勿 commit）</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td><code>ModelFactory</code> 認不得機型 → <code>ModelType.Undefined</code> fallback 到 <code>vsApiDevice</code> → 韌體沒有 <code>com.viewsonic.vsapi.VSNetworkManager</code> → 啟動即 <code>NoClassDefFoundError</code></td>
+          <td><code>ModelFactory.kt:192</code> 改 <code>SystemApiDevice(context, UndefinedDevice(context))</code>（仿 <code>VPC01_AN</code> 先例）</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td><code>WorkerService</code> 啟動 mediaProjection FGS（遠端桌面），需簽章級 <code>CAPTURE_VIDEO_OUTPUT</code>（IFP 平台簽章才有）或 <code>PROJECT_MEDIA</code> appop</td>
+          <td><code>adb shell appops set com.viewsonic.dmagent PROJECT_MEDIA allow</code></td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>systemapi AAR 的 <code>SelfRegisterReceiver</code> 註冊自訂 broadcast 未帶 <code>RECEIVER_EXPORTED/NOT_EXPORTED</code> flag，targetSDK 36 在 Android 14+ 直接 <code>SecurityException</code>（真 systemapi IFP 是舊 Android 無此檢查；此路徑是 hack #1 引入的）</td>
+          <td><code>DMService.kt</code> <code>selfReceivers = emptyList()</code> 跳過註冊</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>結果：<code>EnrollmentActivity</code> 正常起來，可操作 enroll UI（dev 環境）。</p>
+    <h3>對本票的收穫</h3>
+    <ul>
+      <li><strong>agent 端持有 entityName</strong>：<code>DMService.kt:373-378</code> 從 DataStore 收 <code>enrollEntityFlow</code>，內含 <code>entityName</code> + <code>deviceName</code>（來源是 Manager enroll 流程）——與 §4「MVB 讀 agent provider 拿 entity name」互相印證。<strong>強化 Q1 疑點：agent 自己就有 entity name，Stephen comment 要 MVB provider 回 entity name 的目的需釐清</strong></li>
+      <li>同一台 Pixel Tablet 上現有 <code>com.viewsonic.droid</code>（MVB）+ <code>com.viewsonic.dmagent</code> 可跑，之後做 MVB ContentProvider 時可直接在這台驗證 agent → MVB 的讀取路徑</li>
+      <li>⚠️ 本機 repo（<code>Orgs/Viewsonic-EDU/edu-dm-agent-monorepo</code>）目前帶著 hack #1、#3 兩個未 commit 改動，做正事前先 <code>git stash</code></li>
+    </ul>
+
+    <h2 id="poc">8. POC 實作與結果（2026-07-30，Pixel Tablet 全通）</h2>
+    <p>依 <a href="contract-proposal.html">contract 草案</a> 打通 MVB provider → Manager agent 的 end-to-end 讀取。</p>
+    <h3>MVB 端改動（edu-droid-flutter，正式版雛形，可演進成 PR）</h3>
+    <table>
+      <thead><tr><th>檔案</th><th>內容</th></tr></thead>
+      <tbody>
+        <tr><td><code>lib/mvb_activator/provider_info_mirror.dart</code>（新）</td><td>白名單欄位鏡射到 FlutterSharedPreferences（<code>provider_info_*</code> 前綴）</td></tr>
+        <tr><td><code>lib/mvb_activator/secure_data_storage.dart</code></td><td><code>_save()</code> / <code>_load()</code> 各加一行鏡射呼叫（<code>_load</code> 也鏡射 → 既有安裝啟動即生效）</td></tr>
+        <tr><td><code>android/app/src/main/java/com/viewsonic/droid/InstanceInfoProvider.java</code>（新）</td><td><code>/v1/info</code> key-value cursor、read-only、簽章檢查留 TODO</td></tr>
+        <tr><td><code>android/app/src/main/AndroidManifest.xml</code></td><td>註冊 <code>${applicationId}.instanceinfo.provider</code>，<code>exported="true"</code></td></tr>
+      </tbody>
+    </table>
+    <h3>dmagent 端 POC（勿 commit）</h3>
+    <ul>
+      <li><code>app_edla/.../MvbInstanceInfoPoc.kt</code>（新）：query provider，回傳 Map + Timber log</li>
+      <li><code>DMService.onCreate</code> 掛一行呼叫；dmagent 有 <code>QUERY_ALL_PACKAGES</code>，不需加 <code>&lt;queries&gt;</code></li>
+      <li><code>EnrollmentActivity</code> 左下角疊 overlay TextView 顯示讀到的資料（2026-07-31 加）</li>
+    </ul>
+    <h3>驗證結果</h3>
+    <ol>
+      <li>mvbf <code>open</code> flavor debug 裝機（與舊安裝簽章不合，解除安裝重裝，instanceID 重新產生）</li>
+      <li>MVB 首啟 → 產生 instanceID、auto-enroll、鏡射生效；<code>adb shell content query</code> 直接驗過</li>
+      <li>dmagent 啟動時讀取成功：</li>
+    </ol>
+    <pre><code>MvbInstanceInfoPoc: contract_version = 1
+MvbInstanceInfoPoc: instance_id = 8E28AD2200B4D06A06E456FB70C45B4F
+MvbInstanceInfoPoc: activated = true</code></pre>
+    <p>（<code>entity_id</code> / <code>whiteboard_name</code> 空值缺列，符合合約「缺值列不出現」設計；<code>entity_name</code> 仍卡 Q1）</p>
+    <h3 id="poc-v2">8.1 POC v2（2026-07-31）：entity name、即時更新、Pigeon 解耦</h3>
+    <p>三項升級，皆已在 Pixel Tablet 驗證通過。</p>
+
+    <h4>(a) entity name 持久化</h4>
+    <ul>
+      <li><code>_getEntityID()</code> 改回傳 record <code>({String entityID, String organization})</code>，一併解析後端已回的 <code>organization</code>（兩處呼叫點同步更新）</li>
+      <li><code>DataStorage</code> 介面 + <code>SecureDataStorage</code> 新增 <code>entityOrganization</code>（Hive key <code>app_entityOrganization</code>）</li>
+      <li>provider 白名單新增 <code>entity_name</code></li>
+    </ul>
+
+    <h4>(b) 即時更新：notifyChange + ContentObserver</h4>
+    <ul>
+      <li>MVB 每次鏡射後對 provider URI 呼叫 <code>notifyChange</code></li>
+      <li>dmagent <code>EnrollmentActivity</code> 註冊 <code>ContentObserver</code>，<code>onChange</code> 重讀並更新 overlay（顯示更新次數／觸發源／時間戳），<code>onDestroy</code> 解除訂閱</li>
+    </ul>
+    <p>演示（<code>pm clear</code> 清空 MVB 資料後）：</p>
+    <pre><code>10:32:19  dm 啟動，initial 讀取 → 只有 contract_version（NOT_INITIALIZED）
+10:32:24  MVB 啟動 → 鏡射寫入 → notifyChange → dm onChange ×3
+10:32:27  enroll 流程持續寫入 → onChange
+10:32:29  完成 → instance_id=79B5F2277E06B107DF83B72DA4020DF1, activated=true
+          dm overlay：update #6 (onChange)</code></pre>
+    <p>dm 全程在背景、<strong>無輪詢</strong>——驗證了 <a href="contract-proposal.html#empty-handling">contract §8</a> 建議的「NOT_INITIALIZED → 訂閱 → 即時就緒」狀態機。</p>
+
+    <h4>(c) Pigeon 解耦：不再依賴 shared_preferences 內部格式</h4>
+    <div class="callout warn">
+      <strong>問題</strong>：v1 的 provider 直接讀 <code>FlutterSharedPreferences</code> 檔與 <code>flutter.</code> 前綴——那是 <code>shared_preferences</code> 套件的<strong>實作細節，不是公開合約</strong>。
+      最現實的風險不是套件改名（八年未變），而是<strong>我們自己遷移到新 API</strong>（<code>SharedPreferencesAsync</code> / <code>SharedPreferencesWithCache</code> 底層改用 Jetpack DataStore，檔案位置與格式全不同）
+      → Dart 寫進新儲存、Java 仍讀舊 XML → <strong>silent desync</strong>：provider 永遠回舊值且無任何錯誤，dm 拿到過期資料還以為是真的。
+    </div>
+    <table>
+      <thead><tr><th>檔案</th><th>內容</th></tr></thead>
+      <tbody>
+        <tr><td><code>pigeons/instance_info_pigeon.dart</code>（新）</td><td><code>InstanceInfoData</code> + <code>@HostApi InstanceInfoPlugin.setInfo()</code>（照 repo 既有 pigeon 慣例）</td></tr>
+        <tr><td><code>lib/generated/pigeons/instance_info.g.dart</code>、<code>android/.../pigeon/InstanceInfo.java</code></td><td>pigeon 產生</td></tr>
+        <tr><td><code>android/.../pigeon_impl/InstanceInfoPluginImpl.java</code>（新）</td><td>寫入<strong>自持</strong> prefs <code>instance_info_provider</code> + <code>notifyChange</code>，<strong>同一次呼叫完成</strong></td></tr>
+        <tr><td><code>InstanceInfoProvider.java</code></td><td>改讀自持 prefs；key 常數集中於此供 impl 共用；新增 <code>infoUri()</code></td></tr>
+        <tr><td><code>MainActivity.java</code></td><td>改用 <code>InstanceInfo.InstanceInfoPlugin.setUp(...)</code>（移除中繼版的手寫 MethodChannel）</td></tr>
+        <tr><td><code>lib/mvb_activator/provider_info_mirror.dart</code></td><td>改呼叫 Pigeon，<strong>移除 <code>shared_preferences</code> 依賴</strong></td></tr>
+      </tbody>
+    </table>
+    <p>裝置驗證：</p>
+    <ul>
+      <li>新檔 <code>shared_prefs/instance_info_provider.xml</code> 出現，內容即 contract key（<strong>無 <code>flutter.</code> 前綴</strong>）</li>
+      <li><code>FlutterSharedPreferences.xml</code> 內 <code>provider_info_*</code> 比對數 = <strong>0</strong>（新版完全不寫該處）</li>
+      <li><code>content query</code> 與 dm 即時更新皆與 v1 行為一致</li>
+    </ul>
+    <p>附帶收穫：寫入與通知合併為單次原生呼叫（<code>commit()</code> 同步落地後才 <code>notifyChange</code>），消除 v1「鏡射成功但通知先到」的排序縫隙。</p>
+
+    <h3>待收尾</h3>
+    <ul>
+      <li>簽章 permission（等 Q2 最終確認）；POC 的裸 export 只可留在測試機，正式版 provider 註冊須移至 ifp/edla flavor manifest</li>
+      <li><code>entity_name</code> 目前為空值缺列——open flavor 在 dev 環境 auto-enroll 未掛 entity（<code>entity_id</code> 同樣為空）。程式路徑已就緒，需以有 entity 的帳號手動 enroll 才能完整驗證</li>
+      <li>連續多次 <code>onChange</code>（init 期間 <code>mirror()</code> 被呼叫多次）——正式版可在 Dart 側加「值有變才通知」的 debounce</li>
+      <li>既有安裝殘留的 <code>flutter.provider_info_*</code> 值無害（已無程式讀取），正式 PR 可視需要加一次性清除</li>
+      <li>dmagent repo 本地 hack 累計 4 處（ModelFactory、DMService receiver、POC hook、EnrollmentActivity overlay + observer），勿 commit</li>
+    </ul>
+
+    <h2 id="conclusion">9. 實作方向結論</h2>
+    <ol>
+      <li><strong>資料鏡射</strong>：Dart 側把 instanceID / entity name 鏡射寫進 <code>FlutterSharedPreferences</code>（鏡射點 <code>secure_data_storage.dart _save()/_load()</code>，POC 已實作），ContentProvider 從 prefs 讀。</li>
+      <li><strong>entity name 需新增取得與儲存</strong>：擴充 <code>_getEntityID()</code> 解析（若後端 response 有 name），或改抓 <code>GET /me/entity</code>——取決於 Q1 答案。</li>
+      <li><strong>ContentProvider</strong>：以 <code>MainActivity.java:1855-1906</code>（讀 dmagent provider）為對稱範本設計 contract（POC 已實作 <code>InstanceInfoProvider.java</code>）。</li>
+      <li><strong>存取控制</strong>：視 Manager agent 簽章 key（Q2）決定 signature permission 或 runtime SHA-256 allowlist（需支援所有 flavor 的話大概率要走 allowlist）。</li>
+    </ol>
+  </main>
+</div>
+</body>
+</html>

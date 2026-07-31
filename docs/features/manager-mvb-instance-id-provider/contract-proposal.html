@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>Manager 讀取 MVB Instance ID — Contract 草案</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#shape">1. 合約形狀</a></li>
+      <li><a href="#access">2. 存取控制</a></li>
+      <li><a href="#v1-keys">3. v1 keys（本票 scope）</a></li>
+      <li><a href="#reserved">4. 保留候選 keys</a></li>
+      <li><a href="#excluded">5. 明確排除（機敏）</a></li>
+      <li><a href="#mirror">6. 鏡射機制</a></li>
+      <li><a href="#versioning">7. 版本演進策略比較</a></li>
+      <li><a href="#empty-handling">8. instance_id 空值處理</a></li>
+      <li><a href="#meeting">9. 會議待對事項</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>ContentProvider Contract 草案（MVB → Manager agent）</h1>
+    <div class="meta">
+      2026-07-30 起草、07-31 補 §7/§8 &middot; 供與 VB-1399 工程師討論用，尚未定案
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="findings.html">🛠️ 調查 findings</a>
+      <a href="open-questions.html">❓ open questions</a>
+      <a href="contract-proposal.html" class="active">📐 contract 草案</a>
+    </div>
+    <div class="callout">
+      設計原則：<strong>v1 資料給最小集，但合約形狀按「一定會擴充」設計</strong>——之後加欄位是一行 code + 一行文件，不重談合約。
+    </div>
+    <div class="callout warn">
+      <strong>定位原則（2026-07-31）：本 provider 是 read-only 的身分/狀態曝光，不是本地控制通道。</strong>
+      控制面（改設定、下命令）一律維持雲端路徑（Manager 介面 → myViewBoard 後端 → MVB 拉取）；
+      若未來有「本地即時性」需求，上限是 <strong>push-to-pull 通知</strong>（dm 本地通知 MVB「去雲端拉最新設定」，值仍以雲端為權威），
+      <strong>不開放本地寫值</strong>——理由：真相源分裂、授權語意弱化（字串護欄 ≠ 雲端 tenancy 檢查）、稽核斷鏈、寫入攻擊面。
+    </div>
+
+    <h2 id="shape">1. 合約形狀</h2>
+    <ul>
+      <li><strong>Authority</strong>：<code>&lt;applicationId&gt;.instanceinfo.provider</code>（用 <code>${applicationId}</code> 前綴避免多 flavor 同裝置衝突；對向先例 <code>com.viewsonic.dmagent.provider</code> 是固定字串，可在會議上對齊）</li>
+      <li><strong>URI</strong>：<code>content://&lt;authority&gt;/v1/info</code></li>
+      <li><strong>Cursor 形狀</strong>：<strong>key-value 多列</strong>（不是固定欄位單列）</li>
+    </ul>
+    <table>
+      <thead><tr><th>column</th><th>type</th><th>說明</th></tr></thead>
+      <tbody>
+        <tr><td><code>key</code></td><td>String</td><td>資料項目名</td></tr>
+        <tr><td><code>value</code></td><td>String</td><td>值（bool 用 <code>"true"/"false"</code>，int 用十進位字串，缺值列不出現）</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li>Agent 以「有哪些列」做 feature detection，遇到不認得的 key 忽略——加 key 不破壞舊 agent</li>
+      <li>版本演進策略見 <a href="#versioning">§7</a>（2026-07-30 與 Stephen 討論後傾向 key 版本制，path 版本待定）</li>
+    </ul>
+
+    <h2 id="access">2. 存取控制</h2>
+    <div class="callout ok"><strong>2026-07-31 定向：signature permission。</strong>已確認（Jay）provider 只需 ifp/edla flavor 提供，open/store 不管——ifp/edla 與 dmagent 同為 <code>MVBA_PlatForm.jks</code> 簽章，signature 方案成立。</div>
+    <ul>
+      <li><strong>採用方案</strong>：MVB 宣告自訂 <code>&lt;permission android:protectionLevel="signature"&gt;</code>，provider 掛 <code>android:permission=</code>。系統只將此 permission 授予與 MVB 同簽章的 app——dm（MVBA key）自動取得，第三方 app 安裝時即被拒</li>
+      <li><strong>Flavor 範圍</strong>：provider 註冊放 flavor 專屬 manifest（<code>android/app/src/ifp/AndroidManifest.xml</code>、<code>src/edla/</code>），main manifest 不註冊——open/store 上 provider 根本不存在（POC 目前註冊在 main，正式版要搬）</li>
+      <li>備案（若正式包板 key 不同才啟用）：provider <code>query()</code> 內做 runtime SHA-256 簽章 allowlist（<code>getCallingPackage()</code> + <code>GET_SIGNING_CERTIFICATES</code>）</li>
+      <li>安全模型備忘：ContentProvider 本身沒有「同簽章才能用」的內建限制——<code>exported=true</code> 未加 permission 時任何 app 皆可 query（POC 即是）；簽章限制是靠 signature-level permission 的授予機制達成</li>
+    </ul>
+
+    <h2 id="v1-keys">3. v1 keys（本票 scope）</h2>
+    <table>
+      <thead><tr><th>key</th><th>來源</th><th>敏感度</th><th>備註</th></tr></thead>
+      <tbody>
+        <tr><td><code>contract_version</code></td><td>hardcode</td><td>無</td><td><code>"1"</code></td></tr>
+        <tr><td><code>instance_id</code></td><td>Hive <code>app_instanceID</code>（鏡射）</td><td>低</td><td>票面要求</td></tr>
+        <tr><td><code>entity_name</code></td><td><code>GET /{uid}/entity</code> response 的 <strong><code>organization</code></strong> 欄位（後端已回，MVB 擴充解析並持久化即可，<strong>後端不用改</strong>）</td><td>低</td><td>票面要求。<strong>用途（Aaron Chang, 07-31）：授權護欄</strong>——dm 比對 MVB 的 entity name 與自己持有的，不同就不管理該 MVB。<strong>選 <code>organization</code> 的依據</strong>：dm 的 entityName 在 auto-enroll 即以 <code>{organization: entityName}</code> 送後端做精確等值查詢（<code>entity.service.ts:53</code>）；MVB 原樣存、原樣回，比對即逐字元一致</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="reserved">4. 保留候選 keys（已調查、不敏感、暫不實作）</h2>
+    <p>原則：<strong>只放裝置/軟體狀態，不放使用者身分</strong>。</p>
+    <table>
+      <thead><tr><th>key</th><th>來源</th><th>何時可能要</th></tr></thead>
+      <tbody>
+        <tr><td><code>entity_id</code></td><td>Hive <code>app_entityID</code>（鏡射即可）</td><td>Manager 想直接對 entity API</td></tr>
+        <tr><td><code>activated</code></td><td>Hive <code>app_activated</code></td><td>agent 判斷「未 enroll」情境（Q3）；比空 cursor 語意清楚</td></tr>
+        <tr><td><code>whiteboard_name</code></td><td>Hive <code>app_whiteboardName</code></td><td>Manager 顯示 instance 別名</td></tr>
+        <tr><td><code>setting_local_save</code></td><td><code>ITAdminSettings.saveFileToLocalStorageEnabled</code></td><td>Manager 比對「雲端設定 vs 裝置實際生效值」（設定 drift 偵測）</td></tr>
+        <tr><td><code>setting_embedded_browser</code></td><td><code>ITAdminSettings.embeddedWebBrowserEnabled</code></td><td>同上</td></tr>
+        <tr><td><code>setting_check_for_update</code></td><td><code>ITAdminSettings.newerVersionCheckingEnabled</code></td><td>同上</td></tr>
+        <tr><td><code>setting_sign_in</code></td><td><code>ITAdminSettings.userSignInEnabled</code></td><td>同上</td></tr>
+        <tr><td><code>setting_auto_sign_out_minutes</code></td><td><code>ITAdminSettings.autoSignOutTimeInMinutes</code>（-1 = user 自訂）</td><td>同上</td></tr>
+      </tbody>
+    </table>
+    <p>（<code>ITAdminSettings</code> 定義：<code>lib/model/preference_settings/it_admin_settings.dart:7-44</code>，欄位與 Manager Template settings UI 一一對應）</p>
+    <p><strong>不需要經 provider 給的</strong>（agent 自己拿得到，列出避免會議上重複討論）：</p>
+    <ul>
+      <li>MVB app 版本 / versionName——agent 用 <code>PackageManager</code> 即得</li>
+      <li>硬體資訊（型號、Android 版本）——agent 是裝置管理者，本來就有</li>
+    </ul>
+
+    <h2 id="excluded">5. 明確排除（機敏，不給）</h2>
+    <table>
+      <thead><tr><th>項目</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr><td><code>app_email</code>（enroll email）</td><td>個資</td></tr>
+        <tr><td>登入使用者資訊（帳號、display name、entity 角色）</td><td>個資；且與「裝置 ↔ instance 對應」無關</td></tr>
+        <tr><td>user token / session / <code>x-vs-key</code> 材料</td><td>憑證。instanceID 本身參與認證 header 加密（<code>aesEncryptWithBase64(instanceID, sessionID)</code>），這也是 provider 必須做簽章限制、不能裸 export 的原因</td></tr>
+        <tr><td><code>native_analytics</code> 等 analytics id</td><td>追蹤識別碼，無此需求</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="mirror">6. 鏡射機制（MVB 內部實作）</h2>
+    <div class="callout ok"><strong>2026-07-31 定案：Pigeon + 原生自持儲存</strong>（POC v2 已實作驗證，見 <a href="findings.html#poc-v2">findings §8.1</a>）。</div>
+    <ul>
+      <li>Dart 側（<code>ProviderInfoMirror</code>）經 <strong>Pigeon <code>InstanceInfoPlugin.setInfo(InstanceInfoData)</code></strong> 把白名單欄位交給原生層</li>
+      <li>原生層（<code>InstanceInfoPluginImpl</code>）寫入<strong>自持</strong>的 SharedPreferences 檔 <code>instance_info_provider</code>，key 直接等於 contract key（無前綴翻譯），寫入後同一次呼叫內 <code>notifyChange(infoUri)</code></li>
+      <li>Provider 只讀這個自持檔——<strong>對 <code>shared_preferences</code> 套件的內部格式零依賴</strong></li>
+      <li>鏡射點：<code>SecureDataStorage._save()</code> 與 <code>_load()</code>（<code>_load</code> 也鏡射 → 既有安裝啟動即生效），以及 <code>ITAdminSettings</code> 寫入處（若日後曝光設定值）</li>
+      <li>未 enroll 時：<code>instance_id</code> 缺列（只回 <code>contract_version</code>），行為與 <a href="#empty-handling">§8</a> 對齊</li>
+    </ul>
+    <h3>為什麼不直接讀 <code>FlutterSharedPreferences</code>（否決 POC v1 做法）</h3>
+    <table>
+      <thead><tr><th>方案</th><th>評估</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>直讀 <code>FlutterSharedPreferences</code> + <code>flutter.</code> 前綴</td>
+          <td>❌ 依賴套件<strong>實作細節而非公開合約</strong>。主要風險不是套件改名（八年未變），而是<strong>自家遷移新 API</strong>（<code>SharedPreferencesAsync</code> 底層改 Jetpack DataStore）→ Dart 寫新儲存、Java 讀舊 XML → <strong>silent desync</strong>，provider 回過期值且無錯誤</td>
+        </tr>
+        <tr>
+          <td><strong>Pigeon + 原生自持儲存（採用）</strong></td>
+          <td>✅ 合約資料的所有權回到自己手上；key 名即 contract key；型別安全 codegen 且符合 repo 既有 <code>pigeons/</code> 慣例；<strong>寫入與通知併為單次原生呼叫</strong>（<code>commit()</code> 後才 notify），消除排序縫隙</td>
+        </tr>
+        <tr>
+          <td>Provider 直讀 Hive</td>
+          <td>❌ Dart 專有 binary 格式，原生層讀不到</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>邊界說明：Pigeon 呼叫需 Flutter engine 存活——但鏡射本來就只發生在 Dart 執行期，非新增限制；provider <strong>讀取端不需要 engine</strong>（冷啟動 query 讀的是已落地的 prefs 檔），未初始化情境不受影響。</p>
+    <h3>entity name 的持久化決策（2026-07-31）</h3>
+    <ul>
+      <li><strong>採「持久化 + 鏡射」</strong>：<code>_getEntityID()</code> 解析 <code>/{uid}/entity</code> response 時一併取 <code>organization</code> 存 Hive（如 <code>app_entityOrganization</code>），鏡射為 <code>entity_name</code>。後端已回此欄位，零額外請求</li>
+      <li><strong>否決「query 時打 API 換 name」</strong>：provider query 須快速同步（網路呼叫 = ANR）；冷啟動時 Flutter 未跑，Kotlin 重刻 <code>x-vs-key</code> 認證不可取；離線答不出來，護欄失效</li>
+      <li><strong>否決「只留 name、刪 entity_id」</strong>：name 可變（組織改名）、id 是穩定主鍵，角色不同（id 對帳、name 護欄）；且 <code>entityID</code> 有既有用途（analytics），刪除超出 scope</li>
+      <li><strong>新鮮度補丁</strong>：MVB 每次啟動且 <code>activated</code> 時重打 <code>GET /{uid}/entity</code> 更新 Hive + 鏡射 + <code>notifyChange</code>——組織改名的漂移窗口縮到下次啟動前（IFP 幾乎天天重開）</li>
+    </ul>
+
+    <h2 id="versioning">7. 版本演進策略——方案比較（2026-07-31 補充）</h2>
+    <p>背景：Stephen（2026-07-30 口頭）傾向 <strong>key 版本制</strong>（語意/格式變更 → 新 key 如 <code>instance_id_v2</code>），而非 path 版本（<code>/v1</code> → <code>/v2</code>）。以下為完整比較：</p>
+    <table>
+      <thead><tr><th>方案</th><th>做法</th><th>優點</th><th>缺點</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>A. Path 版本</td>
+          <td>破壞性變更開 <code>/v2/info</code></td>
+          <td>整份合約切版清楚；能處理 cursor shape 本身的變更</td>
+          <td>粒度太粗——改一個欄位就要整版切換；遷移期 agent 要同時支援兩個 path</td>
+        </tr>
+        <tr>
+          <td>B. Key 版本（Stephen）</td>
+          <td>變更 = 新 key（<code>instance_id_v2</code>），舊 key 保留</td>
+          <td>粒度細；新舊值<strong>並存於同一回應</strong>，agent 可逐欄位、無痛遷移；實作零成本</td>
+          <td>key 命名空間隨時間累積雜訊；「哪個是現行版」要靠文件；無法處理 shape 變更</td>
+        </tr>
+        <tr>
+          <td>C. 回傳值帶版本（<code>contract_version</code> row）</td>
+          <td>任何合約變更 bump 整數</td>
+          <td>agent 一行 log 即可診斷「對面是哪一版」；便於客服/除錯</td>
+          <td>單靠它不夠——版本號不等於能力，agent 仍要維護「版本 → 差異」對照</td>
+        </tr>
+        <tr>
+          <td>D. Cursor 加 <code>version</code> 欄</td>
+          <td>每列自帶欄位版本（key, value, version）</td>
+          <td>欄位級版本顯式</td>
+          <td>與 B 功能重複（新 key 名本身就是版本宣告），徒增合約複雜度</td>
+        </tr>
+        <tr>
+          <td>E. Presence-based（純能力偵測）</td>
+          <td>agent 只看「row 存在與否」，無版本概念</td>
+          <td>KV 形狀天生支援，最簡</td>
+          <td>對「同 key 改值定義」無解——正是 Stephen 擔心的 case</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3>建議：B 為主幹 + C 輔助 + 三條紀律（B/C/E 不互斥）</h3>
+    <ol>
+      <li><strong>Published key 永久凍結</strong>——一旦發布，語意與格式不再變。要改 → 新 key（<code>instance_id_v2</code>，或更好的做法：取語意化名稱，如假設 v2 是改成 UUID 格式，命名 <code>instance_uuid</code> 比 <code>_v2</code> 自我描述）</li>
+      <li><strong>舊 key 進 deprecation 週期</strong>——文件標註 deprecated + 預告移除版本，等 agent 全面遷移後才移除</li>
+      <li><strong><code>contract_version</code> 保留</strong>——任何 key 新增/棄用都 bump，僅供 log 與除錯，agent <strong>不得</strong>拿它做行為分支（行為分支一律用 presence 偵測，方案 E）</li>
+      <li>Path 固定單一 <code>/info</code>（對 Stephen 的方向讓步），但文件保留「cursor shape 若真要變 → 新 path」作為逃生門——shape 變更是 key 版本制唯一蓋不住的洞</li>
+    </ol>
+
+    <h2 id="empty-handling">8. <code>instance_id</code> 空值（MVB 未初始化）處理——方案比較（2026-07-31 補充）</h2>
+    <h3>關鍵事實（決定了方案取捨）</h3>
+    <ol>
+      <li>instance ID <strong>不只是識別碼</strong>：它是 MVB 後端的 identity key，參與認證加密（<code>x-vs-key</code>）、MQTT topic、enroll——<strong>所有權在 MVB</strong>，產生演算法（<code>md5(ts+androidId+uuid)</code>）是其內部細節</li>
+      <li>MVB 沒啟動過 → instance ID 不存在 → <strong>後端也沒有這個 instance</strong> → Manager 雲端根本沒有可對應的 Software Instance 頁。所以「空」是語意正確的狀態（「這台裝置尚無 MVB instance」），不是錯誤</li>
+      <li><strong>query 未啟動 app 的 provider 會拉起其 process</strong>（Android 標準行為），provider 能回應——但 Flutter/Dart 未跑、鏡射未發生，所以回傳只有 <code>contract_version</code> 一列。這天然就是「未初始化」的訊號</li>
+      <li>IFP 實務上 MVB 常設開機自啟（<code>BootReceiver</code> + <code>app_startAppAtBootUp</code>），「從未啟動」的窗口很小，但仍必須定義行為</li>
+    </ol>
+    <h3>方案比較</h3>
+    <table>
+      <thead><tr><th>方案</th><th>說明</th><th>評估</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>(1) 空值 → dm 報錯</td>
+          <td>agent 讀到空就 error</td>
+          <td>❌ 原樣不可取——「空」是合法狀態非錯誤；但<strong>改良版是正解</strong>，見下</td>
+        </tr>
+        <tr>
+          <td>(1′) 空值 → dm 回報狀態 + 訂閱變更</td>
+          <td>agent 把空值視為 <code>NOT_INITIALIZED</code> 狀態回報雲端；MVB 鏡射時 <code>notifyChange(uri)</code>，agent 用 <code>ContentObserver</code> 訂閱、免輪詢</td>
+          <td>✅ <strong>建議方案</strong>：語意正確、實作最小、完整涵蓋舊版相容（見狀態表）</td>
+        </tr>
+        <tr>
+          <td>(2a) dm 生成後回寫 mvbf</td>
+          <td>dm 產 ID 寫入 MVB 儲存</td>
+          <td>❌ 強烈反對：(i) 所有權倒置——外部 app 操縱 MVB 的認證身分材料，嚴重安全問題；(ii) 產生演算法是 MVB 內部細節，dm 無從正確生成；(iii) race——dm 寫入後 MVB 首啟又自己生成，衝突；(iv) <strong>恰恰無法解決舊版相容</strong>：舊版 MVB 沒有回寫介面，而它正是最需要 fallback 的對象</td>
+        </tr>
+        <tr>
+          <td>(2b) 雙 ID + 後端 mapping</td>
+          <td>dm 與 MVB 各持 ID，後端對應</td>
+          <td>⚠️ 不需要「第二個 instance ID」——<strong>輕量版早已存在</strong>：dm 本來就有自己的裝置身分（serial number，enroll 於 Manager 雲端）。只要把 <code>mvb_instance_id</code> 當作 dm 裝置紀錄上的 <strong>nullable 屬性</strong>回報，mapping 天然就在 Manager 後端，無需新機制</td>
+        </tr>
+        <tr>
+          <td>(3) dm 觸發 MVB 初始化</td>
+          <td>MVB 加一個受簽章保護的「ensure initialized」入口（broadcast/service），dm 呼叫後 MVB 背景產生 instance ID</td>
+          <td>⚠️ 可作 phase 2：解「零接觸部署後立即要看到 instance」需求；但同樣需要新版 MVB（對舊版無效），且多數 IFP 開機自啟已覆蓋此場景</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3>建議的 agent 端狀態機（含舊版相容）</h3>
+    <table>
+      <thead><tr><th>裝置狀態</th><th>agent 觀察到</th><th>agent 回報雲端</th></tr></thead>
+      <tbody>
+        <tr><td>未裝 MVB</td><td>provider 不存在 + <code>PackageManager</code> 查無 package</td><td><code>NO_MVB</code></td></tr>
+        <tr><td><strong>舊版 MVB（無 provider）</strong></td><td>provider 不存在 + package 存在</td><td><code>MVB_TOO_OLD</code>（附 versionName，雲端可提示升級）</td></tr>
+        <tr><td>新版 MVB、未啟動過（或更新後未啟動）</td><td>provider 回應但只有 <code>contract_version</code></td><td><code>NOT_INITIALIZED</code>，註冊 <code>ContentObserver</code> 等通知</td></tr>
+        <tr><td>已啟動、未 enroll</td><td>有 <code>instance_id</code>，<code>activated=false</code></td><td>instance_id + 未啟用</td></tr>
+        <tr><td>已 enroll</td><td>全欄位</td><td>instance_id + 對應完成</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="meeting">9. 會議上要跟 Manager team 對的事</h2>
+    <ol>
+      <li>Q1/Q2/Q3 剩餘部分（見 <a href="open-questions.html">open questions</a>）——Q1 用途已釐清（授權護欄），剩 entity name <strong>來源與正規化規則</strong>（須與 dm 比對邏輯逐字元相容）；Q2 剩 dmagent <strong>正式包板 key</strong> 一句話確認；Q3 有建議方案待採納</li>
+      <li>他們 Story 8+ 的 roadmap 還需要什麼——用真需求決定要不要把 §4 的哪些 key 提前進 v1</li>
+      <li>authority 命名慣例（<code>${applicationId}</code> 前綴 vs 固定字串）</li>
+      <li>§4「設定 drift 偵測」對他們有沒有價值（Manager 頁面顯示的是雲端期望值，裝置實際值可能因版本/離線而不同）</li>
+      <li>版本演進策略定案（<a href="#versioning">§7</a>——key 版本制紀律 + path 是否固定單一 <code>/info</code>）</li>
+      <li>未初始化狀態機（<a href="#empty-handling">§8</a>——agent 端狀態對應與 <code>ContentObserver</code> 訂閱；(3) 觸發初始化是否列 phase 2）</li>
+    </ol>
+  </main>
+</div>
+</body>
+</html>
