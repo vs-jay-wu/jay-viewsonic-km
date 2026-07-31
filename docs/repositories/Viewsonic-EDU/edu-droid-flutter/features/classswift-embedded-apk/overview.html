@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>ClassSwift 內嵌 APK — 交接總覽</title>
+<link rel="stylesheet" href="assets/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#sources">1. 原始文件</a></li>
+      <li><a href="#background">2. 背景與目標</a></li>
+      <li><a href="#arch">3. 架構</a>
+        <ul>
+          <li><a href="#build-flow" class="sub">3.1 Build 時（CI）</a></li>
+          <li><a href="#runtime-flow" class="sub">3.2 執行期</a></li>
+          <li><a href="#flavor-map" class="sub">3.3 Release target 對應</a></li>
+        </ul>
+      </li>
+      <li><a href="#decisions">4. 決議 D1–D9</a></li>
+      <li><a href="#review">5. Review 修正摘要</a></li>
+      <li><a href="#handover">6. 交接待辦</a></li>
+      <li><a href="#verified">7. 驗證狀態</a></li>
+      <li><a href="#commits">8. PR 結構</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>ClassSwift 內嵌 APK 取代 OTA 下載</h1>
+    <div class="meta">
+      VSFT-9785 [ClassSwift] MVB 內嵌 ClassSwift APK，停止從 OTA server 下載以縮短啟動時間 &middot;
+      交接記錄於 2026-07-31 &middot;
+      對應 feature 資料夾 <code>docs/repositories/Viewsonic-EDU/edu-droid-flutter/features/classswift-embedded-apk/</code>
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html" class="active">📘 總覽 (overview)</a>
+      <a href="goal.html">🎯 北極星目標與差距</a>
+      <a href="investigation.md">🔍 接手調查清單</a>
+      <a href="repo-docs/classswift-embedded-apk.md">📄 設計文件（clone）</a>
+      <a href="repo-docs/classswift-embedded-apk-review.md">🧾 決議與風險分析（clone）</a>
+      <a href="jira/VSFT-9785.md">🎫 Jira clone</a>
+    </div>
+
+    <div class="callout warn">
+      <strong>🚦 狀態（2026-07-31）：PR #208 OPEN、票 KICK-OFF。接手 Stephen Yang 的進度。</strong>
+      合併前必辦：GH_PAT <code>DRY_RUN</code> 驗證、Amplitude 事件定義、與 #205 的合併順序（見 §6）。
+      實作與風險分析已相當完整，設計文件本體在 PR branch 的 <code>docs/</code> 內（本資料夾有 clone）。
+    </div>
+    <div class="callout">
+      <strong>🎯 北極星目標（Jay，手段開放）：</strong>老師想用 Quiz Tool 時就能馬上用 —— 不經歷下載 / 更新 / 檢查 / 安裝、
+      不讓使用者做「要不要安裝」的抉擇。
+      <strong>決策更新（2026-07-31）</strong>：原前提「CS 一定要最新版」已移除（不要求最新版為永久決策；
+      「無最小版本限制」為暫時現狀），<strong>版本相容由後端負責</strong> —— 原本最大的新鮮度差距因此解除。
+      剩餘差距（使用者抉擇殘留、region gate、競態窗口）與完整對照見 <a href="goal.html">goal.html</a>。
+    </div>
+
+    <h2 id="sources">1. 原始文件</h2>
+    <table>
+      <thead><tr><th>類型</th><th>文件</th><th>狀態</th><th>本機快照</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-mvb">Jira</span></td>
+          <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9785">VSFT-9785</a> MVB 內嵌 ClassSwift APK</td>
+          <td>KICK-OFF · Assignee: Stephen Yang</td>
+          <td><a href="jira/VSFT-9785.md">jira/VSFT-9785.md</a>（v1, 2026-07-31）</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-mvb">PR</span></td>
+          <td><a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/208">edu-droid-flutter#208</a><br/><code>stephen/VSFT-9785-classswift-embedded-apk</code></td>
+          <td>OPEN · base <code>master</code> · 7 commits</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-phase">repo doc</span></td>
+          <td><code>docs/classswift-embedded-apk.md</code>（設計文件本體）</td>
+          <td>PR branch 內，隨 PR 合併</td>
+          <td><a href="repo-docs/classswift-embedded-apk.md">repo-docs/…apk.md</a>（<code>1846950</code>）</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-phase">repo doc</span></td>
+          <td><code>docs/classswift-embedded-apk-review.md</code>（決議 D1–D9、修正 B1–B17、流程 F1–F10、邊界 E1–E20、競態 R1–R13）</td>
+          <td>PR branch 內，隨 PR 合併</td>
+          <td><a href="repo-docs/classswift-embedded-apk-review.md">repo-docs/…review.md</a>（<code>1846950</code>）</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-cs">PR</span></td>
+          <td><a href="https://github.com/Viewsonic-EDU/ragdoll-cat/pull/1089">ragdoll-cat#1089</a> 移除 MDM 派送（D6）</td>
+          <td>建議 #208 上線後再合</td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>衝突注意：</strong><a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/205">#205</a>（<code>Jay/VSFT-9597-cs-token-redelivery</code>）同樣動到 ClassSwift 區域，合併順序需留意。
+    </div>
+
+    <h2 id="background">2. 背景與目標</h2>
+    <p><strong>現況：</strong>MVB 啟動後從 OTA server 下載 ClassSwift apk：讀 <code>version.json</code> → 下載約 15 MB → 安裝。
+    第一次開機、網路慢或斷網時 ClassSwift 遲遲裝不起來，使用者點 Quiz Tool 就得等下載完成。</p>
+    <p><strong>目標：</strong>ClassSwift apk 由 CI 在 build 時內嵌進 MVB assets。MVB 裝好的當下就帶著對應版本的
+    ClassSwift，啟動後比對版號、背景靜默安裝，<strong>全程不需網路</strong>。</p>
+    <div class="callout warn">
+      <strong>但注意 E9：</strong>完全離線的教室（production、無 region 快取）時，<strong>region gate 拿不到 toggle 就永遠不開</strong>，
+      CS 仍然裝不起來。原本 OTA 版也一樣，不算回歸，但「離線可用」這個賣點實際上被 region gate 擋住。
+    </div>
+
+    <h2 id="arch">3. 架構</h2>
+
+    <h3 id="build-flow">3.1 Build 時（CI）</h3>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart LR
+  PIN["classswift_pin.json<br/>{repo, tag: v1.6.3}"] --> ACTION["composite action<br/>embed-classswift-apk"]
+  RT["release-target<br/>(stage / beta / production /<br/>rollback / auto)"] --> ACTION
+  ACTION -->|"gh release download<br/>依 target 選 flavor"| RC[("ragdoll-cat<br/>GitHub Release")]
+  RC -->|"*_Release.apk + .sha256"| VERIFY["sha256sum -c"]
+  VERIFY --> ASSETS["android/app/src/classswift/<br/>assets/classswift/<br/>ClassSwift_Service.apk + metadata.json<br/>(皆 gitignored)"]
+  ASSETS -->|"sourceSets 只掛 ifp / edla<br/>noCompress 'apk'"| APK["MVB APK<br/>(ifp / edla 含 15 MB<br/>store / open 不含)"]
+      </pre>
+      <div class="diagram-caption">CI embed 流程 — 接入 stage / beta / production / rollback / daily-build 五個 workflow；<code>classswift-bump.yml</code> 每日檢查新 release 並更新 pin</div>
+    </div>
+
+    <h3 id="runtime-flow">3.2 執行期</h3>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TB
+  MS["main_screen<br/>(onITAdminSettingsUpdated)"] --> ENSURE["ClassSwiftInstallCoordinator<br/>.ensureInstalled()<br/>背景 fire-and-forget"]
+  ENSURE --> GATE{"gating:<br/>kClassSwiftEnabled +<br/>region gate (quizTool)"}
+  GATE -->|"gate 未開"| LISTEN["掛監聽<br/>gate 打開後自動補觸發 (D8)"]
+  GATE -->|通過| META["getEmbeddedApkInfo()<br/>讀 assets metadata.json"]
+  META -->|"null（本地 build / open / store）"| UNAVAIL["Unavailable"]
+  META --> CMP{"isUpdateAvailable()<br/>已安裝版號 vs 內嵌版號"}
+  CMP -->|"不比內嵌舊"| NOTNEEDED["NotNeeded"]
+  CMP -->|需安裝| EXTRACT["extractEmbeddedApk()<br/>原生串流解壓 + 驗證 packageName/版號"]
+  EXTRACT --> INSTALL["install(silentInstall: true)<br/>不 fallback、不顯示 UI"]
+  INSTALL -->|成功| DONE["Completed<br/>立即刪解出的 apk (D7)"]
+  INSTALL -->|失敗| FAILED["Failed(filePath)<br/>保留檔案供 retry"]
+  DIALOG["ClassSwiftUpdatingDialog<br/>使用者在完成前點 CS 才出現<br/>= coordinator 的觀察者"] -.->|"retry(allowUserPrompt: true)<br/>允許退回 PackageInstaller"| FAILED
+      </pre>
+      <div class="diagram-caption">執行期安裝流程 — 取代原 <code>ClassSwiftDownloadCoordinator</code> 整套下載機制（FileDownloader、connectivity 監聽、斷網重試皆移除）</div>
+    </div>
+
+    <h3 id="flavor-map">3.3 Release target 對應</h3>
+    <p><code>ReleaseTarget</code> 執行期由版號推導（build number 奇數 = stage、偶數且 minor 奇數 = beta、其餘 production / rollback），CI 埋入的 apk 必須一致（B9 守衛：不符即 <code>Failed(packageMismatch 38)</code>）：</p>
+    <table>
+      <thead><tr><th>MVB release target</th><th>ClassSwift flavor</th><th>package name</th></tr></thead>
+      <tbody>
+        <tr><td>stage</td><td><code>Stag</code></td><td><code>com.viewsonic.classswift.service.stag</code></td></tr>
+        <tr><td>beta</td><td><code>Rc</code></td><td><code>com.viewsonic.classswift.service.rc</code></td></tr>
+        <tr><td>production / rollback</td><td><code>Prod</code></td><td><code>com.viewsonic.classswift.service</code></td></tr>
+      </tbody>
+    </table>
+    <p class="meta"><code>dev</code>（<code>…service.dev</code>）沒有對應的 ragdoll-cat release flavor，不在內嵌範圍。本地開發用 <code>make fetch-classswift</code>；沒跑過的本地 build 回報 <code>Unavailable</code>、跳過安裝，不會 crash。</p>
+
+    <h2 id="decisions">4. 決議 D1–D9</h2>
+    <table>
+      <thead><tr><th>#</th><th>議題</th><th>決議</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr><td>D1</td><td>內嵌 apk 與 OTA 下載的關係</td><td><strong>完全取代</strong>，不保留 OTA fallback</td><td>保留 fallback 等於整套下載程式碼都要留著</td></tr>
+        <tr><td>D2</td><td>安裝時機與 UX</td><td>啟動後背景靜默安裝；dialog 只在使用者於完成前點 CS 時出現</td><td>不在使用者沒操作時彈系統安裝畫面</td></tr>
+        <tr><td>D3</td><td>apk 來源</td><td><code>classswift_pin.json</code> 鎖 tag，CI 下載並驗 sha256；apk 不進 repo</td><td>可重現、換版可 review、避免 repo 膨脹</td></tr>
+        <tr><td>D4</td><td>版本 bump 交付方式</td><td>commit / pr 兩種模式，排程預設 commit</td><td>日常自動跟版用 commit；風險版本用 pr</td></tr>
+        <tr><td>D5</td><td>Beta Program</td><td>只下載 beta 版 MVB，不再另抓 beta CS</td><td>beta MVB 自己就帶著 beta CS</td></tr>
+        <tr><td>D6</td><td>與 MDM（MVB_QuizTool）派送並存</td><td><strong>移除 MDM 派送</strong> → ragdoll-cat#1089</td><td>兩個版本來源會互相覆蓋</td></tr>
+        <tr><td>D7</td><td>解出的 apk 清理時機</td><td>安裝成功後立即刪；失敗保留供 retry</td><td>避免 ~15 MB 長期佔用</td></tr>
+        <tr><td>D8</td><td>region gate 尚未開啟</td><td>掛監聽，gate 打開後自動補觸發一次</td><td>全新裝置首次開機 gate 需等 API</td></tr>
+        <tr><td>D9</td><td>CS 的 <code>--split-per-abi</code></td><td><strong>接受現況</strong>：每個 ABI APK 各含完整 15 MB</td><td>省體積方案 (a) 要把 MVB build 拆成多次；若日後體積成問題，(a) 效果最好</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="review">5. Review 修正摘要</h2>
+    <p>票面 comment 列 B1–B7，PR 內 review 文件為完整版 <strong>B1–B17</strong>（另有使用者流程 F1–F10、邊界 E1–E20、競態 R1–R13），全文見
+    <a href="repo-docs/classswift-embedded-apk-review.md">repo-docs clone</a>。接手時特別值得知道的幾條：</p>
+    <table>
+      <thead><tr><th>#</th><th>問題</th><th>若沒修到的後果</th></tr></thead>
+      <tbody>
+        <tr><td>B1</td><td>APK <code>versionName</code> 是 <code>1.6.3-stag</code> 而非 tag 的 <code>1.6.3</code>，原生端嚴格字串比對</td><td>所有 stage / rc 版被拒裝</td></tr>
+        <tr><td>B3</td><td>背景安裝直接 await <code>startSilentInstallApk</code>（實測可能不回傳）</td><td>coordinator 永遠停在 InProgress、dialog 一直轉圈</td></tr>
+        <tr><td>B4+B8</td><td><code>NotNeeded</code>/<code>Completed</code> 是終端狀態；dialog 又直接套用過時狀態</td><td>CS 事後被移除時要重開 MVB 才能重裝；B8 是 B4 修正自身的漏洞</td></tr>
+        <tr><td>B9</td><td>內嵌 apk 的 packageName 從未與 MVB 期待的 package 比對</td><td>CI 埋錯 flavor 時每次啟動都解壓 15 MB 並安裝一個永遠 bind 不到的 package</td></tr>
+        <tr><td>B10+B13</td><td><code>retry()</code> 沿用 filePath 不驗檔案存在、不重驗是否仍需安裝</td><td>無限失敗迴圈 / 對著裝好的 app 看系統安裝畫面</td></tr>
+        <tr><td>B11</td><td>bump workflow 沒檢查 <code>.sha256</code> 是否存在</td><td>缺 checksum 的 release 通過自動 bump，讓所有 MVB build 失敗</td></tr>
+        <tr><td>B17</td><td>gating 擋下時不 emit 狀態</td><td>使用者主動開的 dialog 永遠轉圈且沒有 retry 按鈕</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>刻意設計、不修改：</strong>IFP52_2 連背景 silent install 也排除 —— 非 owner 的 IFP52_2 會在每次開機被
+      <code>startSilentInstallApk</code> 卡住系統 90 秒；代價是 owner 的 IFP52_2 拿不到「開機就裝好」（F5）。
+    </div>
+
+    <h2 id="handover">6. 交接待辦</h2>
+    <div class="callout new">
+      <strong>⚠️ 合併前必辦 — GH_PAT 權限驗證：</strong>用 <code>ClassSwift Version Bump</code> workflow 的
+      <code>DRY_RUN: true</code> 手動跑一次，確認 <code>GH_PAT</code> 讀得到 ragdoll-cat releases。
+      若 PAT 是 fine-grained 且未授權該 repo，<strong>所有 Android build 會在 embed 步驟失敗</strong>，
+      擋掉整條 release pipeline，不只 ClassSwift（E17）。
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>事項</th><th>時機</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>GH_PAT <code>DRY_RUN: true</code> 驗證（上方）</td><td>合併前</td></tr>
+        <tr><td>2</td><td>Amplitude tracking plan 建立 <code>ClassSwift Install Failed</code> 事件定義</td><td>合併前後</td></tr>
+        <tr><td>3</td><td>與 #205（cs-token-redelivery）確認合併順序</td><td>合併前</td></tr>
+        <tr><td>4</td><td>合併 <a href="https://github.com/Viewsonic-EDU/ragdoll-cat/pull/1089">ragdoll-cat#1089</a>（D6：移除 MDM 派送）</td><td>#208 上線後</td></tr>
+      </tbody>
+    </table>
+    <p>完整清單與研究向問題（Q1–Q4：release target 推導守衛、E9 離線 gate、E4 rollback 相容性、IFP52_2 機型清單）見 <a href="investigation.md">investigation.md</a>。</p>
+
+    <h2 id="verified">7. 驗證狀態（Stephen 已完成）</h2>
+    <ul class="compact">
+      <li>全 repo 2789 個測試通過（ClassSwift 相關 76 個）；<code>flutter analyze</code> 改動範圍內無 warning</li>
+      <li>實際 Gradle build 驗證：<code>ifp</code> / <code>edla</code> 含 15 MB asset，<code>store</code> / <code>open</code> 不含（E6）</li>
+      <li><code>noCompress</code> 生效：打包後僅多 178 bytes，為 stored 而非 deflate</li>
+      <li>簽章相容性（E7）：OTA bucket 上的 apk 就是同一個 release asset 改名上傳，覆蓋安裝不會 <code>INSTALL_FAILED_UPDATE_INCOMPATIBLE</code></li>
+      <li>CI 下載 + sha256 驗證流程實跑通過；所有 workflow YAML 與 shell 語法檢查通過</li>
+    </ul>
+
+    <h2 id="commits">8. PR 結構（7 個 commit，依相依順序、各自可獨立編譯）</h2>
+    <table>
+      <thead><tr><th>#</th><th>內容</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Beta Program 不再另外下載 ClassSwift（先做，後續才能安全移除下載 API）</td></tr>
+        <tr><td>2</td><td>Android：從 assets 解出並驗證內嵌的 APK（<code>ClassSwiftAssetInstaller.java</code>）</td></tr>
+        <tr><td>3</td><td>以內嵌 APK 取代 OTA 下載（核心：coordinator / installer / dialog 改寫）</td></tr>
+        <tr><td>4</td><td>安裝失敗時送出 telemetry（<code>ClassSwift Install Failed</code>）</td></tr>
+        <tr><td>5</td><td>CI：build 時把 pinned 的 APK 放進 assets（embed action + 五個 workflow）</td></tr>
+        <tr><td>6</td><td>CI：自動更新內嵌的 ClassSwift 版本（<code>classswift-bump.yml</code>）</td></tr>
+        <tr><td>7</td><td>文件（<code>docs/classswift-embedded-apk*.md</code>）</td></tr>
+      </tbody>
+    </table>
+
+  </main>
+</div>
+<script src="assets/mermaid-init.js"></script>
+</body>
+</html>

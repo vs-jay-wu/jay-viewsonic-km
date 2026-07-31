@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>ClassSwift 內嵌 APK — 北極星目標與現況差距</title>
+<link rel="stylesheet" href="assets/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#goal">1. 目標</a></li>
+      <li><a href="#compare">2. 目標 vs PR #208 現況</a></li>
+      <li><a href="#gaps">3. 主要差距</a>
+        <ul>
+          <li><a href="#gap1" class="sub">Gap 1 新鮮度耦合 MVB</a></li>
+          <li><a href="#gap2" class="sub">Gap 2 使用者抉擇殘留</a></li>
+          <li><a href="#gap3" class="sub">Gap 3 Region gate</a></li>
+          <li><a href="#gap4" class="sub">Gap 4 競態窗口</a></li>
+        </ul>
+      </li>
+      <li><a href="#ideas">4. 長期選項發想</a></li>
+      <li><a href="#next">5. 對後續研究的意義</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>北極星目標與現況差距</h1>
+    <div class="meta">
+      Jay 定調於 2026-07-31 &middot; 手段開放 —— 不一定是 Stephen 在 PR #208 採用的做法，也不急著現在定案 &middot;
+      本文記錄目標本身，以及「目標 vs PR #208 現況」的差距，供後續研究時對照
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="goal.html" class="active">🎯 北極星目標與差距</a>
+      <a href="investigation.md">🔍 接手調查清單</a>
+      <a href="repo-docs/classswift-embedded-apk.md">📄 設計文件（clone）</a>
+      <a href="repo-docs/classswift-embedded-apk-review.md">🧾 決議與風險分析（clone）</a>
+      <a href="jira/VSFT-9785.md">🎫 Jira clone</a>
+    </div>
+
+    <div class="callout ok">
+      <strong>📣 決策更新（2026-07-31）：「一定要最新版」前提已移除。</strong>
+      上層拍板：<strong>版本相容由後端負責處理</strong>。拆開來看兩件事的性質不同：
+      <ul class="compact">
+        <li><strong>不要求最新版</strong> —— 從現在到未來都成立（永久決策）</li>
+        <li><strong>無最小版本限制</strong> —— 目前的暫時現狀（前端也不處理版本相容錯誤）；<strong>未來可能需要設計最小版本機制</strong>，否則後端要相容的舊版範圍會無限增長（見 Q10）</li>
+      </ul>
+      → 原本最大的結構性差距 <a href="#gap1">Gap 1（新鮮度耦合 MVB）</a>因此解除，E4（rollback 搭到新 CS）的相容性疑慮也由後端承接。
+    </div>
+
+    <h2 id="goal">1. 目標</h2>
+    <ol>
+      <li><strong>老師想用 Quiz Tool 時就能馬上用</strong> —— 點下去零等待</li>
+      <li><strong>使用者不經歷下載、更新、檢查、安裝等流程</strong> —— 不可避免的話盡量縮短、盡量隱形</li>
+      <li><strong>減少使用者的抉擇</strong> —— 不要跳「要不要安裝」讓使用者有機會點「不要」；理想是背景自動處理</li>
+      <li><del><strong>前提：ClassSwift（Quiz Tool）一定要處於最新版</strong> —— 最好的狀態是「在背景永遠維持最新版」</del>
+        <span class="badge badge-na">已移除 2026-07-31</span> 不要求最新版（永久）；最小版本限制目前沒有（暫時現狀，未來可能設計）；相容性由後端處理</li>
+    </ol>
+
+    <h2 id="compare">2. 目標 vs PR #208 現況對照</h2>
+    <table>
+      <thead><tr><th>目標</th><th>PR #208 現況</th><th>判定</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>點了馬上用（首次）</td>
+          <td>內嵌 apk + 開機背景靜默安裝（F1），全程不需網路</td>
+          <td><span class="badge badge-ok">✅ 大幅改善</span>（原本要等 15 MB 下載）</td>
+        </tr>
+        <tr>
+          <td>點了馬上用（升級後）</td>
+          <td>MVB OTA 更新後重啟，背景靜默升級（F2），使用者無感</td>
+          <td><span class="badge badge-ok">✅</span></td>
+        </tr>
+        <tr>
+          <td>不經歷安裝流程</td>
+          <td>happy path 完全背景、無 UI；只有「背景還沒裝完就點」才看到 loading dialog（F3，本地解壓+安裝，秒級）</td>
+          <td><span class="badge badge-ok">✅ 大致達成</span></td>
+        </tr>
+        <tr>
+          <td>減少使用者抉擇</td>
+          <td><strong>殘留三條要使用者做事的路徑</strong>（見 Gap 2）</td>
+          <td><span class="badge badge-warn">⚠️ 部分達成</span></td>
+        </tr>
+        <tr>
+          <td><del>永遠維持最新版</del>（前提已移除 2026-07-31）</td>
+          <td>CS 版本跟著 MVB release / OTA 節奏（見 Gap 1）—— 不要求最新版後這是可接受的行為，相容性由後端處理</td>
+          <td><span class="badge badge-na">— 前提移除，不再是差距</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="gaps">3. 主要差距</h2>
+
+    <h3 id="gap1">Gap 1 — 版本新鮮度與 MVB 耦合 <span class="badge badge-na">已解除（2026-07-31 前提移除）</span></h3>
+    <div class="callout ok">
+      <strong>✅ 不再是差距：</strong>「一定要最新版」前提移除後，CS 跟著 MVB release 節奏更新即可接受，
+      版本相容由後端負責 —— 等同直接採納下方方向 (ii)，且不需要新鮮度 SLA。
+      以下分析保留作為記錄（若日後前提翻回來，這段還是成立）。
+    </div>
+    <p>D1 決議「完全取代、不保留 OTA fallback」之後，裝置上的 CS 只會在 <strong>MVB 自己更新時</strong>跟著換：</p>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart LR
+  CSREL["CS 出新版<br/>(ragdoll-cat release)"] --> BUMP["classswift-bump<br/>更新 pin（每日）"]
+  BUMP --> WAIT1["等 MVB 下一次<br/>release build"]
+  WAIT1 --> WAIT2["等裝置 OTA<br/>更新 MVB"]
+  WAIT2 --> INSTALL["重啟後才裝上新 CS"]
+      </pre>
+      <div class="diagram-caption">新 CS 到裝置的唯一路徑 —— 每一段都是等待</div>
+    </div>
+    <ul class="compact">
+      <li>舊 OTA 流程反而是「每次啟動就檢查、抓得到最新版」—— 內嵌方案用<strong>新鮮度</strong>換<strong>首次可用性</strong></li>
+      <li>若 CS 出了 hotfix 而 MVB 沒有 release 排程，<strong>沒有任何管道把新 CS 推上裝置</strong>（MDM 派送也在 D6 被移除）</li>
+      <li>E14：同一個 tag 重新發佈也推不動（pin 沒變不重抓、版號相同不更新）</li>
+    </ul>
+    <p>當時列過的方向（記錄用）：(i) 內嵌保底 + 背景 OTA 混合式（推翻 D1）、
+    (ii) 接受「最新 = 跟著 MVB release 的最新」、(iii) CS hotfix 時主動觸發 MVB release。
+    <strong>2026-07-31 前提移除後等同採納 (ii)</strong>，且不需要逼近任何新鮮度目標。</p>
+
+    <h3 id="gap2">Gap 2 — 殘留的使用者抉擇路徑</h3>
+    <table>
+      <thead><tr><th>路徑</th><th>情境</th><th>使用者看到什麼</th></tr></thead>
+      <tbody>
+        <tr><td>F4</td><td>非 owner 帳號，系統拒絕 silent install</td><td>點 Quiz Tool → 退回 PackageInstaller → <strong>要按「安裝」</strong></td></tr>
+        <tr><td>F5</td><td>IFP52_2（機型排除背景 silent install，避免卡系統 90 秒）</td><td>背景必失敗 → 同 F4，<strong>每次更新都要人工按</strong></td></tr>
+        <tr><td>F6</td><td>使用者在系統安裝畫面按取消</td><td>Error 34 + retry —— <strong>正是「他點了不要」的情境</strong></td></tr>
+      </tbody>
+    </table>
+    <p>要消滅這三條，關鍵在 <strong>silent install 的權限面</strong>：owner / device owner 權限怎麼配置、
+    IFP52_2 的系統問題能否從 firmware 端解。這不是 Flutter 端能單獨解掉的。</p>
+
+    <h3 id="gap3">Gap 3 — Region gate 擋住「馬上用」（E9）</h3>
+    <p>完全離線的教室（production、無 region 快取）時 gate 永遠不開，CS 裝不起來，點 Quiz Tool 完全不可用。
+    內嵌方案的「離線可用」賣點實際上被 region gate 抵銷。舊流程也一樣（不算回歸），但以北極星目標來看是個缺口。</p>
+
+    <h3 id="gap4">Gap 4 — 開機後的競態窗口</h3>
+    <p>背景安裝完成前點 Quiz Tool 仍會看到 loading（F3）。內嵌方案已把窗口從「下載 15 MB」縮成「本地解壓 + 安裝」（秒級），
+    剩餘窗口可能只能靠提早觸發時機（目前掛在 <code>onITAdminSettingsUpdated</code>）再壓縮。</p>
+
+    <h2 id="ideas">4. 長期選項發想（未定案，記錄用）</h2>
+
+    <h3>把 ClassSwift 整個融合進 MVBF（單一 APK）</h3>
+    <p class="meta">Jay 2026-07-31 發想。ragdoll-cat（ClassSwift_Service.apk）是<strong>純 Android 原生 Kotlin app</strong>（Views XML + Retrofit + SocketIO），
+    MVB 是 Flutter app —— Flutter 的 android module 本來就能承載原生 code，技術上不是「Flutter 混 native 行不行」的問題，而是「吞下一整個 app」的工程與組織問題。</p>
+    <table>
+      <thead><tr><th>面向</th><th>評估</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>對北極星目標</td>
+          <td><span class="badge badge-ok">完勝</span> 唯一能把「安裝 / 更新 / 版本同步」這整類問題<strong>連根拔掉</strong>的方向：F4/F5/F6 三條使用者抉擇路徑消失、silent install 權限問題消失、CS↔MVB 版本相容矩陣消失（單一 artifact 永遠同步）、#205 的跨 app token 傳遞變成 in-process 呼叫</td>
+        </tr>
+        <tr>
+          <td>技術難度</td>
+          <td><span class="badge badge-ok">POC 後下修為中等</span> <del>大工程但可行</del> —— 2026-07-31 POC 實證：wrapper module + sourceSets 指向手法讓 CS 零改動編進 MVB，manifest / 資源 / codegen 全數過關，整包 assemble 成功。真正的工程主體是 MVB 端 CS 整合層改為 in-process（見 <a href="findings.html">findings.html</a> R2）</td>
+        </tr>
+        <tr>
+          <td>執行期風險</td>
+          <td><span class="badge badge-warn">失去程序隔離</span> 現在 CS crash 不影響 MVB；合併後單一程序記憶體水位變高（IFP 是低 RAM 裝置）。<strong>中間解：CS 元件跑獨立 <code>:process</code></strong> —— 保住單一 APK 交付，又保留部分隔離</td>
+        </tr>
+        <tr>
+          <td>組織面</td>
+          <td><span class="badge badge-err">最硬的部分</span> ragdoll-cat 是 CS 團隊的 repo、獨立 release 節奏；合併等於兩team 的 CI / review / release train 綁在一起（Conway's law）。且需先確認 <strong>ClassSwift_Service.apk 是否只有 MVB 一個消費者</strong>（若還有 standalone / 其他產品用途，合併等於分岔或砍掉它）→ Q11</td>
+        </tr>
+        <tr>
+          <td>ROI 時點</td>
+          <td>「後端處理相容」拍板後，現狀（內嵌 APK）的痛已大幅降低 —— 合併的相對效益變小。適合當<strong>長期方向</strong>存查，等內嵌方案上線後看剩餘痛點再評估</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="next">5. 對後續研究的意義</h2>
+    <ul>
+      <li>評估任何手段時，用剩下的 3 個 gap 檢核：<strong>首次可用性、零抉擇、離線</strong>（新鮮度已因前提移除而出局）</li>
+      <li><del>Gap 1 是方向性問題，需要先對齊「最新版」定義與 SLA</del> —— 已解除（2026-07-31）；<strong>後端如何處理版本相容</strong>成為新的追蹤點（Q9：哪個後端？相容到多舊？），
+        以及<strong>最小版本機制的未來設計</strong>（Q10：「無最小版本限制」只是暫時，一直沒有的話後端相容範圍會無限增長）</li>
+      <li><strong>剩餘重點是 Gap 2（零抉擇）</strong>：偏權限 / firmware 面，可能要拉裝置端的人</li>
+      <li>相關調查問題已列入 <a href="investigation.md">investigation.md</a>（Q2、Q7–Q10；Q3 / Q5 / Q6 已因決策關閉）</li>
+    </ul>
+
+  </main>
+</div>
+<script src="assets/mermaid-init.js"></script>
+</body>
+</html>
