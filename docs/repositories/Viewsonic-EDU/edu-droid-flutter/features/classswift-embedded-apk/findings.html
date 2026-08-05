@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8" />
-<title>ClassSwift 融合 POC — findings</title>
+<title>ClassSwift 融合 — findings（實作記錄）</title>
 <link rel="stylesheet" href="assets/style.css" />
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
@@ -12,38 +12,96 @@
     <h2>目錄</h2>
     <ul>
       <li><a href="#result">1. 結果一句話</a></li>
+      <li><a href="#why-index">1.1 決策記錄索引（為什麼）</a></li>
       <li><a href="#approach">2. 做法</a></li>
       <li><a href="#changes">3. 改動清單</a></li>
       <li><a href="#obstacles">4. 遇到的坑與解法</a></li>
       <li><a href="#verified">5. 驗證結果</a></li>
-      <li><a href="#ota">6.1 停用 CS 的 OTA</a></li>
+      <li><a href="#ota">6.1 停用 CS 自我更新（OTA）</a></li>
       <li><a href="#integration">6.2 略過 MVB 端安裝檢查</a></li>
-      <li><a href="#endclass">6.3 ⚠️ End Class 殺掉 MVB</a></li>
-      <li><a href="#pending">6.4 尚未驗證</a></li>
+      <li><a href="#endclass">6.3 End Class 殺掉 MVB（已解）</a></li>
+      <li><a href="#endclass-update" class="sub">6.3.1 quit seam 實作</a></li>
+      <li><a href="#koin-rebuild" class="sub">6.3.4 Koin 整鍋重建（決策）</a></li>
+      <li><a href="#pending">6.4 生產化風險清單 R1–R14</a></li>
+      <li><a href="#repo-strategy">6.5 Repo 策略：git submodule</a></li>
       <li><a href="#conclusion">7. 對可行性評估的更新</a></li>
     </ul>
   </nav>
 
   <main>
-    <h1>ClassSwift 融合 POC — findings</h1>
+    <h1>ClassSwift 融合 — findings（實作記錄）</h1>
     <div class="meta">
-      實驗於 2026-07-31 &middot; mvbf 分支 <code>jay/VSFT-9785-spike-classswift-fusion</code>（commit <code>acc9ab93</code>，spike tmp commit、未開 PR）+ ragdoll-cat develop <code>0612878d</code> &middot;
+      實驗於 2026-07-31 ~ 08-04 &middot; mvbf 分支 <code>Jay/VSFT-9785-classswift-fusion</code>（<a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/210">PR #210</a>）+ ragdoll-cat 分支 <code>jay/feature/VSFT-9785-app-exit-seam</code>（已 push，PR 未開）&middot;
       呼應 <a href="goal.html">goal.html §4 長期選項發想</a>
     </div>
     <div class="doc-nav">
       <a href="overview.html">📘 總覽 (overview)</a>
       <a href="goal.html">🎯 北極星目標與差距</a>
-      <a href="findings.html" class="active">🛠️ 融合 POC findings</a>
-      <a href="investigation.md">🔍 接手調查清單</a>
+      <a href="findings.html" class="active">🛠️ 融合 findings（實測記錄）</a>
+      <a href="investigation.html">🔍 接手調查清單</a>
     </div>
 
     <h2 id="result">1. 結果一句話</h2>
     <div class="callout ok">
-      <strong>✅ 編譯 + 真機 runtime 都可行，成本遠低於預期。</strong>
-      CS 整個 codebase 以 library 形式編進 MVB，<strong>在 Pixel Tablet 上實跑：CS 的 UI、overlay 視窗框架、
-      後端登入、socket 連線全部在 <code>com.viewsonic.droid</code> process 內正常運作</strong>，MVB 自己的 Flutter 白板不受影響。
-      全程 <strong>0 個 ragdoll-cat 檔案改動</strong>（含停用 CS 自我更新，見 §6.1），mvbf 端動 7 個檔案 + 新增 1 個 wrapper module + 4 個融合膠水檔案。<strong>toggle 已可直接開出融合版 CS、無安裝畫面</strong>（§6.2）。
+      <strong>✅ 可行。編譯與真機 runtime 都通，成本遠低於預期。</strong>
     </div>
+    <table>
+      <thead><tr><th>面向</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr><td>真機實跑</td><td>CS 的 UI、overlay 視窗框架、後端登入、socket 連線<strong>全部在 <code>com.viewsonic.droid</code> process 內正常運作</strong>，MVB 自己的 Flutter 白板不受影響（Pixel Tablet, Android 16）</td></tr>
+        <tr><td>使用者可見行為</td><td>MVB 工具列 toggle <strong>直接開出融合版 CS、無安裝畫面</strong>（§6.2）</td></tr>
+        <tr><td>mvbf 端改動</td><td>約 20 個檔案：既有檔案微調 + 1 個 wrapper module + 6 個融合膠水檔案 + flavor 隔離的 sourceSet 搬遷（清單見 §3）</td></tr>
+        <tr><td>ragdoll-cat 端改動</td><td><strong>只需 4 檔的 quit seam</strong>（§6.3.1：AppExitHandler 抽象 + AccountManager 尾段委派 + Koin 註冊 + 契約測試），<strong>獨立 APK 行為不變</strong>。<br/>這是必要改動 —— 融合版靠 Koin 覆寫此 interface 才能接管 quit，否則 End class 的 <code>killProcess</code> 會把 MVB 一起殺掉。其餘（含停用 CS 自我更新，§6.1）全部從 MVB 端達成</td></tr>
+        <tr><td>驗證範圍</td><td>真機驗證均為 <strong>debug + stag</strong>；release + rc/prod <strong>僅驗證 build 成功，尚未上真機</strong></td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="why-index">1.1 決策記錄索引（為什麼要這樣做）</h2>
+    <p>本文的 §6.3.x 依日期記錄完整演進過程；此表是「被問為什麼時」的快速入口 ——
+    每一條都是實測踩雷後的決定，不是憑空設計。</p>
+    <table>
+      <thead><tr><th>決策</th><th>為什麼（一句話）</th><th>完整記錄</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>為什麼 ragdoll-cat 需要改動（quit seam 4 檔）？</strong></td>
+          <td>quitApp 尾段原本寫死 <code>killProcess</code> —— 融合後同 process，End class 會把 MVB
+          一起殺掉（真機踩雷）；可覆寫的 interface 只能由 CS 端開出，且全 codebase 殺 process 僅此一處，
+          seam 成本遠低於當初估計</td>
+          <td><a href="#endclass">§6.3</a>、§6.3.1</td>
+        </tr>
+        <tr>
+          <td><strong>為什麼要有 quit bridge（通知 MVB 端重置）？</strong></td>
+          <td>獨立 APK 靠 process 死亡讓 binder 斷線、觸發 MVB 的 Bloc 重置；融合後 binder 永不斷，
+          不補訊號則第二次 toggle-on 什麼都開不出來（真機踩雷）</td>
+          <td>§6.3.2</td>
+        </tr>
+        <tr>
+          <td><strong>為什麼 quit 時要 stopKoin 整鍋重建，而不是逐欄位 reset 或殺 process？</strong></td>
+          <td>帳號切換實測抓到跨帳號殘留（standards 洩漏、selectedOrg 導向錯 org、logoutAndQuit 自殺迴圈）；
+          逐欄位 reset 清單會漂移（新欄位必漏），殺 process（獨立 :process）代價是 IPC 邊界 + manifest 手術 +
+          WebView 新雷；重建實測僅 ~25ms 且與冷啟動同構</td>
+          <td>§6.3.3、§6.3.4（含 A/B/C/D 方案比較與決策記錄）</td>
+        </tr>
+        <tr>
+          <td><strong>為什麼 Amplitude 要 carry-over、不隨容器重建？</strong></td>
+          <td>Amplitude SDK 每顆實例持有 3-4 個永不關閉的 executor，隨重建每輪洩 ~4 條執行緒
+          （8 輪實測 111→162）；carry-over 後持平</td>
+          <td>§6.3.5</td>
+        </tr>
+        <tr>
+          <td><strong>為什麼維持 process 啟動時 init CS 的 Koin，而不是 lazy init？</strong></td>
+          <td>initKoin 只註冊定義（實測含 stopKoin 整套 ~25ms），lazy 化反而要保證所有 CS 進入點
+          都先經過 init，漏一條就 crash</td>
+          <td><code>ClassSwiftFusionInitProvider</code> KDoc</td>
+        </tr>
+        <tr>
+          <td><strong>為什麼 Firebase/RemoteConfig 暫不處理？</strong></td>
+          <td>RemoteConfig 現況零實質使用（唯一 key 無讀取者且屬於被移除的 OTA 流程）；
+          Crashlytics/Analytics 歸屬是數據面產品決策，不影響行為</td>
+          <td>§6.4 R7</td>
+        </tr>
+      </tbody>
+    </table>
 
     <h2 id="approach">2. 做法</h2>
     <p>核心手法：<strong>wrapper module + sourceSets 指向</strong>。在 mvbf 新增 <code>android/classswift/</code>
@@ -57,7 +115,7 @@ flowchart LR
     WRAP[":classswift wrapper module<br/>com.android.library<br/>namespace com.viewsonic.classswift"]
     SETTINGS["settings.gradle<br/>+ ksp / protobuf / safeargs plugins<br/>+ cslibs version catalog"]
   end
-  subgraph CS["ragdoll-cat（零改動）"]
+  subgraph CS["ragdoll-cat（原始碼留在自己的 repo）"]
     SRC["app/src/main/*<br/>java / res / assets / aidl / proto / manifest"]
     TOML["gradle/libs.versions.toml"]
     KEYS["keystore.properties<br/>version.properties"]
@@ -69,9 +127,12 @@ flowchart LR
       </pre>
       <div class="diagram-caption">依賴版本透過匯入 CS 自己的 version catalog（<code>cslibs</code>）自動同步 —— 零漂移</div>
     </div>
-    <p>POC 的刻意簡化：不套 CS 的 flavors（environment 固定 stag、BuildConfig 直接烘入 stag 值 +
-    手動補 library 不自動生成的 <code>FLAVOR</code> / <code>VERSION_NAME</code> / <code>VERSION_CODE</code>）；
-    跳過 google-services / crashlytics / perf 這些 app-level plugins（由 MVB app 自己的接管）；不接 test sourceSets。</p>
+    <p>與 CS 原生 build 的差異：不套 CS 的 gradle flavors —— <strong>environment 於 build 時依 MVB
+    release target 推導</strong>（stage→stag / beta→rc / production·rollback→prod，<code>-PcsEnv=</code> 可覆寫），
+    以 buildConfigField 烘入，並手動補 library 不自動生成的 <code>FLAVOR</code> / <code>VERSION_NAME</code> /
+    <code>VERSION_CODE</code>；跳過 google-services / crashlytics / perf 這些 app-level plugins
+    （由 MVB app 自己的接管）；不接 test sourceSets。CS 的 proguard 規則已透過
+    <code>consumerProguardFiles</code> 帶入（見 §6.4 R6）。</p>
 
     <h2 id="changes">3. 改動清單</h2>
     <table>
@@ -79,16 +140,28 @@ flowchart LR
       <tbody>
         <tr><td><code>android/classswift/build.gradle</code></td><td><span class="badge badge-new">新增</span> wrapper module（~180 行，含全部 buildConfigField 與依賴清單）</td></tr>
         <tr><td><code>android/settings.gradle</code></td><td>+ ksp <code>2.1.0-1.0.29</code> / protobuf <code>0.9.5</code> / safeargs <code>2.8.9</code> plugins；+ <code>cslibs</code> catalog；+ <code>include ':classswift'</code></td></tr>
-        <tr><td><code>android/app/build.gradle</code></td><td>+ <code>implementation project(':classswift')</code>（POC 全 flavor；生產要改 <code>ifpImplementation</code>/<code>edlaImplementation</code>）</td></tr>
+        <tr><td><code>android/app/build.gradle</code></td><td>+ <code>implementation project(':classswift')</code>（目前全 flavor 帶 CS；生產要改 <code>ifpImplementation</code>/<code>edlaImplementation</code>，見 R5）</td></tr>
         <tr><td><code>android/app/src/main/AndroidManifest.xml</code></td><td>application 加 <code>tools:replace="android:name,label,icon,roundIcon,resizeableActivity,networkSecurityConfig"</code></td></tr>
         <tr><td><code>…/p2pClient/SocketSignalingChannel.java</code></td><td>socket.io 1.x→2.x API 遷移（<code>EVENT_ERROR</code>/<code>EVENT_RECONNECTING</code> 移到 <code>Manager</code>，2 行）</td></tr>
         <tr><td><code>…/droid/classswift/ClassSwiftFusionInitProvider.java</code></td><td><span class="badge badge-new">新增</span> ContentProvider，process 啟動時觸發融合初始化（CS Application 不會跑）</td></tr>
         <tr><td><code>…/droid/classswift/ClassSwiftFusionKoin.kt</code></td><td><span class="badge badge-new">新增</span> 呼叫 CS 的 <code>KoinModules.initKoin()</code> + 載入覆寫模組（停用 OTA）+ 驗證覆寫生效</td></tr>
         <tr><td><code>…/droid/classswift/BypassOtaUpdateApiService.kt</code></td><td><span class="badge badge-new">新增</span> 停用 CS 自我更新（見 §6.1）</td></tr>
+        <tr><td><code>…/droid/classswift/EmbeddedClassSwiftExitHandler.kt</code></td><td><span class="badge badge-new">新增</span> 融合版 quit：收 CS activity/視窗、Koin 整鍋重建（Amplitude carry-over）、重入 dedupe（§6.3.1–6.3.5）；含 ClassSwiftActivityTracker</td></tr>
+        <tr><td><code>…/droid/classswift/ClassSwiftFusionQuitBridge.kt</code></td><td><span class="badge badge-new">新增</span> quit 時補發「斷線」訊號給 MVB 端（clearBinding + Flutter Bloc 重置，§6.3.2）</td></tr>
+        <tr><td><code>…/droid/MainActivity.java</code></td><td>註冊 quit bridge handler（斷線通知接到既有的 MethodChannel）</td></tr>
         <tr><td><code>lib/helper/class_swift/class_swift_fusion.dart</code></td><td><span class="badge badge-new">新增</span> <code>kClassSwiftFusedIntoMvb</code> 旗標（見 §6.2）</td></tr>
         <tr><td><code>lib/helper/class_swift/class_swift_installer.dart</code></td><td>融合模式下 <code>_getPackageName</code> 回 MVB 自己、<code>isUpdateAvailable</code> 回 false</td></tr>
         <tr><td><code>…/class_swift_download_coordinator.dart</code></td><td>融合模式下直接 emit <code>NotNeeded</code>，不跑下載流程</td></tr>
-        <tr><td>ragdoll-cat 任何檔案</td><td><span class="badge badge-ok">零改動</span></td></tr>
+        <tr><td><code>android/classswift/build.gradle</code>（環境對應）</td><td>CS environment 依 MVB release target 於 build 時推導，<code>-PcsEnv=</code> 可覆寫（R9）</td></tr>
+        <tr><td><code>android/classswift/build.gradle</code>（proguard）</td><td><code>consumerProguardFiles</code> 指向 CS 的 <code>proguard-rules.pro</code>，release/R8 才不會砍壞 CS（R6）</td></tr>
+        <tr><td>app 端 <code>aidl/com/viewsonic/classswift/service/*.aidl</code></td><td><span class="badge badge-err">刪除</span> 與 wrapper 生成的類別撞名，release/R8 直接拒收（已 diff 驗證兩邊定義一致）。R5 之後 store/open 改由 <code>aidl.srcDirs</code> 指向 CS repo 的同一份定義</td></tr>
+        <tr><td><code>android/app/src/fusion/</code>（新 sourceSet）</td><td><span class="badge badge-new">新增</span> R5 flavor 隔離：膠水層 4 檔 + fusion manifest（provider 宣告），ifp/edla 共用一份</td></tr>
+        <tr><td><code>android/app/build.gradle</code>（flavor 隔離）</td><td><code>ifpImplementation</code>/<code>edlaImplementation project(':classswift')</code>、ifp/edla 掛 <code>src/fusion</code>、store/open 掛 CS repo 的 aidl（<code>maybeCreate</code>：本區塊早於 productFlavors 執行，且 <code>open</code> 是 Groovy 保留字）</td></tr>
+        <tr><td><code>res/xml/network_security_config_stage.xml</code></td><td>stage 加信任 user CA —— 融合後 CS 流量改由 MVB 的 NSC 管轄，否則 QA 失去抓包能力</td></tr>
+        <tr><td>ragdoll-cat（quit seam，見 §6.3.1）</td><td><span class="badge badge-warn">4 檔</span>
+        <code>AppExitHandler.kt</code> 新增、<code>AccountManager.kt</code> 尾段委派、
+        <code>KoinModules.kt</code> 註冊、<code>AccountManagerTest.kt</code> 契約測試——獨立 APK 行為不變；
+        其餘 ragdoll-cat 檔案不動</td></tr>
       </tbody>
     </table>
 
@@ -115,7 +188,7 @@ flowchart LR
           <td>P4</td>
           <td><strong>CS-only application 屬性靜默滲入</strong>：merged manifest 的 application 變成
             <code>theme=@style/Theme.ClassSwift</code>、<code>allowBackup=false</code>、<code>dataExtractionRules</code>/<code>fullBackupContent</code>=CS 的、<code>supportsRtl=true</code></td>
-          <td>POC 未處理（可編可裝）。生產化要在 MVB manifest 明示自己的值或加進 tools:replace —— application-level theme 尤其要注意（影響未宣告 theme 的 activity）</td>
+          <td><strong>仍未處理</strong>（可編可裝，release 亦通過）。生產化要在 MVB manifest 明示自己的值或加進 tools:replace —— application-level theme 尤其要注意（影響未宣告 theme 的 activity）</td>
         </tr>
         <tr>
           <td>P5</td>
@@ -141,7 +214,7 @@ flowchart LR
         <tr>
           <td>P8</td>
           <td>裝置安裝：MVB 用 <code>sharedUserId=android.uid.system</code>，<code>ifp</code> flavor 簽章與測試機不符</td>
-          <td>POC 改用 <code>edla</code> flavor 安裝（非融合問題，是既有的簽章/機型限制）</td>
+          <td>驗證機一律用 <code>edla</code> flavor 安裝（非融合問題，是既有的簽章/機型限制）</td>
         </tr>
       </tbody>
     </table>
@@ -185,7 +258,7 @@ flowchart LR
     </div>
 
     <div class="callout warn">
-      <strong>⚠️ R2 的實證：MVB 工具列的 CS toggle 仍啟動<em>外部</em>的 <code>com.viewsonic.classswift.service.stag</code></strong>
+      <strong>⚠️（2026-07-31 當時的觀察，已於 §6.2 解決）R2 的初次實證：當時 toggle 仍啟動<em>外部</em>的 <code>com.viewsonic.classswift.service.stag</code></strong>
       （另一個 PID），不是融合進來的那份。裝置上因此同時跑兩個 CS。
       這正是「融合的真正工程主體是改寫 MVB 端整合層」的直接證據 —— 打包融合完成 ≠ 整合完成。
     </div>
@@ -195,7 +268,7 @@ flowchart LR
     <code>version.json</code>、比對版號、下載並安裝<strong>一份獨立的 CS APK</strong> —— 那份與融合進 MVB 的是<strong>兩個不同的
     package</strong>，裝了只會讓機器上同時存在兩個 CS。</p>
     <div class="callout ok">
-      <strong>做法：從 MVB 端替換 Koin 綁定，ragdoll-cat 仍是零改動。</strong>
+      <strong>做法：從 MVB 端替換 Koin 綁定 —— OTA 這一項不需動 ragdoll-cat（CS 端的必要改動只有 §6.3.1 的 quit seam 4 檔）。</strong>
       兩個條件讓這件事變乾淨：CS 的 <code>OtaUpdateApiService</code> 是 <strong>interface</strong>（有接縫可替換），
       且 CS 自己就有 <code>is_bypass_ota</code> 這個一級旗標（有語意正確的「關閉」表達方式）。
     </div>
@@ -266,9 +339,13 @@ flowchart LR
     前提下可運作。不過這是<strong>用旗標繞過</strong>既有邏輯，不是重寫 —— 生產化時應讓「CS 是內部元件」成為編譯期事實，
     並把整套 installer / download coordinator / updating dialog 真正移除（連同 VSFT-9785 的內嵌 APK 機制）。</p>
 
-    <h2 id="endclass">6.3 ⚠️ 已知問題：End Class 會連 MVB 一起殺掉</h2>
-    <div class="callout new">
-      <strong>這是目前最重要的未解問題，也是結構性的 —— 不是單點 bug。</strong>
+    <h2 id="endclass">6.3 End Class 會連 MVB 一起殺掉 <span class="badge badge-ok">已解（2026-08-03）</span></h2>
+    <div class="callout ok">
+      <strong>✅ 已解決並通過真機驗證</strong> —— 解法是 §6.3.1 的 quit seam（CS 端抽象化 + MVB 端覆寫），
+      配套 §6.3.2 的視窗清理與 quit bridge、§6.3.4 的 Koin 容器重建。
+      guest / 記名 / 帳號切換 / 派題中斷 四類情境全數通過（§6.3.2、6.3.6、6.3.7）。
+      <br/>以下保留當初的問題分析（發現當下的認知），是理解「為什麼 CS 需要那 4 檔改動」的脈絡；
+      當時對成本的估計（「40 個呼叫點」）後來被證明是高估的，見 §6.3.1。
     </div>
     <p>CS 的 <code>AccountManager.quitApp()</code> 做兩件事：</p>
     <pre>activityManager.appTasks.forEach { task -&gt; task.finishAndRemoveTask() }
@@ -281,50 +358,403 @@ exitProcess(0)</pre>
     <code>quitApp</code> 在 CS 內約有 <strong>40 個呼叫點</strong>（各種錯誤頁、SettingMenu、Toolbar、
     <code>ClassSwiftService.onUnbind</code>、<code>MyViewBoardMessageHandler</code> 的 teardown 等），
     甚至有多處註解在描述「killProcess 與 IPC emit 的競態」，代表這個行為是被刻意依賴的設計，不是疏漏。</p>
+    <p class="meta">以下為 2026-07-31 發現當下的評估，<strong>結論已被 §6.3.1 / §6.3.4 推翻</strong>（(b) 成本遠低於此處估計、(a) 降為備援），保留供脈絡。</p>
     <table>
-      <thead><tr><th>方向</th><th>說明</th><th>評估</th></tr></thead>
+      <thead><tr><th>方向</th><th>說明</th><th>評估（當時）</th></tr></thead>
       <tbody>
         <tr>
           <td>(a) CS 元件跑獨立 <code>android:process</code></td>
           <td>單一 APK 交付不變，但 CS 在自己的 process 內 —— <code>quitApp</code> 語意完全不需要改</td>
-          <td><span class="badge badge-ok">最省力</span> 也順帶保住程序隔離（CS crash 不影響 MVB）與記憶體水位問題（R8）。代價：IPC 仍存在，「in-process 直接呼叫」的好處拿不到</td>
+          <td><span class="badge badge-warn">當時判定最省力 → 已降為備援</span> 也順帶保住程序隔離（CS crash 不影響 MVB）與記憶體水位問題（R8）。代價：IPC 仍存在，「in-process 直接呼叫」的好處拿不到</td>
         </tr>
         <tr>
           <td>(b) CS 端抽象化 <code>quitApp</code></td>
           <td>改成「結束會話」語意，內嵌模式下只收視窗、不殺 process</td>
-          <td><span class="badge badge-warn">較徹底但要動 CS</span> 40 個呼叫點 + 既有競態註解都要重新檢視；也破壞本 POC「ragdoll-cat 零改動」的性質</td>
+          <td><span class="badge badge-ok">已採用（實際成本遠低）</span> 當時估計 40 個呼叫點 + 既有競態註解都要重新檢視；也破壞本 POC「ragdoll-cat 零改動」的性質</td>
         </tr>
       </tbody>
     </table>
     <div class="callout">
-      <strong>順帶一提：</strong>(a) 同時解掉 goal.html §4 當初列的「失去程序隔離」顧慮 —— 它本來就是那裡提過的中間解。
-      這個問題反而讓 (a) 從「折衷」變成「首選」。
+      <strong>順帶一提（當時判斷）：</strong>(a) 同時解掉 goal.html §4 當初列的「失去程序隔離」顧慮 ——
+      它本來就是那裡提過的中間解，這個問題一度讓 (a) 從「折衷」變成「首選」。
+      <strong>此結論已被 §6.3.1 / §6.3.4 推翻 —— (a) 現為備援方案。</strong>
     </div>
 
-    <h2 id="pending">6.4 尚未驗證（runtime 與生產化）</h2>
+    <h3 id="endclass-update">6.3.1 更新（2026-08-03）：方向 (b) 已實作，成本遠低於當初估計</h3>
+    <div class="callout new">
+      <strong>「40 個呼叫點」的恐懼是錯的</strong> —— 實際盤點後，CS 全部 quit 路徑
+      （ToolbarManager / LoginViewModel / 各錯誤 Fragment / <code>ClassSwiftService.onUnbind</code> /
+      <code>MyViewBoardMessageHandler</code>）最終都匯流到 <strong>唯一一個終結點</strong>：
+      <code>AccountManager.quitApp()</code> 的尾段（finishAndRemoveTask + flush + killProcess）。
+      全 codebase 沒有第二個 <code>killProcess</code> / <code>exitProcess</code> / <code>finishAffinity</code> / 自我重啟點。
+    </div>
+    <p>因此 (b) 不需要動 40 個呼叫點，只要把這個終結點抽成 seam（mvbf 見 PR #210；ragdoll-cat 見分支 <code>jay/feature/VSFT-9785-app-exit-seam</code>）：</p>
+    <table>
+      <thead><tr><th>Repo</th><th>改動</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>ragdoll-cat（CS）</td>
+          <td>新增 <code>manager/AppExitHandler.kt</code>：<code>AppExitHandler</code> 介面 +
+          <code>StandaloneAppExitHandler</code>（原 VSFT-8940 flush-then-kill 邏輯原樣搬移）；
+          <code>AccountManager.quitApp</code> 尾段改委派（lazy Koin 注入，unit test 不受影響）；
+          <code>activityManager</code> 從建構子移除（只剩終結點在用）；KoinModules 註冊預設實作；<code>AccountManagerTest.kt</code> 加契約測試（鎖住委派行為，防日後誤刪 seam）。
+          <strong>獨立 APK 行為完全不變。</strong></td>
+        </tr>
+        <tr>
+          <td>edu-droid-flutter（MVB 膠水層）</td>
+          <td>新增 <code>EmbeddedClassSwiftExitHandler</code>：只 finish CS 的 Activity、flush Amplitude、
+          不殺 process，完成後透過 <code>onExitHandled</code> 重置 <code>isQuitting</code> 讓下一個 CS session 能再 quit。
+          <code>ClassSwiftFusionKoin</code> 加上覆寫 + 生效驗證 log。</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>三個實作細節值得記錄（第 2 點是真機實測踩到的，桌面推理錯了）：</p>
+    <ul>
+      <li><strong>不能用 task 級別的 finish</strong>：融合後 CS activity 的 <code>taskAffinity</code>
+      預設跟隨 merged applicationId（<code>com.viewsonic.droid</code>），CS 的
+      <code>FLAG_ACTIVITY_NEW_TASK</code> 啟動可能落進 MVB 的 task —— <code>appTasks</code> 過濾
+      baseIntent 也不可靠。改用 <code>ClassSwiftActivityTracker</code>（ActivityLifecycleCallbacks，
+      以 <code>com.viewsonic.classswift</code> class 前綴辨識）逐一 finish。</li>
+      <li><strong>⚠️ overlay 視窗必須自己收（真機實測 2026-08-03 Pixel Tablet 踩到）</strong>：
+      原以為 <code>quitApp</code> → <code>stopCSService()</code> → <code>onDestroy</code> →
+      <code>clearAllWindow()</code> 會收視窗 —— 錯。MVB 仍 bind 著 service 時 <code>stopSelf</code>
+      不會觸發 <code>onDestroy</code>，<strong>獨立 APK 的視窗清理其實是靠 killProcess 完成的</strong>。
+      第一輪實測結果：End class 後 process 存活、toggle 關閉，但 Join Class 視窗 + End 對話框整組殘留在畫面上。
+      修法：exit handler 內呼叫 <code>CSWindowManager.removeAllWindowsExcept(emptyList())</code>
+      —— 走正常 close 路徑（發 CLOSED 通知、保留 listener）；<strong>不可用 <code>reset()</code></strong>，
+      它會連 service 在 onCreate 註冊的 window listener 一起清掉，重演 VSFT-9004 症狀。</li>
+      <li><strong>overlay 視窗不會因 activity finish 消失</strong>：CS 的主要 UI（Join Class、toolbar、
+      對話框）都是 WindowManager overlay，不附著在 activity 上 —— 這也是第一輪 log
+      顯示「finished 0 ClassSwift activities」的原因（guest join 流程根本沒有活著的 CS activity）。</li>
+    </ul>
+    <p><strong>對 (a) vs (b) 評估的影響</strong>：(b) 的成本從「重檢 40 個呼叫點」降為「一個 interface + 一行 Koin 覆寫」，
+    quit 語意不再逼迫選 (a)。(a) 剩下的優勢是程序隔離與記憶體水位（R8）—— 變回純粹的架構取捨，而非 quit 問題的解法。</p>
+
+    <h3 id="endclass-verified">6.3.2 真機驗證（2026-08-03 Pixel Tablet, Android 16, edlaDebug）：完整 quit→第二 session 迴圈 PASS</h3>
+    <div class="callout new">
+      <strong>End Class → toggle 再開 → 第二個 CS session 正常開出（新 class ID、重新登入），process 全程不死，可重複。</strong>
+    </div>
+    <p>實測序列（PID 全程 15603）：</p>
+    <ol>
+      <li>toggle on → 融合版 CS 開 Join Class（class <code>1488 0644</code>，guest 自動登入）</li>
+      <li>Join Class 的 X → End class 確認 → <code>CSFusionExit: Embedded quit ... process stays alive</code>，
+      CS overlay 視窗數歸零、toggle 自動關閉、MVB 白板無恙</li>
+      <li>toggle on → MVB 重新 bindAndLaunch → <code>EventLoginStatus success</code> →
+      <strong>新的 Join Class 視窗（class <code>7097 2712</code>）</strong></li>
+      <li>再 End 一次 → 一樣乾淨（可重複性 OK）</li>
+    </ol>
+    <p><strong>過程中踩到的第二個結構性殘留（比視窗殘留更隱蔽）——MVB 端 Bloc 狀態也靠 process death 重置</strong>：
+    第一版修完視窗殘留後，第二次 toggle-on 什麼都開不出來。原因：獨立 APK 時代 CS 死亡 → binder 死 →
+    <code>onServiceDisconnected</code> → Flutter <code>ClassSwiftBloc._onServiceDisconnected</code> 重置狀態；
+    融合後 binder 永遠不斷，MVB 認為 CS 還在跑，第二次 toggle-on 只送 <code>MessageMvbVisibility</code>（show/hide 語意），
+    但視窗已被收掉 → 無畫面。修法：新增 <code>ClassSwiftFusionQuitBridge</code>——MainActivity 註冊
+    「<code>clearBinding()</code> + 對 Flutter 發 <code>onClassSwiftServiceDisconnected</code>」，
+    embedded quit 尾端呼叫，等同人工補上 binder 死亡訊號。之後 toggle-on 走完整 launch 路徑。</p>
+    <p>已知小瑕疵（無害）：bridge 的 unbind 觸發 <code>ClassSwiftService.onUnbind</code> →
+    <code>quitApp(false)</code> 重入 → 第二輪空的 embedded quit（finish 0、remove 0、重複通知 Flutter 一次，冪等）。
+    生產化時可在 exit handler 加 in-flight 去重（<strong>已於 §6.3.4 實作</strong>：companion 時間戳 dedupe）。</p>
+    <p><strong>R11 的初步答案（後續已全面解決，見 §6.3.4–6.3.7）</strong>：guest 流程下「殘留的 CS
+    in-memory 狀態」沒有阻礙第二個 session。當時列為待盤點的記名登入、帳號切換、派題中 quit
+    等路徑，已於 §6.3.6 / §6.3.7 逐一驗證通過（根本解是 §6.3.4 的 Koin 容器整鍋重建）。</p>
+
+    <h3 id="account-switch">6.3.3 真機驗證（2026-08-03 下午）：帳號切換的狀態殘留 — probe 實測</h3>
+    <p>方法：在 <code>AccountManager</code> 加臨時診斷 probe（<code>CSFusionProbe</code> tag，
+    只印 token 長度/布林/id，未 commit），於 <code>quitApp:enter</code> 與
+    <code>loginWithMvbToken:enter</code> 兩點拍身分欄位快照。
+    劇本：MVB 登入帳號 A（記名、進「Jay」班）→ End class → MVB 登出 → 登入帳號 B（dillon，同 org）
+    → 開 CS 進 B 的班 → End。全程 PID 不變。</p>
+    <table>
+      <thead><tr><th>時點</th><th>快照重點</th></tr></thead>
+      <tbody>
+        <tr><td>A quit 後</td><td>A 的完整身分留在記憶體：accessToken(1493)/idToken(1329)、userId=539bc98f…、selectedOrg=0268c150…、standardFromId=others、standardsLoadedForOrgId=0268c150…、<strong>logoutAndQuit=true</strong></td></tr>
+        <tr><td>B 開 CS 的登入入口</td><td><strong>上述 A 的殘留原封不動全部在場</strong>（獨立 APK 此刻應為全空）</td></tr>
+        <tr><td>B session 結束</td><td>token/userId 已換成 B（de096c2c…）；B 看到自己的班級與 35 人名單，<strong>UI 層無跨帳號洩漏</strong>。但 selectedOrg/standards/logoutAndQuit 見下</td></tr>
+      </tbody>
+    </table>
+    <p><strong>確認的兩個殘留機制（fusion-specific，獨立 APK 靠 process death 免疫）：</strong></p>
+    <ul>
+      <li><strong>⚠️ standards 狀態跨帳號洩漏（同 org 換帳號時）</strong>：<code>loadUserPreference</code>
+      全 codebase 唯一呼叫點是 <code>ensureStandardsPreferenceLoaded</code>，而它以
+      <code>standardsLoadedForOrgId == selectedOrg?.orgId</code> 短路。A→B 同 org（0268c150）切換時
+      quit 不清這個 cache（<code>clearStandardsState</code> 只掛在 logout / mVB takeover）→
+      <strong>B 的 user preference 從未被載入，直接繼承 A 的 standardFromId</strong>。
+      本次兩帳號都是 "others" 所以無可見傷害，但若 A 有 us-common-core 而 B 沒有，
+      B 會拿到 A 的 standards 能力（VSFT-7267 的 canUseStandards）。cache key 隱含假設
+      「process 生命週期 = user 生命週期」。</li>
+      <li><strong>⚠️ logoutAndQuit=true 永久殘留 → SignInFragment 開屏自殺迴圈</strong>：
+      A 以「不記住我」quit 時 <code>logoutAndQuit = !isRememberLogin</code> 設為 true，之後無人重置
+      （唯一寫入點就是 quitApp；獨立 APK 靠 process 重生歸 false）。
+      <code>SignInFragment.onCreateView</code> 開頭就檢查 <code>isLogOutAndQuit()</code> → true 則立即
+      <code>quitApp()</code> —— 融合版只要走到 CS 自己的登入畫面（無 MVB token 且非 guest 的路徑）
+      就會<strong>一開就自我關閉</strong>。本次 MVB-token 流程沒經過 SignInFragment 所以未發作，是顆地雷。</li>
+    </ul>
+    <p>其他觀察：<code>refreshToken.len=43</code> 在全新 process 的第一次登入前就存在 ——
+    來自 DataStore 磁碟持久化，獨立 APK 也有，非融合議題。
+    <strong>測試侷限（後經 §6.3.6 修正）</strong>：當時判讀為「兩帳號同 org」，實際上 B 屬不同 org —— 是 A 殘留的 selectedOrg 讓 B 看起來在同一 org。跨 org 污染已於 §6.3.6 實證並由 Koin 重建解決。</p>
+    <p><strong>生產化含義（已由 §6.3.4 以另一種方式解決 —— 當時想的是方案 C 顯式 reset 清單，後因清單會漂移而否決，改採 Koin 容器整鍋重建）</strong>：embedded quit 需要一個明確的「CS session reset」步驟
+    （重用/擴充 <code>clearSessionForMvbTakeover</code> + <code>clearStandardsState</code> 的既有邏輯，
+    並重置 <code>logoutAndQuit</code>）—— 這正是「以前 OS 免費送、現在要自己做」清單的延續。</p>
+
+    <h3 id="koin-rebuild">6.3.4 真機驗證（2026-08-03 傍晚）：✅ singleton 殘留的整體解 — quit 時整鍋重建 Koin 容器</h3>
+    <div class="callout new">
+      <strong>embedded quit 尾端 <code>stopKoin()</code> + 重跑 <code>ClassSwiftFusionKoin.init()</code>：
+      65 顆 CS single 全部丟棄重建（~25ms），第二 session 的登入入口 probe 全空 —— §6.3.3 的兩顆殘留 bug
+      連同「未來所有同類 bug」一次消滅，CS 端零改動。</strong>
+    </div>
+    <p>比較過的方案（詳細取捨已在對話中評估）：(A) stopKoin 整鍋重建、(B) 拆 process/session 模組分鍋重建、
+    (C) 顯式 reset 清單（復用 clearSessionForMvbTakeover，但需排除它的 DataStore 磁碟清除——process death 不動磁碟）、
+    (D) 獨立 android:process。選 A 先驗，理由：改動最少（全在 MVB 膠水層）、重建後跑的是與冷啟動
+    <strong>字面相同</strong>的 constructor + init{}，沒有第二份會漂移的 reset 清單（C 的本質缺陷）。</p>
+    <div class="callout">
+      <strong>決策記錄 —— 為什麼選 (A) stopKoin 而不是 (D) 殺 process（獨立 android:process）：</strong>
+      (D) 能讓 quit 恢復「真殺 process」、狀態問題連根消失，但代價是：①保留跨 process IPC 邊界，
+      放棄融合的 in-process 直呼潛力；②manifest 手術（CS 所有元件加 process 屬性、library manifest 需逐項覆寫）；
+      ③共用 Application 需按 process 名分流初始化；④Android 9+ 第二 process 用 WebView 必須
+      <code>setDataDirectorySuffix</code>（CS 登入走 WebView，新雷）。而 (A) 實測只要 ~25ms、
+      改動全在膠水層、CS 零改動，且四類情境真機驗證全過 —— (D) 的優勢只剩程序隔離與記憶體水位（R8），
+      降級為架構取捨與備援方案，不再是 quit/狀態問題的必要解。若 (A) 日後踩到不可解的雷，(D) 仍是安全網。
+    </div>
+    <p>A 的可行性前提（皆已確認）：MVB 不用 Koin（GlobalContext 全屬 CS）；quit 時 activity/視窗/service
+    已收畢、無存活元件持有舊實例；<code>CoroutineScopeProvider</code> 用 WeakReference + cleaner，
+    舊實例 GC 後 scope 自動取消。實作細節：Koin 重建後 fusion 覆寫（OTA / AppExitHandler）由 init 重掛；
+    <code>ClassSwiftActivityTracker.install</code> 改 idempotent；onUnbind 重入用 companion 時間戳 dedupe
+    （重入取到的是舊容器 cache 的 handler 實例，instance 欄位擋不住）。</p>
+    <p>實測（Pixel Tablet，guest 流程，PID 不變）：session 1 → End（rebuilt log、重入被 dedupe 擋下、無 crash）
+    → session 2 probe <code>accessToken.len=0 / selectedOrg=null / standardsLoadedForOrgId=null / logoutAndQuit=false</code>
+    （唯一非零 refreshToken.len=43 來自 DataStore —— 與真冷啟動一致）→ session 2 正常開新 class → 再 End 一樣乾淨。</p>
+    <p><strong>當時的待驗清單 —— 現已全數結案</strong>：R12-a ✅ Amplitude 執行緒洩漏已修
+    （carry-over，§6.3.5）、R12-b ✅ 記名帳號切換（§6.3.6）、R12-c ✅ 派題中 quit（§6.3.7）。</p>
+
+    <h3 id="r12a">6.3.5 真機驗證（2026-08-03）：R12-a 結案 — Amplitude 執行緒洩漏證實並修復（carry-over）</h3>
+    <p><strong>方法</strong>：8 輪 open→End 自動循環，量測 <code>/proc/pid/status</code> Threads 與
+    <code>dumpsys meminfo</code> TOTAL PSS，並以執行緒名稱歸因。</p>
+    <table>
+      <thead><tr><th>版本</th><th>Threads 趨勢（8 輪）</th><th>歸因</th></tr></thead>
+      <tbody>
+        <tr><td>整鍋重建（無 carry-over）</td><td><strong>111 → 162，每輪 +4~5 單調遞增 ❌</strong></td>
+        <td>32 條匿名 <code>pool-N-thread-1</code>（<code>Executors.newSingleThreadExecutor</code> 命名）——
+        Amplitude SDK 每顆實例持有 3-4 個永不關閉的 executor（core thread 不逾時、SDK 無 close API），
+        8 輪 ×4 吻合。OkHttp 僅殘 2 條（executor 會 idle timeout，自癒）；Firebase 4 條（全域 SDK，不隨重建增加）</td></tr>
+        <tr><td>Amplitude carry-over 修復後</td><td><strong>115~121 徘徊、零增長 ✅</strong>（記憶體兩版皆平，±10MB 噪音）</td>
+        <td>修法：stopKoin 前抓住舊 <code>AmplitudeManager</code>，init 後以
+        <code>loadKoinModules(module { single { carried } })</code> 覆寫 —— Amplitude 視為 process 級資源，
+        不隨容器重建（跨 session 狀態只有 userId，login/logout 都會重設）。MVB 膠水層 ~8 行，CS 零改動</td></tr>
+      </tbody>
+    </table>
+    <p><strong>功能面兩版皆乾淨</strong>：事件照送（Logged event）、零 SQLite lock、零 FATAL；
+    修復版 log 確認 <code>Amplitude carried over (ok)</code>、重建 ~24ms、重入 dedupe 正常，
+    同一 process 累計 10+ 輪循環穩定。</p>
+    <p>已知邊角（記錄備查）：carried 實例內部 lazy 的 <code>MyViewBoardConnectionStateProvider</code>
+    指向舊容器的 provider，其 <code>wasEverBound</code> sticky flag 跨重建保留 —— 融合版恆由 MVB
+    啟動，語意仍正確。生產化若走 (B) 分鍋，此邊角自然消失。</p>
+
+    <h3 id="r12b">6.3.6 真機驗證（2026-08-03）：R12-b 結案 — 記名 A→B 切換在重建版上 PASS，並回溯證實 selectedOrg 污染</h3>
+    <p>與 §6.3.3 完全相同的劇本（A 記名 session → End → MVB 登出 → 登入 B → 開 CS），唯一差異是這次跑在
+    Koin 重建版上。<strong>關鍵斷言 PASS</strong>：B 開 CS 的 <code>loginWithMvbToken:enter</code> probe
+    全空（上次同一時點是 A 的完整殘留）—— standards cache marker 為 null（B 的 preference 會真的重載）、
+    <code>logoutAndQuit=false</code>（自殺迴圈解除）。B 的 session 正常（自己的 org、班級、50 人名單）。</p>
+    <div class="callout new">
+      <strong>回溯性鐵證 —— §6.3.3 的「兩帳號同 org」解讀是錯的：</strong>
+      重建版上 B 的 <code>selectedOrg=fc224d10…</code>（B 自己的 AutoTest_Plan org、org 選單預設也不同），
+      而未重建版上 B 全程 <code>selectedOrg=0268c150…</code>（A 的 org）。同帳號、同流程、唯一差異是重建
+      —— <strong>A 殘留的 selectedOrg 當時把 B 悄悄導進了 A 的 org</strong>，是會改變實際行為
+      （org 預選、班級清單來源、user preference 載入對象）的跨帳號污染，不只是隱形欄位。
+      這把 §6.3.3 該項風險從「潛在」升級為「已實證發生過」，也再次驗證重建方案的必要性。
+    </div>
+    <p>R12 清單狀態：R12-a ✅（§6.3.5）、R12-b ✅（本節）、R12-c ✅（§6.3.7）。</p>
+
+    <h3 id="r12c">6.3.7 真機驗證（2026-08-03）：R12-c 結案 — 派題進行中 quit 的重建時序 PASS</h3>
+    <p>劇本（帳號 B，重建版）：進班 → 拍題派 True/false（<code>EventMissionStatus: quiz ONGOING</code>、
+    計時中、0/50 回覆）→ <strong>不關題直接 End class</strong> → 再進同一班 → 驗證派題功能。結果全數乾淨：</p>
+    <ul>
+      <li><strong>teardown</strong>：進行中的題目視窗 + 50 人 roster 一併被 <code>removeAllWindowsExcept</code>
+      收掉、重建正常（Amplitude carried over）、重入 dedupe 生效、零 FATAL、CS 視窗歸零、PID 不變</li>
+      <li><strong>伺服器端收尾</strong>：quit 過程中觀察到 CS 自己發出 <code>GET /lessons/{id}/unclosed_quiz</code>
+      —— End class 流程有處理懸空題目，班級清單重開後無 Ongoing 殘留標記</li>
+      <li><strong>第二 session</strong>：登入 probe 全空、重進同一班無題目還原、無「還原上次 mission」異常、
+      Question 派題選單正常開啟（mVB 派題 gate 未卡死 —— VSFT-7538 記錄過的 isMissionOngoing 顛倒問題未發生，
+      因為 Bloc 已由 quit bridge 的 disconnected 事件完整重置）</li>
+    </ul>
+    <div class="callout new">
+      <strong>R12 三項全數結案 —— 「方案 A（stopKoin 整鍋重建）+ Amplitude carry-over + quit bridge」
+      在 guest / 記名 / 帳號切換 / 派題中斷 四類情境的真機驗證全部通過。</strong>
+      quit/狀態管理已不再是融合版的阻擋性風險；剩餘的生產化議題回到 findings 原有清單
+      （R7 Firebase 歸屬、R10 依賴衝突系統性排查、R14 CI 改造、R15 manifest 屬性滲入、（B）分鍋重建的正式化）。
+    </div>
+
+    <h2 id="pending">6.4 生產化風險清單（R1–R16，含已解）</h2>
+    <p class="meta">狀態 badge 表示<strong>該項本身的處理進度</strong>（已解 / 未做 / 待決策 / 已查明 / 待 QA）。
+    <strong>所有改動一律要過 QA</strong>，所以「還沒測」不算狀態 —— <strong>「待 QA」只用於真正被阻塞的項目</strong>：
+    我方已無法自行推進、必須先拿到 QA 的實測資訊或回報才能決定下一步。
+    僅需 QA 留意、或必須寫進 release note 的事項，寫在該列內文而不佔用狀態欄。</p>
     <table>
       <thead><tr><th>#</th><th>項目</th><th>說明</th></tr></thead>
       <tbody>
-        <tr><td>R1</td><td><s>Koin 初始化</s> <span class="badge badge-ok">已解</span></td><td>用 <code>ClassSwiftFusionInitProvider</code> 補 init（P6）；MVB 本身沒用 Koin，無 GlobalContext 衝突。<strong>剩餘</strong>：CS Application 其他初始化（Timber 樹、Coil memory cache cap、Firebase manager）POC 未接，且應改為 lazy init 以免拖慢 MVB 冷啟動</td></tr>
-        <tr><td>R2</td><td>MVB 的 CS 整合路徑重接 <span class="badge badge-warn">POC 已打通，待正式重寫</span></td><td>已用 <code>kClassSwiftFusedIntoMvb</code> 旗標短路安裝／更新檢查並實機驗證 toggle 可開出融合版 CS（§6.2）。<strong>剩餘</strong>：讓它成為編譯期事實、真正移除 installer / download coordinator / updating dialog 與 VSFT-9785 的內嵌機制</td></tr>
-        <tr><td>R3</td><td>VSApiCompat 版本差</td><td>CS 編譯對 CS repo 的 aar、runtime 用 MVB 的 1.15.1。POC 未觸發相關路徑（未進實際 IFP 硬體 API），仍需比對兩份 aar</td></tr>
-        <tr><td>R4</td><td>socket.io 2.x runtime</td><td>MVB p2p 訊令的錯誤/重連 callback 在 2.x 下的實際行為（P2）。註：CS 自己的 socket 連線在 2.x 下實測正常</td></tr>
-        <tr><td>R5</td><td>flavor 隔離</td><td>POC 用 <code>implementation</code> = store/open 也帶 CS。生產要 <code>ifpImplementation</code>/<code>edlaImplementation</code>（跟 VSFT-9785 的 sourceSets 手法同精神）</td></tr>
-        <tr><td>R6</td><td>release build + proguard</td><td>CS 的 <code>proguard-rules.pro</code> 未接（wrapper 需 <code>consumerProguardFiles</code> 指向 CS 的規則檔）；release minify 未跑過</td></tr>
-        <tr><td>R7</td><td>Firebase 多專案</td><td>CS 各 flavor 有自己的 google-services.json / Firebase 專案；融合後共用 MVB 的 —— CS 的 Crashlytics / Analytics / RemoteConfig 資料會進 MVB 的 Firebase 專案，需產品面決策</td></tr>
-        <tr><td>R8</td><td>記憶體 / 程序隔離 <span class="badge badge-warn">與 §6.3 綁在一起</span></td><td>單程序水位未測。<strong>End Class 問題（§6.3）讓「CS 跑獨立 <code>:process</code>」從折衷變成首選</strong> —— 一併解掉 quitApp 語意、程序隔離與記憶體水位</td></tr>
-        <tr><td>R9</td><td>環境對應</td><td>POC 固定 stag。生產要把 CS 的 environment 對應到 MVB 的 release target（stage→stag / beta→rc / prod→prod），在 wrapper 內用 flavor 或 buildConfig 分支實作</td></tr>
-        <tr><td>R10</td><td><strong>其餘傳遞依賴衝突未系統性檢查</strong></td><td>P7（Amplitude）是「編得過、跑才炸」型，靠實跑才發現。okhttp / moshi / retrofit / coil / firebase / androidx 等兩邊共用的函式庫都可能有同型問題，需逐一比對 <code>dependencies</code> 解析結果 vs 各自編譯版本</td></tr>
-      </tbody>
+        <tr><td>R1</td><td><s>Koin 初始化</s> <span class="badge badge-ok">已解</span></td><td>用 <code>ClassSwiftFusionInitProvider</code> 補 init（P6）；MVB 本身沒用 Koin，無 GlobalContext 衝突。<strong>剩餘</strong>：CS Application 其他初始化（Timber 樹、Coil memory cache cap、Firebase manager）目前未接，且應改為 lazy init 以免拖慢 MVB 冷啟動</td></tr>
+        <tr><td>R2</td><td>MVB 的 CS 整合路徑重接 <span class="badge badge-warn">已打通，待正式重寫</span></td><td>已用 <code>kClassSwiftFusedIntoMvb</code> 旗標短路安裝／更新檢查並實機驗證 toggle 可開出融合版 CS（§6.2）。<strong>剩餘</strong>：讓它成為編譯期事實、真正移除 installer / download coordinator / updating dialog 與 VSFT-9785 的內嵌機制</td></tr>
+        <tr><td>R3</td><td>VSApiCompat 版本差</td><td>CS 編譯對 CS repo 的 aar、runtime 用 MVB 的 1.15.1。目前未觸發相關路徑（未進實際 IFP 硬體 API），仍需比對兩份 aar</td></tr>
+        <tr><td>R4</td><td>socket.io 2.x runtime <span class="badge badge-ok">機制已驗</span> <span class="badge badge-warn">待 QA 投屏迴歸</span><br/><span class="meta">2026-08-04 bytecode 比對</span></td><td>
+        <p><strong>✅ 事件語意等價（已用 bytecode 證實，非推論）</strong> —— 反編譯 socket.io-client-java 1.0.2 與 2.1.2 比對：</p>
+        <ul class="compact">
+          <li><code>Manager$11$1</code>（1.x，重連排程 runnable）在<strong>同一方法內連續 emit</strong> <code>"reconnect_attempt"</code> 與 <code>"reconnecting"</code>，參數相同（<code>Integer attempts</code>）—— 即 1.x 的 <code>reconnecting</code> 是 <code>reconnect_attempt</code> 的別名</li>
+          <li>2.x 的同一位置（<code>Manager$7$1</code>）<strong>只剩 <code>"reconnect_attempt"</code></strong>（<code>reconnecting</code> 已移除）→ 遷移選對了替代事件，觸發時機與參數不變</li>
+          <li><code>EVENT_ERROR</code> 兩版字串值皆為 <code>"error"</code>，僅常數位置由 <code>Socket</code> 移到 <code>Manager</code></li>
+          <li>監聽層從 <code>socket.on(...)</code> 改為 <code>socket.io().on(...)</code>：1.x 的 Socket 會轉發 Manager 事件，2.x 移除轉發，故必須直接掛 Manager（符合官方遷移指南）</li>
+        </ul>
+        <p><strong>影響範圍與最壞情況</strong>（讀完程式碼後下修）：</p>
+        <ul class="compact">
+          <li>功能歸屬是<strong>投屏（Cast）</strong>（<code>CastListPlatformView</code> / <code>CastInViewPlatformView</code>），與 ClassSwift 無關 —— 屬「融合改動波及的既有功能」</li>
+          <li><code>onReconnectingCallback</code> 只有一行 <code>reconnectAttempts++</code>，是計數器；唯一作用是讓 <code>onConnectErrorCallback</code> 判斷「重試滿 <code>MAX_RECONNECT_ATTEMPTS</code>(5) 才回報失敗」</li>
+          <li>最壞情況<strong>不是 crash 而是「該報錯卻不報」</strong>：若事件沒觸發 → 計數器恆 0 → 條件永不成立 → 投屏連不上時不回報失敗，UI 可能一直轉圈</li>
+        </ul>
+        <p><strong>待 QA（真正阻塞：我方驗不到真實投屏場景）</strong> —— 需要回報的具體資訊，而非只回「有/沒問題」：</p>
+        <ul class="compact">
+          <li>正常投屏可建立連線、畫面正常</li>
+          <li>投屏中途<strong>斷網</strong>：是否出現失敗提示（而非無限轉圈）、多久出現</li>
+          <li><strong>網路恢復</strong>後能否自動重連成功</li>
+          <li>指向錯誤 / 無法連線的 signaling server 時，是否在數次重試後回報失敗</li>
+        </ul>
+        <p class="meta">註：CS 自己的 socket 連線在 2.x 下已實測正常（§5 真機驗證）。原始風險編號 P2。</p></td></tr>
+        <tr><td>R5</td><td>flavor 隔離 <span class="badge badge-ok">已解（2026-08-04）</span></td><td>依賴改 <code>ifpImplementation</code>/<code>edlaImplementation</code>；融合膠水層（4 檔）移到新的 <code>src/fusion/</code> sourceSet 由 ifp/edla 共用一份，<code>ClassSwiftFusionInitProvider</code> 宣告移到 <code>src/fusion/AndroidManifest.xml</code>。
+        <br/><strong>順帶修掉一個潛在 release 事故</strong>：原本 provider 宣告在 main manifest —— store/open 出貨到 Play Store 會帶著一個指向不存在類別的 provider，Android 啟動初始化 provider 時直接 crash。
+        <br/><strong>驗收</strong>：四 flavor 編譯全過；merged manifest 比對 —— edla 有 19 個 CS 元件 + fusion provider，store 只剩 9 個「MVB 作為 CS client」的字串常數（intent action / 權限名 / package name，融合前就有）且無 provider。
+        <br/><strong>留下的耦合</strong>：<code>ClassSwiftServiceManager</code> / <code>ClassSwiftReceiver</code> 在 <code>src/main</code>（全 flavor 編）仍需 CS 的 IPC 介面，故 store/open 的 <code>aidl.srcDirs</code> 指向 CS repo 的同一份 <code>.aidl</code>（零同步成本；這兩個 flavor 不含 wrapper 所以不撞名）—— 代價見 R14</td></tr>
+        <tr><td>R6</td><td>release build + proguard <span class="badge badge-ok">已解</span></td><td>wrapper 已加 <code>consumerProguardFiles</code> 指向 CS 的 <code>proguard-rules.pro</code>，<code>edlaRelease</code> build 通過。<strong>更正</strong>：先前「mvbf release 沒開 minify」的認知有誤 —— Flutter gradle plugin 對 release 預設啟用 R8（也因此才踩到重複 AIDL 的 R8 拒收）。<strong>剩餘</strong>：release 包未上真機，keep 規則是否足夠需實跑驗證</td></tr>
+        <tr><td>R17</td><td>Amplitude 實例隔離 <span class="badge badge-ok">已解（2026-08-04）</span></td><td>
+        <p><strong>已查證的事實：</strong></p>
+        <ul class="compact">
+          <li><strong>專案歸屬不是融合問題</strong> —— CS 與 MVB <strong>融合前就共用同一把 API key、同一個 Amplitude 專案</strong>（三環境的 key 逐一比對相同；MVB 的 <code>amplitude_config.dart</code> 註解亦明載「事件統一送往 ClassSwift project」）。後台實證：<code>Classswift-Stag</code> 內含 MVB 專屬事件（<code>ClassSwift Downloaded</code>、<code>Launcher Start</code>、<code>Beta Program Joined Clicked</code>）。環境對應（stage/rc/prod）因此天然一致</li>
+          <li><strong>底層是同一個 SDK</strong> —— MVB 的 <code>amplitude_flutter 4.x</code> 內部即 <code>com.amplitude:analytics-android</code></li>
+          <li><strong>⚠️ 但兩邊都未指定 <code>instanceName</code></strong>（都用 SDK 預設）。bytecode 顯示三份 storage 路徑全由它串出：<code>amplitude-android-&lt;name&gt;</code>（event queue）、<code>amplitude-identify-intercept-&lt;name&gt;</code>、<code>amplitude-kotlin-&lt;name&gt;</code>（identity）。獨立 APK 各有 data dir 所以無妨；<strong>融合後同 process / 同 data dir → device id、user id、session id 與 event queue 全部共用</strong>，且兩邊都會呼叫 <code>setUserId</code>（CS 登入/登出四處、MVB 亦有）</li>
+        </ul>
+        <p><strong>後台實測（2026-08-03 測試時段，未隔離版本）</strong>：CS 的事件流 session 成對連續、user 正確、deviceId 一致，<strong>未觀察到錯亂</strong>；但當時 MVB 多處於未登入狀態（未呼叫 <code>setUserId</code>），競爭情境並未真正發生 —— <strong>屬「沒觀察到」而非「已反證」</strong>。</p>
+        <p><strong>解法（已實作）</strong>：與其設計競爭情境去驗，直接讓它架構上不可能發生 ——</p>
+        <ul class="compact">
+          <li>CS 端 <code>AmplitudeManager</code> 加<strong>可選</strong>參數 <code>instanceName: String? = null</code>（null = SDK 預設，<strong>獨立 APK 行為不變</strong>）</li>
+          <li>融合膠水層 <code>ClassSwiftFusionKoin</code> 覆寫 Koin 定義，傳入 <code>"classswift-fused"</code>（手法與 OTA / AppExitHandler 一致），並在 init 時驗證覆寫生效、失敗印 error</li>
+          <li><strong>只改 CS 側的理由</strong>：融合版 CS 本來就是「全新安裝」（R13 ①，data dir 不同），deviceId 本就會重生一次；MVB 端維持預設 → 歷史數據的裝置連續性完全不受影響。反之若改 MVB，所有 MVB 使用者（含非融合版）的 deviceId 都會斷裂</li>
+        </ul>
+        <p><strong>⚠️ 實作踩坑（值得記住）：<code>instanceName</code> 必須由建構子傳入，事後 set 無效</strong></p>
+        <ul class="compact">
+          <li>第一版寫成 <code>Configuration(...).apply { this.instanceName = it }</code> —— <strong>編譯過、log 顯示成功、實際完全沒生效</strong>。<code>Configuration</code> 在<strong>建構當下</strong>就依當時的 instanceName 決定 storage / identity provider，之後改 property 已來不及</li>
+          <li><strong>更該檢討的是驗證方式</strong>：當時的驗證 log 檢查的是 <code>resolvedAmplitude.instanceName == "classswift-fused"</code>（我方自己存的 property），所以印出「storage isolated」——<strong>驗到的是自己傳入的參數，不是 SDK 真正的行為</strong>。若非上機列出 storage 目錄，這個假的成功會直接進 PR</li>
+          <li>修正：改用建構子參數 <code>Configuration(..., instanceName = instanceName)</code>，並保留 <code>null</code> 分支完全不碰該參數（獨立 APK 行為 bit-for-bit 不變）</li>
+        </ul>
+        <p><strong>✅ 上機實證（2026-08-04，Pixel Tablet，edlaDebug + stag）</strong> —— 三份 storage 各自獨立出現：</p>
+        <pre>app_amplitude-kotlin-$default_instance          ← MVB identity
+app_amplitude-kotlin-classswift-fused           ← CS identity（新）
+
+shared_prefs/
+  amplitude-android-$default_instance.xml       ← MVB
+  amplitude-android-classswift-fused.xml        ← CS（新）
+  amplitude-events-$default_instance.xml        ← MVB event queue
+  amplitude-events-classswift-fused.xml         ← CS event queue（新）
+  amplitude-identify-intercept-$default_instance.xml
+  amplitude-identify-intercept-classswift-fused.xml   ← CS（新）</pre>
+        <p>CS 的事件（<code>Lesson Start</code> / <code>Session Start</code>）照常送出。
+        驗證手法備查：debug build + <code>adb shell run-as com.viewsonic.droid ls</code> / <code>ls shared_prefs/</code>
+        （release 無法 run-as）。註：<code>amplitude-*-26b3e0c…</code> 那組是舊版 SDK 以 API key 命名的 legacy storage，與本議題無關。</p>
+        <p><strong>未來方向</strong>（獨立票）：若要讓兩邊<strong>刻意共用</strong>同一份 identity（跨產品分析需求），應由 MVB 統一管理 user identity、CS 端不自行 <code>setUserId</code> —— 那是數據面決策，不在本票範圍。</p></td></tr>
+        <tr><td>R7</td><td>Firebase 多專案 <span class="badge badge-warn">待產品決策</span></td><td>CS 各 flavor 有自己的 google-services.json / Firebase 專案；融合後共用 MVB 的 ——
+        CS 的 Crashlytics / Firebase Analytics 資料會進 MVB 的 Firebase 專案，需產品面決策（數據歸屬，不影響行為）。<strong>註：Amplitude 不在此列</strong> —— 它融合前就與 MVB 共用專案，且實例已隔離，見 R17。
+        <br/><strong>RemoteConfig 子項已查證為零實質使用（2026-08-04）</strong>，依據三點：
+        ①全 CS 只定義一個 key（<code>key_download_and_update_timeout_in_seconds</code>，OTA 下載逾時），
+        其常數<strong>沒有任何程式碼讀取者</strong>（舊 OTA 流程重構殘骸）；
+        ②該 key 的主題正是融合版整條移除的下載/更新流程；
+        ③<code>FirebaseRemoteConfigManager.initialize()</code> 唯一呼叫點在 ClassSwiftApplication ——
+        融合版不執行，連 fetch 都不會發生。
+        <br/><strong>⚠️ 未來注意</strong>：CS 一旦開始真的用 RemoteConfig 控制行為，融合版會去
+        <strong>MVB 的 Firebase 專案</strong>抓值 —— key 不存在時 <strong>靜默 fallback 到
+        <code>default_remote_config.xml</code> 預設值</strong>（不會報錯、不易察覺）。屆時二選一：
+        把 CS 的 key 同步建到 MVB 專案，或用 secondary FirebaseApp（RemoteConfig 支援指定非 default app；
+        Crashlytics/Analytics 不支援，僅能綁 default）。</td></tr>
+        <tr><td>R8</td><td>記憶體 / 程序隔離 <span class="badge badge-warn">已初步量測，長時負載未測</span></td><td>單程序水位未系統性量測（8 輪 quit 循環的 TOTAL PSS 持平、無洩漏，見 §6.3.5，但未測長時間高負載）。<strong>與 §6.3 的綁定已解除</strong>：End Class 問題由 quit seam 解決後，「CS 跑獨立 <code>:process</code>」從首選降為備援 —— 純粹的架構取捨（程序隔離 vs in-process 潛力），不再是 quit 語意的必要解，詳見 §6.3.4 決策記錄</td></tr>
+        <tr><td>R9</td><td>環境對應 <span class="badge badge-ok">已解</span></td><td>CS environment 於 build 時依 MVB release target 推導（移植 <code>release_target.dart</code> 規則：stage→stag / beta→rc / production·rollback→prod），<code>-PcsEnv=</code> 可覆寫。三環境編譯通過，rc（3.11.0+30110002）與 prod（3.12.200+30122002）以真實版號 build 驗證。<strong>剩餘</strong>：rc/prod 包未上真機跑</td></tr>
+        <tr><td>R10</td><td><strong>其餘傳遞依賴衝突未系統性檢查</strong> <span class="badge badge-err">未做</span></td><td><code>edlaRelease</code>+R8 已通過 ⇒ 無編譯期/縮減期問題，但 runtime 型別衝突仍需系統性比對。P7（Amplitude）是「編得過、跑才炸」型，靠實跑才發現。okhttp / moshi / retrofit / coil / firebase / androidx 等兩邊共用的函式庫都可能有同型問題，需逐一比對 <code>dependencies</code> 解析結果 vs 各自編譯版本</td></tr>
+        <tr><td>R11</td><td>embedded quit 後的狀態殘留 <span class="badge badge-ok">已解</span></td><td>quit 時整鍋重建 Koin 容器（§6.3.4）= process death 的 singleton 等價物；帳號切換實測確認殘留歸零（§6.3.6）</td></tr>
+        <tr><td>R12</td><td>重建方案的三項驗證 <span class="badge badge-ok">已結案</span></td><td>R12-a Amplitude 執行緒洩漏（已修，carry-over，§6.3.5）、R12-b 記名帳號切換（§6.3.6）、R12-c 派題中 quit（§6.3.7）—— 四類情境真機全過</td></tr>
+        <tr><td>R13</td><td><strong>共享儲存效應</strong> <span class="badge badge-ok">已查明</span><br/><span class="meta">2026-08-04 盤查 · ① 須進 release note</span></td><td>
+        <p><strong>✅ 檔名無碰撞</strong>（互相覆寫不會發生）：</p>
+        <ul class="compact">
+          <li>CS：全走 proto DataStore（8 個 <code>*_datastore.pb</code> 專屬檔名，位於 <code>files/datastore/</code>），完全沒用 <code>getSharedPreferences</code></li>
+          <li>MVB：Flutter 的 <code>FlutterSharedPreferences</code>（<code>shared_prefs/</code>）</li>
+        </ul>
+        <p><strong>但共用同一個 data dir 帶來三個效應：</strong></p>
+        <ul class="compact">
+          <li><strong>① 無資料遷移</strong> —— 獨立 CS 的既有資料（記住我 token 等）不會帶入，融合版首啟等於 CS 全新安裝、<strong>使用者需重登一次</strong>（release note / QA 須知）</li>
+          <li><strong>② 生命週期綁定</strong> —— 清除 MVB 資料 / 解除安裝 = CS 狀態一起消失（以前是獨立的）</li>
+          <li><strong>③ WebView cookie jar 共享</strong> <span class="badge badge-warn">機制存在，目前實作無影響</span>
+            <p><strong>雙向查證（2026-08-04）：</strong></p>
+            <table>
+              <thead><tr><th>方向</th><th>結論</th></tr></thead>
+              <tbody>
+                <tr><td>CS 登出 → 影響 MVB</td><td><strong>❌ 不成立</strong>（原推測有誤）—— CS 全 codebase <strong>零 <code>CookieManager</code> / <code>WebStorage</code> / <code>clearCache</code> 呼叫</strong>；登出走 <code>openCustomTabForLogout()</code>：OIDC 標準登出（<code>session/end</code> + <code>id_token_hint</code>）且用 <strong>Custom Tabs（外部 Chrome）</strong>，cookie 在 Chrome 的 jar，與 app 內 WebView 完全分離</td></tr>
+                <tr><td><strong>MVB 清 cookie → 影響 CS</strong></td><td><strong>⚠️ 機制存在但目前無影響</strong> —— MVB 有兩處 <code>deleteAllCookies()</code>（清整個 app 的 WebView cookie jar、全網域）：<code>browser_dialog.dart</code> 與 <code>immersive_reader_dialog.dart</code> 的 <code>dispose()</code>，即<strong>使用者關閉內建瀏覽器 / Immersive Reader 時</strong>。融合後 CS 與 MVB 共用同一個 jar，但 CS 的 WebView 不依賴 cookie（見下）</td></tr>
+              </tbody>
+            </table>
+            <p><strong>CS 的 WebView 清單與認證方式</strong>（= 為什麼 cookie 被清不影響它）：</p>
+            <ul class="compact">
+              <li><strong>Leaderboard</strong>（<code>CLASS_SWIFT_HUB_URL/leaderboard/{classroomId}</code>）與 <strong>Records</strong>（<code>/signin?orgId=&amp;lessonId=</code>）—— 用 <strong>JS bridge</strong>（<code>addJavascriptInterface(webInterface, "asyncBridge")</code>），網頁透過 <code>getAccessToken()</code> <strong>現場向 app 索取</strong> token（token 在 app 記憶體，非 cookie）</li>
+              <li><strong>Spinner</strong>（<code>SPINNER_URL</code>）—— 純工具頁，無認證</li>
+              <li><strong>FillUserInfo</strong>（<code>USER_INFO_URL/l/927653/…</code>）—— marketing 表單，參數帶在 query string，無認證</li>
+              <li><strong>Katex</strong> —— <code>loadDataWithBaseURL</code> 載入本地 HTML，無網路</li>
+            </ul>
+            <p><strong>⚠️ 未來注意</strong>：這是「目前實作恰好不受影響」而非「架構上安全」。CS 日後若新增<strong>依賴 cookie / session 的 WebView 頁面</strong>，就會踩到「使用者關掉 MVB 瀏覽器 → CS 頁面掉登入」這個坑（且症狀與 CS 自身邏輯無關，極難追）。屆時對策：CS 的 WebView 改用獨立 profile，或請 MVB 改為<strong>只清自己網域</strong>的 cookie（<code>deleteCookies(url:)</code>）而非 <code>deleteAllCookies()</code>。</p>
+          </li>
+        </ul></td></tr>
+        <tr><td>R16</td><td><code>ClassSwiftInstaller</code> 的殘餘消費者 <span class="badge badge-warn">R2 重寫時處理</span></td><td>
+        <p>融合後 CS 不需要安裝，但 <code>ClassSwiftInstaller.install()</code> <strong>還有一個非 CS 的消費者</strong>：<code>beta_dialog_bloc</code> 用它裝 <strong>MVB 自己的 Beta APK</strong>（<code>silentInstall: true</code>，非 Owner 會失敗、退回系統安裝畫面）。</p>
+        <p><strong>影響：</strong></p>
+        <ul class="compact">
+          <li>移除 CS 安裝機制時<strong>不能整個類別刪掉</strong> —— 安裝能力要留給 beta 流程（或抽成通用 <code>ApkInstaller</code>）</li>
+          <li>類別名稱屆時會誤導（叫 <code>ClassSwiftInstaller</code> 卻只服務 MVB 自己）</li>
+        </ul>
+        <p><strong>相關</strong>（2026-08-04 口頭）：MVB 自身更新的安裝已定案由 Manager 處理 → 全 app 的 non-silent install 風險<strong>收斂到 Beta Program 這一處</strong>，屬可接受限制。</p></td></tr>
+        <tr><td>R15</td><td>manifest 屬性滲入（原 P4）<span class="badge badge-err">未做</span></td><td>CS-only 的 <code>&lt;application&gt;</code> 屬性（theme=Theme.ClassSwift、allowBackup=false、dataExtractionRules / fullBackupContent、supportsRtl）會靜默進入 merged manifest —— <code>tools:replace</code> 只解「兩邊都有且衝突」的屬性。生產化需在 MVB manifest 明示自己的值</td></tr>
+        <tr><td>R14</td><td><strong>CI 改造清單</strong> <span class="badge badge-err">未做</span><br/><span class="meta">上線前必辦</span></td><td>
+        <p><strong>現況會直接失敗</strong>：<code>settings.gradle</code> 寫死 <code>../../ragdoll-cat</code> 同層路徑，CI runner 無此 checkout ——
+        <strong>所有 Android workflow（beta / production / daily-build / rollback / release-s3 / release-store / neo-*）在融合分支上編不過</strong>。</p>
+        <p><strong>待辦：</strong></p>
+        <ul class="compact">
+          <li><strong>① checkout ragdoll-cat</strong>（private repo → PAT / deploy key，承接 #208 原 GH_PAT 需求、權限改「讀 repo」）。
+          <strong>⚠️ R5 之後連 store / open 也需要</strong> —— 它們雖不含 CS 程式碼，但 <code>src/main</code> 的 ClassSwiftServiceManager 仍需 CS 的 <code>.aidl</code> 生成 IPC 介面，
+          故 checkout 是<strong>全 flavor 的前提</strong>（若要讓 store/open 完全脫離 CS repo，需把 aidl 複製回 mvbf 並承擔雙份定義的同步成本）</li>
+          <li><strong>② CS 版本釘選機制</strong> —— 建議 git submodule，見 §6.5</li>
+          <li><strong>③ <s>flavor 隔離</s></strong> ✅ 已完成（R5，2026-08-04）；CI 可加驗「store/open APK 不含 CS」</li>
+          <li><strong>④ 退役 #208 機制</strong> —— <code>embed-classswift-apk</code> action 與 <code>classswift-bump.yml</code>（或改造成 source-pin bump）</li>
+          <li><strong>⑤ 跨 repo 保護</strong> —— mvbf PR CI 加 fused compile check，讓 CS 端改動弄壞融合編譯時提早發現（如誤刪 <code>onExitHandled</code> seam）</li>
+        </ul></td></tr>
+        </tbody>
     </table>
+
+    <h2 id="repo-strategy">6.5 Repo 策略建議（2026-08-04）：git submodule，暫不併 repo</h2>
+    <div class="callout">
+      <strong>建議：ragdoll-cat 以 git submodule 引入 mvbf，不合併 repo。</strong>
+      <ul class="compact">
+        <li><strong>不併 repo 的理由</strong>：前提問題 Q11（CS 是否只有 MVB 一個消費者）未答；
+        併 repo = 兩團隊 CI / review / release train 綁死（Conway's law）+ git 歷史遷移 ——
+        組織成本遠大於技術收益，而 submodule 就能拿到同樣的技術好處</li>
+        <li><strong>submodule 的優點</strong>：pin 精確 commit（build 可重現；rollback 連 CS 版本一起回滾）、
+        CI checkout 內建（<code>submodules: true</code> + PAT）、兩 repo 繼續獨立開發、
+        「升級 CS」在 mvbf PR 裡是一個可 review 的 pointer diff —— 等於用 git 原生機制實現
+        #208 的 <code>classswift_pin.json</code></li>
+        <li><strong>已知缺點與緩解</strong>：submodule DX（本地忘記 <code>git submodule update</code>、
+        pointer 忘了 bump）—— 可把 classswift-bump bot 改造成「submodule bump PR」</li>
+        <li><strong>建議路徑</strong>：開發期維持現在的同層 checkout（彈性好）；
+        <strong>上 CI 前轉 submodule</strong>（settings.gradle 的 <code>../../ragdoll-cat</code>
+        改指 repo 內 submodule 路徑，一行事）</li>
+      </ul>
+    </div>
 
     <h2 id="conclusion">7. 對可行性評估的更新</h2>
     <ul>
-      <li><strong>「技術難度」從「大工程但可行」下修為「中等」</strong>：goal.html §4 原本擔心的 manifest 合併、資源衝突、Application 衝突、codegen 鏈（KSP/protobuf/safeargs）全部在半天內解掉，且零改動 CS repo。wrapper + sourceSets 手法甚至讓兩個 repo 可以<strong>繼續各自獨立開發</strong>——融合版只是多一個消費者</li>
-      <li><strong>真正的工程主體在 R2</strong>（已由真機實證）：把 MVB 的 CS 整合層（bind / 啟動 / 版本檢查 / 安裝機制）改成 in-process。這是行為改寫，不是打包問題</li>
+      <li><strong>「技術難度」從「大工程但可行」下修為「中等」</strong>：goal.html §4 原本擔心的 manifest 合併、資源衝突、Application 衝突、codegen 鏈（KSP/protobuf/safeargs）全部在半天內解掉；CS repo 僅需 4 檔 quit seam（獨立 APK 行為不變，§6.3.1）。wrapper + sourceSets 手法讓兩個 repo 可以<strong>繼續各自獨立開發</strong>——融合版只是多一個消費者</li>
+      <li><strong>真正的工程主體在 R2</strong>（已由真機實證）：把 MVB 的 CS 整合層（bind / 啟動 / 版本檢查 / 安裝機制）改成 in-process。這是行為改寫，不是打包問題。<br/><strong>2026-08-04 更新</strong>：quit/狀態管理、環境對應（R9）、proguard（R6）均已完成；剩餘主體為 R2 正式重寫、R10 依賴排查、R14 CI 改造（R5 flavor 隔離已於 2026-08-04 完成）</li>
       <li><strong>最大的隱性風險是傳遞依賴衝突（R10）</strong>：Amplitude 那條編譯期毫無徵兆、一跑就 FATAL。兩個成熟 app 的依賴圖合併，這類問題需要系統性排查而非逐一踩雷</li>
-      <li><strong>組織面問題不變</strong>（goal.html §4）：release train 綁定、Q11（CS 是否有其他消費者）、R7（Firebase 資料歸屬）仍是主要待決事項</li>
-      <li>重現方式：mvbf 工作目錄目前就是 POC 狀態（未 commit）；ragdoll-cat 在 develop <code>0612878d</code>，需與 mvbf repo 同層目錄（或 <code>-PclassswiftRepoPath=</code> 指定）</li>
+      <li><strong>組織面</strong>（goal.html §4）：<strong>Q11 已初步回答（2026-08-04，口頭：CS 只有 mvbf 一個消費者，Finch 當消費者的需求已不存在）</strong> —— 融合最大的組織面阻礙解除，惟尚待書面確認。剩餘：release train 綁定、repo 策略（§6.5）、R7（Firebase 資料歸屬）。<br/><strong>新增</strong>：ragdoll-cat 需接受 quit seam（companion 分支已 push、PR 未開），兩 repo 的合併時序需協調；repo 策略建議見 §6.5</li>
+      <li>重現方式：checkout mvbf <code>Jay/VSFT-9785-classswift-fusion</code>（PR #210）+ ragdoll-cat
+      <code>jay/feature/VSFT-9785-app-exit-seam</code>（PR 未開），兩 repo 需同層目錄
+      （或 <code>-PclassswiftRepoPath=</code> 指定）</li>
     </ul>
 
   </main>

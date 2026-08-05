@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8" />
-<title>ClassSwift 內嵌 APK — 交接總覽</title>
+<title>ClassSwift 內嵌 APK（PR #208）— 交接總覽</title>
 <link rel="stylesheet" href="assets/style.css" />
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
@@ -11,6 +11,7 @@
   <nav class="toc" aria-label="目錄">
     <h2>目錄</h2>
     <ul>
+      <li><a href="findings.html"><strong>⚠️ 當前方向：融合 → findings</strong></a></li>
       <li><a href="#sources">1. 原始文件</a></li>
       <li><a href="#background">2. 背景與目標</a></li>
       <li><a href="#arch">3. 架構</a>
@@ -20,41 +21,52 @@
           <li><a href="#flavor-map" class="sub">3.3 Release target 對應</a></li>
         </ul>
       </li>
-      <li><a href="#decisions">4. 決議 D1–D9</a></li>
-      <li><a href="#review">5. Review 修正摘要</a></li>
-      <li><a href="#handover">6. 交接待辦</a></li>
-      <li><a href="#verified">7. 驗證狀態</a></li>
-      <li><a href="#commits">8. PR 結構</a></li>
+      <li><a href="#decisions">4. 決議 D1–D9 (#208)</a></li>
+      <li><a href="#review">5. Review 修正摘要 (#208)</a></li>
+      <li><a href="#handover">6. 交接待辦 (#208)</a></li>
+      <li><a href="#verified">7. 驗證狀態 (#208)</a></li>
+      <li><a href="#commits">8. PR #208 結構</a></li>
     </ul>
   </nav>
 
   <main>
-    <h1>ClassSwift 內嵌 APK 取代 OTA 下載</h1>
+    <h1>ClassSwift 內嵌 APK 取代 OTA 下載 <span class="badge badge-warn">PR #208 方案 · 已被融合方向取代，保留為歷史／備案</span></h1>
     <div class="meta">
       VSFT-9785 [ClassSwift] MVB 內嵌 ClassSwift APK，停止從 OTA server 下載以縮短啟動時間 &middot;
-      交接記錄於 2026-07-31 &middot;
+      交接記錄於 2026-07-31 &middot; 最後更新 2026-08-04（加註融合方向狀態）&middot;
       對應 feature 資料夾 <code>docs/repositories/Viewsonic-EDU/edu-droid-flutter/features/classswift-embedded-apk/</code>
     </div>
     <div class="doc-nav">
       <a href="overview.html" class="active">📘 總覽 (overview)</a>
       <a href="goal.html">🎯 北極星目標與差距</a>
-      <a href="investigation.md">🔍 接手調查清單</a>
+      <a href="findings.html">🛠️ 融合 findings（<strong>當前方向</strong>）</a>
+      <a href="investigation.html">🔍 接手調查清單</a>
       <a href="repo-docs/classswift-embedded-apk.md">📄 設計文件（clone）</a>
       <a href="repo-docs/classswift-embedded-apk-review.md">🧾 決議與風險分析（clone）</a>
       <a href="jira/VSFT-9785.md">🎫 Jira clone</a>
     </div>
 
-    <div class="callout warn">
-      <strong>🚦 狀態（2026-07-31）：PR #208 OPEN、票 KICK-OFF。接手 Stephen Yang 的進度。</strong>
-      合併前必辦：GH_PAT <code>DRY_RUN</code> 驗證、Amplitude 事件定義、與 #205 的合併順序（見 §6）。
-      實作與風險分析已相當完整，設計文件本體在 PR branch 的 <code>docs/</code> 內（本資料夾有 clone）。
+    <div class="callout new">
+      <strong>🚦 狀態（2026-08-04）：方向已轉為「ClassSwift 融合進 MVB 成單一 APK」。</strong>
+      實作完成並通過真機驗證，<strong>edu-droid-flutter <a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/210">PR #210</a></strong>
+      （<code>Jay/VSFT-9785-classswift-fusion</code>）已開；ragdoll-cat companion 分支
+      <code>jay/feature/VSFT-9785-app-exit-seam</code> 已 push。
+      <strong>當前方向的完整記錄見 <a href="findings.html">findings.html</a>。</strong>
+      <br/><br/>
+      <strong>本頁記錄的是 Stephen 的 PR #208（內嵌 APK 取代 OTA 下載）</strong>，仍為 OPEN，
+      保留作為歷史脈絡與備案 —— 融合方向若採用，#208 的整套內嵌機制
+      （embed action / bump workflow / InstallCoordinator / 內嵌 assets）不再需要。
+      原「合併前必辦」三項（GH_PAT <code>DRY_RUN</code>、Amplitude 事件定義、與 #205 的合併順序）
+      <strong>皆已失效或完成</strong>（#205 已合併進 master）。以下 §3–§8 均為 #208 方案的內容。
     </div>
     <div class="callout">
       <strong>🎯 北極星目標（Jay，手段開放）：</strong>老師想用 Quiz Tool 時就能馬上用 —— 不經歷下載 / 更新 / 檢查 / 安裝、
       不讓使用者做「要不要安裝」的抉擇。
       <strong>決策更新（2026-07-31）</strong>：原前提「CS 一定要最新版」已移除（不要求最新版為永久決策；
       「無最小版本限制」為暫時現狀），<strong>版本相容由後端負責</strong> —— 原本最大的新鮮度差距因此解除。
-      剩餘差距（使用者抉擇殘留、region gate、競態窗口）與完整對照見 <a href="goal.html">goal.html</a>。
+      #208 方案下的剩餘差距（使用者抉擇殘留、region gate、競態窗口）與完整對照見 <a href="goal.html">goal.html</a>；
+      <strong>融合方向下這些差距多已消解</strong>（無安裝流程 → 無使用者抉擇、無競態窗口；region gate 僅影響入口顯示），
+      見 <a href="findings.html">findings.html</a>。
     </div>
 
     <h2 id="sources">1. 原始文件</h2>
@@ -64,13 +76,13 @@
         <tr>
           <td><span class="badge badge-mvb">Jira</span></td>
           <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-9785">VSFT-9785</a> MVB 內嵌 ClassSwift APK</td>
-          <td>KICK-OFF · Assignee: Stephen Yang</td>
+          <td>KICK-OFF · Assignee: Stephen Yang<br/><span class="meta">（快照時狀態；工作已轉由融合方向 PR #210 承接）</span></td>
           <td><a href="jira/VSFT-9785.md">jira/VSFT-9785.md</a>（v1, 2026-07-31）</td>
         </tr>
         <tr>
           <td><span class="badge badge-mvb">PR</span></td>
           <td><a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/208">edu-droid-flutter#208</a><br/><code>stephen/VSFT-9785-classswift-embedded-apk</code></td>
-          <td>OPEN · base <code>master</code> · 7 commits</td>
+          <td>OPEN（<strong>融合方向下不再需要</strong>，保留為備案）· 7 commits</td>
           <td>—</td>
         </tr>
         <tr>
@@ -86,30 +98,43 @@
           <td><a href="repo-docs/classswift-embedded-apk-review.md">repo-docs/…review.md</a>（<code>1846950</code>）</td>
         </tr>
         <tr>
+          <td><span class="badge badge-mvb">PR</span></td>
+          <td><a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/210">edu-droid-flutter#210</a><br/><code>Jay/VSFT-9785-classswift-fusion</code>（<strong>當前方向：融合單一 APK</strong>）</td>
+          <td>OPEN · base <code>master</code></td>
+          <td><a href="findings.html">findings.html</a></td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-cs">分支</span></td>
+          <td>ragdoll-cat <code>jay/feature/VSFT-9785-app-exit-seam</code>（quit seam，融合 companion）</td>
+          <td>已 push · PR 未開</td>
+          <td><a href="findings.html">findings.html</a> §6.3.1</td>
+        </tr>
+        <tr>
           <td><span class="badge badge-cs">PR</span></td>
           <td><a href="https://github.com/Viewsonic-EDU/ragdoll-cat/pull/1089">ragdoll-cat#1089</a> 移除 MDM 派送（D6）</td>
-          <td>建議 #208 上線後再合</td>
+          <td>建議 #208 上線後再合 —— <strong>融合方向下不適用</strong>（需重新評估 MDM 策略）</td>
           <td>—</td>
         </tr>
       </tbody>
     </table>
-    <div class="callout">
-      <strong>衝突注意：</strong><a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/205">#205</a>（<code>Jay/VSFT-9597-cs-token-redelivery</code>）同樣動到 ClassSwift 區域，合併順序需留意。
+    <div class="callout ok">
+      <strong>✅ 已解除（2026-08-04）：</strong><a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/205">#205</a>（VSFT-9597）已合併進 master，合併順序議題不再存在（融合分支即基於其上開出）。
     </div>
 
     <h2 id="background">2. 背景與目標</h2>
-    <p><strong>現況：</strong>MVB 啟動後從 OTA server 下載 ClassSwift apk：讀 <code>version.json</code> → 下載約 15 MB → 安裝。
+    <p><strong>融合／內嵌之前的行為（master 現況）：</strong>MVB 啟動後從 OTA server 下載 ClassSwift apk：讀 <code>version.json</code> → 下載約 15 MB → 安裝。
     第一次開機、網路慢或斷網時 ClassSwift 遲遲裝不起來，使用者點 Quiz Tool 就得等下載完成。</p>
-    <p><strong>目標：</strong>ClassSwift apk 由 CI 在 build 時內嵌進 MVB assets。MVB 裝好的當下就帶著對應版本的
-    ClassSwift，啟動後比對版號、背景靜默安裝，<strong>全程不需網路</strong>。</p>
+    <p><strong>#208 的目標：</strong>ClassSwift apk 由 CI 在 build 時內嵌進 MVB assets。MVB 裝好的當下就帶著對應版本的
+    ClassSwift，啟動後比對版號、背景靜默安裝，<strong>全程不需網路</strong>。<br/><strong>融合方向已更進一步</strong>：CS 以 library 形式編進 MVB，同一 APK、同一 process，連「安裝」這一步都消失（見 <a href="findings.html">findings.html</a>）。</p>
     <div class="callout warn">
       <strong>但注意 E9：</strong>完全離線的教室（production、無 region 快取）時，<strong>region gate 拿不到 toggle 就永遠不開</strong>，
-      CS 仍然裝不起來。原本 OTA 版也一樣，不算回歸，但「離線可用」這個賣點實際上被 region gate 擋住。
+      CS 仍然裝不起來。原本 OTA 版也一樣，不算回歸，但「離線可用」這個賣點實際上被 region gate 擋住。<br/><strong>融合方向下不適用</strong>：CS 隨 MVB 一起安裝，region gate 只影響 toggle 是否顯示、不再阻擋可用性。
     </div>
 
     <h2 id="arch">3. 架構</h2>
 
-    <h3 id="build-flow">3.1 Build 時（CI）</h3>
+    <h3 id="build-flow">3.1 Build 時（CI）— #208 方案</h3>
+    <div class="callout warn"><strong>融合方向下不再需要</strong> —— CS 改為 Gradle 子模組隨 MVB 一起編，無 embed action、無 bump workflow、無內嵌 assets。</div>
     <div class="diagram">
       <pre class="mermaid">
 flowchart LR
@@ -123,7 +148,8 @@ flowchart LR
       <div class="diagram-caption">CI embed 流程 — 接入 stage / beta / production / rollback / daily-build 五個 workflow；<code>classswift-bump.yml</code> 每日檢查新 release 並更新 pin</div>
     </div>
 
-    <h3 id="runtime-flow">3.2 執行期</h3>
+    <h3 id="runtime-flow">3.2 執行期 — #208 方案</h3>
+    <div class="callout warn"><strong>融合方向下整條流程被移除</strong> —— 對照見 <a href="findings.html">findings.html</a> §6.2。</div>
     <div class="diagram">
       <pre class="mermaid">
 flowchart TB
@@ -143,7 +169,8 @@ flowchart TB
       <div class="diagram-caption">執行期安裝流程 — 取代原 <code>ClassSwiftDownloadCoordinator</code> 整套下載機制（FileDownloader、connectivity 監聽、斷網重試皆移除）</div>
     </div>
 
-    <h3 id="flavor-map">3.3 Release target 對應</h3>
+    <h3 id="flavor-map">3.3 Release target 對應 — #208 方案</h3>
+    <div class="callout warn"><strong>融合方向下不適用</strong> —— CS 沒有獨立 package name（= MVB 自己）；環境對應改為 build 時依 release target 推導 CS environment，見 <a href="findings.html">findings.html</a> R9。</div>
     <p><code>ReleaseTarget</code> 執行期由版號推導（build number 奇數 = stage、偶數且 minor 奇數 = beta、其餘 production / rollback），CI 埋入的 apk 必須一致（B9 守衛：不符即 <code>Failed(packageMismatch 38)</code>）：</p>
     <table>
       <thead><tr><th>MVB release target</th><th>ClassSwift flavor</th><th>package name</th></tr></thead>
@@ -155,7 +182,8 @@ flowchart TB
     </table>
     <p class="meta"><code>dev</code>（<code>…service.dev</code>）沒有對應的 ragdoll-cat release flavor，不在內嵌範圍。本地開發用 <code>make fetch-classswift</code>；沒跑過的本地 build 回報 <code>Unavailable</code>、跳過安裝，不會 crash。</p>
 
-    <h2 id="decisions">4. 決議 D1–D9</h2>
+    <h2 id="decisions">4. 決議 D1–D9 <span class="badge badge-warn">#208 脈絡</span></h2>
+    <div class="callout warn"><strong>融合方向下的狀態</strong>：D5 仍成立；D1 精神被繼承（不留 OTA fallback，見 findings §6.1）；<strong>D2 / D3 / D4 / D6 / D7 / D8 不適用</strong>（無安裝流程、無 pin、無 bump workflow）；D9 體積模型改變需重新量測。</div>
     <table>
       <thead><tr><th>#</th><th>議題</th><th>決議</th><th>理由</th></tr></thead>
       <tbody>
@@ -171,7 +199,8 @@ flowchart TB
       </tbody>
     </table>
 
-    <h2 id="review">5. Review 修正摘要</h2>
+    <h2 id="review">5. Review 修正摘要 <span class="badge badge-warn">#208 脈絡</span></h2>
+    <div class="callout warn">以下 bug 全屬 #208 的內嵌安裝機制；<strong>融合方向下相關程式路徑不存在</strong>，保留作為「若回頭走內嵌方案」的檢查清單。</div>
     <p>票面 comment 列 B1–B7，PR 內 review 文件為完整版 <strong>B1–B17</strong>（另有使用者流程 F1–F10、邊界 E1–E20、競態 R1–R13），全文見
     <a href="repo-docs/classswift-embedded-apk-review.md">repo-docs clone</a>。接手時特別值得知道的幾條：</p>
     <table>
@@ -191,7 +220,8 @@ flowchart TB
       <code>startSilentInstallApk</code> 卡住系統 90 秒；代價是 owner 的 IFP52_2 拿不到「開機就裝好」（F5）。
     </div>
 
-    <h2 id="handover">6. 交接待辦</h2>
+    <h2 id="handover">6. 交接待辦 <span class="badge badge-warn">#208 脈絡</span></h2>
+    <div class="callout new"><strong>當前方向（融合）的待辦見 <a href="findings.html">findings.html</a></strong>（R5 flavor 隔離、R7 Firebase 歸屬、R10 依賴排查、R14 CI 改造、Q11 消費者確認）。以下四項為 #208 服務，<strong>#3 已完成、其餘融合方向下不需要</strong>。</div>
     <div class="callout new">
       <strong>⚠️ 合併前必辦 — GH_PAT 權限驗證：</strong>用 <code>ClassSwift Version Bump</code> workflow 的
       <code>DRY_RUN: true</code> 手動跑一次，確認 <code>GH_PAT</code> 讀得到 ragdoll-cat releases。
@@ -207,9 +237,10 @@ flowchart TB
         <tr><td>4</td><td>合併 <a href="https://github.com/Viewsonic-EDU/ragdoll-cat/pull/1089">ragdoll-cat#1089</a>（D6：移除 MDM 派送）</td><td>#208 上線後</td></tr>
       </tbody>
     </table>
-    <p>完整清單與研究向問題（Q1–Q4：release target 推導守衛、E9 離線 gate、E4 rollback 相容性、IFP52_2 機型清單）見 <a href="investigation.md">investigation.md</a>。</p>
+    <p>完整清單與研究向問題（Q1–Q4：release target 推導守衛、E9 離線 gate、E4 rollback 相容性、IFP52_2 機型清單）見 <a href="investigation.html">investigation.html</a>。</p>
 
-    <h2 id="verified">7. 驗證狀態（Stephen 已完成）</h2>
+    <h2 id="verified">7. 驗證狀態 — PR #208（Stephen 已完成）</h2>
+    <div class="callout">融合方向（PR #210）的驗證記錄見 <a href="findings.html">findings.html</a> §5 / §6.3.2–6.3.7。以下針對 #208 的內嵌 APK 機制，融合方向下不再適用。</div>
     <ul class="compact">
       <li>全 repo 2789 個測試通過（ClassSwift 相關 76 個）；<code>flutter analyze</code> 改動範圍內無 warning</li>
       <li>實際 Gradle build 驗證：<code>ifp</code> / <code>edla</code> 含 15 MB asset，<code>store</code> / <code>open</code> 不含（E6）</li>
@@ -218,7 +249,7 @@ flowchart TB
       <li>CI 下載 + sha256 驗證流程實跑通過；所有 workflow YAML 與 shell 語法檢查通過</li>
     </ul>
 
-    <h2 id="commits">8. PR 結構（7 個 commit，依相依順序、各自可獨立編譯）</h2>
+    <h2 id="commits">8. PR #208 結構（7 個 commit，依相依順序、各自可獨立編譯）</h2>
     <table>
       <thead><tr><th>#</th><th>內容</th></tr></thead>
       <tbody>

@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8" />
-<title>ClassSwift 內嵌 APK — 北極星目標與現況差距</title>
+<title>ClassSwift — 北極星目標與現況差距（內嵌 APK / 融合）</title>
 <link rel="stylesheet" href="assets/style.css" />
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
@@ -12,16 +12,16 @@
     <h2>目錄</h2>
     <ul>
       <li><a href="#goal">1. 目標</a></li>
-      <li><a href="#compare">2. 目標 vs PR #208 現況</a></li>
+      <li><a href="#compare">2. 目標 vs 現況（#208 / #210）</a></li>
       <li><a href="#gaps">3. 主要差距</a>
         <ul>
           <li><a href="#gap1" class="sub">Gap 1 新鮮度耦合 MVB</a></li>
-          <li><a href="#gap2" class="sub">Gap 2 使用者抉擇殘留</a></li>
+          <li><a href="#gap2" class="sub">Gap 2 使用者抉擇殘留（融合後消失）</a></li>
           <li><a href="#gap3" class="sub">Gap 3 Region gate</a></li>
-          <li><a href="#gap4" class="sub">Gap 4 競態窗口</a></li>
+          <li><a href="#gap4" class="sub">Gap 4 競態窗口（融合後消失）</a></li>
         </ul>
       </li>
-      <li><a href="#ideas">4. 長期選項發想</a></li>
+      <li><a href="#ideas">4. 融合方案（已實作 · PR #210）</a></li>
       <li><a href="#next">5. 對後續研究的意義</a></li>
     </ul>
   </nav>
@@ -29,18 +29,29 @@
   <main>
     <h1>北極星目標與現況差距</h1>
     <div class="meta">
-      Jay 定調於 2026-07-31 &middot; 手段開放 —— 不一定是 Stephen 在 PR #208 採用的做法，也不急著現在定案 &middot;
-      本文記錄目標本身，以及「目標 vs PR #208 現況」的差距，供後續研究時對照
+      Jay 定調於 2026-07-31 &middot; <strong>2026-08-04 更新：手段已收斂到「融合（單一 APK）」並開出 PR #210</strong> &middot; 本文保留 PR #208（內嵌 APK）時期的差距分析作為對照基線 &middot;
+      本文記錄目標本身，以及各方案與目標的差距對照
     </div>
     <div class="doc-nav">
       <a href="overview.html">📘 總覽 (overview)</a>
       <a href="goal.html" class="active">🎯 北極星目標與差距</a>
-      <a href="investigation.md">🔍 接手調查清單</a>
+      <a href="findings.html">🛠️ 融合 findings（實測記錄）</a>
+      <a href="investigation.html">🔍 接手調查清單</a>
       <a href="repo-docs/classswift-embedded-apk.md">📄 設計文件（clone）</a>
       <a href="repo-docs/classswift-embedded-apk-review.md">🧾 決議與風險分析（clone）</a>
       <a href="jira/VSFT-9785.md">🎫 Jira clone</a>
     </div>
 
+    <div class="callout new">
+      <strong>📣 方向更新（2026-08-04）：§4 的「融合進 MVBF」已從發想變成實作。</strong>
+      分支 <code>Jay/VSFT-9785-classswift-fusion</code>（mvbf）+
+      <code>jay/feature/VSFT-9785-app-exit-seam</code>（ragdoll-cat），
+      <a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/210">PR #210</a> 已開。
+      融合後 <strong>Gap 2（使用者抉擇）與 Gap 4（競態窗口）直接消失</strong>（沒有安裝流程），
+      <strong>Gap 3 性質改變</strong>（從「裝不起來」變成「region gate 不開就看不到 toggle」）。
+      完整實測記錄見 <a href="findings.html">findings.html</a> §6.3.1–6.3.7。
+      <br/>以下對 PR #208 的差距分析改讀為「過渡期基線」，各節已標註融合方向下的判定。
+    </div>
     <div class="callout ok">
       <strong>📣 決策更新（2026-07-31）：「一定要最新版」前提已移除。</strong>
       上層拍板：<strong>版本相容由後端負責處理</strong>。拆開來看兩件事的性質不同：
@@ -60,29 +71,32 @@
         <span class="badge badge-na">已移除 2026-07-31</span> 不要求最新版（永久）；最小版本限制目前沒有（暫時現狀，未來可能設計）；相容性由後端處理</li>
     </ol>
 
-    <h2 id="compare">2. 目標 vs PR #208 現況對照</h2>
+    <h2 id="compare">2. 目標 vs 現況對照（PR #208 內嵌 / PR #210 融合）</h2>
+    <p class="meta">下表「現況」欄為 PR #208（內嵌 APK）方案；融合方向（PR #210）的判定見每列末的粗體註記。<br/>
+    編號對照（出自 <a href="repo-docs/classswift-embedded-apk-review.md">決議與風險分析</a>）：
+    <strong>D</strong>=決議、<strong>B</strong>=已修正的問題、<strong>F</strong>=使用者流程、<strong>E</strong>=邊界情況、<strong>R</strong>=競態分析。</p>
     <table>
       <thead><tr><th>目標</th><th>PR #208 現況</th><th>判定</th></tr></thead>
       <tbody>
         <tr>
           <td>點了馬上用（首次）</td>
-          <td>內嵌 apk + 開機背景靜默安裝（F1），全程不需網路</td>
+          <td>內嵌 apk + 開機背景靜默安裝（<a href="repo-docs/classswift-embedded-apk-review.md" title="使用者流程 F1（見決議與風險分析 §三）">F1</a>），全程不需網路<br/><strong>融合：CS 已在 MVB 進程內，無安裝步驟</strong></td>
           <td><span class="badge badge-ok">✅ 大幅改善</span>（原本要等 15 MB 下載）</td>
         </tr>
         <tr>
           <td>點了馬上用（升級後）</td>
-          <td>MVB OTA 更新後重啟，背景靜默升級（F2），使用者無感</td>
+          <td>MVB OTA 更新後重啟，背景靜默升級（<a href="repo-docs/classswift-embedded-apk-review.md" title="使用者流程 F2（見決議與風險分析 §三）">F2</a>），使用者無感</td>
           <td><span class="badge badge-ok">✅</span></td>
         </tr>
         <tr>
           <td>不經歷安裝流程</td>
-          <td>happy path 完全背景、無 UI；只有「背景還沒裝完就點」才看到 loading dialog（F3，本地解壓+安裝，秒級）</td>
+          <td>happy path 完全背景、無 UI；只有「背景還沒裝完就點」才看到 loading dialog（<a href="repo-docs/classswift-embedded-apk-review.md" title="使用者流程 F3（見決議與風險分析 §三）">F3</a>，本地解壓+安裝，秒級）<br/><strong>融合：無安裝流程本身，<a href="repo-docs/classswift-embedded-apk-review.md" title="使用者流程 F3（見決議與風險分析 §三）">F3</a> 不存在</strong></td>
           <td><span class="badge badge-ok">✅ 大致達成</span></td>
         </tr>
         <tr>
           <td>減少使用者抉擇</td>
-          <td><strong>殘留三條要使用者做事的路徑</strong>（見 Gap 2）</td>
-          <td><span class="badge badge-warn">⚠️ 部分達成</span></td>
+          <td><strong>殘留三條要使用者做事的路徑</strong>（見 Gap 2）<br/><strong>融合：無安裝流程 → <a href="repo-docs/classswift-embedded-apk-review.md" title="使用者流程 F4（見決議與風險分析 §三）">F4</a>/<a href="repo-docs/classswift-embedded-apk-review.md" title="使用者流程 F5（見決議與風險分析 §三）">F5</a>/<a href="repo-docs/classswift-embedded-apk-review.md" title="使用者流程 F6（見決議與風險分析 §三）">F6</a> 均不存在</strong></td>
+          <td><span class="badge badge-ok">✅ 融合後完全達成</span><br/><span class="badge badge-warn">⚠️ #208 部分達成</span></td>
         </tr>
         <tr>
           <td><del>永遠維持最新版</del>（前提已移除 2026-07-31）</td>
@@ -120,64 +134,76 @@ flowchart LR
     (ii) 接受「最新 = 跟著 MVB release 的最新」、(iii) CS hotfix 時主動觸發 MVB release。
     <strong>2026-07-31 前提移除後等同採納 (ii)</strong>，且不需要逼近任何新鮮度目標。</p>
 
-    <h3 id="gap2">Gap 2 — 殘留的使用者抉擇路徑</h3>
+    <h3 id="gap2">Gap 2 — 殘留的使用者抉擇路徑 <span class="badge badge-na">融合後消失（2026-08-04）</span></h3>
+    <div class="callout ok"><strong>融合方向下不再存在</strong> —— <a href="repo-docs/classswift-embedded-apk-review.md" title="使用者流程 F4（見決議與風險分析 §三）">F4</a>/<a href="repo-docs/classswift-embedded-apk-review.md" title="使用者流程 F5（見決議與風險分析 §三）">F5</a>/<a href="repo-docs/classswift-embedded-apk-review.md" title="使用者流程 F6（見決議與風險分析 §三）">F6</a> 都源自安裝流程，融合後沒有安裝流程，三條路徑一併消失。以下保留為 PR #208 過渡期記錄。
+      <br/><br/><strong>MVB 自身的安裝問題（2026-08-04 更新）</strong>：MVB 自己更新仍需要安裝能力，
+      此部分<strong>聽說已定案由 Manager 處理</strong>（口頭，未書面確認）——「使用者要按安裝」的殘餘面
+      因此收斂到<strong>單一位置</strong>：<code>beta_dialog_bloc</code> 的 Beta Program 安裝
+      （目前借用 <code>ClassSwiftInstaller.install(silentInstall: true)</code>，非 Owner 帳號會失敗、
+      退回系統安裝畫面）。<strong>從「CS 每次更新都可能要人工按」變成「只有加入 Beta Program 時可能要按」，
+      是可接受的限制。</strong></div>
     <table>
       <thead><tr><th>路徑</th><th>情境</th><th>使用者看到什麼</th></tr></thead>
       <tbody>
         <tr><td>F4</td><td>非 owner 帳號，系統拒絕 silent install</td><td>點 Quiz Tool → 退回 PackageInstaller → <strong>要按「安裝」</strong></td></tr>
-        <tr><td>F5</td><td>IFP52_2（機型排除背景 silent install，避免卡系統 90 秒）</td><td>背景必失敗 → 同 F4，<strong>每次更新都要人工按</strong></td></tr>
+        <tr><td>F5</td><td>IFP52_2（機型排除背景 silent install，避免卡系統 90 秒）</td><td>背景必失敗 → 同 <a href="repo-docs/classswift-embedded-apk-review.md" title="使用者流程 F4（見決議與風險分析 §三）">F4</a>，<strong>每次更新都要人工按</strong></td></tr>
         <tr><td>F6</td><td>使用者在系統安裝畫面按取消</td><td>Error 34 + retry —— <strong>正是「他點了不要」的情境</strong></td></tr>
       </tbody>
     </table>
-    <p>要消滅這三條，關鍵在 <strong>silent install 的權限面</strong>：owner / device owner 權限怎麼配置、
-    IFP52_2 的系統問題能否從 firmware 端解。這不是 Flutter 端能單獨解掉的。</p>
+    <p>（#208 過渡期適用）要消滅這三條，關鍵在 <strong>silent install 的權限面</strong>：owner / device owner 權限怎麼配置、
+    IFP52_2 的系統問題能否從 firmware 端解。這不是 Flutter 端能單獨解掉的。
+    <strong>融合方案繞過整個權限面</strong>（無 <code>VSSystemManager.installApp</code> 依賴）；investigation 的 Q7 / Q12 已標註融合方向下不適用。</p>
 
-    <h3 id="gap3">Gap 3 — Region gate 擋住「馬上用」（E9）</h3>
-    <p>完全離線的教室（production、無 region 快取）時 gate 永遠不開，CS 裝不起來，點 Quiz Tool 完全不可用。
-    內嵌方案的「離線可用」賣點實際上被 region gate 抵銷。舊流程也一樣（不算回歸），但以北極星目標來看是個缺口。</p>
+    <h3 id="gap3">Gap 3 — Region gate 擋住「馬上用」（E9）<span class="badge badge-warn">融合後性質改變</span></h3>
+    <p>完全離線的教室（production、無 region 快取）時 gate 永遠不開。<strong>#208 下的症狀是「CS 裝不起來」；融合後 CS 已內建、不需安裝，但 MVB 的 region gate（<code>RegionGateService.isEnabled(quizTool)</code>）仍決定 CS toggle 是否顯示 —— 問題從「裝不起來」變成「看不到入口」，離線缺口本身仍在（Q2）。</strong>舊流程也一樣（不算回歸），但以北極星目標來看是個缺口。</p>
 
-    <h3 id="gap4">Gap 4 — 開機後的競態窗口</h3>
-    <p>背景安裝完成前點 Quiz Tool 仍會看到 loading（F3）。內嵌方案已把窗口從「下載 15 MB」縮成「本地解壓 + 安裝」（秒級），
+    <h3 id="gap4">Gap 4 — 開機後的競態窗口 <span class="badge badge-na">融合後消失（2026-08-04）</span></h3>
+    <div class="callout ok"><strong>融合方向下窗口歸零</strong> —— 沒有背景安裝，就沒有「裝完前點下去」的窗口；<a href="repo-docs/classswift-embedded-apk-review.md" title="使用者流程 F3（見決議與風險分析 §三）">F3</a> 與 <code>onITAdminSettingsUpdated</code> 觸發點壓縮都不再適用（Q8 已標註）。以下為 #208 過渡期記錄。</div>
+    <p>背景安裝完成前點 Quiz Tool 仍會看到 loading（<a href="repo-docs/classswift-embedded-apk-review.md" title="使用者流程 F3（見決議與風險分析 §三）">F3</a>）。內嵌方案已把窗口從「下載 15 MB」縮成「本地解壓 + 安裝」（秒級），
     剩餘窗口可能只能靠提早觸發時機（目前掛在 <code>onITAdminSettingsUpdated</code>）再壓縮。</p>
 
-    <h2 id="ideas">4. 長期選項發想（未定案，記錄用）</h2>
+    <h2 id="ideas">4. 融合方案：把 ClassSwift 整個融合進 MVBF（單一 APK）<span class="badge badge-ok">已實作 · PR #210（2026-08-04）</span></h2>
 
-    <h3>把 ClassSwift 整個融合進 MVBF（單一 APK）</h3>
-    <p class="meta">Jay 2026-07-31 發想。ragdoll-cat（ClassSwift_Service.apk）是<strong>純 Android 原生 Kotlin app</strong>（Views XML + Retrofit + SocketIO），
-    MVB 是 Flutter app —— Flutter 的 android module 本來就能承載原生 code，技術上不是「Flutter 混 native 行不行」的問題，而是「吞下一整個 app」的工程與組織問題。</p>
+    <p class="meta">Jay 2026-07-31 提出，<strong>2026-08-03/04 完成實作與真機驗證，PR #210 已開</strong>
+    （mvbf <code>Jay/VSFT-9785-classswift-fusion</code> + ragdoll-cat <code>jay/feature/VSFT-9785-app-exit-seam</code>）。
+    完整實測見 <a href="findings.html">findings.html</a> §6.3.1–6.3.7。
+    ragdoll-cat（ClassSwift_Service.apk）是<strong>純 Android 原生 Kotlin app</strong>（Views XML + Retrofit + SocketIO），
+    MVB 是 Flutter app —— Flutter 的 android module 本來就能承載原生 code，
+    <strong>工程面已由 PR #210 證明可做</strong>（wrapper module + quit seam + Koin 重建），剩下的主要是組織面。</p>
     <table>
       <thead><tr><th>面向</th><th>評估</th></tr></thead>
       <tbody>
         <tr>
           <td>對北極星目標</td>
-          <td><span class="badge badge-ok">完勝</span> 唯一能把「安裝 / 更新 / 版本同步」這整類問題<strong>連根拔掉</strong>的方向：F4/F5/F6 三條使用者抉擇路徑消失、silent install 權限問題消失、CS↔MVB 版本相容矩陣消失（單一 artifact 永遠同步）、#205 的跨 app token 傳遞變成 in-process 呼叫</td>
+          <td><span class="badge badge-ok">✅ 完勝（已驗證）</span> <strong>已實測達成</strong>：把「安裝 / 更新 / 版本同步」這整類問題連根拔掉 —— <a href="repo-docs/classswift-embedded-apk-review.md" title="使用者流程 F4（見決議與風險分析 §三）">F4</a>/<a href="repo-docs/classswift-embedded-apk-review.md" title="使用者流程 F5（見決議與風險分析 §三）">F5</a>/<a href="repo-docs/classswift-embedded-apk-review.md" title="使用者流程 F6（見決議與風險分析 §三）">F6</a> 三條使用者抉擇路徑消失、silent install 權限問題消失、CS↔MVB 版本相容矩陣消失（單一 artifact 永遠同步）；#205 的跨 app token 傳遞可進一步改為 in-process 呼叫（#205 已先合入 master，融合分支基於其上）</td>
         </tr>
         <tr>
           <td>技術難度</td>
-          <td><span class="badge badge-ok">POC 後下修為中等</span> <del>大工程但可行</del> —— 2026-07-31 POC 實證：wrapper module + sourceSets 指向手法讓 CS 零改動編進 MVB，manifest / 資源 / codegen 全數過關，整包 assemble 成功。真正的工程主體是 MVB 端 CS 整合層改為 in-process（見 <a href="findings.html">findings.html</a> R2）</td>
+          <td><span class="badge badge-ok">✅ 已實作並真機驗證（2026-08-03）</span> 2026-07-31 POC 證明可編（wrapper module + sourceSets），<strong>2026-08-03 完成實作</strong>：quit seam（ragdoll-cat 僅 4 檔）、quit 時整鍋重建 Koin 容器、Amplitude carry-over；guest / 記名 / 帳號切換 / 派題中斷四類情境真機全過（<a href="findings.html">findings.html</a> §6.3.1–6.3.7）。原估的「40 個呼叫點」成本被證明高估。剩餘工程主體：R2 正式重寫、R5 flavor 隔離、R10 依賴排查、R14 CI 改造</td>
         </tr>
         <tr>
           <td>執行期風險</td>
-          <td><span class="badge badge-warn">失去程序隔離</span> 現在 CS crash 不影響 MVB；合併後單一程序記憶體水位變高（IFP 是低 RAM 裝置）。<strong>中間解：CS 元件跑獨立 <code>:process</code></strong> —— 保住單一 APK 交付，又保留部分隔離</td>
+          <td><span class="badge badge-warn">失去程序隔離</span> 現在 CS crash 不影響 MVB；合併後單一程序記憶體水位變高（IFP 是低 RAM 裝置）。<strong>獨立 <code>:process</code> 已降為備援</strong> —— quit 語意問題已由 quit seam + Koin 重建解決（<a href="findings.html">findings.html</a> §6.3.4 決策記錄），是否走 <code>:process</code> 純屬架構取捨。記憶體：8 輪 quit 循環 TOTAL PSS 持平、無洩漏（§6.3.5），長時間高負載與 release 包水位未量（R8）</td>
         </tr>
         <tr>
           <td>組織面</td>
-          <td><span class="badge badge-err">最硬的部分</span> ragdoll-cat 是 CS 團隊的 repo、獨立 release 節奏；合併等於兩team 的 CI / review / release train 綁在一起（Conway's law）。且需先確認 <strong>ClassSwift_Service.apk 是否只有 MVB 一個消費者</strong>（若還有 standalone / 其他產品用途，合併等於分岔或砍掉它）→ Q11</td>
+          <td><span class="badge badge-err">最硬的部分</span> ragdoll-cat 是 CS 團隊的 repo、獨立 release 節奏；<strong>→ 已有緩解：<a href="findings.html">findings.html</a> §6.5 建議走 git submodule、暫不併 repo</strong>，兩 repo 繼續獨立開發、只 pin commit，避開 CI / review / release train 綁死（Conway's law）。<strong>Q11 已初步回答（2026-08-04，口頭）：只有 mvbf 一個消費者</strong> —— 曾考慮讓 CS 獨立以便 Finch 也能當消費者，現已無此需求，融合的最大組織面阻礙因此解除（尚待書面確認）。剩餘組織面：repo 策略（§6.5 建議 submodule）與兩 repo 的 release train 協調</td>
         </tr>
         <tr>
           <td>ROI 時點</td>
-          <td>「後端處理相容」拍板後，現狀（內嵌 APK）的痛已大幅降低 —— 合併的相對效益變小。適合當<strong>長期方向</strong>存查，等內嵌方案上線後看剩餘痛點再評估</td>
+          <td><strong>2026-08-04 更新：已不等 #208 上線</strong> —— 融合在 2026-08-03 完成實作與真機驗證、PR #210 已開，實作成本遠低於原估（ragdoll-cat 僅 4 檔 seam）。#208 內嵌方案定位轉為過渡 / 備援；ROI 判斷點從「效益是否夠大」移到「組織面（Q11 + repo 策略）是否放行」。</td>
         </tr>
       </tbody>
     </table>
 
     <h2 id="next">5. 對後續研究的意義</h2>
     <ul>
-      <li>評估任何手段時，用剩下的 3 個 gap 檢核：<strong>首次可用性、零抉擇、離線</strong>（新鮮度已因前提移除而出局）</li>
+      <li><strong>融合方向（PR #210）下只剩 1 個 gap：離線</strong>（Gap 3，性質已從「裝不起來」變成「region gate 不開就看不到 toggle」）—— 首次可用性、零抉擇皆已由融合達成，新鮮度已因前提移除出局。若要評估 #208 過渡方案，才回頭用 3 個 gap 檢核</li>
       <li><del>Gap 1 是方向性問題，需要先對齊「最新版」定義與 SLA</del> —— 已解除（2026-07-31）；<strong>後端如何處理版本相容</strong>成為新的追蹤點（Q9：哪個後端？相容到多舊？），
         以及<strong>最小版本機制的未來設計</strong>（Q10：「無最小版本限制」只是暫時，一直沒有的話後端相容範圍會無限增長）</li>
-      <li><strong>剩餘重點是 Gap 2（零抉擇）</strong>：偏權限 / firmware 面，可能要拉裝置端的人</li>
-      <li>相關調查問題已列入 <a href="investigation.md">investigation.md</a>（Q2、Q7–Q10；Q3 / Q5 / Q6 已因決策關閉）</li>
+      <li><strong>剩餘重點改為 Gap 3（離線 region gate，Q2）與組織面 Q11</strong>；Gap 2 的權限 / firmware 路線（Q7 / Q12）僅在 #208 過渡期適用，融合方向下不需拉裝置端的人</li>
+      <li>相關調查問題見 <a href="investigation.html">investigation.html</a>：<strong>融合方向下仍有效</strong> —— Q2、Q9 / Q10、Q11（融合定案前必答）；<strong>僅 #208 過渡期適用</strong> —— Q7 / Q8 / Q12；<strong>已因決策關閉</strong> —— Q3 / Q5 / Q6</li>
+      <li>融合的完整實測記錄見 <a href="findings.html">findings.html</a> §6.3.1–6.3.7 與 §6.5（repo 策略：git submodule）</li>
     </ul>
 
   </main>

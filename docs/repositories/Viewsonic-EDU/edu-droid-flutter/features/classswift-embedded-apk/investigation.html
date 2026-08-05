@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>ClassSwift 融合（VSFT-9785）— 接手調查清單</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#pre-merge">1. 合併前必辦</a></li>
+      <li><a href="#post-merge">2. 合併後 / 上線後</a></li>
+      <li><a href="#questions">3. 要弄懂的問題（研究向）</a></li>
+    </ul>
+  </nav>
+  <main>
+    <h1>接手調查清單（VSFT-9785）</h1>
+
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="goal.html">🎯 北極星目標與差距</a>
+      <a href="findings.html">🛠️ 融合 findings（實測記錄）</a>
+      <a href="investigation.html" class="active">🔍 接手調查清單</a>
+      <a href="repo-docs/classswift-embedded-apk.md">📄 設計文件（clone）</a>
+      <a href="repo-docs/classswift-embedded-apk-review.md">🧾 決議與風險分析（clone）</a>
+      <a href="jira/VSFT-9785.md">🎫 Jira clone</a>
+    </div>
+
+    <blockquote>
+      <p>接手 Stephen Yang 的進度。以下為合併前後要釐清 / 執行的事項與查證狀態。
+      調查結果寫在 <a href="findings.html">findings.html</a>。</p>
+    </blockquote>
+
+    <h2 id="pre-merge">1. 合併前必辦</h2>
+    <table>
+      <thead><tr><th>#</th><th>事項</th><th>狀態</th><th>備註</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><strong>GH_PAT 權限驗證</strong>：用 <code>ClassSwift Version Bump</code> workflow 手動跑 <code>DRY_RUN: true</code>，確認 <code>GH_PAT</code> 讀得到 ragdoll-cat releases</td><td>☐ 未做</td><td>權限不足會讓<strong>所有 Android build 在 embed 步驟失敗</strong>（E17），擋整條 release pipeline</td></tr>
+        <tr><td>2</td><td><strong>Amplitude tracking plan</strong>：建立 <code>ClassSwift Install Failed</code> 事件定義</td><td>☐ 未做</td><td>PR 新增的 telemetry 事件（commit 4）</td></tr>
+        <tr><td>3</td><td><strong>與 #205 的合併順序</strong>：<code>Jay/VSFT-9597-cs-token-redelivery</code> 同樣動到 ClassSwift 區域</td><td>✅ 已解（2026-08-04）</td><td>#205 已先合入 master；融合分支 <code>Jay/VSFT-9785-classswift-fusion</code> 基於其上開出，stash pop 無衝突</td></tr>
+        <tr><td>4</td><td>PR #208 本身的 code review</td><td>☐ 未做</td><td>7 個 commit 依相依順序，各自可獨立編譯。<strong>注意</strong>：融合方向（findings）若定案，#208 的內嵌 APK 機制整個不再需要</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="post-merge">2. 合併後 / 上線後</h2>
+    <table>
+      <thead><tr><th>#</th><th>事項</th><th>狀態</th><th>備註</th></tr></thead>
+      <tbody>
+        <tr><td>5</td><td><strong>D6 實作</strong>：合併 <a href="https://github.com/Viewsonic-EDU/ragdoll-cat/pull/1089">ragdoll-cat#1089</a>（移除 <code>_deploy-mvb.yml</code> MDM 派送）</td><td>☐ 等 #208 上線</td><td>Stephen 建議 #208 上線後再合</td></tr>
+        <tr><td>6</td><td>確認 <code>classswift-bump.yml</code> 排程實際運作（每天 01:00 UTC）</td><td>☐</td><td>首次排程跑完看 draft PR / commit 是否正常</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="questions">3. 要弄懂的問題（研究向）</h2>
+    <blockquote>
+      <p>北極星目標與差距分析見 <a href="goal.html">goal.html</a>。<br/>
+      <strong>2026-07-31 決策更新</strong>：「一定要最新版」前提移除，上層拍板<strong>版本相容由後端負責</strong> → Q3 / Q5 / Q6 關閉，新增 Q9 / Q10。<br/>
+      注意兩件事性質不同：<strong>不要求最新版</strong>是永久決策；<strong>無最小版本限制</strong>只是暫時現狀（前端也不處理版本相容錯誤），
+      未來可能需要設計，否則後端要相容的舊版範圍會無限增長。</p>
+    </blockquote>
+    <table>
+      <thead><tr><th>#</th><th>問題</th><th>狀態</th></tr></thead>
+      <tbody>
+        <tr><td>Q1</td><td><code>ReleaseTarget</code> 執行期由版號推導的規則（build number 奇偶 → stage/beta/prod）與 CI 埋入 flavor 的一致性守衛（B9 修正）實際怎麼運作</td><td>☐</td></tr>
+        <tr><td>Q2</td><td>E9：完全離線教室 region gate 永遠不開 → 「離線可用」賣點被 gate 擋住。有沒有後續票要處理？（goal Gap 3）</td><td>☐</td></tr>
+        <tr><td>Q3</td><td><s>E4：rollback 不降級 CS，舊 MVB 可能搭到不相容的新 CS。相容性由誰保證？</s></td><td>✅ 已拍板（2026-07-31）：<strong>後端負責處理相容</strong></td></tr>
+        <tr><td>Q4</td><td>IFP52_2 跳過 silent install（避免卡系統 90 秒）的機型清單會不會擴大？</td><td>☐</td></tr>
+        <tr><td>Q5</td><td><s>「一定要最新版」的定義與新鮮度要求（goal Gap 1）</s></td><td>✅ 關閉（2026-07-31）：前提移除，不要求最新版</td></tr>
+        <tr><td>Q6</td><td><s>CS 出新版但 MVB 沒有 release 排程時，有什麼管道推上裝置？（goal Gap 1）</s></td><td>✅ 關閉（2026-07-31）：不要求最新版後，跟著 MVB release 即可</td></tr>
+        <tr><td>Q7</td><td>silent install 權限面：非 owner 帳號、IFP52_2 能否從裝置 / firmware 端解，讓 F4 / F5 / F6 三條「要使用者按安裝」的路徑消失？（goal Gap 2）</td>
+        <td>✅ <strong>大致收斂（2026-08-04）</strong>：CS 端因融合而消失；MVB 自身安裝<strong>聽說已定案由 Manager 處理</strong>（口頭）。殘餘的 non-silent install 只剩 <code>beta_dialog_bloc</code> 的 Beta Program 安裝一處 —— 已是可接受的限制，不需再拉 firmware 團隊</td></tr>
+        <tr><td>Q8</td><td>背景安裝觸發點掛在 <code>onITAdminSettingsUpdated</code>，能否更早觸發以壓縮開機後的競態窗口？（goal Gap 4）</td><td>☐（同上，融合方向下不再適用）</td></tr>
+        <tr><td>Q9</td><td><strong>「後端必須處理相容」的具體範圍</strong>：是哪個後端（CS 後端？MVB 後端？）？「相容」涵蓋到多舊的 CS / MVB 組合？有沒有對應的票？</td><td>☐</td></tr>
+        <tr><td>Q10</td><td><strong>最小版本機制的未來設計</strong>：目前「無最小版本限制」只是暫時現狀，若一直沒有，後端要相容的舊版範圍會無限增長。何時、由誰設計？屆時前端（MVB / CS）要不要配合做版本檢查與提示？</td><td>☐</td></tr>
+        <tr><td>Q11</td><td><strong>ClassSwift_Service.apk 是否只有 MVB 一個消費者？</strong>（有沒有 standalone 或其他產品使用它？）→ 決定「融合進 MVBF」（goal.html §4）是否可行</td>
+        <td>✅ <strong>初步確認（2026-08-04，口頭）：只有 mvbf 一個消費者</strong>。曾考慮讓 CS 獨立、使 Finch 也能成為消費者，但現已無此需求。<br/><span class="meta">⚠️ 口頭轉述、尚未書面拍板 —— 融合正式定案前建議取得產品／架構端書面確認（這是「CS 永久放棄獨立交付」的不可逆決定）</span></td></tr>
+        <tr><td>Q12</td><td>silent install 實際依賴 <strong>firmware 的 VS API</strong>（<code>VSSystemManager.installApp</code>，Android 13+ 失敗即不 fallback）：非 owner user 被拒、IFP52_2 卡 90 秒都是 firmware 行為 —— firmware 團隊能否放寬非 owner / 修 IFP52_2？（Q7 的具體化）</td><td>☐（融合方向下不再適用；且 Q7 已收斂，firmware 端放寬需求消失）</td></tr>
+      </tbody>
+    </table>
+  </main>
+</div>
+</body>
+</html>
