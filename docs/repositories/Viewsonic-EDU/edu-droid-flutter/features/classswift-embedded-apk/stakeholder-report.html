@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>ClassSwift 融合進 myViewBoard — 階段報告（給 PM / 上層）</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="overview.html"><strong>← 回總覽 overview</strong></a></li>
+      <li><a href="#tldr">0. 一頁摘要</a></li>
+      <li><a href="#what">1. 這是什麼改變</a></li>
+      <li><a href="#user-impact">2. 對使用者的影響</a></li>
+      <li><a href="#done">3. 目前完成度</a></li>
+      <li><a href="#not-done">4. ⚠️ 還沒做的</a></li>
+      <li><a href="#decisions">5. 🔴 需要決策 / 知會</a></li>
+      <li><a href="#qa">6. QA 需要知道的</a></li>
+      <li><a href="#risk">7. 風險與退路</a></li>
+    </ul>
+  </nav>
+  <main>
+    <h1>ClassSwift 融合進 myViewBoard — 階段報告</h1>
+    <div class="meta">
+      VSFT-9785 &middot; 撰寫日期：<strong>（填寫）</strong> &middot; 撰寫人：Jay Wu &middot;
+      技術細節見 <a href="findings.html">findings.html</a>
+    </div>
+
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="goal.html">🎯 北極星目標與差距</a>
+      <a href="findings.html">🛠️ 融合 findings（實測記錄）</a>
+      <a href="investigation.html">🔍 接手調查清單</a>
+      <a href="stakeholder-report.html" class="active">📊 階段報告（給 PM／上層）</a>
+      <a href="jira/VSFT-9785.md">🎫 Jira clone</a>
+    </div>
+
+    <h2 id="tldr">0. 一頁摘要</h2>
+    <div class="callout ok">
+      <strong>✅ 技術可行性已完全驗證，本地 build 與真機測試通過。</strong>
+      ClassSwift 不再是需要另外安裝的 app —— 它直接編進 myViewBoard，成為同一個 APK 的一部分。
+      老師點 Quiz Tool 就能用，<strong>沒有下載、沒有安裝、沒有「要不要安裝」的詢問、沒有版本不同步</strong>。
+    </div>
+    <div class="callout warn">
+      <strong>⚠️ 尚未具備上線條件</strong>：CI（自動化建置）尚未改造，目前<strong>只能本地 build</strong>。
+      另有 3 項需要產品面決策（見 §5）。
+    </div>
+    <div class="callout warn">
+      <strong>⚠️ 最需要注意的一項</strong>：融合後 ClassSwift <strong>不能再單獨更新</strong> ——
+      任何 ClassSwift 的修正都必須跟著 myViewBoard 一起發版。
+      而 myViewBoard 目前<strong>沒有「最低版本」檢查機制</strong>，無法要求舊裝置升級（見 §5.2）。
+    </div>
+    <table>
+      <thead><tr><th>問題</th><th>回答</th></tr></thead>
+      <tbody>
+        <tr><td>能上線了嗎？</td><td><strong>不能</strong>。CI 未改造（趕上線期間暫緩），需另抓時程</td></tr>
+        <tr><td>使用者會感覺到什麼？</td><td>Quiz Tool 秒開、不再有安裝畫面。<strong>但升級後首次使用需重新登入一次</strong>（見 §2）</td></tr>
+        <tr><td>APK 會變多大？</td><td><strong>+11 MB（+3.3%）</strong>：340 MB → 351 MB。<br/>對照：現行方案是額外下載安裝約 15 MB 的獨立 app，<strong>裝置整體其實更省</strong></td></tr>
+        <tr><td>需要上層決策嗎？</td><td><strong>是，4 項</strong>：Firebase 數據歸屬、<strong>失去 ClassSwift 獨立熱修能力</strong>、是否永久放棄獨立交付、兩 repo 合併時序</td></tr>
+        <tr><td>原本 Stephen 的方案怎麼辦？</td><td>PR #208（內嵌 APK）轉為<strong>備案</strong>保留，不作廢（見 §7）</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="what">1. 這是什麼改變</h2>
+    <table>
+      <thead><tr><th></th><th>現在（線上版本）</th><th>融合後</th></tr></thead>
+      <tbody>
+        <tr><td>ClassSwift 的身分</td><td>獨立的 app，要另外安裝</td><td><strong>myViewBoard 的一部分</strong>，同一個 APK</td></tr>
+        <tr><td>怎麼到使用者手上</td><td>myViewBoard 啟動後連網下載約 15 MB → 安裝</td><td><strong>不需要</strong> —— 裝 myViewBoard 就有了</td></tr>
+        <tr><td>版本同步</td><td>兩個 app 各自的版本，可能不相容</td><td><strong>永遠同版</strong>（同一個 artifact）</td></tr>
+        <tr><td>使用者是否需要做決定</td><td>部分情境會跳出系統安裝畫面要求確認</td><td><strong>完全不需要</strong></td></tr>
+      </tbody>
+    </table>
+    <p class="meta">技術上的做法：ClassSwift 的原始碼以「函式庫」形式編進 myViewBoard，兩個專案的程式碼<strong>仍分別留在各自的 repo</strong>、各自開發，只是最後打包成一個 APK。</p>
+
+    <h3>1.1 APK 體積</h3>
+    <table>
+      <thead><tr><th>版本</th><th>APK 大小</th><th>說明</th></tr></thead>
+      <tbody>
+        <tr><td>目前線上（edla, release）</td><td>340 MB</td><td>不含 ClassSwift，使用者另外下載約 15 MB 安裝</td></tr>
+        <tr><td>融合版（edla, release）</td><td><strong>351 MB</strong></td><td>已含完整 ClassSwift</td></tr>
+        <tr><td>差異</td><td><strong>+11 MB（+3.3%）</strong></td><td>比獨立安裝的 15 MB 更小 —— 兩者共用的函式庫不再重複打包</td></tr>
+      </tbody>
+    </table>
+    <p class="meta">量測條件：同一台機器、同版號（3.11.0+30110002）、edla flavor、release build。
+    Play 商店版（store / open）<strong>不含 ClassSwift，體積不變</strong>。</p>
+
+    <h2 id="user-impact">2. 對使用者的影響</h2>
+    <p><strong>正面：</strong></p>
+    <ul class="compact">
+      <li>Quiz Tool 點下去即用，無等待、無安裝畫面、無網路需求（就本機而言）</li>
+      <li>不會再出現「ClassSwift 版本過舊 / 不相容」這類問題</li>
+      <li>非 owner 帳號、特定機型（IFP52_2）過去會卡在安裝失敗，這些情境消失</li>
+    </ul>
+    <p><strong>⚠️ 需要寫進 release note 的一項：</strong></p>
+    <div class="callout warn">
+      <strong>升級到融合版後，ClassSwift 的首次使用需要重新登入一次。</strong>
+      原因：融合後 ClassSwift 的資料存放位置改變（從獨立 app 的空間移到 myViewBoard 內），
+      舊資料不會自動搬移。這是<strong>一次性</strong>的，之後正常。
+    </div>
+
+    <h2 id="done">3. 目前完成度</h2>
+    <table>
+      <thead><tr><th>項目</th><th>狀態</th></tr></thead>
+      <tbody>
+        <tr><td>ClassSwift 編進 myViewBoard、可正常運作</td><td>✅ 真機驗證通過</td></tr>
+        <tr><td>老師的完整使用流程（登入 → 開課 → 派題 → 結束）</td><td>✅ 真機驗證通過（含 guest / 記名 / 換帳號 / 派題中結束四種情境）</td></tr>
+        <tr><td>環境對應（測試版連測試站、正式版連正式站）</td><td>✅ 已實作並驗證</td></tr>
+        <tr><td>正式版打包（release build）</td><td>✅ 本地 build 成功</td></tr>
+        <tr><td>不需要 ClassSwift 的版本（Play 商店版）不會被塞進去</td><td>✅ 已隔離並驗證</td></tr>
+        <tr><td>自動化測試</td><td>✅ 兩邊單元測試全數通過（myViewBoard 2778 條、ClassSwift 1160 條）</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="not-done">4. ⚠️ 還沒做的（上線前必辦）</h2>
+    <table>
+      <thead><tr><th>項目</th><th>影響</th><th>備註</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>CI（自動化建置）改造</strong></td>
+          <td><strong>目前只能本地 build，CI 上跑不起來</strong> —— 所有 Android 的自動建置流程都會失敗</td>
+          <td>因趕上線暫緩。需要讓建置機器能同時取得兩個 repo 的程式碼，工作量與時程需另估</td>
+        </tr>
+        <tr>
+          <td>正式版（release）真機測試</td>
+          <td>目前 release 版只驗證「能打包成功」，<strong>沒有實際裝到機器上跑過</strong></td>
+          <td>正式版會做程式碼壓縮最佳化，行為可能與測試版不同，需實機驗證</td>
+        </tr>
+        <tr>
+          <td>投屏功能迴歸測試</td>
+          <td>融合過程動到投屏用的連線元件（非 ClassSwift 功能，是被波及）</td>
+          <td>已用程式碼層級比對確認邏輯等價，但需 QA 實際測投屏斷線 / 重連</td>
+        </tr>
+        <tr>
+          <td>依賴函式庫的全面盤查</td>
+          <td>兩個 app 合併後共用同一套函式庫版本，可能有隱性衝突</td>
+          <td>已知並修復一例（Amplitude）。release 打包已通過，代表無編譯期問題，但執行期仍需系統性檢查</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="decisions">5. 🔴 需要決策 / 知會</h2>
+
+    <h3>5.1 Firebase 數據歸屬（需產品 / 數據面決策）</h3>
+    <div class="callout warn">
+      <strong>融合後，ClassSwift 的當機記錄（Crashlytics）與 Firebase Analytics 事件會進入
+      myViewBoard 的 Firebase 專案</strong>，而不是 ClassSwift 原本的專案。
+    </div>
+    <ul class="compact">
+      <li><strong>後果</strong>：ClassSwift 團隊在自己的 Firebase 後台<strong>看不到</strong>融合版的當機資料</li>
+      <li><strong>技術限制</strong>：一個 app 只能有一個主要的 Firebase 專案，這是平台限制、無法兩邊都送</li>
+      <li><strong>需要決定</strong>：接受合併（ClassSwift 團隊改看 myViewBoard 的後台），或投入額外工作做分流</li>
+      <li>✅ <strong>Amplitude 不在此列</strong> —— 兩邊本來就共用同一個 Amplitude 專案，且已做技術隔離，數據不受影響</li>
+    </ul>
+
+    <h3>5.2 🔺 失去 ClassSwift 的獨立熱修能力 —— 是否要補「最低版本」機制（需產品 + 後端共同決策）</h3>
+    <div class="callout warn">
+      <strong>這是融合最實質的代價，建議優先討論。</strong>
+    </div>
+    <table>
+      <thead><tr><th></th><th>現在</th><th>融合後</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>ClassSwift 出問題要修</td>
+          <td>ClassSwift 自己有更新機制 —— myViewBoard 啟動時會檢查並自動更新到最新版，<strong>不需要發 myViewBoard</strong></td>
+          <td><strong>必須發一版完整的 myViewBoard</strong>，走完整的發版流程與時程</td>
+        </tr>
+        <tr>
+          <td>後端做了不相容的改動</td>
+          <td>推新的 ClassSwift，裝置下次啟動就跟上</td>
+          <td>裝置停在舊版就是舊版，<strong>沒有補救手段</strong></td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>實際查證結果：</strong></p>
+    <ul class="compact">
+      <li>myViewBoard <strong>目前完全沒有「最低版本」或「強制更新」機制</strong> —— 沒有任何方式可以告訴舊版裝置「你必須升級」</li>
+      <li>兩邊現有的機制都只是「更新到最新版」，<strong>不是「低於某版就擋下來」</strong>，性質不同</li>
+      <li>融合版中 ClassSwift 的自我更新機制已被關閉（否則它會去下載獨立版並覆蓋自己）</li>
+      <li>→ <strong>結論：融合移除了唯一的快速修正路徑，而目前沒有東西接手</strong></li>
+    </ul>
+    <p><strong>需要決定（建議三選一）：</strong></p>
+    <table>
+      <thead><tr><th>選項</th><th>成本</th><th>適用情境</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>A. 接受現況，不做</strong></td>
+          <td>無</td>
+          <td>若 ClassSwift 功能已穩定、後端承諾長期相容舊版</td>
+        </tr>
+        <tr>
+          <td><strong>B. 在 myViewBoard 加最低版本檢查</strong>（由後端下發，過舊時提示或阻擋）</td>
+          <td>中，且<strong>需後端配合</strong></td>
+          <td>推薦 —— 這是產品長期都會需要的能力，不只為了本案</td>
+        </tr>
+        <tr>
+          <td><strong>C. 保留 ClassSwift 的獨立更新作為緊急後路</strong></td>
+          <td>高</td>
+          <td>不建議 —— 等於同時維護兩套機制，融合的好處被抵消</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>需要後端團隊知道的</strong>：融合後，ClassSwift 後端若要做不相容的改動，
+      <strong>必須維持對舊版的相容更久</strong>，因為未升級的裝置無法再被單獨修正。
+      這是跨團隊的影響，建議在決策時一併告知。
+    </div>
+    <p class="meta">補充：裝置端（EDLA）的 myViewBoard 實際更新速度與涵蓋率，會直接決定這個風險的大小 ——
+    建議向負責發版的同仁確認「一版 myViewBoard 推到大多數裝置需要多久」，再據以判斷要選 A 還是 B。</p>
+
+    <h3>5.3 ClassSwift 是否永久放棄「獨立交付」（不可逆，需書面確認）</h3>
+    <ul class="compact">
+      <li>目前口頭確認：ClassSwift 只有 myViewBoard 一個使用者，過去曾考慮讓 Finch 也能接，<strong>現已無此需求</strong></li>
+      <li><strong>建議取得書面確認</strong> —— 融合上線後 ClassSwift 就不再有獨立的發版流程，日後若有其他產品想接，成本很高</li>
+    </ul>
+    <div class="callout">
+      <strong>相關的第二件事：既有裝置上殘留的獨立版 ClassSwift 要不要清掉？</strong>
+      已技術查證<strong>不清也不會出問題</strong>（它沒有圖示、不會被啟動，等同閒置）。
+      <strong>建議不清</strong> —— 留著等於保有「萬一要退回非融合版」的現成退路，代價是永久佔用約 15 MB。
+      但這該是明確決定；目前僅有口頭表示「standalone 用戶不管」而無書面紀錄，建議補進票裡。
+    </div>
+
+    <h3>5.4 兩個 repo 的合併時序（需 RD 主管 / release 協調）</h3>
+    <ul class="compact">
+      <li>本案<strong>同時牽涉兩個 repo</strong>：myViewBoard（主要改動）與 ClassSwift（小幅必要改動）</li>
+      <li>ClassSwift 端的改動很小且<strong>不影響其獨立版行為</strong>，但兩邊必須<strong>一起合併</strong>，否則 myViewBoard 會建置失敗</li>
+      <li>需要與 ClassSwift 團隊協調 review 與合併時程</li>
+    </ul>
+
+    <h3>5.5 原方案（PR #208）的定位 —— 需對內說明</h3>
+    <ul class="compact">
+      <li>Stephen 先前完成的「內嵌 APK」方案已相當完整，若採用融合方向，該方案的機制不再需要</li>
+      <li><strong>建議保留為備案</strong>（若融合方向在組織面受阻，它是現成的次佳解），並在對內溝通時說明清楚，避免造成「工作白做」的誤解</li>
+    </ul>
+
+    <h2 id="qa">6. QA 需要知道的</h2>
+    <ul class="compact">
+      <li><strong>首次啟動需重新登入</strong>（見 §2）—— 這是預期行為，不是 bug</li>
+      <li><strong>投屏功能要迴歸</strong>：正常投屏、中途斷網是否出現失敗提示（而非一直轉圈）、恢復後能否自動重連</li>
+      <li><strong>正式版（release）需重點測試</strong>：目前只驗證測試版，正式版的程式碼壓縮可能造成差異</li>
+      <li><strong>不需要再測「ClassSwift 安裝流程」</strong>：該流程已不存在</li>
+      <li><strong>裝置上會殘留舊的獨立版 ClassSwift</strong>：已查證不會與融合版衝突（它沒有圖示、不會被啟動），
+      殘留是預期的，不是安裝失敗。若看到兩個 ClassSwift 相關套件，屬正常</li>
+      <li>測試環境對應：測試版（stage）連測試站、beta 版連 RC 站、正式版連正式站 —— 已自動對應，但值得抽驗</li>
+    </ul>
+
+    <h2 id="risk">7. 風險與退路</h2>
+    <table>
+      <thead><tr><th>風險</th><th>評估</th></tr></thead>
+      <tbody>
+        <tr><td>技術可行性</td><td><span class="badge badge-ok">低</span> 已完整驗證，含最複雜的「結束課堂」流程（曾是最大技術障礙，已解決並通過四種情境的真機測試）</td></tr>
+        <tr><td>時程</td><td><span class="badge badge-warn">中</span> 主要卡在 CI 改造，工作量明確但需要時間；其餘為驗證與決策</td></tr>
+        <tr><td>組織面</td><td><span class="badge badge-warn">中</span> 兩個團隊的 repo 需協調合併與後續開發節奏</td></tr>
+        <tr><td><strong>退路</strong></td><td><span class="badge badge-ok">有</span> 若融合方向受阻，PR #208（內嵌 APK）可直接接手；技術上也可改為「ClassSwift 在自己的程序執行」的折衷版本，保留單一 APK 的好處</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>結論建議</strong>：技術面已證明可行且成本低於預期，建議<strong>先取得 §5 的三項決策</strong>，
+      再安排 CI 改造與 QA 完整迴歸的時程。在此之前，可先用本地建置的版本讓 QA 提前測試功能面。
+    </div>
+  </main>
+</div>
+</body>
+</html>

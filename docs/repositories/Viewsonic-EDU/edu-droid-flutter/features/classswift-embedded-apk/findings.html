@@ -39,6 +39,7 @@
       <a href="goal.html">🎯 北極星目標與差距</a>
       <a href="findings.html" class="active">🛠️ 融合 findings（實測記錄）</a>
       <a href="investigation.html">🔍 接手調查清單</a>
+      <a href="stakeholder-report.html">📊 階段報告（給 PM／上層）</a>
     </div>
 
     <h2 id="result">1. 結果一句話</h2>
@@ -655,6 +656,86 @@ shared_prefs/
         驗證手法備查：debug build + <code>adb shell run-as com.viewsonic.droid ls</code> / <code>ls shared_prefs/</code>
         （release 無法 run-as）。註：<code>amplitude-*-26b3e0c…</code> 那組是舊版 SDK 以 API key 命名的 legacy storage，與本議題無關。</p>
         <p><strong>未來方向</strong>（獨立票）：若要讓兩邊<strong>刻意共用</strong>同一份 identity（跨產品分析需求），應由 MVB 統一管理 user identity、CS 端不自行 <code>setUserId</code> —— 那是數據面決策，不在本票範圍。</p></td></tr>
+        <tr><td>R18</td><td>與殘留 standalone CS 共存 <span class="badge badge-ok">已查證 + 已修（2026-08-05）</span></td><td>
+        <p><strong>問題</strong>：現網裝置（演進第 2 階段）都已裝了獨立版 CS。MVB 升級成融合版後，一台機器上同時存在
+        <code>com.viewsonic.droid</code>（含內嵌 CS）與 <code>com.viewsonic.classswift.service[.stag|.rc]</code>。會不會打架？</p>
+        <p class="meta">背景：PM 口頭表示「standalone 用戶不管」（QA 轉述，2026-08-04，<strong>無書面紀錄</strong>）。以下為技術面查證，用以確認「不管」是否安全。</p>
+
+        <p><strong>查證方法</strong>：融合版 APK 本體 <code>aapt2 dump xmltree</code> ＋ 從 OTA 下載真正的獨立版
+        <code>ClassSwift_Service_1_7_1.apk</code> 做交叉比對（非讀原始碼推論）。</p>
+
+        <table>
+          <thead><tr><th>衝突面</th><th>結論</th><th>依據</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>能不能同時安裝</td>
+              <td><span class="badge badge-ok">可以</span>，但屬僥倖</td>
+              <td>兩者<strong>都宣告同名自訂 permission</strong> <code>com.viewsonic.classswift.service.ClassSwiftService</code>。
+              同名 permission 若<strong>簽章不同會直接 <code>INSTALL_FAILED_DUPLICATE_PERMISSION</code></strong>。
+              實測兩邊憑證完全相同（ViewSonic VSD224，SHA-256 <code>8e767158…</code>）故放行。
+              <strong>⚠️ 這不是設計出來的保障 —— CS 若換簽章即爆</strong></td>
+            </tr>
+            <tr>
+              <td>會不會綁錯 / 啟動錯對象</td>
+              <td><span class="badge badge-ok">不會</span></td>
+              <td>MVB 綁 service 走隱式 intent 解析（<code>resolveServiceIntent</code>），但融合版傳
+              <code>preferredPackageName = 'com.viewsonic.droid'</code> 過濾；啟動 Activity 用
+              <code>setPackage(boundPackageName)</code>。兩條路都鎖定自己</td>
+            </tr>
+            <tr>
+              <td>獨立版會不會被喚起</td>
+              <td><span class="badge badge-ok">幾乎不會</span>（變成孤兒）</td>
+              <td>獨立版<strong>沒有 launcher 圖示</strong>（manifest 內 LAUNCHER = 0），使用者點不到。
+              僅三個入口：MVB 的 <code>LAUNCH_FROM_MYVIEWBOARD</code>、<code>BIND_FROM_MYVIEWBOARD</code>、自身
+              <code>MY_PACKAGE_REPLACED</code>。融合版不碰前兩者，且已停用 CS 下載/安裝 → 也不會再更新它</td>
+            </tr>
+            <tr>
+              <td>反向 cross-talk</td>
+              <td><span class="badge badge-warn">存在 → 已修</span></td>
+              <td>見下方</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p><strong>唯一實際缺陷（已修）</strong>：融合版的 <code>ClassSwiftReceiver</code> 是 <code>exported=true</code>，
+        且<strong>只比對 action、不比對來源</strong>。獨立版的 <code>StartupReceiver</code> 在
+        <code>MY_PACKAGE_REPLACED</code> 時會送 <code>ACTION_APP_STARTED</code>，且是
+        <strong>explicit component 指名打 <code>com.viewsonic.droid</code> ＋ <code>FLAG_INCLUDE_STOPPED_PACKAGES</code>
+        —— 連被強制停止的融合版 MVB 都會被喚醒</strong>。
+        融合版收到後（toggle 為 off 且無前次成功登入時）會 <code>unbind → TurnOn</code>，<strong>把內嵌 CS 莫名叫出來</strong>。
+        已確認獨立版 1.7.1 的 dex 內確實含該 action 字串（真的會送，非理論風險）。</p>
+
+        <p><strong>修法</strong>：在 <code>ClassSwiftBloc._onBroadcastReceived</code> 加融合版守衛，一律忽略
+        <code>ACTION_APP_STARTED</code>。理由是語意上的 —— 該廣播<strong>唯一的合法來源</strong>是 CS 的
+        <code>StartupReceiver</code>（MVB 驅動 OTA 後重啟 CS 用），而融合版已用 <code>tools:node="remove"</code>
+        移除該 receiver 並停用 OTA，<strong>因此融合模式下不存在任何自己人會送出它</strong> —— 收到即代表殘留的獨立版。
+        <br/>守在 Dart 層而非 manifest 層的原因：manifest 無法只移除單一 action，移掉整個 receiver 會連帶砍掉
+        <code>ACTION_CLASSSWIFT</code>（維修狀態，CS 端尚無 sender 但為既定 contract）。
+        <br/><strong>測試</strong>：新增 2 條（融合版忽略 / 非融合版仍 re-bind，確認守衛未誤傷）；
+        既有的 <code>ACTION_APP_STARTED</code> 群組補上 <code>debugSetClassSwiftFusedIntoMvb(false)</code> ——
+        該組驗的本來就是 standalone 時代的 OTA 重啟行為。</p>
+
+        <p><strong>順帶查證：獨立版 CS 不是 system app</strong>（常見誤解，因它沒有 launcher 圖示、行為像背景服務）。
+        依據：①執行期由 MVB 下載後安裝 → 落在 <code>/data/app</code>，不可能是 system app；
+        ②manifest 無 <code>sharedUserId</code> / <code>persistent</code> / <code>coreApp</code>；
+        ③與 MVB 同簽章（VSD224）故拿得到 signature 級權限，但拿不到 privileged 級 ——
+        它宣告的 <code>MANAGE_USERS</code>（<code>signature|privileged</code>）以 <code>/data</code> app 身分<strong>實際拿不到</strong>，應為歷史遺留。
+        <br/><strong>融合後的變化</strong>：CS 程式碼跑在 MVB process 內，<strong>繼承 MVB 的 system app 身分與特權</strong>
+        （獨立版拿不到的 <code>MANAGE_USERS</code>，融合後對 CS 程式碼實際可用）。
+        惟<strong>權限申請面幾乎沒擴張</strong> —— 融合前後 merged manifest 比對，MVB 僅新增
+        <code>FOREGROUND_SERVICE_REMOTE_MESSAGING</code> 一項（<code>MANAGE_USERS</code> 是 MVB 本來就有，非 CS 帶入）。</p>
+
+        <p><strong>殘留的決策（非技術）</strong>：要不要主動移除裝置上的獨立版？
+        <strong>建議不移除</strong> —— 留著等於保有「融合版回滾成非融合版」的現成退路；代價是永久佔用約 15 MB（APK 大小，安裝後更多）。
+        但這應是<strong>明確決定</strong>而非預設，且 PM 那句話目前無書面紀錄，建議補進票裡。</p>
+
+        <p class="meta">⚠️ 過程中的意外發現：拿來做本次 dump 的 <code>fused-release.apk</code>（先前 build 留存）
+        <strong>裡面還有 CS 的 StartupReceiver</strong> —— 該移除是 2026-08-04 15:41（commit <code>9b9aea922</code>）才加入的，
+        那顆 APK 建於修正之前。以現行原始碼跑 <code>processEdlaReleaseManifest</code> 驗證：StartupReceiver = 0（已移除）、
+        fusion provider = 1（有生效）。<strong>若先前給 QA 的 APK 屬同一批，需重建再交付</strong>
+        （該版行為：MVB 更新後 CS LoginActivity 被拉起並劫持 task，導致從桌面點 MVB 進不了主畫面）。
+        體積量測 +11 MB 不受影響（差一個 receiver）。</p>
+        </td></tr>
         <tr><td>R7</td><td>Firebase 多專案 <span class="badge badge-warn">待產品決策</span></td><td>CS 各 flavor 有自己的 google-services.json / Firebase 專案；融合後共用 MVB 的 ——
         CS 的 Crashlytics / Firebase Analytics 資料會進 MVB 的 Firebase 專案，需產品面決策（數據歸屬，不影響行為）。<strong>註：Amplitude 不在此列</strong> —— 它融合前就與 MVB 共用專案，且實例已隔離，見 R17。
         <br/><strong>RemoteConfig 子項已查證為零實質使用（2026-08-04）</strong>，依據三點：
