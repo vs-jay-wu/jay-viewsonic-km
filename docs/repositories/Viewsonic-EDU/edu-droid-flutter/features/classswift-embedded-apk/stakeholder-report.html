@@ -109,8 +109,18 @@
         <tr><td>老師的完整使用流程（登入 → 開課 → 派題 → 結束）</td><td>✅ 真機驗證通過（含 guest / 記名 / 換帳號 / 派題中結束四種情境）</td></tr>
         <tr><td>環境對應（測試版連測試站、正式版連正式站）</td><td>✅ 已實作並驗證</td></tr>
         <tr><td>正式版打包（release build）</td><td>✅ 本地 build 成功</td></tr>
-        <tr><td>不需要 ClassSwift 的版本（Play 商店版）不會被塞進去</td><td>✅ 已隔離並驗證</td></tr>
-        <tr><td>自動化測試</td><td>✅ 兩邊單元測試全數通過（myViewBoard 2778 條、ClassSwift 1160 條）</td></tr>
+        <tr>
+          <td><strong>正式版（release）真機驗證</strong></td>
+          <td>✅ <strong>已完成</strong>（2026-08-06）—— 不只裝得起來，是<strong>走真實 OTA 更新</strong>上機。
+              IFP51 與 IFP41 各跑完 23 列驗證項，兩台結果一致：<strong>17 PASS / 1 FAIL / 5 SKIP</strong>。
+              唯一 FAIL 是「介面語言不跟隨」，屬 ClassSwift 上游既有決策（已主動移除中文資源），<strong>非融合造成</strong>。
+              先前另在三台機器（SM-X520 平板、IFP8652-2、IFP63）以側載方式驗過。</td>
+        </tr>
+        <tr>
+          <td>不需要 ClassSwift 的版本（Play 商店版）不會被塞進去</td><td>✅ 已隔離並驗證</td>
+        </tr>
+        <tr><td>自動化測試</td><td>✅ 兩邊單元測試全數通過（myViewBoard 2778 條、ClassSwift 1160 條）；
+            ClassSwift 的整合測試（53 條）直接對融合版跑亦全數通過（須在 IFP 機台執行）</td></tr>
       </tbody>
     </table>
 
@@ -120,23 +130,26 @@
       <tbody>
         <tr>
           <td><strong>CI（自動化建置）改造</strong></td>
-          <td><strong>目前只能本地 build，CI 上跑不起來</strong> —— 所有 Android 的自動建置流程都會失敗</td>
-          <td>因趕上線暫緩。需要讓建置機器能同時取得兩個 repo 的程式碼，工作量與時程需另估</td>
-        </tr>
-        <tr>
-          <td>正式版（release）真機測試</td>
-          <td>目前 release 版只驗證「能打包成功」，<strong>沒有實際裝到機器上跑過</strong></td>
-          <td>正式版會做程式碼壓縮最佳化，行為可能與測試版不同，需實機驗證</td>
+          <td><strong>目前 master 的自動建置是壞的</strong> —— 融合版合併後，建置機器找不到 ClassSwift 的程式碼，
+              所有 Android 自動建置流程都會失敗（每日排程自 2026-08-06 起紅燈）</td>
+          <td><strong>已實作完成，正在做第一次 CI 驗證</strong>（2026-08-07）。作法是把「要用哪一版 ClassSwift」
+              寫成一個版控檔案，建置時自動去取對應版本。<strong>工作量已知，不需另估。</strong>
+              剩兩件事才能上正式：ClassSwift 需切一個涵蓋融合改動的正式版號（目前只能釘測試標記），
+              以及兩項防呆檢查（商店版不含 ClassSwift 的自動驗證、跨 repo 編譯保護）</td>
         </tr>
         <tr>
           <td>投屏功能迴歸測試</td>
           <td>融合過程動到投屏用的連線元件（非 ClassSwift 功能，是被波及）</td>
-          <td>已用程式碼層級比對確認邏輯等價，但需 QA 實際測投屏斷線 / 重連</td>
+          <td>已用程式碼層級比對確認邏輯等價（bytecode 比對，非推論）。
+              <strong>但截至 2026-08-07 完全沒有人測過投屏</strong> —— 近期的真機驗證與多人試用都集中在 Quiz Tool 流程。
+              最壞情況不是閃退，而是<strong>「該報錯卻不報」</strong>：投屏連不上時不顯示失敗、畫面一直轉圈。<strong>仍需 QA 針對性驗證斷線 / 重連</strong></td>
         </tr>
         <tr>
           <td>依賴函式庫的全面盤查</td>
           <td>兩個 app 合併後共用同一套函式庫版本，可能有隱性衝突</td>
-          <td>已知並修復一例（Amplitude）。release 打包已通過，代表無編譯期問題，但執行期仍需系統性檢查</td>
+          <td>已知並修復一例（Amplitude）。release 打包通過代表無編譯期問題；
+              <strong>風險已下修</strong> —— 多台機器、多人實際跑完整出題流程未出現執行期衝突。
+              但這是「沒踩到」不是「已排查」，未覆蓋的路徑仍需系統性比對</td>
         </tr>
       </tbody>
     </table>
@@ -222,11 +235,12 @@
       但這該是明確決定；目前僅有口頭表示「standalone 用戶不管」而無書面紀錄，建議補進票裡。
     </div>
 
-    <h3>5.4 兩個 repo 的合併時序（需 RD 主管 / release 協調）</h3>
+    <h3>5.4 兩個 repo 的合併時序 <span class="badge badge-ok">CS 端已完成（2026-08-05）</span></h3>
     <ul class="compact">
       <li>本案<strong>同時牽涉兩個 repo</strong>：myViewBoard（主要改動）與 ClassSwift（小幅必要改動）</li>
-      <li>ClassSwift 端的改動很小且<strong>不影響其獨立版行為</strong>，但兩邊必須<strong>一起合併</strong>，否則 myViewBoard 會建置失敗</li>
-      <li>需要與 ClassSwift 團隊協調 review 與合併時程</li>
+      <li><strong>ClassSwift 端已合併</strong>（PR #1090 → develop，2026-08-05）—— 其改動不影響獨立版行為，
+      先行合併無風險，這一側的協調已完成</li>
+      <li>剩餘：myViewBoard 端（PR #210）的 review 與合併</li>
     </ul>
 
     <h3>5.5 原方案（PR #208）的定位 —— 需對內說明</h3>

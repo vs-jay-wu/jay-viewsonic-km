@@ -31,7 +31,7 @@
   <main>
     <h1>ClassSwift 融合 — findings（實作記錄）</h1>
     <div class="meta">
-      實驗於 2026-07-31 ~ 08-04 &middot; mvbf 分支 <code>Jay/VSFT-9785-classswift-fusion</code>（<a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/210">PR #210</a>）+ ragdoll-cat 分支 <code>jay/feature/VSFT-9785-app-exit-seam</code>（已 push，PR 未開）&middot;
+      實驗於 2026-07-31 ~ 08-04 &middot; mvbf 分支 <code>Jay/VSFT-9785-classswift-fusion</code>（<a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/210">PR #210</a>）+ ragdoll-cat 分支 <code>jay/feature/VSFT-9785-app-exit-seam</code>（<a href="https://github.com/Viewsonic-EDU/ragdoll-cat/pull/1090">PR #1090</a>，<strong>2026-08-05 已合併進 develop</strong>）&middot;
       呼應 <a href="goal.html">goal.html §4 長期選項發想</a>
     </div>
     <div class="doc-nav">
@@ -156,7 +156,7 @@ flowchart LR
         <tr><td><code>android/classswift/build.gradle</code>（環境對應）</td><td>CS environment 依 MVB release target 於 build 時推導，<code>-PcsEnv=</code> 可覆寫（R9）</td></tr>
         <tr><td><code>android/classswift/build.gradle</code>（proguard）</td><td><code>consumerProguardFiles</code> 指向 CS 的 <code>proguard-rules.pro</code>，release/R8 才不會砍壞 CS（R6）</td></tr>
         <tr><td>app 端 <code>aidl/com/viewsonic/classswift/service/*.aidl</code></td><td><span class="badge badge-err">刪除</span> 與 wrapper 生成的類別撞名，release/R8 直接拒收（已 diff 驗證兩邊定義一致）。R5 之後 store/open 改由 <code>aidl.srcDirs</code> 指向 CS repo 的同一份定義</td></tr>
-        <tr><td><code>android/app/src/fusion/</code>（新 sourceSet）</td><td><span class="badge badge-new">新增</span> R5 flavor 隔離：膠水層 4 檔 + fusion manifest（provider 宣告），ifp/edla 共用一份</td></tr>
+        <tr><td><code>android/app/src/fusion/</code>（新 sourceSet）</td><td><span class="badge badge-new">新增</span> R5 flavor 隔離：膠水層 4 檔，ifp/edla 共用一份。<strong>2026-08-05 起不再含 manifest</strong>（<code>manifest.srcFile</code> 是取代語意、曾丟掉 flavor 自己的 manifest —— 見 R5 追修；fusion 宣告改寫進各 flavor manifest）</td></tr>
         <tr><td><code>android/app/build.gradle</code>（flavor 隔離）</td><td><code>ifpImplementation</code>/<code>edlaImplementation project(':classswift')</code>、ifp/edla 掛 <code>src/fusion</code>、store/open 掛 CS repo 的 aidl（<code>maybeCreate</code>：本區塊早於 productFlavors 執行，且 <code>open</code> 是 Groovy 保留字）</td></tr>
         <tr><td><code>res/xml/network_security_config_stage.xml</code></td><td>stage 加信任 user CA —— 融合後 CS 流量改由 MVB 的 NSC 管轄，否則 QA 失去抓包能力</td></tr>
         <tr><td>ragdoll-cat（quit seam，見 §6.3.1）</td><td><span class="badge badge-warn">4 檔</span>
@@ -583,7 +583,7 @@ exitProcess(0)</pre>
       （R7 Firebase 歸屬、R10 依賴衝突系統性排查、R14 CI 改造、R15 manifest 屬性滲入、（B）分鍋重建的正式化）。
     </div>
 
-    <h2 id="pending">6.4 生產化風險清單（R1–R16，含已解）</h2>
+    <h2 id="pending">6.4 生產化風險清單（R1–R21，含已解）</h2>
     <p class="meta">狀態 badge 表示<strong>該項本身的處理進度</strong>（已解 / 未做 / 待決策 / 已查明 / 待 QA）。
     <strong>所有改動一律要過 QA</strong>，所以「還沒測」不算狀態 —— <strong>「待 QA」只用於真正被阻塞的項目</strong>：
     我方已無法自行推進、必須先拿到 QA 的實測資訊或回報才能決定下一步。
@@ -615,12 +615,31 @@ exitProcess(0)</pre>
           <li><strong>網路恢復</strong>後能否自動重連成功</li>
           <li>指向錯誤 / 無法連線的 signaling server 時，是否在數次重試後回報失敗</li>
         </ul>
-        <p class="meta">註：CS 自己的 socket 連線在 2.x 下已實測正常（§5 真機驗證）。原始風險編號 P2。</p></td></tr>
-        <tr><td>R5</td><td>flavor 隔離 <span class="badge badge-ok">已解（2026-08-04）</span></td><td>依賴改 <code>ifpImplementation</code>/<code>edlaImplementation</code>；融合膠水層（4 檔）移到新的 <code>src/fusion/</code> sourceSet 由 ifp/edla 共用一份，<code>ClassSwiftFusionInitProvider</code> 宣告移到 <code>src/fusion/AndroidManifest.xml</code>。
+        <p class="meta">註：CS 自己的 socket 連線在 2.x 下已實測正常（§5 真機驗證）。原始風險編號 P2。</p>
+        <p><strong>2026-08-07 狀態確認：仍然完全沒有人測過投屏。</strong>五台機台的驗證與 v3.11.1-stage 的多人試用
+        都集中在 Quiz Tool 流程，<strong>無人碰投屏</strong>（已向 Jay 確認）。<span class="badge badge-warn">注意</span>
+        這是目前唯一「動到非 ClassSwift 功能、且只有靜態證據」的項目 —— 大量實機驗證都繞過了它，
+        不要因為「測了很多台都沒事」而誤以為這條也一併被覆蓋。</p></td></tr>
+        <tr><td>R5</td><td>flavor 隔離 <span class="badge badge-ok">已解（2026-08-04）</span><br/><span class="badge badge-err">追修（2026-08-05）</span></td><td>依賴改 <code>ifpImplementation</code>/<code>edlaImplementation</code>；融合膠水層（4 檔）移到新的 <code>src/fusion/</code> sourceSet 由 ifp/edla 共用一份，<code>ClassSwiftFusionInitProvider</code> 宣告移到 <code>src/fusion/AndroidManifest.xml</code>。
+        <br/><strong>⚠️ 追修（Jacky，<code>78af5c4d2</code>）：上述 manifest 作法藏了一個真實 bug</strong> ——
+        <code>manifest.srcFile</code> 是「<strong>取代</strong>」而非「追加」（AGP 一個 sourceSet 只允許一份 manifest），
+        把 fusion manifest 掛到 ifp/edla sourceSet 等於把 flavor 自己的 manifest <strong>整份無聲丟棄</strong>：
+        ifp 掉了 <code>sharedUserId="android.uid.system"</code>（IFP 平台整合關鍵）、<code>app_model</code> meta-data
+        與 READ/WRITE_SECURE_SETTINGS、INJECT_EVENTS 三個 protected 權限；edla 掉了 <code>app_model</code>。
+        <code>REQUEST_INSTALL_PACKAGES</code>/<code>MANAGE_USERS</code> 僥倖仍在（CS 的 manifest 也宣告了同兩個）而掩蓋了問題。
+        修法：刪除 <code>src/fusion/AndroidManifest.xml</code>，fusion 宣告（provider + StartupReceiver 的
+        <code>tools:node="remove"</code>）直接寫進各 flavor 既有 manifest（約 14 行重複，換取不再有取代語意）。
+        <br/><strong>當時的驗收為何沒抓到（方法論教訓）</strong>：驗收只檢查了「<strong>加進去的東西在不在</strong>」
+        （edla 19 個 CS 元件 + provider），完全沒檢查「<strong>原本有的東西有沒有消失</strong>」。
+        與 R17 的 instanceName 假驗證同型 —— 驗自己的輸出而非與基準比對。正確作法：<strong>改動前後的
+        merged manifest 做 diff</strong>。已於兩 flavor 的 merged manifest 復驗：fusion 宣告與 flavor 原有宣告並存 ✓。
         <br/><strong>順帶修掉一個潛在 release 事故</strong>：原本 provider 宣告在 main manifest —— store/open 出貨到 Play Store 會帶著一個指向不存在類別的 provider，Android 啟動初始化 provider 時直接 crash。
         <br/><strong>驗收</strong>：四 flavor 編譯全過；merged manifest 比對 —— edla 有 19 個 CS 元件 + fusion provider，store 只剩 9 個「MVB 作為 CS client」的字串常數（intent action / 權限名 / package name，融合前就有）且無 provider。
         <br/><strong>留下的耦合</strong>：<code>ClassSwiftServiceManager</code> / <code>ClassSwiftReceiver</code> 在 <code>src/main</code>（全 flavor 編）仍需 CS 的 IPC 介面，故 store/open 的 <code>aidl.srcDirs</code> 指向 CS repo 的同一份 <code>.aidl</code>（零同步成本；這兩個 flavor 不含 wrapper 所以不撞名）—— 代價見 R14</td></tr>
-        <tr><td>R6</td><td>release build + proguard <span class="badge badge-ok">已解</span></td><td>wrapper 已加 <code>consumerProguardFiles</code> 指向 CS 的 <code>proguard-rules.pro</code>，<code>edlaRelease</code> build 通過。<strong>更正</strong>：先前「mvbf release 沒開 minify」的認知有誤 —— Flutter gradle plugin 對 release 預設啟用 R8（也因此才踩到重複 AIDL 的 R8 拒收）。<strong>剩餘</strong>：release 包未上真機，keep 規則是否足夠需實跑驗證</td></tr>
+        <tr><td>R6</td><td>release build + proguard <span class="badge badge-ok">已解</span></td><td>wrapper 已加 <code>consumerProguardFiles</code> 指向 CS 的 <code>proguard-rules.pro</code>，<code>edlaRelease</code> build 通過。<strong>更正</strong>：先前「mvbf release 沒開 minify」的認知有誤 —— Flutter gradle plugin 對 release 預設啟用 R8（也因此才踩到重複 AIDL 的 R8 拒收）。
+        <br/><strong>剩餘項已消（2026-08-06）</strong>：<code>edlaRelease</code> 已在五台機器上真機驗證，其中 IFP51 / IFP41
+        是走<strong>真實 OTA</strong> 安裝 3.11.1，各跑完 23 列驗證項、全程 <code>FATAL EXCEPTION</code> 命中 0，
+        完整出題流程（截圖 → 派題 → 收答 → 結果）正常 —— <strong>keep 規則足夠，R8 沒砍壞 CS</strong></td></tr>
         <tr><td>R17</td><td>Amplitude 實例隔離 <span class="badge badge-ok">已解（2026-08-04）</span></td><td>
         <p><strong>已查證的事實：</strong></p>
         <ul class="compact">
@@ -736,6 +755,40 @@ shared_prefs/
         （該版行為：MVB 更新後 CS LoginActivity 被拉起並劫持 task，導致從桌面點 MVB 進不了主畫面）。
         體積量測 +11 MB 不受影響（差一個 receiver）。</p>
         </td></tr>
+        <tr><td>R19</td><td>Kotlin object 不受 Koin 重建保護 <span class="badge badge-ok">已修（2026-08-06）</span></td><td>
+        <p><strong>問題</strong>：融合版 quit 的「整鍋重建 Koin 容器」策略（§6.3，process death 的等價物）有一個結構性邊界 ——
+        <strong>Kotlin <code>object</code> 住在 classloader 層，<code>stopKoin()</code> 碰不到</strong>。
+        獨立 APK 靠 killProcess 把它們歸零；融合版不殺 process，這些狀態會原樣留到下個 session。</p>
+        <p><strong>全量盤點</strong>（掃描全部 object 宣告 + companion 可變成員）：</p>
+        <table>
+          <thead><tr><th>object</th><th>狀態</th><th>quit 後誰清</th><th>判定</th></tr></thead>
+          <tbody>
+            <tr><td><strong><code>QuizSharedUiInfo</code></strong></td><td><strong>9 個可變欄位</strong>（quizType／isOngoing／quizContent／screenshotImageUri／選項清單…）</td>
+              <td><strong>沒有人</strong> —— 原本只有局部的 <code>resetMultipleOptions()</code></td>
+              <td><span class="badge badge-err">缺口 → 已修</span></td></tr>
+            <tr><td><code>CSWindowManager</code></td><td>視窗清單 ×2</td><td>exit handler 的 <code>removeAllWindowsExcept</code></td><td>安全</td></tr>
+            <tr><td><code>MyViewBoardSessionStore</code>／<code>LaunchState</code></td><td>MVB token</td><td>bridge unbind → <code>MyViewBoardBinder</code> 兩處 <code>clearToken()</code></td><td>安全</td></tr>
+            <tr><td><code>ClassSwiftActivityTracker</code></td><td>活 Activity 集合</td><td>WeakHashMap 自清</td><td>安全</td></tr>
+            <tr><td><code>LanguageUtils</code>／<code>DisplayUtils</code></td><td>語言 code／螢幕尺寸</td><td>不清</td><td><strong>殘留才正確</strong>（裝置屬性，非 session 狀態）</td></tr>
+          </tbody>
+        </table>
+        <p><strong>具體失效情境</strong>：出題編輯到一半（已截圖、已填內容）quit → <code>quizContent</code>／<code>screenshotImageUri</code>／<code>quizType</code>
+        殘留 → 下個 session 任何 read-before-write 的路徑會看到上一堂課的殘影。
+        風險評為<strong>低但真實</strong>：QuizManager 有 30 處寫入、開新出題視窗會重寫欄位，且 R12-c（派題中 quit）真機 PASS ——
+        但「所有讀取點先寫後讀」<strong>沒有任何機制保證</strong>，只是目前的呼叫點恰好如此；<code>isOngoing</code> 設回 false
+        全 codebase 僅一處（<code>QuizManager:1042</code>），quit 時序是否必然經過並無把握。</p>
+        <p><strong>修法</strong>：CS 端 <code>QuizSharedUiInfo</code> 加 <code>reset()</code>（歸零全部欄位；<code>quizType</code> 的
+        setter 會連動重算 <code>isNonStandardAnswerType</code>，一併歸位）；融合端
+        <code>EmbeddedClassSwiftExitHandler</code> 在 Koin 重建<strong>之前</strong>呼叫（object 不依賴容器，
+        就算重建失敗也該先歸零）。獨立 APK 不呼叫 —— killProcess 仍然免費做同一件事，行為不變。</p>
+        <p><strong>測試</strong>：<code>QuizSharedUiInfoTest</code> 新增 1 條 —— 把<strong>每一個</strong>欄位弄髒再
+        <code>reset()</code>，逐欄斷言回到初始值。用意是把「新增欄位但忘了加進 reset()」這種<strong>靜默回歸</strong>變成紅燈；
+        該測試檔的 <code>@Before</code> 一併改用 <code>reset()</code>（原本只清選項欄位，隔離不完整）。17/17 通過；
+        MVB 端 <code>compileEdlaDebugKotlin</code> 通過。</p>
+        <p class="meta">設計註記：exit handler 的 KDoc 原本寫「沒有第二份要人工同步的 reset 清單」—— 那句話只對
+        Koin 管的東西成立。object 沒有別的辦法，reset() 就是那份無法消除的清單，兩側（object 本體 + 測試）都已註明此事。
+        若日後 CS 新增帶 session 狀態的 object，需比照納入。</p>
+        </td></tr>
         <tr><td>R7</td><td>Firebase 多專案 <span class="badge badge-warn">待產品決策</span></td><td>CS 各 flavor 有自己的 google-services.json / Firebase 專案；融合後共用 MVB 的 ——
         CS 的 Crashlytics / Firebase Analytics 資料會進 MVB 的 Firebase 專案，需產品面決策（數據歸屬，不影響行為）。<strong>註：Amplitude 不在此列</strong> —— 它融合前就與 MVB 共用專案，且實例已隔離，見 R17。
         <br/><strong>RemoteConfig 子項已查證為零實質使用（2026-08-04）</strong>，依據三點：
@@ -792,23 +845,251 @@ shared_prefs/
         </ul>
         <p><strong>相關</strong>（2026-08-04 口頭）：MVB 自身更新的安裝已定案由 Manager 處理 → 全 app 的 non-silent install 風險<strong>收斂到 Beta Program 這一處</strong>，屬可接受限制。</p></td></tr>
         <tr><td>R15</td><td>manifest 屬性滲入（原 P4）<span class="badge badge-err">未做</span></td><td>CS-only 的 <code>&lt;application&gt;</code> 屬性（theme=Theme.ClassSwift、allowBackup=false、dataExtractionRules / fullBackupContent、supportsRtl）會靜默進入 merged manifest —— <code>tools:replace</code> 只解「兩邊都有且衝突」的屬性。生產化需在 MVB manifest 明示自己的值</td></tr>
-        <tr><td>R14</td><td><strong>CI 改造清單</strong> <span class="badge badge-err">未做</span><br/><span class="meta">上線前必辦</span></td><td>
-        <p><strong>現況會直接失敗</strong>：<code>settings.gradle</code> 寫死 <code>../../ragdoll-cat</code> 同層路徑，CI runner 無此 checkout ——
-        <strong>所有 Android workflow（beta / production / daily-build / rollback / release-s3 / release-store / neo-*）在融合分支上編不過</strong>。</p>
-        <p><strong>待辦：</strong></p>
+        <tr><td>R14</td><td><strong>CI 改造清單</strong> <span class="badge badge-ok">已實作並 CI 驗證（2026-08-07）</span><br/><span class="meta">PR #211</span></td><td>
+        <p><strong>「會失敗」已成事實</strong>：<code>settings.gradle</code> 原本寫死 <code>../../ragdoll-cat</code> 同層路徑，CI runner 無此 checkout。
+        PR #210 於 2026-08-06 02:49 合併進 master 後，<strong>當天 03:08 的 Daily Build 即紅燈</strong>：</p>
+        <pre><code>Daily Build &amp; Test #31067589032（master）
+X Build IFP APK
+  File '.../edu-droid-flutter/ragdoll-cat/gradle/libs.versions.toml' doesn't exist.</code></pre>
+        <p>IFP / OPEN / EDLA / STORE 四個構件全部沒建成；stage / beta / production / rollback 共用同一個
+        <code>android-setup</code>，只是當時還沒人觸發。<strong>五個會建 Android 的 workflow 全數受影響</strong>
+        （release-s3 / release-store / neo-* / unit-test 不建 Android，不受影響 —— 原記載範圍偏大，已修正）。</p>
+        <p><strong>解法（PR #211）</strong>：ref 檔釘選 + sync 腳本取得 checkout。詳見 §6.5。</p>
         <ul class="compact">
-          <li><strong>① checkout ragdoll-cat</strong>（private repo → PAT / deploy key，承接 #208 原 GH_PAT 需求、權限改「讀 repo」）。
+          <li><strong>① checkout ragdoll-cat</strong> <span class="badge badge-ok">已解</span> ——
+          <code>tools/sync-classswift.sh</code> 以 <code>GH_PAT</code> clone 到 <code>third_party/ragdoll-cat</code>（gitignored）。
+          <strong>PAT 讀得到 ragdoll-cat 已於 CI 實證</strong>（此前只是假設）。
           <strong>⚠️ R5 之後連 store / open 也需要</strong> —— 它們雖不含 CS 程式碼，但 <code>src/main</code> 的 ClassSwiftServiceManager 仍需 CS 的 <code>.aidl</code> 生成 IPC 介面，
           故 checkout 是<strong>全 flavor 的前提</strong>（若要讓 store/open 完全脫離 CS repo，需把 aidl 複製回 mvbf 並承擔雙份定義的同步成本）</li>
-          <li><strong>② CS 版本釘選機制</strong> —— 建議 git submodule，見 §6.5</li>
-          <li><strong>③ <s>flavor 隔離</s></strong> ✅ 已完成（R5，2026-08-04）；CI 可加驗「store/open APK 不含 CS」</li>
-          <li><strong>④ 退役 #208 機制</strong> —— <code>embed-classswift-apk</code> action 與 <code>classswift-bump.yml</code>（或改造成 source-pin bump）</li>
-          <li><strong>⑤ 跨 repo 保護</strong> —— mvbf PR CI 加 fused compile check，讓 CS 端改動弄壞融合編譯時提早發現（如誤刪 <code>onExitHandled</code> seam）</li>
-        </ul></td></tr>
+          <li><strong>② CS 版本釘選機制</strong> <span class="badge badge-ok">已解</span> ——
+          ref 檔（非 submodule，決策見 §6.5）＋兩道 CI gate：「必須釘在 tag 上」（驗
+          <code>git describe --exact-match</code> 的現實而非檔案宣告，tag 被移動 / 刪除也擋得住）、
+          「CI 不得使用 <code>classswiftRepoPath</code> 本機覆寫」（否則 tag gate 會驗到一個沒被使用的 checkout，靜默失效）</li>
+          <li><strong>③ <s>flavor 隔離</s></strong> ✅ 已完成（R5，2026-08-04）；
+          <span class="badge badge-err">仍未做</span> CI 加驗「store/open APK 不含 CS」</li>
+          <li><strong>④ 退役 #208 機制</strong> <span class="badge badge-ok">已解</span> ——
+          <code>embed-classswift-apk</code> action 與 <code>classswift-bump.yml</code> 皆已不在 repo 內</li>
+          <li><strong>⑤ 跨 repo 保護</strong> <span class="badge badge-err">仍未做</span> ——
+          mvbf PR CI 加 fused compile check，讓 CS 端改動弄壞融合編譯時提早發現（如誤刪 <code>onExitHandled</code> seam）</li>
+        </ul>
+        <p><strong>CI 實證</strong>（<a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/actions/runs/31139570827">Daily Build #31139570827</a>，
+        分支 <code>Jay/VSFT-9785-ci-classswift-ref</code>）：三個 job 全綠 —— Android 20m10s，
+        IFP / OPEN / EDLA APK + STORE AAB 全部建成。log 節錄：</p>
+        <pre><code>ClassSwift ref: fusion-ci-test-20260806
+  首次取得，clone 到 third_party/ragdoll-cat …   (13 秒)
+✅ ClassSwift 釘在 tag fusion-ci-test-20260806</code></pre>
+        <p class="meta">當時釘的 <code>fusion-ci-test-20260806</code> 是驗 CI 用的臨時 tag；
+        驗完已改釘正式的 <code>mvb-v3.10.201</code>（同一顆 commit <code>e18fa8f1</code>），見 R21。</p>
+        <p><strong>踩到的坑</strong>：本 repo <code>core.fileMode=false</code>，sync 腳本第一次 commit 被記成
+        <code>100644</code>，CI 直接 <code>Permission denied</code>。以 <code>git update-index --chmod=+x</code> 修正。
+        <strong>之後新增任何腳本都會踩同一個坑</strong>（或改用 <code>run: bash ./tools/...</code> 不依賴檔案模式）。</p>
+        <p><strong>殘留</strong>：sync 腳本在 CI 會印一句誤導的黃字「缺少 keystore.properties」——
+        其實是下一步 <code>Write ClassSwift secrets</code> 才寫入，順序正常，但看 log 的人會被騙一次。
+        另：self-hosted runner 上還原出的 <code>keystore.properties</code> job 結束後留在磁碟，建議加 <code>if: always()</code> 清除。</p></td></tr>
+        <tr><td>R20</td><td><strong>CS secrets 進 CI</strong> <span class="badge badge-ok">已解（2026-08-07）</span><br/><span class="meta">但有陷阱</span></td><td>
+        <p>ragdoll-cat 的 <code>keystore.properties</code> 是 <strong>gitignored</strong>，全新 clone 不會有 ——
+        而 <code>settings.gradle</code> 無條件 <code>include ':classswift'</code>，wrapper 在 configuration 階段就讀它，
+        所以<strong>連 store / open 也需要</strong>。CI 以 repo secret <code>CS_KEYSTORE_PROPERTIES</code>（base64）還原。</p>
+        <p><strong>這個檔名會騙人 —— 它是混合檔</strong>：</p>
+        <ul class="compact">
+          <li><code>storeFile</code> / <code>storePassword</code> / <code>keyAlias</code> / <code>keyPassword</code> ——
+          CS 自己簽 APK 用，<strong>融合版完全不碰</strong>（CS 的 <code>app/build.gradle</code> 在融合建置裡根本沒被 evaluate；簽章由 MVB 自己的 keystore 做）</li>
+          <li><code>signInOAuthClientID</code> → <code>BuildConfig.SIGN_IN_OAUTH_CLIENT_ID</code>，
+          用於 <code>SignInFragment.kt:175</code> 組 VS 帳號伺服器的 <code>/auth/v1/signup?client_id=…</code></li>
+          <li><code>amplitude{Staging,Rc,Production}ApiKey</code> → <code>BuildConfig.AMPLITUDE_API_KEY</code>（<code>AmplitudeManager.kt:40</code>）</li>
+          <li><code>guestMode{Staging,Rc,Production}ApiKey</code> → <code>BuildConfig.GUEST_MODE_LOGIN_API_KEY</code>（<code>AccountManager.kt:212</code>）</li>
+        </ul>
+        <p>也就是說<strong>實際需要的是 3 個 runtime API key，跟簽章無關</strong>；環境對應的那 2 個隨 build 變，
+        故 secret 需涵蓋三環境共 7 個欄位（目前放整份 11 欄，多的 4 個無害且不會漏欄位）。</p>
+        <p><strong>⚠️ 陷阱</strong>：wrapper 是 <code>csKeystoreProps['…']</code> 直接內插進 <code>buildConfigField</code>，
+        欄位不存在時 Groovy 把 <code>null</code> 渲染成字串 —— <code>BuildConfig.AMPLITUDE_API_KEY</code> 會變成字面上的
+        <code>"null"</code>。<strong>build 照樣成功、APK 照樣出得來，執行期才發現 Amplitude 沒送、guest 登入失敗。</strong></p>
+        <p><strong>後續</strong>：CS 輪換這些 key 時<strong>兩邊都要更新</strong>（CS repo 的檔案 + mvbf 的 secret），
+        沒有機制會提醒。較乾淨的做法是把 3 個值改用 gradle property 傳入、缺值直接 build 失敗，
+        並讓 store / open 讀不到時退回空字串（可拿掉 action input 的 <code>required: true</code>）—— 未做。</p></td></tr>
+        <tr><td>R21</td><td><strong>CS 缺少涵蓋融合改動的正式 tag</strong> <span class="badge badge-ok">已解（2026-08-07）</span></td><td>
+        <p>CI 的 tag gate 要求 ref 必須是 tag，但當時 ragdoll-cat <strong>沒有任何可用的 tag</strong>：</p>
+        <ul class="compact">
+          <li><code>v1.7.1</code>（2026-08-04）—— <strong>不含</strong>融合所需的 <code>e18fa8f1</code></li>
+          <li><code>v1.8.0</code> / <code>v1.9.0</code> —— <strong>是 2026-01 的舊 tag</strong>，版號看起來新但內容更舊</li>
+        </ul>
+        <p><strong>解法</strong>：在 develop HEAD <code>e18fa8f1</code> 打 <code>mvb-v3.10.201</code>（2026-08-07）。
+        命名刻意與 CS 自己的 release tag（<code>v1.x.y</code>）分流，避免兩套版號互相干擾。
+        <strong>tag 名稱不影響 CS 連哪個環境</strong> —— environment 由 MVB 版號推導（<code>deriveCsEnv</code>），與 tag 無關。</p>
+        <p><strong>遺留的節奏問題</strong>：往後每次要帶新版 CS，都是「CS 打 tag → mvbf 改 ref → PR → merge」。
+        誰負責 bump、多久一次、要不要把原 <code>classswift-bump</code> bot 改造成「ref bump PR」—— <strong>尚未決定</strong>（§6.5.6 版號政策）。</p></td></tr>
         </tbody>
     </table>
 
-    <h2 id="repo-strategy">6.5 Repo 策略建議（2026-08-04）：git submodule，暫不併 repo</h2>
+    <h2 id="repo-strategy-2">6.5 Repo 策略（2026-08-05 定案）：ref 檔 + wrapper；library/AAR 為已驗證備案</h2>
+    <div class="callout ok">
+      <strong>✅ 最終決定（2026-08-05，Jay）：自製 ref 檔（<code>classswift-ref.properties</code>）＋保留現有 wrapper。</strong>
+      <span class="meta">（實作時收斂為單一 <code>ref=</code> 欄位，無 mode —— 見下方「實作狀態」）</span>spike 證明的 library/AAR 路線<strong>保留不合併</strong>
+      （分支已 push：兩 repo 各自的 <code>*/spike/VSFT-9785-cs-library-module</code>），作為
+      「CS 未來若需要多個消費者」的現成答案。
+      <ul class="compact">
+        <li><strong>選 ref 檔的關鍵理由</strong>：保留 wrapper = 保留「CS 原始碼用 <em>MVB 的 AGP</em> 編」——
+        兩 repo 的 AGP 可各自獨立升級（實測 CS 8.8.2 / MVB 8.13.2 共存中；AAR 路線雖也有此性質，
+        但要付出發佈管線 + 版號政策 + 6 variant OOM 處理的成本）</li>
+        <li><strong>§6.5.1 說「ref 檔沒解到 wrapper 債」仍然成立</strong>，但債務已縮小：最危險的環境表
+        （三環境 × 11 URL 跨 repo 抄本）已由 CS 的 <code>gradle/classswift-environments.json</code>
+        單一來源解掉（CS commit <code>4e0ff6d4</code>，wrapper 改讀該檔），剩餘為相對靜態的 sourceSets／依賴清單</li>
+        <li>ref 檔比 submodule 多的能力：釘選明文可 diff（PR 上看得懂「v1.7.1 → v1.7.2」而不是兩串 SHA），
+        且 CI 可強制「正式建置必須落在 tag 上」；比 gradle property 覆寫多的能力：釘選進版控，
+        不會因為某人本機設了覆寫就靜默建出別的版本</li>
+        <li><strong>實作狀態</strong> <span class="badge badge-ok">已完成（2026-08-07）</span> ——
+        已 commit 並開 <a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/211">PR #211</a>
+        （ref 檔 + <code>tools/sync-classswift.sh</code> + Gradle 驗證 + CI 兩道 gate），
+        <strong>CI 實跑全綠</strong>（<a href="https://github.com/Viewsonic-EDU/edu-droid-flutter/actions/runs/31139570827">Daily Build #31139570827</a>）。
+        最終落地與原設計的兩處差異：<strong>(1) ref 檔只有一個 <code>ref=</code> 欄位、沒有 <code>mode=</code></strong> ——
+        git 本來就用同一套語法解析 tag 與 commit，多宣告一個 mode 只是多一份「宣告與現實不符」的可能，
+        是不是 tag 由 sync 腳本 checkout 後反查（寫進 <code>.classswift-synced-ref</code> 的 <code>kind=</code>）；
+        <strong>(2) 「mode≠local」那道 gate 不需要了</strong> —— 本機覆寫走 gradle property（repo 之外，結構上不可能被提交），
+        CI 端改為直接檢查該 property 不存在。詳見 R14</li>
+        <li><strong>釘選對象已定</strong>：<code>ref=mvb-v3.10.201</code>（打在 develop HEAD <code>e18fa8f1</code>）。
+        原記載的「⚠️ 釘 <code>commit=170afdeb</code> 是 rebase 前 SHA、合併後只能經由 feature 分支觸及」<strong>已不適用</strong> ——
+        改釘 tag 後不再有 SHA 失效問題。詳見 R21</li>
+      </ul>
+      <p class="meta">rebase 對照（feature 分支 → develop，歷史記錄用）：<code>170afdeb</code>→<code>4e0ff6d4</code>、
+      <code>0e83ccdc</code>→<code>21bbc630</code>、<code>a2db27e3</code>→<code>0aa281a0</code>。
+      QA APK 檔名中的 <code>cs-a2db27e3</code> 等即為 feature 分支 SHA，內容與 develop 對應 commit 相同。</p>
+    </div>
+    <p class="meta">以下為 spike 的完整記錄（結論「AAR 是唯一能徹底移除 wrapper 的路」仍正確 ——
+    定案是「暫不移除 wrapper」，不是推翻 spike）。</p>
+    <div class="callout warn">
+      <strong>結論先講：submodule 方向已否決；技術上唯一可行且能徹底移除 wrapper 的是
+      「CS 自己產出 library、發佈成 AAR，myViewBoard 以座標＋版號消費」。</strong>
+      實測分支：<code>ragdoll-cat</code> / <code>edu-droid-flutter</code> 各自的
+      <code>*/spike/VSFT-9785-cs-library-module</code>。
+    </div>
+
+    <h3>6.5.1 為什麼不是 submodule / ref 檔 —— 它們沒解到真正的債</h3>
+    <p>submodule 管的是「取得哪一份原始碼」，而成本在「取得之後怎麼編」。
+    現行 <code>android/classswift/build.gradle</code>（283 行）是<strong>把 CS 的 app build 平行重寫一遍</strong>：
+    sourceSets、依賴、環境表、proguard、AAR、BuildConfig 全部手抄，任何一項與 CS 不同步都會靜默失效。
+    submodule、ref 檔、monorepo 都不會改善這件事。</p>
+    <p><strong>實例（本次才發現）</strong>：wrapper 只映射了 <code>main</code> / <code>debug</code> sourceSet，
+    <strong>完全漏掉 CS 的 flavor sourceSets</strong>。CS 的 <code>main/AndroidManifest.xml</code> 引用
+    <code>@xml/network_security_config</code>，而該資源只存在於 <code>app/src/{stag,rc,prod}/res/</code> ——
+    融合版根本沒有納入。目前沒出事只因 MVB 的 manifest 有
+    <code>tools:replace="…networkSecurityConfig"</code> 把整個屬性換掉。
+    但若 CS 日後在 <code>app/src/stag/java/</code> 放程式碼，融合版會<strong>靜默漏編</strong>。</p>
+
+    <h3>6.5.2 CS 端：反轉為 library（已完整驗證）</h3>
+    <p>做法是<strong>反轉</strong>而非並排：新增 <code>:classswift-lib</code>（<code>com.android.library</code>）
+    持有程式碼／資源／manifest／依賴／environment flavors／單元測試，<code>:app</code> 縮成薄殼、只留
+    applicationId／版號／簽章／google-services／crashlytics／perf，並<strong>依賴</strong>該 library。</p>
+    <p><strong>關鍵：原始碼一個檔案都沒搬、也沒改</strong>（library 的 sourceSets 指向 <code>../app/src</code>）。
+    <code>app/src</code> 有 1655 個檔案，實測 CS 有 75 個遠端分支、抽查 40 個有 30 個改到 <code>app/src</code> ——
+    真的搬會與約 3/4 的在途工作衝突。等有協調窗口再 <code>git mv</code>，屆時只需改路徑字串。</p>
+    <p><strong>不能「並排」的理由</strong>：library 與 <code>:app</code> 各編一份同樣的原始碼，
+    <code>:app</code> 就無法依賴 library（同一份類別出現兩次）→ CS 自己的建置與 CI 不會編到 library →
+    漂移照樣無人察覺，等於白做。</p>
+    <table>
+      <thead><tr><th>驗證項</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr><td><code>:classswift-lib</code> 編譯</td><td><span class="badge badge-ok">✅</span> 3948 個 class</td></tr>
+        <tr><td>產出可發佈 AAR</td><td><span class="badge badge-ok">✅</span> 13.5 MB</td></tr>
+        <tr><td><code>:app:assembleStagDebug</code></td><td><span class="badge badge-ok">✅</span> 成功</td></tr>
+        <tr><td>獨立版 APK 等價</td><td><span class="badge badge-ok">✅</span> package／versionName 後綴／15 activity・7 service・4 receiver・2 provider／APK 檔名慣例全部一致</td></tr>
+        <tr><td>真機（Pixel Tablet）</td><td><span class="badge badge-ok">✅</span> 安裝、啟動、UI 與重構前一致</td></tr>
+        <tr><td>單元測試</td><td><span class="badge badge-ok">✅</span> <strong>1160 個全數通過</strong>（195 類別，零失敗零跳過）</td></tr>
+      </tbody>
+    </table>
+
+    <h3>6.5.3 五個踩坑（都已解，供實作時參考）</h3>
+    <ol class="compact">
+      <li><strong>catalog 缺 <code>android-library</code></strong> —— 補 alias 後還要在 root
+      <code>build.gradle.kts</code> 宣告 <code>apply false</code>，否則報
+      <em>plugin already on the classpath with an unknown version</em>（<code>com.android.application</code> 已在 classpath，版本無法比對）</li>
+      <li><strong><code>proto {}</code> 在 Kotlin DSL 無 accessor</strong> —— 需
+      <code>import com.google.protobuf.gradle.proto</code></li>
+      <li><strong>本地 <code>.aar</code> 不能被打包進 AAR</strong>（最關鍵）——
+      <code>Direct local .aar file dependencies are not supported when building an AAR</code>。
+      解法：<code>VSApiCompat</code> 改 <code>compileOnly</code>，由 <code>:app</code> 補回
+      <code>implementation</code>。依據是現行 wrapper 對兩個 VSApi 都用 <code>compileOnly</code> 且真機正常，
+      證明執行期由裝置提供。<strong>沒解掉這條，registry 與 sourceControl 兩條路都不可行</strong></li>
+      <li><strong>namespace 必須跨模組唯一</strong> —— <code>:app</code> 改
+      <code>com.viewsonic.classswift.app</code>；程式碼仍在原套件下（R／BuildConfig 由 library 提供），故原始碼不用改</li>
+      <li><strong><code>internal</code> 是模組可見性</strong> —— 只清空 <code>:app</code> 的
+      <code>main</code> 後，<code>app/src/debug/java</code> 冒出 8 個
+      <em>Cannot access … it is internal</em>。<strong>測試與 debug 程式碼必須與 main 同模組</strong>，
+      不能留在 <code>:app</code>（這也解釋了為何 201 個測試檔要一起歸 library）</li>
+    </ol>
+
+    <h3>6.5.4 消費端：三個機制實測，只有一條路可行</h3>
+    <table>
+      <thead><tr><th>機制</th><th>結果</th><th>原因</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>includeBuild</code>（composite build）</td>
+          <td><span class="badge badge-warn">實測失敗</span></td>
+          <td><code>Using multiple versions of the Android Gradle plugin(8.8.2, 8.13.2) in the same build is not allowed</code>
+          —— CS 是 AGP 8.8.2、MVB 是 8.13.2。這是 AGP 硬規則</td>
+        </tr>
+        <tr>
+          <td><code>sourceControl</code>（git repo + tag）</td>
+          <td><span class="badge badge-warn">不可行</span></td>
+          <td>①同樣是 source dependency → 受上述 AGP 同版限制；
+          ②CS 的 build 在 configuration 階段要讀 <strong>gitignored</strong> 的
+          <code>keystore.properties</code>，Gradle 從 git 抓下來不會有它。JitPack 同理</td>
+        </tr>
+        <tr>
+          <td><strong>發佈 AAR（registry）</strong></td>
+          <td><span class="badge badge-ok">✅ 實測成功</span></td>
+          <td>消費端拿二進位 → <strong>兩邊 AGP 可各自獨立升級</strong>；
+          且發佈由 CS 自己的 CI 執行，secrets 本來就只在那裡</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>現行 wrapper 一個先前未意識到的優點</strong>：它把 CS 的<strong>原始碼</strong>編進 MVB 的 build，
+      用的是 <strong>MVB 的 AGP</strong> —— 兩個 repo 因此可各自升級 AGP、互不干涉。
+      改用 composite build 會失去這個自由，每次任一邊升 AGP 都變成跨團隊協調事項。
+      這是「wrapper 有債」之外必須一併權衡的另一面。
+    </div>
+    <p><strong>composite build 另一個做不到的事</strong>：MVB 原本用 <code>-Xfriend-paths</code> 指向
+    <code>:classswift</code> 的 <code>classes.jar</code>，讓 CS 的 androidTest 能存取 <code>internal</code> 成員。
+    跨 build 拿不到另一個 build 的 project layout，此手法不成立 —— 那是 wrapper（同 build 內 module）才做得到的。
+    解法方向：讓 <code>:classswift-lib</code> 自己持有 androidTest（同模組即為 friend）。</p>
+    <p class="meta">基礎設施不是問題：Maven repository 只是「按目錄慣例放在 HTTP 上的檔案」，沒有 server 要架或維運。
+    MVB 的 <code>repositories</code> 已設定 Azure DevOps 私有 feed 與 jitpack，兩者都是 Maven 格式。</p>
+
+    <h3>6.5.5 端到端實測：整條消費鏈已驗通（2026-08-05）</h3>
+    <div class="callout ok">
+      <strong>✅ CS（AGP 8.8.2）→ AAR → mavenLocal → myViewBoard（AGP 8.13.2）→ 融合 APK，全鏈通過。</strong>
+      這同時證明了「AGP 版本可以不一致」—— <code>includeBuild</code> 與 <code>sourceControl</code> 都做不到這件事。
+    </div>
+    <table>
+      <thead><tr><th>環節</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr><td>CS 發佈</td><td>✅ <code>classswift-lib-1.6.3.aar</code> + Gradle module metadata + POM</td></tr>
+        <tr><td>MVB 以 <code>com.viewsonic.classswift:classswift-lib:1.6.3</code> 建置</td><td>✅ BUILD SUCCESSFUL（<code>assembleEdlaDebug</code>）</td></tr>
+        <tr><td>融合是否真的生效</td><td>✅ <code>ClassSwiftFusionInitProvider</code> 在 APK 內；CS 的 <code>LoginActivity</code> 由 AAR 的 manifest 合併進來</td></tr>
+        <tr><td><code>tools:node="remove"</code> 對 AAR 是否仍有效</td><td>✅ CS 的 <code>StartupReceiver</code> 仍被成功移除（融合版的 task 劫持修正不受影響）</td></tr>
+        <tr><td>環境正確性</td><td>✅ dex 內只有 stag 的 API URL，對應所發佈的 <code>stagDebug</code> variant</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>⚠️ 發佈全部 variant 會 OOM —— 這是 CI 的實質限制</strong><br/>
+      第一次以 <code>multipleVariants + allVariants()</code>（3 環境 × debug/release = 6 個 variant）發佈時，
+      Kotlin daemon 記憶體不足而失敗（耗時 20 分鐘後 <code>Not enough memory to run compilation</code>）。
+      GitHub 託管的 runner 只有約 7 GB，導入時必須處理：調高 <code>kotlin.daemon.jvmargs</code>、
+      用 <code>--max-workers=1</code> 讓編譯序列化（本次即以此成功）、或把 variant 拆到多個 job 分別發佈。
+      <br/><strong>順帶的成本提醒</strong>：CS 的發佈會成為一個「編 6 個 variant」的重量級 job，
+      而目前 CS 的 CI 只編 <code>stagDebug</code> 一個 —— 發佈流程的耗時會明顯高於現況。
+    </div>
+
+    <h3>6.5.6 尚待決定</h3>
+    <ul class="compact">
+      <li><strong>是否放棄本機 composite 開發路徑</strong>：若要保留 <code>includeBuild</code>（改 CS 後直接在 MVB 驗），
+      兩 repo 的 AGP 必須對齊（8.8.2 → 8.13.2）。若一律走發佈的 AAR，AGP 可獨立但迴圈變長（改 CS 要先發版才能驗）</li>
+      <li><strong>發佈 host</strong>：既有的 Azure DevOps feed（零新增設定）或 GitHub Packages。次要決定</li>
+      <li><strong>版號政策</strong>：CS 何時發佈、MVB 何時升版。等同先前設想的三段式，只是「釘 commit」換成「釘版號」</li>
+      <li><strong>Q11 仍為口頭</strong>：本方向不刪除 <code>:app</code>，故獨立版與回滾退路都保留</li>
+    </ul>
+
+    <h2 id="repo-strategy">6.5-舊 Repo 策略建議（2026-08-04，已被 §6.5 取代）：git submodule，暫不併 repo</h2>
     <div class="callout">
       <strong>建議：ragdoll-cat 以 git submodule 引入 mvbf，不合併 repo。</strong>
       <ul class="compact">
@@ -830,11 +1111,15 @@ shared_prefs/
     <h2 id="conclusion">7. 對可行性評估的更新</h2>
     <ul>
       <li><strong>「技術難度」從「大工程但可行」下修為「中等」</strong>：goal.html §4 原本擔心的 manifest 合併、資源衝突、Application 衝突、codegen 鏈（KSP/protobuf/safeargs）全部在半天內解掉；CS repo 僅需 4 檔 quit seam（獨立 APK 行為不變，§6.3.1）。wrapper + sourceSets 手法讓兩個 repo 可以<strong>繼續各自獨立開發</strong>——融合版只是多一個消費者</li>
-      <li><strong>真正的工程主體在 R2</strong>（已由真機實證）：把 MVB 的 CS 整合層（bind / 啟動 / 版本檢查 / 安裝機制）改成 in-process。這是行為改寫，不是打包問題。<br/><strong>2026-08-04 更新</strong>：quit/狀態管理、環境對應（R9）、proguard（R6）均已完成；剩餘主體為 R2 正式重寫、R10 依賴排查、R14 CI 改造（R5 flavor 隔離已於 2026-08-04 完成）</li>
-      <li><strong>最大的隱性風險是傳遞依賴衝突（R10）</strong>：Amplitude 那條編譯期毫無徵兆、一跑就 FATAL。兩個成熟 app 的依賴圖合併，這類問題需要系統性排查而非逐一踩雷</li>
-      <li><strong>組織面</strong>（goal.html §4）：<strong>Q11 已初步回答（2026-08-04，口頭：CS 只有 mvbf 一個消費者，Finch 當消費者的需求已不存在）</strong> —— 融合最大的組織面阻礙解除，惟尚待書面確認。剩餘：release train 綁定、repo 策略（§6.5）、R7（Firebase 資料歸屬）。<br/><strong>新增</strong>：ragdoll-cat 需接受 quit seam（companion 分支已 push、PR 未開），兩 repo 的合併時序需協調；repo 策略建議見 §6.5</li>
+      <li><strong>真正的工程主體在 R2</strong>（已由真機實證）：把 MVB 的 CS 整合層（bind / 啟動 / 版本檢查 / 安裝機制）改成 in-process。這是行為改寫，不是打包問題。<br/><strong>2026-08-04 更新</strong>：quit/狀態管理、環境對應（R9）、proguard（R6）均已完成；剩餘主體為 R2 正式重寫、R10 依賴排查、R14 CI 改造（R5 flavor 隔離已於 2026-08-04 完成）
+      <br/><strong>2026-08-07 更新</strong>：<strong>R14 CI 改造已完成並 CI 實跑全綠</strong>（PR #211），R6 的「release 未上真機」亦已由五台機器實證消除。
+      <strong>剩餘主體只剩 R2 正式重寫與 R10 依賴排查</strong>；CI 側殘留兩項非阻擋性補強（R14 ③⑤）</li>
+      <li><strong>傳遞依賴衝突（R10）——「最大的隱性風險」可下修為殘餘風險</strong>：Amplitude 那條編譯期毫無徵兆、一跑就 FATAL，性質沒變。
+      但 2026-08-06 起五台機器、多人試用 v3.11.1-stage 跑完整出題流程，<strong>未再出現執行期衝突</strong>。
+      <span class="badge badge-warn">注意</span> 這是「沒踩到」不是「已排查」—— 未覆蓋的路徑（其他題型、長時間高負載、投屏斷線重連）仍需系統性比對 okhttp / moshi / retrofit / coil / firebase / androidx 的解析結果</li>
+      <li><strong>組織面</strong>（goal.html §4）：<strong>Q11 已初步回答（2026-08-04，口頭：CS 只有 mvbf 一個消費者，Finch 當消費者的需求已不存在）</strong> —— 融合最大的組織面阻礙解除，惟尚待書面確認。剩餘：release train 綁定、repo 策略（§6.5）、R7（Firebase 資料歸屬）。<br/><strong>更新（2026-08-05）</strong>：ragdoll-cat 端已完成 —— PR #1090（quit seam + instanceName + 環境表單一來源）<strong>已合併進 develop</strong>，且 CS 的改動不影響獨立版行為，先行合併無風險。合併時序問題只剩 mvbf PR #210；repo 策略定案見 §6.5</li>
       <li>重現方式：checkout mvbf <code>Jay/VSFT-9785-classswift-fusion</code>（PR #210）+ ragdoll-cat
-      <code>jay/feature/VSFT-9785-app-exit-seam</code>（PR 未開），兩 repo 需同層目錄
+      <code>develop</code>（PR #1090 已合併；重現歷史狀態則用 <code>jay/feature/VSFT-9785-app-exit-seam</code>），兩 repo 需同層目錄
       （或 <code>-PclassswiftRepoPath=</code> 指定）</li>
     </ul>
 
