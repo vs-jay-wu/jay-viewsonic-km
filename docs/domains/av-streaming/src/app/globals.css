@@ -1,0 +1,86 @@
+@import 'tailwindcss';
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-slate-950 text-slate-200 antialiased;
+}
+
+/* 內文自動標註的縮寫。要夠明顯讓人知道可以點，又不能吵到影響閱讀。 */
+.gloss-mark {
+  border-bottom: 1px dotted color-mix(in oklab, currentColor 45%, transparent);
+  cursor: help;
+  text-underline-offset: 2px;
+}
+.gloss-mark:hover,
+.gloss-mark:focus-visible {
+  border-bottom-color: var(--color-sky-400);
+  color: var(--color-sky-300);
+  outline: none;
+}
+/* code 本身就是 sky-300，所以在 code 裡要換一階才看得出 hover */
+code .gloss-mark:hover,
+code .gloss-mark:focus-visible {
+  border-bottom-color: var(--color-sky-300);
+  color: var(--color-sky-200);
+}
+
+/* 散文排版。TSX 寫文章的代價就是要自己控排版，所以集中在這裡。 */
+.prose-note {
+  @apply text-[15px] leading-7 text-slate-300;
+}
+/* 只套用在直接子元素 —— 這樣圖表元件內部的 ul/ol/table 不會被 prose 樣式汙染。 */
+.prose-note > h2 {
+  @apply mt-12 mb-4 text-xl font-semibold text-slate-100 scroll-mt-24;
+}
+.prose-note > h3 {
+  @apply mt-8 mb-3 text-base font-semibold text-slate-100 scroll-mt-24;
+}
+.prose-note > p {
+  @apply my-4;
+}
+.prose-note > ul {
+  @apply my-4 list-disc space-y-2 pl-6;
+}
+.prose-note > ol {
+  @apply my-4 list-decimal space-y-2 pl-6;
+}
+.prose-note li > ul {
+  @apply my-2 list-disc space-y-1 pl-5;
+}
+.prose-note strong {
+  @apply font-semibold text-slate-100;
+}
+.prose-note code {
+  @apply rounded bg-slate-800/80 px-1.5 py-0.5 font-mono text-[13px] text-sky-300;
+}
+.prose-note a {
+  @apply text-sky-400 underline decoration-sky-400/30 underline-offset-2 hover:decoration-sky-400;
+}
+.prose-note > blockquote {
+  @apply my-5 border-l-2 border-slate-700 pl-4 text-slate-400;
+}
+/* 表格在窄螢幕自己橫向捲，不要壓垮版面。 */
+.prose-note .table-scroll {
+  @apply -mx-4 my-6 overflow-x-auto px-4 sm:mx-0 sm:px-0;
+}
+.prose-note > table,
+.prose-note > .table-scroll > table {
+  @apply w-full border-collapse text-sm;
+}
+.prose-note > table {
+  @apply my-6;
+}
+.prose-note > .table-scroll > table {
+  @apply min-w-[520px];
+}
+.prose-note > table th,
+.prose-note > .table-scroll > table th {
+  @apply border-b border-slate-700 px-3 py-2 text-left font-semibold text-slate-200;
+}
+.prose-note > table td,
+.prose-note > .table-scroll > table td {
+  @apply border-b border-slate-800 px-3 py-2 align-top;
+}
