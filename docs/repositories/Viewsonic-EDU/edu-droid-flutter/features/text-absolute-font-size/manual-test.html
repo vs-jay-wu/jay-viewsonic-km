@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>VSFT-6964 手動測試清單 — 文字字級絕對值顯示</title>
+<link rel="stylesheet" href="assets/style.css" />
+<style>
+  ul.check { list-style: none; padding: 0; margin: 8px 0 16px; }
+  ul.check li {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 6px 10px; margin: 3px 0; background: #fff;
+    border: 1px solid var(--c-border); border-radius: 6px; font-size: 13.5px;
+  }
+  ul.check li:hover { border-color: var(--c-accent); }
+  ul.check input[type="checkbox"] { margin-top: 3px; width: 15px; height: 15px; flex: none; cursor: pointer; accent-color: var(--c-accent); }
+  ul.check label { cursor: pointer; flex: 1; }
+  ul.check li.done { background: #f0fdf4; border-color: #bbf7d0; }
+  ul.check li.done label { color: var(--c-muted); }
+  .sec-head { display: flex; align-items: baseline; gap: 10px; }
+  .count { font-size: 12px; color: var(--c-muted); font-weight: 400; font-family: "SF Mono", Menlo, monospace; }
+  .progress-bar { height: 6px; background: var(--c-border); border-radius: 3px; overflow: hidden; margin: 6px 0 0; }
+  .progress-bar > i { display: block; height: 100%; background: var(--c-reuse); width: 0; transition: width .2s; }
+  .overall { border: 1px solid var(--c-border); border-radius: 8px; background: #fff; padding: 14px 18px; margin: 16px 0 8px; }
+  .overall strong { font-size: 15px; }
+  .tools { font-size: 12px; margin: 8px 0 0; }
+  .tools button { font: inherit; padding: 4px 10px; border: 1px solid var(--c-border); background: #fff; border-radius: 6px; cursor: pointer; }
+  .tools button:hover { border-color: var(--c-new); color: var(--c-new); }
+  .note { font-size: 12.5px; color: var(--c-muted); margin: 4px 0 10px; }
+  s { color: var(--c-muted); }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#A">A. 基本 toolbar 顯示</a></li>
+      <li><a href="#B">B. 預設字級切換</a></li>
+      <li><a href="#C">C. 編輯字級</a></li>
+      <li><a href="#D">D. Round-trip（同 session）</a></li>
+      <li><a href="#E">E. Round-trip（OLF 存檔）</a></li>
+      <li><a href="#F">F. Lasso resize</a></li>
+      <li><a href="#G">G. 多段文字混合字級</a></li>
+      <li><a href="#H">H. 樣式 + 字級同時改</a></li>
+      <li><a href="#I">I. 視覺對齊</a></li>
+      <li><a href="#J">J. 不該回歸的舊功能</a></li>
+      <li><a href="#K">K. Edge cases</a></li>
+      <li><a href="#L">L. Commit 前清單</a></li>
+      <li><a href="#unit">補充：單元測試</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>VSFT-6964 手動測試清單 <span class="badge badge-mvb">文字字級絕對值顯示</span></h1>
+    <div class="meta">
+      對象 repo <code>edu-droid-flutter</code>（mvbf）&middot;
+      狀態：開發中（WIP 未 commit，源自 cherry-pick <code>f41b437c</code>）&middot;
+      對應 feature 資料夾 <code>features/text-absolute-font-size/</code>
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="findings.html">🔍 調查記錄 (findings)</a>
+      <a href="superseded-2026-07-29.html">🗄️ 舊修法（04b2c3571）</a>
+      <a href="manual-test.html" class="active">🧪 手動測試清單</a>
+      <a href="jira/VSFT-6964.md">🎫 Jira clone</a>
+    </div>
+
+    <div class="callout">
+      Toolbar 顯示的字級在 canvas zoom 變動時應該保持「<strong>display value</strong>」一致。
+      設計文件見 flutter repo 的 <code>docs/text_annotation_font_size_clean_architecture.md</code>。
+    </div>
+
+    <div class="overall">
+      <strong>整體進度 <span class="count" id="overall-count">—</span></strong>
+      <div class="progress-bar"><i id="overall-bar"></i></div>
+      <div class="tools">
+        勾選狀態存在本機瀏覽器（localStorage），換裝置不會同步。
+        <button type="button" id="reset">重設全部</button>
+      </div>
+    </div>
+
+    <!-- A -->
+    <h2 id="A"><span class="sec-head">A. 基本 toolbar 顯示（核心 VSFT-6964）<span class="count" data-count-for="A"></span></span></h2>
+    <ul class="check" data-section="A">
+      <li><input type="checkbox" id="A1" checked /><label for="A1">zoom=100%，建立文字 fontSize=20，預期 toolbar 顯示 <strong>20</strong></label></li>
+      <li><input type="checkbox" id="A2" checked /><label for="A2">zoom=175%，建立文字 fontSize=20，預期 toolbar 顯示 <strong>20</strong></label></li>
+      <li><input type="checkbox" id="A3" checked /><label for="A3">zoom=75%，建立文字 fontSize=20，預期 toolbar 顯示 <strong>20</strong></label></li>
+      <li><input type="checkbox" id="A4" checked /><label for="A4">zoom=90%（非整數比例），建立文字 fontSize=20，預期 toolbar 顯示 <strong>20</strong></label></li>
+      <li><input type="checkbox" id="A5" checked /><label for="A5">zoom=400%（最大），建立文字 fontSize=20，預期 toolbar 顯示 <strong>20</strong></label></li>
+      <li><input type="checkbox" id="A6" checked /><label for="A6">zoom=10%（最小），建立文字 fontSize=20，預期 toolbar 顯示 <strong>20</strong></label></li>
+    </ul>
+
+    <!-- B -->
+    <h2 id="B"><span class="sec-head">B. 預設字級切換（settings → fontSize）<span class="count" data-count-for="B"></span></span></h2>
+    <ul class="check" data-section="B">
+      <li><input type="checkbox" id="B1" checked /><label for="B1">settings 預設字級調為 <strong>72</strong></label></li>
+      <li><input type="checkbox" id="B2" checked /><label for="B2">zoom=100% 開編輯器，預期 toolbar 一開啟就顯示 <strong>72</strong>（不會閃一下其他值）</label></li>
+      <li><input type="checkbox" id="B3" checked /><label for="B3">zoom=75% 開編輯器，預期 toolbar 一開啟就顯示 <strong>72</strong>（不會閃 54 變 72）</label></li>
+      <li><input type="checkbox" id="B4" checked /><label for="B4">zoom=175% 開編輯器，預期 toolbar 一開啟就顯示 <strong>72</strong></label></li>
+      <li><input type="checkbox" id="B5" checked /><label for="B5">把預設字級調回 <strong>20</strong>，重複上面 3 個 zoom，預期都顯示 <strong>20</strong></label></li>
+    </ul>
+
+    <!-- C -->
+    <h2 id="C"><span class="sec-head">C. 編輯字級（toolbar 操作）<span class="count" data-count-for="C"></span></span></h2>
+    <ul class="check" data-section="C">
+      <li><input type="checkbox" id="C1" checked /><label for="C1">zoom=100%，編輯中從 dropdown 選 22，預期 toolbar 顯示 22、視覺變大</label></li>
+      <li><input type="checkbox" id="C2" checked /><label for="C2">zoom=175%，編輯中從 dropdown 選 22，預期 toolbar 顯示 22、視覺對齊畫布</label></li>
+      <li><input type="checkbox" id="C3" checked /><label for="C3">zoom=90%，編輯中按 ↑ 箭頭，預期值依 [10,12,…,130] 步進、toolbar 顯示對得上</label></li>
+      <li><input type="checkbox" id="C4" checked /><label for="C4">zoom=90%，編輯中按 ↓ 箭頭，預期同上反向</label></li>
+      <li><input type="checkbox" id="C5" checked /><label for="C5">zoom=90%，挑 MIN(10)，預期 toolbar 顯示 10、視覺最小</label></li>
+      <li><input type="checkbox" id="C6" checked /><label for="C6">zoom=90%，挑 MAX(130)，預期 toolbar 顯示 130、視覺最大</label></li>
+    </ul>
+
+    <!-- D -->
+    <h2 id="D"><span class="sec-head">D. Round-trip：建立 → 關閉 → 再開（同 session）<span class="count" data-count-for="D"></span></span></h2>
+    <ul class="check" data-section="D">
+      <li><input type="checkbox" id="D1" /><label for="D1">zoom=100% 建 fontSize=72 → 關 → 點文字再開，toolbar 顯示 <strong>72</strong></label></li>
+      <li><input type="checkbox" id="D2" /><label for="D2">zoom=90% 建 fontSize=72 → 關 → 點文字再開，toolbar 顯示 <strong>72</strong></label></li>
+      <li><input type="checkbox" id="D3" /><label for="D3">zoom=175% 建 fontSize=72 → 關 → 點文字再開，toolbar 顯示 <strong>72</strong></label></li>
+      <li><input type="checkbox" id="D4" /><label for="D4">zoom=100% 建 → 切到 zoom=90% → 點文字開，toolbar 顯示 <strong>72</strong></label></li>
+      <li><input type="checkbox" id="D5" /><label for="D5">zoom=100% 建 → 切到 zoom=175% → 點文字開，toolbar 顯示 <strong>72</strong></label></li>
+    </ul>
+
+    <!-- E -->
+    <h2 id="E"><span class="sec-head">E. Round-trip：OLF 存檔 → 重開<span class="count" data-count-for="E"></span></span></h2>
+    <div class="callout warn">
+      這一節正是 <a href="findings.html#tldr">findings 的 D1/D2 漂移</a>所在，修正後最該重測。
+    </div>
+    <ul class="check" data-section="E">
+      <li><input type="checkbox" id="E1" /><label for="E1">zoom=90% 建 fontSize=72 → <strong>存 OLF</strong> → 重開 OLF → 點文字，toolbar 顯示 <strong>72</strong></label></li>
+      <li><input type="checkbox" id="E2" /><label for="E2">zoom=75% 建 fontSize=20 → 存 OLF → 重開 OLF → 點文字，toolbar 顯示 <strong>20</strong></label></li>
+      <li><input type="checkbox" id="E3" /><label for="E3">zoom=400% 建 fontSize=130 → 存 OLF → 重開 OLF → 點文字，toolbar 顯示 <strong>130</strong></label></li>
+    </ul>
+
+    <!-- F -->
+    <h2 id="F"><span class="sec-head">F. Lasso resize（必須保留的 invariant）<span class="count" data-count-for="F"></span></span></h2>
+    <p class="note">Lasso 放大文字後再點進編輯，toolbar 顯示應反映 resize 後的視覺字級。例：fontSize=20 → lasso 2x → toolbar 顯示 40。</p>
+    <ul class="check" data-section="F">
+      <li><input type="checkbox" id="F1" /><label for="F1">zoom=100% 建 fontSize=20，lasso 把手拉大到 2x，點進編輯，toolbar 顯示 <strong>40</strong></label></li>
+      <li><input type="checkbox" id="F2" /><label for="F2">zoom=100% 建 fontSize=20，lasso 縮小到 0.5x，點進編輯，toolbar 顯示 <strong>10</strong></label></li>
+      <li><input type="checkbox" id="F3" /><label for="F3">zoom=175% 建 fontSize=20，lasso 2x，點進編輯，toolbar 顯示 <strong>40</strong>（不是 70 或別的怪數字）</label></li>
+      <li><input type="checkbox" id="F4" /><label for="F4">lasso 後存 OLF → 重開 → 點進編輯，toolbar 顯示一致</label></li>
+    </ul>
+
+    <!-- G -->
+    <h2 id="G"><span class="sec-head">G. 多段文字混合字級<span class="count" data-count-for="G"></span></span></h2>
+    <ul class="check" data-section="G">
+      <li><input type="checkbox" id="G1" /><label for="G1">zoom=100% 在同一個 textbox 內：第一行 20、第二行 40、第三行 60</label></li>
+      <li><input type="checkbox" id="G2" /><label for="G2">zoom=175% 重新點進編輯，每一行 toolbar 顯示應對應到原本挑的值</label></li>
+      <li><input type="checkbox" id="G3" /><label for="G3">存 OLF → 重開 → 各行字級對得上</label></li>
+    </ul>
+
+    <!-- H -->
+    <h2 id="H"><span class="sec-head">H. 樣式 + 字級同時改<span class="count" data-count-for="H"></span></span></h2>
+    <ul class="check" data-section="H">
+      <li><input type="checkbox" id="H1" /><label for="H1">zoom=90%，建立文字後，挑粗體 + fontSize=22，預期 toolbar 顯示 22、文字粗體</label></li>
+      <li><input type="checkbox" id="H2" /><label for="H2">zoom=90%，建立文字後，挑斜體 + 顏色，再挑 fontSize=22，預期 toolbar 顯示 22</label></li>
+      <li><input type="checkbox" id="H3" /><label for="H3">連續 undo / redo 後 toolbar 顯示與內容一致</label></li>
+    </ul>
+
+    <!-- I -->
+    <h2 id="I"><span class="sec-head">I. 視覺對齊（不只看 toolbar）<span class="count" data-count-for="I"></span></span></h2>
+    <p class="note">Toolbar 數字對 ≠ 視覺對。要一併確認畫面上文字大小看起來合理。</p>
+    <ul class="check" data-section="I">
+      <li><input type="checkbox" id="I1" /><label for="I1">zoom=175% 建 fontSize=20，視覺上的文字應該比 zoom=100% 的相同字級大 1.75 倍</label></li>
+      <li><input type="checkbox" id="I2" /><label for="I2">Lasso 放大 2 倍後，視覺確實變兩倍大</label></li>
+      <li><input type="checkbox" id="I3" /><label for="I3">切換 zoom 不會讓既有文字「跳」一下變形</label></li>
+    </ul>
+
+    <!-- J -->
+    <h2 id="J"><span class="sec-head">J. 不該回歸的舊功能<span class="count" data-count-for="J"></span></span></h2>
+    <ul class="check" data-section="J">
+      <li><input type="checkbox" id="J1" /><label for="J1">Sticky note 文字（黃色便利貼）打字、改字級、存檔、重開都正常</label></li>
+      <li><input type="checkbox" id="J2" /><label for="J2">Pop quiz 文字輸入正常</label></li>
+      <li><input type="checkbox" id="J3" /><label for="J3">Title bar 上的 zoom 按鈕（如有）跟 pinch zoom 都讓所有 text 一起縮放</label></li>
+      <li><input type="checkbox" id="J4" /><label for="J4">Undo / Redo text edit 都正確</label></li>
+      <li><input type="checkbox" id="J5" /><label for="J5">Connector 連到 text 不會因 text 改字級而斷掉</label></li>
+      <li><input type="checkbox" id="J6" /><label for="J6">純空白文字（按進去沒打就關掉）不會留下空 annotation</label></li>
+      <li><input type="checkbox" id="J7" /><label for="J7">連續 edit 同一段文字多次，內容與字級不會錯位</label></li>
+      <li><input type="checkbox" id="J8" /><label for="J8">RTL 語言（阿拉伯文 / 希伯來文）輸入正常顯示</label></li>
+    </ul>
+
+    <!-- K -->
+    <h2 id="K"><span class="sec-head">K. Edge cases<span class="count" data-count-for="K"></span></span></h2>
+    <ul class="check" data-section="K">
+      <li><input type="checkbox" id="K1" /><label for="K1">zoom=100% 點空白 → 進編輯器 → 不打字 → 關閉，畫面上不會有 ghost annotation</label></li>
+      <li><input type="checkbox" id="K2" /><label for="K2">zoom=90% 點空白 → 不打字 → 關閉，同上</label></li>
+      <li><input type="checkbox" id="K3" /><label for="K3">文字框拖到畫布外（負座標）後關閉再開，toolbar 顯示一致</label></li>
+      <li><input type="checkbox" id="K4" /><label for="K4">連續按 zoom 進出（100% → 175% → 100% → 175% …）多次後點文字，toolbar 顯示不漂移</label></li>
+    </ul>
+
+    <!-- L -->
+    <h2 id="L"><span class="sec-head">L. Commit 前清單（提醒自己）<span class="count" data-count-for="L"></span></span></h2>
+    <ul class="check" data-section="L">
+      <li><input type="checkbox" id="L1" checked /><label for="L1"><s><code>lib/constants.dart</code> 把 <code>kEnableAppiumIntegration</code> 改回原值</s> — 已確認：目前工作區與 master 一致（<code>kDebugMode &amp;&amp; false</code>），無需處理（2026-07-29）</label></li>
+      <li><input type="checkbox" id="L2" checked /><label for="L2"><s>刪掉 flutter repo 的 <code>MANUAL_TEST_VSFT-6964.md</code></s> — 已移到本檔（km），flutter repo 的副本已刪（2026-07-29）</label></li>
+      <li><input type="checkbox" id="L3" /><label for="L3">確認沒有殘留的 <code>print('🐛…')</code> debug log</label></li>
+      <li><input type="checkbox" id="L4" /><label for="L4"><code>git diff --cached</code> 最後檢查一次</label></li>
+    </ul>
+
+    <!-- unit -->
+    <h2 id="unit">補充：單元測試（2026-07-29 補上）</h2>
+    <table>
+      <thead><tr><th>測試檔</th><th>覆蓋範圍</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>test/annotation_model/text_annotation_font_size_test.dart</code></td>
+          <td><code>getNextLargerNumber</code> / <code>clampedPreciseSizeString</code>（OLF 序列化，自 <code>filesave_helper</code> 抽出的純函式）/ <code>normalizedClone</code> 兩條路徑</td>
+        </tr>
+        <tr>
+          <td><code>test/widget/dialog/text_editor/text_editor_size_bridge_test.dart</code></td>
+          <td>bridge 換算（cherry-pick 內既有）</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout ok"><code>make test</code> 全套 <strong>2798 個測試通過</strong>（2026-07-29）。</div>
+  </main>
+</div>
+
+<script>
+(function () {
+  var KEY = 'vsft6964-manual-test';
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('ul.check input[type="checkbox"]'));
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { saved = {}; }
+
+  boxes.forEach(function (b) {
+    if (Object.prototype.hasOwnProperty.call(saved, b.id)) b.checked = !!saved[b.id];
+    b.addEventListener('change', function () { persist(); render(); });
+  });
+
+  function persist() {
+    var state = {};
+    boxes.forEach(function (b) { state[b.id] = b.checked; });
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+  }
+
+  function render() {
+    boxes.forEach(function (b) { b.closest('li').classList.toggle('done', b.checked); });
+    document.querySelectorAll('ul.check[data-section]').forEach(function (ul) {
+      var items = ul.querySelectorAll('input[type="checkbox"]');
+      var done = ul.querySelectorAll('input[type="checkbox"]:checked').length;
+      var el = document.querySelector('.count[data-count-for="' + ul.dataset.section + '"]');
+      if (el) el.textContent = done + ' / ' + items.length;
+    });
+    var total = boxes.length;
+    var done = boxes.filter(function (b) { return b.checked; }).length;
+    document.getElementById('overall-count').textContent =
+      done + ' / ' + total + '（' + Math.round(done / total * 100) + '%）';
+    document.getElementById('overall-bar').style.width = (done / total * 100) + '%';
+  }
+
+  document.getElementById('reset').addEventListener('click', function () {
+    if (!confirm('確定要清掉所有勾選狀態？')) return;
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    location.reload();
+  });
+
+  render();
+  persist();
+})();
+</script>
+</body>
+</html>

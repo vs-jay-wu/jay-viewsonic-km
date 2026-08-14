@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>VSFT-6964 調查記錄 — OLF 字級漂移</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#source">0. 原始 ticket</a></li>
+      <li><a href="#tldr">1. 結論 TL;DR（D1 / D2）</a></li>
+      <li><a href="#math">2. 三個數字的完整驗算</a></li>
+      <li><a href="#method">3. 驗證方法</a></li>
+      <li><a href="#nature">4. 關鍵定性</a></li>
+      <li><a href="#fix">5–6. 舊修法 → 已移到獨立頁</a></li>
+      <li><a href="#code">7. 相關程式碼位置</a></li>
+      <li><a href="#crossplatform">8. 跨平台查證（sparrow）</a>
+        <ul>
+          <li><a href="#cp-model" class="sub">mvbW 的 zoom / resize 分工</a></li>
+          <li><a href="#cp-unit" class="sub">單位域與安全上限驗算</a></li>
+          <li><a href="#cp-destroy" class="sub">破壞觸發條件</a></li>
+          <li><a href="#cp-conclusion" class="sub">對 mvbf 修法的結論</a></li>
+        </ul>
+      </li>
+      <li><a href="#mvbf-verify">9. mvbf 端查證與定案</a>
+        <ul>
+          <li><a href="#mv-resize" class="sub">resize 走 matrix（與 mvbW 相反）</a></li>
+          <li><a href="#mv-scaler" class="sub">TextScaler 實測</a></li>
+          <li><a href="#mv-nomvbw" class="sub">不動 mvbW 的解法</a></li>
+          <li><a href="#mv-scope" class="sub">本票範圍定案</a></li>
+        </ul>
+      </li>
+      <li><a href="#verify3">11. 三題查證（master / D2 / sticky note）</a>
+        <ul>
+          <li><a href="#v3-master" class="sub">master 的整數化行為</a></li>
+          <li><a href="#v3-d2" class="sub">D2：Q1 不撞反修</a></li>
+          <li><a href="#v3-sticky" class="sub">sticky note 反例</a></li>
+          <li><a href="#v3-display" class="sub">顯示穩定性（乘積守恆）</a></li>
+        </ul>
+      </li>
+      <li><a href="#impl">10. 實作記錄（第 1 項）</a>
+        <ul>
+          <li><a href="#impl-diff" class="sub">改動一覽</a></li>
+          <li><a href="#impl-tradeoff" class="sub">關鍵取捨：兩個域</a></li>
+          <li><a href="#impl-verify" class="sub">驗證狀態</a></li>
+          <li><a href="#impl2" class="sub">第 2 項：存檔正規化</a></li>
+        </ul>
+      </li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>VSFT-6964 調查記錄 <span class="badge badge-warn">方向調整中</span></h1>
+    <div class="meta">
+      Bug：OLF 存檔重開後 font size 漂移（130→106、48→46、20→20）&middot;
+      調查與 WIP 修正 2026-07-29（§1–7）&middot; 跨平台查證與方向收斂 2026-08-13（§8）&middot;
+      對象 repo <code>edu-droid-flutter</code>（mvbf）&middot;
+      對應 feature 資料夾 <code>features/text-absolute-font-size/</code>
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="findings.html" class="active">🔍 調查記錄 (findings)</a>
+      <a href="superseded-2026-07-29.html">🗄️ 舊修法（04b2c3571）</a>
+      <a href="manual-test.html">🧪 手動測試清單</a>
+      <a href="jira/VSFT-6964.md">🎫 Jira clone</a>
+    </div>
+
+    <div class="callout new">
+      <strong>回報現象：</strong>zoom 維持 <strong>122.66%</strong> 不動，存檔重開後字級變成
+      <strong>130→106</strong>、<strong>48→46</strong>、<strong>20→20</strong>。
+    </div>
+
+    <!-- 0. Source -->
+    <h2 id="source">0. 原始 ticket</h2>
+    <div class="source-card">
+      <div class="title"><span class="badge badge-mvb">Jira 漏洞</span> VSFT-6964 — [Droid-100655] [MVBFv3] text size is not absolute</div>
+      <div class="id">Jira ID 69705 &middot; Status: 開放 &middot; Assignee: Jay Wu &middot; Reporter: Shuying &middot; Platform: mVB Flutter &middot; Sprint: Bug</div>
+      <div>
+        <a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-6964" target="_blank">Jira 原 issue</a> &middot;
+        <a href="jira/VSFT-6964.md">本地 clone</a> &middot;
+        含 2026-07-29 進度暫存留言（mvbW 跨平台調查與提案方向）
+      </div>
+    </div>
+
+    <!-- 1. TL;DR -->
+    <h2 id="tldr">1. 結論 TL;DR</h2>
+    <p>兩個缺陷疊加，都與「canvas zoom 烤進 annotation matrix」的機制有關：</p>
+
+    <div class="source-card">
+      <div class="title"><span class="badge badge-err">D1</span> 存檔端 — 資料損毀</div>
+      <div class="id">text_annotation.dart:1089 · TextAnnotation.toJson</div>
+      <div>
+        <code>toJson</code> 用<strong>預設整數化的 <code>normalizedClone()</code></strong>
+        把 annotation matrix 的 scale 烤進字級：
+        <code>getNextLargerNumber(json_size × matrix_scale)</code> → round → floor 到偶數 →
+        <strong>clamp 到 [10,130]</strong>。
+        超過 130 的 scaled 值被 clamp 是最大災難（<strong>159.45 → 130，直接損失 18.5%</strong>）。
+      </div>
+    </div>
+
+    <div class="source-card">
+      <div class="title"><span class="badge badge-warn">D2</span> 開檔端 — 幽靈 zoom</div>
+      <div class="id">olf_reader.dart:320</div>
+      <div>
+        把 page matrix 的 scale（＝存檔時的 canvas zoom）還原給 <code>infiniteCanvasScale</code>，
+        <strong>卻不烤回任何 annotation matrix</strong>（<code>pageSetMatrix</code> 只被讀 scale，從未 apply）。
+        開檔後畫面實際以 100% 渲染、zoom 標籤卻顯示 122.66%。
+        WIP 的 bridge 相信這個標籤去除法 → 數字漂移。
+      </div>
+    </div>
+
+    <!-- 2. Math -->
+    <h2 id="math">2. 三個數字的完整驗算</h2>
+    <p>前提（已證實）：文字在 zoom=100% 時建立（quill 為整數 display 值），之後 pinch 到
+      <strong>122.66%</strong>（scale 烤進 annotation matrix），然後存檔。</p>
+    <table>
+      <thead>
+        <tr>
+          <th>display</th>
+          <th>存檔 D1：×1.22657 → 整數化</th>
+          <th>檔案內容（×f2s 2.0）</th>
+          <th>開檔 D2：÷1.22657 → floor 偶數</th>
+          <th>重開顯示</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>20</td><td>24.53 → <strong>24</strong></td><td>48 ✓</td><td>19.57 →</td><td><strong>20</strong>（僥倖不變）</td></tr>
+        <tr><td>48</td><td>58.88 → <strong>58</strong></td><td>116 ✓</td><td>47.29 →</td><td><strong>46</strong></td></tr>
+        <tr><td>130</td><td>159.45 → <strong>clamp 130</strong></td><td>260 ✓</td><td>105.98 →</td><td><strong>106</strong></td></tr>
+      </tbody>
+    </table>
+    <div class="callout ok">
+      <strong>檔案實測</strong>（<code>tmp_0729_01.olf</code> 從裝置 <code>run-as</code> 拉出）：
+      font-size = [20, 32, 48, 68, 84, <strong>116</strong>, 196, <strong>260</strong>] 全為整數；
+      page matrix scale = <code>1.2265710829939889</code>。與上表逐一吻合。
+    </div>
+
+    <!-- 3. Method -->
+    <h2 id="method">3. 驗證方法（全程未改程式碼）</h2>
+    <ol class="compact">
+      <li><code>adb run-as</code> 拉出 app cache 的 OLF → 解包 <code>content.json</code> 檢查實際存值。</li>
+      <li>VM Service 對執行中 debug app 求值（<code>vm_eval.dart</code>，scratchpad 可重用）：
+        <ul class="compact">
+          <li><code>olfRatio=2.0</code>、<code>fileToScreenScale=1.0</code>、
+            <code>infiniteCanvasScale=1.2265710829939889</code>、<code>dpr=2.0</code></li>
+          <li>畫布 annotation 實際 <code>jsonList size</code> 與 <code>matrix scale</code>（開檔後 = 整數 + m0=1.0）</li>
+          <li>活體驗證 quill <code>Document.fromJson→toDelta</code> 與 <code>jsonToTextSpan</code> 都<strong>保留 float</strong>
+            → 排除編輯器關閉與 span 管線嫌疑，<strong>鎖定 toJson 的 normalizedClone</strong></li>
+        </ul>
+      </li>
+      <li>靜態追碼：pinch zoom 把 scale 烤進所有 annotation matrix
+        （<code>infinite_canvas.dart</code> 的 <code>_concatenatingTransformByElement</code>）。</li>
+    </ol>
+
+    <!-- 4. Nature -->
+    <h2 id="nature">4. 關鍵定性</h2>
+    <ul class="compact">
+      <li>存檔後檔案裡的 font-size 是「<strong>烤過 zoom 的視覺尺寸</strong>」（display × zoom），
+        page matrix 另存 zoom。今天的 loader 不重烤 → 視覺大小大致不變（58 vs 58.88 px），
+        但<strong>「使用者當初挑的數字」已經永久遺失</strong>（48 變 58）。</li>
+      <li><strong>D1 在 WIP 之前就存在</strong>（<code>getNextLargerNumber</code> 的 clamp/floor 一直都在
+        <code>toJson</code> 裡），但舊 toolbar 直接顯示 quill 原值，掩蓋了問題；WIP 的 bridge 讓它可見。</li>
+      <li>WIP 在編輯器開啟端改用 <code>normalizedClone(convertToIntegerFontSize: false)</code> 保留精度，
+        但<strong>存檔端 toJson 仍走整數化預設</strong> —— 這正是先前單元測試 gap 分析點名的
+        「OLF 序列化」風險成真。</li>
+    </ul>
+
+    <!-- 5. Fix -->
+    <!-- 5/6 已移到 superseded-2026-07-29.html -->
+    <h2 id="fix">5. 舊修法（2026-07-29，commit 04b2c3571）→ 已移出本頁</h2>
+    <div class="callout new">
+      <strong>這一版修法的完整記錄已移到獨立頁面：<a href="superseded-2026-07-29.html">🗄️ 舊修法（04b2c3571）</a>。</strong>
+      內容未刪，只是換頁 —— 它與現行方向的取捨不同（主張「存的 scaled 值可無限大」），
+      放在同一頁容易跟現行結論混淆。分支 <code>Jay/VSFT-6964-tmp-font-size</code> 也刻意保留。
+      <br/><br/>
+      該頁包含：當時的設計決策、三個動作（D1 / 匯入端 / D2 不需修）、當時的待驗證事項，
+      以及更早的「原分析」推導脈絡，並補上「為什麼被取代」。
+    </div>
+    <div class="callout warn">
+      一句話差異：舊修法主張 <strong>clamp 屬於顯示域、存的值可無限大</strong>；
+      現行修法保留「clamp 屬於顯示域」，但加上<strong>天花板 173.33（mvbW 的 130pt）</strong>，
+      超出的倍率改由 matrix 承載。見 <a href="#impl2">§10 第 2 項</a>。
+    </div>
+
+    <h2 id="code">7. 相關程式碼位置</h2>
+    <table>
+      <thead><tr><th>角色</th><th>檔案 : 行</th><th>說明</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge badge-err">D1</span></td><td><code>text_annotation.dart:1086-1089</code></td><td>toJson → normalizedClone() 預設整數化</td></tr>
+        <tr><td><span class="badge badge-warn">D2</span></td><td><code>olf_reader.dart:316-320</code></td><td>只設 infiniteCanvasScale，未 apply 到元素</td></tr>
+        <tr><td>存檔縮放</td><td><code>file_olf_save_helper.dart:764</code></td><td>font-size × <code>fileToScreenScale</code></td></tr>
+        <tr><td>匯入縮放</td><td><code>element_helper.dart:1344</code></td><td>font-size ÷ <code>olfRatio</code></td></tr>
+        <tr><td>zoom 烤 matrix</td><td><code>infinite_canvas.dart</code></td><td><code>_concatenatingTransformByElement</code></td></tr>
+        <tr><td>bridge</td><td><code>lib/widget/dialog/text_editor/ui_v2/text_editor_size_bridge.dart</code></td><td>toolbar display 值換算</td></tr>
+      </tbody>
+    </table>
+
+    <!-- 8. Cross-platform -->
+    <h2 id="crossplatform">8. 跨平台查證（sparrow 原始碼，2026-08-13）</h2>
+    <div class="meta">
+      對象：<code>Orgs/Viewsonic-EDU/edu-sparrow-app</code> · <code>main</code> @ <code>e751e68ca</code>。
+      以下行號皆為該 commit 的實碼，非推測。
+    </div>
+
+    <h3 id="cp-model">結論 1：mvbW 已經把 zoom 與 resize 分乾淨了，mvbf 才是異類</h3>
+    <table>
+      <thead><tr><th>行為</th><th>mvbW 落到哪</th><th>證據</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>canvas zoom</td>
+          <td><strong>matrix</strong>（font-size 完全不碰）</td>
+          <td>存檔 <code>OLFTextArea.cs:146-159</code>（<code>matrix × zoom</code>）；讀檔 <code>OLFTextArea.cs:227-238</code>（<code>M11/M22 ÷ zoom</code> 後保留）</td>
+        </tr>
+        <tr>
+          <td>lasso resize</td>
+          <td><strong>font size + width</strong>（matrix scale 原封不動）</td>
+          <td><code>TextEdit.cs:1275-1300</code>：<code>matrix.M11 = oldMatrix.M11</code> 放回舊值，改以 <code>textCharSizeRatio</code> 乘進每個 <code>CharacterFormat.Size</code></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout ok">
+      <strong>兩個原假設都成立：</strong>
+      <ul class="compact">
+        <li><strong>(a) matrix 會縮字形</strong> —— 讀檔保留的 matrix 直接成為 <code>RenderTransform</code>
+          （<code>TextEdit.cs:757</code>），XAML 的 RenderTransform 會縮整個 visual tree。</li>
+        <li><strong>(b) 換行寬度在 content space</strong> —— <code>TextEdit.cs:725</code> 的 local <code>Width</code>
+          是 RenderTransform <em>之前</em> 的值（讀檔時 x/y 有 ÷zoom，width 沒有），斷行算完才整個被 matrix 縮放。</li>
+      </ul>
+    </div>
+    <div class="callout warn">
+      <strong>但 (b) 有個坑：加法常數不跟著縮。</strong>
+      這條路徑散落固定 px padding（讀檔 <code>-40</code> / <code>+8</code>、<code>TextEdit.cs:734-735</code> 的
+      <code>-2</code> / <code>+8</code>、<code>IWBTextArea.cs:79-80</code> 的 <code>-18</code> / <code>-12</code>）。
+      加法與縮放不交換 → 任何「width ÷ k」的重正規化都會隨 k 放大版面偏差。
+    </div>
+
+    <h3 id="cp-unit">結論 2：單位域與安全上限（數字全部對得起來）</h3>
+    <p>
+      <code>TextEditService.cs:33</code>：<code>FONT_SIZE_PIXEL_POINT_RATIO = (16*20)/15</code>，
+      註解寫明 <code>Pixel : Point = 20 : 15</code>；字級清單為
+      <code>FontSizeHelper.GetFontSizes(10, 130, 2)</code> 的 <strong>pt 域</strong>；
+      吸附是 <code>FontSizeList.OrderBy(x =&gt; Math.Abs(x - inFontSize)).First()</code>
+      （<code>TextEditControlViewModel.cs:1093</code>，硬取最近，<strong>無上下限保護</strong>）。
+    </p>
+    <table>
+      <thead><tr><th>mvbf display</th><th>檔案（×dpr 2.0）</th><th>mvbW pt（×0.75）</th><th>mvbW 顯示</th></tr></thead>
+      <tbody>
+        <tr><td>48</td><td>96 px</td><td>72 pt</td><td>72（= 1.5×，與票面描述吻合）</td></tr>
+        <tr><td>130</td><td>260 px</td><td>195 pt</td><td><strong>130</strong>（被吸附 —— 「兩邊都顯示 130」是巧合）</td></tr>
+      </tbody>
+    </table>
+    <div class="callout new">
+      <strong>安全上限是確定值：</strong>mvbW 天花板 130 pt = <strong>173.33 px（檔案域）</strong>。
+      以目前 mvbf 存檔乘 devicePixelRatio 的寫法，dpr=2 的機器上
+      <strong>display 超過 86.67 存出去就進入 mvbW 的破壞區</strong> —— 而且這條線<strong>隨裝置 dpr 浮動</strong>。
+      改成固定 <code>×4/3</code> 後檔案域 = mvbW px 域，兩邊天花板才會對齊在 130。
+    </div>
+    <p class="meta">
+      另：<code>BridgeClient.OLF.cs:996 / 1059 / 1085</code> 全為 <code>Math.Round(...)</code> →
+      mvbW 存出的 font-size 必為整數 px。我們寫進檔案的 float 只要被 mvbW 存過一次就沒了，
+      WIP 存 float 的價值僅限 mvbf 自身 round-trip。
+    </p>
+
+    <h3 id="cp-destroy">結論 3：破壞的觸發條件比原本假設的窄</h3>
+    <table>
+      <thead><tr><th>在 mvbW 的操作</th><th>會不會改寫字級</th><th>證據</th></tr></thead>
+      <tbody>
+        <tr><td>純開檔瀏覽</td><td><span class="badge badge-ok">安全</span></td><td>顯示端吸附（<code>:1525</code>）不回寫</td></tr>
+        <tr><td>在該文字框<strong>打新字</strong></td><td><span class="badge badge-err">改寫</span></td><td><code>ApplyFontAttributesOnNewText</code> <code>:1121</code> 把吸附後的 <code>_selectedFontSize</code> 寫進新字</td></tr>
+        <tr><td>動 dropdown 挑字級</td><td><span class="badge badge-err">改寫</span></td><td><code>FontSizeProcess()</code> <code>:1623-1637</code></td></tr>
+        <tr><td>lasso resize</td><td><span class="badge badge-err">改寫</span></td><td><code>TextEdit.cs:1303-1390</code>，乘 ratio 後 <code>GetNearestFontSize</code> 吸附</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      QA 迴歸警語可以講得更精準：<strong>大字級文字框在 mvbW「被輸入或被 resize」才會毀，單純開檔瀏覽是安全的。</strong>
+    </div>
+
+    <h3 id="cp-conclusion">結論 4：對 mvbf 修法的影響（收回「全部走 matrix」的提案）</h3>
+    <div class="callout warn">
+      <strong>「所有放大都走 matrix、stored 永遠 10~130」這個提案要收回。</strong>
+      (a) 保證它畫得出來，但 mvbW 的 resize 會廢掉：<code>font=130 + matrix=2</code> 的文字在 mvbW 拉大 1.2 倍時，
+      算式為 <code>130×1.2=156 → 吸附回 130</code>、matrix 不動 → <strong>拉了等於沒拉</strong>。
+      不毀資料，但行為壞掉。
+    </div>
+    <div class="callout ok">
+      <strong>收斂方向：mvbf 照抄 mvbW 的分工，不要發明第三種模型。</strong>
+      <ul class="compact">
+        <li>canvas zoom → 只動 matrix，<strong>永遠不進 stored</strong>（＝本票 VSFT-6964 的原始 bug）</li>
+        <li>lasso resize → 改 font size（與 mvbW 一致，也與 PPT 直覺一致）</li>
+        <li>編輯器那層用 <code>TextScaler</code> 取代烤值 —— 解的是「編輯器不在 canvas transform 底下」，與跨平台模型無關</li>
+      </ul>
+      好處：<strong>不動檔案格式、不需重正規化、不需要 model 版本標記</strong>，上面 padding 加法常數的坑也自動閃掉。
+    </div>
+    <div class="callout new">
+      <strong>⚠️ 上面這條「lasso resize → 改 font size」已於 2026-08-14 推翻</strong>（查了 mvbf 端才發現 mvbf 的 resize 本來就走 matrix，
+      改成動 font size 是重寫整條路）。最終定案見 <a href="#mvbf-verify">§9</a>。
+      本節其餘結論（(a)(b) 成立、單位域驗算、破壞觸發條件）仍然有效。
+    </div>
+    <p class="meta">
+      獨立於本票的既有 bug：<strong>存檔乘 devicePixelRatio 導致同一份文件在不同機器存出的數字不同</strong>
+      （安全上限也跟著浮動）。改固定 <code>×4/3</code> 需要格式版本標記來區分新舊檔，屬另一張單的範圍。
+    </p>
+
+    <!-- 9. mvbf verify -->
+    <h2 id="mvbf-verify">9. mvbf 端查證與方向定案（2026-08-14）</h2>
+
+    <h3 id="mv-resize">結論 1：mvbf 的 resize 走 matrix —— 與 mvbW 完全相反</h3>
+    <p><code>transformable.dart:29-50</code> 的 <code>scaleByPivot</code> / <code>scaleXYByPivot</code> 直接對
+      annotation 的 <code>transform</code> 做 <code>..scale(...)</code>，<strong>字級一個字都沒動</strong>。</p>
+    <table>
+      <thead><tr><th></th><th>mvbW</th><th>mvbf</th></tr></thead>
+      <tbody>
+        <tr><td>canvas zoom</td><td>matrix</td><td>matrix</td></tr>
+        <tr><td>lasso resize</td><td><strong>font size</strong>（matrix 不動）</td><td><strong>matrix</strong>（font size 不動）</td></tr>
+        <tr><td>「烤」的時機</td><td>無（各管各的）</td><td><code>normalizedClone</code> —— 開編輯器 / 存檔時把 matrix 灌進 font size</td></tr>
+      </tbody>
+    </table>
+    <p>toolbar 之所以在 lasso 2x 後顯示 40，是因為 <code>normalizedClone</code>
+      （<code>text_annotation.dart:252-363</code>）把 matrix scale 乘進每個 span 的 <code>size</code>，
+      再把 matrix scale 設回 1（<code>m.scale(1.0/scale, 1.0/scale)</code>）。呼叫點共 6 處：</p>
+    <ul class="compact">
+      <li><code>text_editor.dart:153</code>（開編輯器）· <code>text_annotation.dart:1084</code>（<code>toJson</code>）</li>
+      <li><code>adorning_text_options.dart:108</code> · <code>element_helper.dart:276 / 372</code></li>
+      <li><code>popquiz_view_v2.dart:168</code> · <code>sticky_note_text.dart:149</code></li>
+    </ul>
+    <div class="callout ok">
+      <strong>定案：mvbf 的 resize 模型本來就是對的，不要改。</strong>
+      要拔的是 <code>normalizedClone</code> 這根釘子（把 matrix 烤進 size 的動作），
+      不是 resize 本身。text 若改成動 font size，會與 shape / image（都走 matrix）行為分岔。
+    </div>
+    <div class="callout warn">
+      <strong>順帶更正：</strong><code>getNextLargerNumber</code> 上方註解寫「字體大小最小10最大480」是<strong>錯的</strong>，
+      實際 <code>MAX_SIZE = 130</code>（<code>text_annotation.dart:134</code>）。
+    </div>
+
+    <h3 id="mv-scaler">結論 2：TextScaler 可行（已實測）</h3>
+    <p><code>text_line.dart:171 / 179</code> 的 <code>RichText</code> 與 <code>RichTextProxy</code>
+      都吃 <code>MediaQuery.textScalerOf(context)</code>，且 WIP 的 quill patch 未動到這兩行。
+      以 widget test 直接量 render box：</p>
+    <pre><code>scale=1.0  richText.textScaler=no scaling     size=Size(800.0, 23.0)
+scale=2.0  richText.textScaler=linear (2.0x)  size=Size(800.0, 46.0)
+heightRatio = 2.0</code></pre>
+    <div class="callout warn">
+      <strong>必修配套：</strong><code>_caretHeightAtPosition</code>（<code>text_line.dart:1284-1308</code>）
+      回傳的是 <strong>raw attribute size，沒有乘 scaler</strong>。
+      textScaler=2 時字放大 2 倍、游標高度仍為 1 倍。一行的修正，但不知道就會踩。
+    </div>
+
+    <h3 id="mv-nomvbw">結論 3：不動 mvbW 也能達成目標 —— 存檔正規化</h3>
+    <div class="callout ok">
+      <strong>槓桿：「視覺大小 = font-size × matrix scale」這條算式兩平台一致</strong>（§8 已證），
+      所以同一個視覺結果有無限多組 <code>(font, matrix)</code> 拆法 ——
+      <strong>我們可以自由挑一組落在 mvbW 安全區內的</strong>。
+    </div>
+    <p>做法：<strong>存檔時把 font-size 正規化到 ≤ mvbW 天花板（130 pt = 173.33 px），超出的倍率丟進 matrix。</strong></p>
+    <table>
+      <thead><tr><th>視覺 260px 的字</th><th>檔案內容</th><th>mvbW 讀到</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr><td>今天</td><td><code>font=260, matrix=1</code></td><td>195 pt</td><td><span class="badge badge-err">一被輸入 / resize 就毀</span></td></tr>
+        <tr><td>正規化後</td><td><code>font=173, matrix=1.5</code></td><td>130 pt</td><td><span class="badge badge-ok">永遠在合法清單內</span></td></tr>
+      </tbody>
+    </table>
+    <p>為什麼不需要動 mvbW、也不需要格式版本標記：</p>
+    <ul class="compact">
+      <li><strong>語意沒變</strong>：沒有新欄位、沒改單位，只是換一組等價的 <code>(font, matrix)</code>。
+        任何 reader（mvbW / 舊版 mvbf / PPTX parser）用同一條算式還原成同樣視覺 → <strong>舊 reader 天然正確</strong>。
+        這正是它比「改單位域 ×4/3」優越之處（後者一定要版本標記）。</li>
+      <li><strong>斷行不受影響</strong>：mvbW 的 wrap 寬度 = <code>Width − padding</code> = 檔案 width
+        （<code>TextEdit.cs:725</code> 加上去、排版時再扣掉），與 matrix 無關。
+        只有外框 padding 與 <code>-2</code>/<code>+8</code> 常數會跟著 k 倍放大 → 純外框位移，不重排文字。</li>
+      <li><strong>繞開破壞行為</strong>：mvbW 的吸附發生在 pt 域，而我們保證餵給它的 pt 永遠在 10~130 射程內。</li>
+    </ul>
+    <table>
+      <thead><tr><th>代價</th><th>嚴重度</th><th>說明</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>mvbW 對 &gt;130pt 的字 resize 會「拉了沒反應」</td>
+          <td><span class="badge badge-warn">可接受</span></td>
+          <td>它算 <code>130×1.2=156 → 吸附回 130</code>、matrix 不動 → 無效操作但<strong>非破壞性</strong>，優於今天的靜默改小；一般大小的文字完全照舊</td>
+        </tr>
+        <tr>
+          <td>舊版 mvbf 開新檔<strong>並進編輯器</strong>會縮一半</td>
+          <td><span class="badge badge-err">無解，需權衡</span></td>
+          <td>被它自己的 <code>normalizedClone</code> 烤回 260 再 clamp 成 130。純檢視不會。兩個 knob 只能滿足一邊 —— 選對 mvbW 安全，因為舊版 mvbf 會隨版本更新自然消失，mvbW 的碼我們動不了</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 id="mv-scope">結論 4：本票範圍定案</h3>
+    <table>
+      <thead><tr><th>#</th><th>項目</th><th>進本票</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>拔掉 zoom 進 stored 的路徑：編輯器改用 <code>TextScaler</code>（含 caret 高度修正），<code>normalizedClone</code> 只留給真正需要折 matrix 的呼叫點</td><td><span class="badge badge-ok">✅</span></td></tr>
+        <tr><td>2</td><td>存檔正規化：<code>toJson</code> 保證 font-size ≤ 173.33 px、超出丟 matrix</td><td><span class="badge badge-ok">✅</span></td></tr>
+        <tr><td>3</td><td>resize 維持現況（走 matrix，正確）</td><td><span class="badge badge-ok">✅ 不動</span></td></tr>
+        <tr><td>4</td><td>dpr → 固定 <code>×4/3</code>（需格式版本標記）</td><td><span class="badge badge-na">❌ 拆單</span></td></tr>
+        <tr><td>5</td><td>mvbW 端的破壞性吸附 / <code>Math.Round</code></td><td><span class="badge badge-na">❌ Windows 團隊</span></td></tr>
+      </tbody>
+    </table>
+    <p class="meta">
+      裝置驗證：<code>3629105H804NHC</code>（Pixel Tablet）· edla debug。
+      cursor / selection / IME 在 TextScaler 下的行為要等第 1 項實作出來才有得測。
+    </p>
+
+    <!-- 10. Implementation -->
+    <h2 id="impl">10. 實作記錄 —— 第 1 項：拔掉 zoom 進 stored（2026-08-14）</h2>
+    <div class="callout ok">
+      <strong>核心：Quill 內從「烤過 scale 的值」改成 stored 域字級，視覺放大改由
+      <code>MediaQuery(textScaler:)</code> 提供。</strong>
+      分支 <code>Jay/VSFT-6964-text-font-size</code>（cherry-pick staged + 本次改動 unstaged，皆未 commit）。
+    </div>
+
+    <h3 id="impl-diff">改動一覽</h3>
+    <table>
+      <thead><tr><th>檔案</th><th>改動</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>text_annotation.dart</code></td>
+          <td><code>normalizedClone</code> 加 <code>bakeMatrixScale</code> 開關 —— false 時只做 json 形狀正規化（拆行、補 size 屬性），不乘 scale、不把 matrix 歸 1、width 維持 stored 域。另加 <code>matrixScale</code> getter。退化矩陣守門從 <code>scale != 0</code> 改為 <code>matrixScale != 0</code></td>
+        </tr>
+        <tr>
+          <td><code>text_editor_size_bridge.dart</code></td>
+          <td>語意改為 <code>display = stored × elementScale ÷ canvasZoom</code>。純 zoom 時 factor=1（字級完全不動）；lasso 2x 時 factor=2</td>
+        </tr>
+        <tr>
+          <td><code>text_editor.dart</code></td>
+          <td>Quill 吃 stored 域 json（<code>_initStoredTextAnno</code>）；<code>_buildBody</code> 包 <code>TextScaler.linear(_editorScale)</code>；commit 改用<strong>原始 matrix</strong>（scale 不歸 1）、width 除回 stored 域；「有沒有改過」的比較基準改為 stored 域</td>
+        </tr>
+        <tr>
+          <td><code>text_line.dart</code>（quill patch）</td>
+          <td><code>_caretHeightAtPosition</code> 乘上 <code>textScaler</code>（經 <code>RenderParagraphProxy.child</code> 取得）—— 否則字放大 k 倍、游標仍是 1 倍</td>
+        </tr>
+        <tr>
+          <td><code>text_editor_size_bridge_test.dart</code></td>
+          <td>依新語意重寫，補 lasso factor、clamp 只在顯示域、退化矩陣 / NaN / Infinity 等 case</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="meta">
+      <code>normalizedClone</code> 其餘 5 個呼叫點（adorning / element_helper ×2 / pop quiz / sticky note）本次<strong>未動</strong>。
+    </p>
+
+    <h3 id="impl-tradeoff">關鍵取捨：編輯器同時活在兩個域</h3>
+    <div class="callout warn">
+      <strong>編輯框寬度留在「視覺域」，字級走「stored 域」—— 這是刻意的，不是疏漏。</strong>
+      <ul class="compact">
+        <li><code>TextScaler</code> 只放大 <strong>glyph</strong>，<strong>不會</strong>放大寬度約束。</li>
+        <li>所以字被放大 k 倍時，編輯框也必須是 k 倍寬，斷行點才會跟畫布上一致
+          —— 即 <code>normalizedClone(bakeMatrixScale: true)</code> 給的 <code>width × scale</code>。</li>
+        <li>commit 時再 <code>_textFieldWidth / _editorScale</code> 除回 stored 域寫進 annotation。</li>
+      </ul>
+      這也是為什麼 <code>_initNormalizedTextAnno</code>（視覺域，供 geometry）與
+      <code>_initStoredTextAnno</code>（stored 域，供 Quill 與 diff 比較）兩份並存。
+      <strong>比較「有沒有改過」時務必用 stored 域那份</strong>，否則域不同會永遠判定為 changed。
+    </div>
+
+    <h3 id="impl-verify">驗證狀態</h3>
+    <table>
+      <thead><tr><th>項目</th><th>狀態</th></tr></thead>
+      <tbody>
+        <tr><td><code>flutter test</code> 全套</td><td><span class="badge badge-ok">2897 passed</span>（+1 skipped，0 failed）</td></tr>
+        <tr><td>quill 吃 textScaler</td><td><span class="badge badge-ok">widget test 實測</span> heightRatio 精準 2.0</td></tr>
+        <tr><td>真機：zoom 100% 建 20 → zoom 175% → 點進編輯</td><td><span class="badge badge-ok">toolbar 顯示 20</span>（= manual-test D4，本票原始 bug 情境）</td></tr>
+        <tr><td>真機：編輯器內視覺大小與畫布一致、編輯框無溢出</td><td><span class="badge badge-ok">通過</span></td></tr>
+        <tr><td>游標高度 / 選取 / 點擊定位 / IME / 多行斷行</td><td><span class="badge badge-warn">待人工驗</span> adb 點不出來</td></tr>
+        <tr><td>Lasso resize 後進編輯（factor ≠ 1）</td><td><span class="badge badge-warn">完全未測</span></td></tr>
+      </tbody>
+    </table>
+    <p class="meta">
+      真機：<code>3629105H804NHC</code>（Pixel Tablet）· <code>app-edla-debug.apk</code> ·
+      <code>com.viewsonic.droid</code>。
+    </p>
+
+    <h3 id="impl2">第 2 項：存檔正規化（2026-08-14）</h3>
+    <div class="callout ok">
+      <strong>存檔時字級只烤到 mvbW 合法上限為止，超出的倍率留在 matrix。</strong>
+      視覺與語意都沒變 → 舊 reader 天然正確、<strong>不需要格式版本標記</strong>。
+    </div>
+    <table>
+      <thead><tr><th>新增</th><th>說明</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>MVBW_SAFE_MAX_FILE_FONT_SIZE</code></td>
+          <td><code>130 / 0.75 = 173.33</code>（檔案域 px）。來源見 <a href="#cp-unit">§8 結論 2</a></td>
+        </tr>
+        <tr>
+          <td><code>maxStoredFontSize</code></td>
+          <td>jsonList 內最大 stored 字級（無 size 屬性的 run 以 app 預設字級計）</td>
+        </tr>
+        <tr>
+          <td><code>safeBakeScaleForSave(fileScale)</code></td>
+          <td>回傳「該烤進字級的倍率」。<strong>沒超標時等於 matrixScale（＝過去行為）</strong>，只有會超標才小於它。<code>fileScale</code> 是存檔時字級還會再被乘的倍率（<code>file_olf_save_helper.setTextFontSizeFromMapKey</code>），上限要換算回 annotation 域比</td>
+        </tr>
+        <tr>
+          <td><code>normalizedClone(bakeScaleOverride:)</code></td>
+          <td>只烤指定倍率，殘餘留在 matrix（<code>m.scale(1/烤掉的)</code>）。烤滿時退化成原本的「matrix scale 歸 1」</td>
+        </tr>
+        <tr>
+          <td><code>toJson</code></td>
+          <td>改用上面的倍率</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>踩到的雷：<code>PageSetModel._fileToScreenScale</code> 是 <code>late</code>。</strong>
+      文件尚未初始化時讀取會丟 <code>LateInitializationError</code> ——
+      單元測試會炸，理論上任何早於 document 建立的存檔路徑也會。
+      已用 <code>_currentFileToScreenScale</code> 包 try/catch 退回 1.0
+      （最壞情況只是上限抓得保守，不會讓存檔失敗）。
+    </div>
+    <div class="callout new">
+      <strong>語意變更：舊測試「存 520 不 clamp」已被取代。</strong>
+      WIP 時期的決策是「clamp 屬於顯示域，存檔值可合法超過 130」——
+      那讓 mvbf 自己 round-trip 對了，但把破壞風險推給 mvbW。
+      現在改為：<strong>存檔值有上限，但視覺大小與可還原性完全不變</strong>（倍率換去 matrix）。
+      對應測試已改寫為斷言「字級 ≤ 上限」且「字級 × 殘餘 matrixScale == 原視覺大小」。
+      130 / 48 / 20 @ 122.66% 三個使用者實測案例的 scaled 值（159.45 / 58.88 / 24.53）
+      都在上限內，<strong>正規化不會介入，round-trip 行為與第 2 項之前相同</strong>。
+    </div>
+    <p class="meta">
+      <code>flutter test</code> 全套 <strong>2906 passed</strong>（0 failed）。
+      新增測試涵蓋：不超標時不介入、貼齊上限、超標只烤到上限、
+      視覺大小守恆、任意 scale×size 組合存檔後必 ≤ 上限、fileScale 納入計算、退化輸入不炸。
+    </p>
+    <h4>格線對齊（2026-08-14 追加）與一個重要發現</h4>
+    <div class="callout ok">
+      <strong><code>gridAlignedBakeScaleForSave</code></strong>：在上限之上再微調烤入倍率，
+      讓<strong>最大 run 剛好落在偶數整數 px 格線</strong>上，差額由 matrix 承載 →
+      mvbW 的 <code>Math.Round</code> 與 RTF 半點量化<strong>全部變成 no-op</strong>，第 5 項不再是前提。
+    </div>
+    <div class="callout new">
+      <strong>⚠️ 實作時踩到（並修正）：一開始逐個 run 各自吸附，結果乘積被改變 →
+      display 48 存完重開變 46，直接重現本票的 bug。</strong>
+      正解只能是「<strong>單一參考 run 對齊 + 差額進 matrix</strong>」，乘積必須精確守恆。
+      混合字級時非最大的 run 可能落在格線外、被 mvbW ±0.5px 四捨五入，但非破壞性。
+      測試已釘住乘積守恆與 round-trip。
+    </div>
+    <div class="callout warn">
+      <strong>🔴 新發現：檔案域倍率 = annotation 域 × dpr × fileToScreenScale，
+      dpr 讓上限被觸發得比預期頻繁得多。</strong>
+      先前 §8 用 dpr=2 估「display &gt; 86.7 才越界」；實測在
+      <strong>dpr=3 的裝置上，display 48 @ zoom 1.23（名目 58.9）就已經超過 mvbW 的 173.33 上限</strong>
+      而被壓縮。
+      <br/><br/>
+      這把<strong>第 4 項（存檔單位 dpr → 固定 ×4/3）從「拆單的清理工作」提升為「正在造成實害的根因」</strong> ——
+      它讓安全線隨裝置浮動且過低。視覺與 round-trip 目前仍正確（差額進 matrix），
+      但代價是 element matrix 幾乎總是帶著補償倍率。
+    </div>
+    <div class="callout warn">
+      <strong>尚未處理：</strong>XML / textarea 那條存檔路徑（<code>genParagraph</code> 的 xmlBuilder）
+      沒有套用正規化，只有 content.json 路徑（<code>toJson</code>）有。若該路徑也會產出給 mvbW 讀的檔，需要一併處理。
+    </div>
+
+    <!-- 11 -->
+    <h2 id="verify3">11. 三題查證（2026-08-14）</h2>
+
+    <h3 id="v3-master">結論 1：master 不會有小數 —— 小數是 WIP 引進的</h3>
+    <p><code>git show master</code> 確認：<code>toJson</code>（<code>:1075</code>）與開編輯器
+      （<code>text_editor.dart:139</code>）<strong>都用整數化的 <code>normalizedClone()</code></strong>（預設
+      <code>convertToIntegerFontSize: true</code>）。</p>
+    <div class="callout warn">
+      所以 master 的字級永遠是 10~130 的偶數整數，lasso 拉出小數倍率也一樣 ——
+      <strong>但這正是本票的 bug</strong>：每次「烤」都 <code>round → floor 到偶數 → clamp</code>，
+      lasso 1.37 倍時 20×1.37=27.4 被 floor 成 26（<strong>字真的縮小 5%</strong>），超過 130 直接 clamp。
+      <br/><br/>
+      <strong>master 是用「每次烤都掉精度」換到乾淨的偶數格線。</strong>
+      我們要的是保留那條格線、但不要破壞性 —— 即「偶數吸附 + 差額進 matrix」。
+    </div>
+
+    <h3 id="v3-d2">結論 2：Q1 不但不撞 D2，反而修好它（先前判斷已推翻）</h3>
+    <ul class="compact">
+      <li><code>olf_reader.dart:316-320</code>：<code>pageSetMatrix</code> 只被讀 scale 塞給
+        <code>infiniteCanvasScale</code>，<strong>從未套用到任何 element</strong>。</li>
+      <li><code>infiniteCanvasScale</code> <strong>不是渲染 transform，只是狀態/標籤</strong> ——
+        真正的縮放是 <code>infinite_canvas.dart:294-298</code> 用 <code>scaleByPivot</code>
+        把 deltaScale <strong>烤進 element matrix</strong>。</li>
+    </ul>
+    <table>
+      <thead><tr><th></th><th>檔案裡 element matrix</th><th>還原的 zoom 標籤</th><th>使用者把 zoom 拉回 100%</th></tr></thead>
+      <tbody>
+        <tr><td>現在</td><td>scale=1（zoom 被烤進字級）</td><td>1.2266</td><td>套 delta 0.815 → 元素<strong>縮小 18%</strong>（幽靈 zoom）</td></tr>
+        <tr><td>Q1 之後</td><td>scale=1.2266（真實值）</td><td>1.2266</td><td>套 delta 0.815 → 元素回到 scale 1 <span class="badge badge-ok">✓</span></td></tr>
+      </tbody>
+    </table>
+    <div class="callout ok">
+      <strong>不存在重複套用的風險。</strong>Q1 讓檔案狀態自洽，
+      D2 那個「靠存檔烤 zoom × 開檔還原標籤剛好抵消」的脆弱點也一起消失。
+      Q1 從「有風險、待評估」改判為「<strong>該做</strong>」。
+    </div>
+
+    <h3 id="v3-sticky">結論 3：sticky note 是「matrix 救不回來」的反例</h3>
+    <table>
+      <thead><tr><th>方向</th><th>位置</th><th>行為</th></tr></thead>
+      <tbody>
+        <tr><td>存</td><td><code>stickynote_annotation.dart:223</code></td><td><code>font-size = getTextAnnotationFontSize() × ratio</code></td></tr>
+        <tr><td>取值</td><td><code>stickynote_annotation.dart:316-329</code></td><td>回傳內層 text 的<strong>原始 size 屬性 —— 完全不看內層 matrix</strong></td></tr>
+        <tr><td>讀</td><td><code>element_helper.dart:1453</code></td><td><code>attributes['size'] = fontSize / ratio</code></td></tr>
+      </tbody>
+    </table>
+    <div class="callout new">
+      <strong>sticky note 的字級是純量，內層 text annotation 的 matrix scale 存檔時會被無聲丟掉。</strong>
+      <ul class="compact">
+        <li><span class="badge badge-ok">無回歸</span> 第 1、2 項不影響 sticky note —— 它走自己的序列化路徑，不經過 <code>TextAnnotation.toJson</code>。此行為 master 就有。</li>
+        <li><span class="badge badge-err">但</span> 它證明「倍率放 matrix 一定救得回來」<strong>不是全域成立</strong>。</li>
+        <li>目前安全是<strong>碰巧</strong>：內層 text 被 <code>sticky_note_text.dart:159</code> 從 <code>pageData.annotations</code> 移除，pinch zoom 不會烤進它的 matrix，內層 matrix 實質恆為 identity。<strong>需要一條測試把這個前提釘住。</strong></li>
+      </ul>
+    </div>
+
+    <h3 id="v3-display">結論 4：resize 後重開顯示不會變（乘積守恆）</h3>
+    <p>display 是<strong>每次重算</strong>、不是存起來的：
+      <code>display = getNextLargerNumber(stored × elementScale ÷ zoom)</code>。
+      以 lasso 1.37 倍（zoom=1、stored=20）為例：</p>
+    <table>
+      <thead><tr><th>時機</th><th>stored</th><th>elementScale</th><th>乘積</th><th>toolbar</th></tr></thead>
+      <tbody>
+        <tr><td>剛 lasso 完</td><td>20</td><td>1.37</td><td>27.4</td><td><strong>26</strong></td></tr>
+        <tr><td>關掉再開（同 session）</td><td>20</td><td>1.37</td><td>27.4</td><td><strong>26</strong></td></tr>
+        <tr><td>存檔重開（現行）</td><td>27.4</td><td>1</td><td>27.4</td><td><strong>26</strong></td></tr>
+        <tr><td>存檔重開（偶數吸附後）</td><td>26</td><td>1.0538…</td><td>27.4</td><td><strong>26</strong></td></tr>
+      </tbody>
+    </table>
+    <div class="callout ok">
+      <strong>只要乘積被保住，顯示就穩定</strong> —— 四種拆法給同一個數字。
+      這正是「差額必須進 matrix」而不能直接截斷的原因：截斷會改變乘積。
+      <strong>master 就是截斷</strong>（27.4 floor 成 26 且 matrix 歸 1 → 字真的縮小 5%）。
+      浮點誤差也不咬人：<code>getNextLargerNumber</code> 先 <code>round()</code> 再取最大偶數。
+    </div>
+    <div class="callout warn">
+      <strong>既有怪癖（master 也有，且更嚴重）：</strong>toolbar 顯示 26、實際視覺 27.4。
+      此時去 dropdown 點一下「26」，stored 被重寫成 <code>26/1.37 = 18.98</code>，視覺真的縮成 26 ——
+      「選了你本來就看到的數字，字卻變小」。這是 floor-to-even 顯示的固有副作用，非本次引入；
+      要根治得讓 display 不 floor（spec 決策，未動）。
+    </div>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>VSFT-6964 文字字級絕對值顯示 — 總覽</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#status">1. 現況</a></li>
+      <li><a href="#source">2. 原始 ticket</a></li>
+      <li><a href="#problem">3. 問題一句話</a></li>
+      <li><a href="#evolution">4. 三個階段的演進</a></li>
+      <li><a href="#model">5. 現行模型（三個域）</a></li>
+      <li><a href="#scope">6. 範圍：進 / 不進本票</a></li>
+      <li><a href="#branches">7. 分支與檔案</a></li>
+      <li><a href="#todo">8. TODO</a></li>
+      <li><a href="#open">9. 待決事項</a></li>
+      <li><a href="#docs">10. 文件導覽</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>VSFT-6964 · [Text] 文字字級絕對值顯示 <span class="badge badge-warn">開發中</span></h1>
+    <div class="meta">
+      [Droid-100655] [MVBFv3] text size is not absolute &middot;
+      對象 repo <code>edu-droid-flutter</code>（mvbf）&middot;
+      Assignee: Jay Wu &middot; Platform: mVB Flutter &middot;
+      最後更新 2026-08-14
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html" class="active">📘 總覽 (overview)</a>
+      <a href="findings.html">🔍 調查記錄 (findings)</a>
+      <a href="superseded-2026-07-29.html">🗄️ 舊修法（04b2c3571）</a>
+      <a href="manual-test.html">🧪 手動測試清單</a>
+      <a href="jira/VSFT-6964.md">🎫 Jira clone</a>
+    </div>
+
+    <!-- 1 -->
+    <h2 id="status">1. 現況（2026-08-14 收尾）</h2>
+    <div class="callout ok">
+      <strong>第 1、2 項 + 格線對齊 + Q2 已實作完成，全套測試 2923 passed。</strong>
+      程式碼在 <code>Jay/VSFT-6964-text-font-size</code>，<strong>尚未 commit</strong> ——
+      完整快照已存成 <a href="patches/README.md">patch（含 git 座標與還原方式）</a>。
+    </div>
+    <div class="callout warn">
+      <strong>⚠️ 交接重點：唯一驗過的真機情境只有「zoom 175% 點進編輯顯示 20」。</strong>
+      互動類（游標 / 選取 / IME / 斷行）與 <strong>OLF 實際存檔內容、mvbW 雙向開檔</strong>
+      都還沒驗。續做前請先看 <a href="#todo">§8 TODO</a>。
+    </div>
+    <table>
+      <thead><tr><th>座標</th><th>值</th></tr></thead>
+      <tbody>
+        <tr><td>base（master HEAD）</td><td><code>093103866</code></td></tr>
+        <tr><td>工作分支</td><td><code>Jay/VSFT-6964-text-font-size</code>（未 commit）</td></tr>
+        <tr><td>舊修法分支（保留）</td><td><code>Jay/VSFT-6964-tmp-font-size</code> @ <code>04b2c3571</code></td></tr>
+        <tr><td>patch</td><td><a href="patches/vsft-6964-worktree-vs-master.patch">patches/vsft-6964-worktree-vs-master.patch</a>（19 檔）</td></tr>
+        <tr><td>真機</td><td><code>3629105H804NHC</code> · edla debug · <code>com.viewsonic.droid</code></td></tr>
+      </tbody>
+    </table>
+
+    <!-- 2 -->
+    <h2 id="source">2. 原始 ticket</h2>
+    <div class="source-card">
+      <div class="title"><span class="badge badge-mvb">Jira 漏洞</span> VSFT-6964 — [Droid-100655] [MVBFv3] text size is not absolute</div>
+      <div class="id">Jira ID 69705 &middot; Status: 開放 &middot; Reporter: Shuying &middot; 建立於 2026-04-08</div>
+      <div>
+        <a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-6964" target="_blank">Jira 原 issue</a> &middot;
+        <a href="jira/VSFT-6964.md">本地 clone</a>
+      </div>
+    </div>
+
+    <!-- 3 -->
+    <h2 id="problem">3. 問題一句話</h2>
+    <div class="callout">
+      使用者看到的 font size 會隨 canvas zoom 改變（在不同縮放等級下建立同樣 fontSize=20 的文字，
+      顯示出來的數字卻不同），而且<strong>存檔重開後數字會漂移</strong>（130→106、48→46）。
+    </div>
+    <p>病根：字級其實有三個不同的域，而 mvbf 把它們壓成同一個值 ——
+      <code>normalizedClone</code> 會把 annotation matrix 的 scale（含 canvas zoom）
+      <strong>烤進字級並寫回</strong>，這是不可逆的資訊破壞。</p>
+
+    <!-- 4 -->
+    <h2 id="evolution">4. 三個階段的演進</h2>
+    <table>
+      <thead><tr><th>階段</th><th>時間</th><th>主張</th><th>下場</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><a href="superseded-2026-07-29.html">舊修法 <code>04b2c3571</code></a></td>
+          <td>2026-07-29</td>
+          <td>clamp 屬於顯示域，<strong>存的 scaled 值可無限大</strong></td>
+          <td><span class="badge badge-na">已取代</span> mvbf 自己 round-trip 對了，但把破壞風險推給 mvbW</td>
+        </tr>
+        <tr>
+          <td><a href="findings.html#cp-conclusion">中途提案（已收回）</a></td>
+          <td>2026-08-13</td>
+          <td>mvbf 照抄 mvbW：resize 改成動 font size</td>
+          <td><span class="badge badge-na">已推翻</span> 查了 mvbf 才知道它的 resize 本來就走 matrix，改動等於重寫整條路</td>
+        </tr>
+        <tr>
+          <td><strong><a href="findings.html#impl">現行修法</a></strong></td>
+          <td>2026-08-14</td>
+          <td>zoom 永不進 stored（<code>TextScaler</code>）＋ 存檔正規化到 mvbW 合法射程</td>
+          <td><span class="badge badge-ok">實作完成</span> 待人工驗證</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- 5 -->
+    <h2 id="model">5. 現行模型（三個域）</h2>
+    <table>
+      <thead><tr><th>域</th><th>語意</th><th>誰能寫</th></tr></thead>
+      <tbody>
+        <tr><td><strong>stored</strong></td><td>annotation / 檔案裡的正典值</td><td>只有使用者主動挑字級時</td></tr>
+        <tr><td><strong>render</strong></td><td>stored × element matrix（含 canvas zoom）</td><td>渲染層算出來，<strong>不回寫</strong></td></tr>
+        <tr><td><strong>display</strong></td><td>toolbar 顯示 = stored × elementScale ÷ canvasZoom</td><td>UI 算出來，<strong>不回寫</strong></td></tr>
+      </tbody>
+    </table>
+    <ul class="compact">
+      <li><strong>canvas zoom</strong> → 只動 matrix，永不進 stored</li>
+      <li><strong>lasso resize</strong> → 只動 matrix（mvbf 本來就是這樣，正確，不動）</li>
+      <li><strong>編輯器</strong> → 用 <code>MediaQuery(textScaler:)</code> 呈現放大，不再把 scale 烤進字級</li>
+      <li><strong>clamp（10~130）</strong> → 只發生在顯示域；stored 可超過 130，但<strong>存檔時不得超過 173.33</strong>（mvbW 的 130pt），超出的倍率由 matrix 承載</li>
+    </ul>
+    <div class="callout ok">
+      跨平台的槓桿：<strong>「視覺 = font-size × matrix scale」這條算式 mvbf / mvbW 兩邊一致</strong>，
+      所以同一個視覺有無限多組拆法，我們挑一組落在 mvbW 合法射程內的 ——
+      <strong>不需要動 mvbW、不需要格式版本標記、舊 reader 天然正確</strong>。
+      查證見 <a href="findings.html#crossplatform">findings §8</a>。
+    </div>
+
+    <!-- 6 -->
+    <h2 id="scope">6. 範圍</h2>
+    <table>
+      <thead><tr><th>#</th><th>項目</th><th>狀態</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>編輯器改用 <code>TextScaler</code>，zoom 不再進 stored（含 caret 高度修正）</td><td><span class="badge badge-ok">✅ 完成</span></td></tr>
+        <tr><td>2</td><td>存檔正規化：font-size ≤ 173.33，超出丟 matrix</td><td><span class="badge badge-ok">✅ 完成</span></td></tr>
+        <tr><td>2b</td><td>格線對齊（偶數整數 px）＋「只在必要時才用 matrix 補償」</td><td><span class="badge badge-ok">✅ 完成</span></td></tr>
+        <tr><td>2c</td><td>Q2：<code>.iwb</code> 路徑（<code>writeData</code>）壓進安全格線 + transform 反向補償</td><td><span class="badge badge-ok">✅ 完成</span></td></tr>
+        <tr><td>3</td><td>resize 維持走 matrix</td><td><span class="badge badge-ok">✅ 不動</span></td></tr>
+        <tr><td>4</td><td>存檔單位 dpr → 固定 <code>×4/3</code>（需格式版本標記）</td><td><span class="badge badge-na">❌ 拆單</span></td></tr>
+        <tr><td>5</td><td>mvbW 端的破壞性吸附 / <code>Math.Round</code></td><td><span class="badge badge-ok">✅ 不需要</span> 由 mvbf 側存檔約束解決（值吸附到偶數整數 px、差額進 matrix → mvbW 三種破壞全部變 no-op）。見 <a href="findings.html#v3-master">findings §11</a></td></tr>
+      </tbody>
+    </table>
+
+    <!-- 7 -->
+    <h2 id="branches">7. 分支與檔案</h2>
+    <table>
+      <thead><tr><th>分支</th><th>內容</th></tr></thead>
+      <tbody>
+        <tr><td><code>Jay/VSFT-6964-text-font-size</code></td><td><strong>現行</strong>。cherry-pick 的 <code>04b2c3571</code>（staged）＋ 第 1/2 項（unstaged），皆未 commit</td></tr>
+        <tr><td><code>Jay/VSFT-6964-tmp-font-size</code></td><td>舊修法 <code>04b2c3571</code>，<strong>刻意保留</strong>供對照，見 <a href="superseded-2026-07-29.html">舊修法頁</a></td></tr>
+      </tbody>
+    </table>
+    <p class="meta">
+      真機：<code>3629105H804NHC</code>（Pixel Tablet）· edla debug · <code>com.viewsonic.droid</code>。
+      設計文件另見 flutter repo 的 <code>docs/text_annotation_font_size_clean_architecture.md</code>。
+    </p>
+
+    <!-- TODO -->
+    <h2 id="todo">8. TODO（依建議順序）</h2>
+    <table>
+      <thead><tr><th>#</th><th>項目</th><th>為什麼是這個順序</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>T1</td>
+          <td><strong>OLF 實際存檔驗證</strong>：mvbf 存檔 → <code>adb run-as</code> 撈 <code>content.json</code> →
+            確認 font-size 落在偶數整數 px 且 ≤173.33、一般情況 matrix 仍為 1</td>
+          <td><span class="badge badge-err">最高優先</span> 壞檔案是永久的，可能要打 patch 才能救。這是唯一能退掉格式風險的方法</td>
+        </tr>
+        <tr>
+          <td>T2</td>
+          <td><strong>mvbW 雙向開檔</strong>：mvbf 存 → mvbW 開；mvbW 存 → mvbf 開</td>
+          <td>核心目標是內部產品間的 OLF 轉換</td>
+        </tr>
+        <tr>
+          <td>T3</td>
+          <td><strong>編輯器互動人工測</strong>：游標高度、選取、點擊定位、IME、多行斷行、lasso resize 後進編輯</td>
+          <td>這是我們<strong>自己引進</strong>的風險（TextScaler + caret patch），測試蓋不到</td>
+        </tr>
+        <tr>
+          <td>T4</td>
+          <td>走完 <a href="manual-test.html">手動測試清單</a> A–L</td>
+          <td>A/B/C 是回歸確認，D/E/F 是這次真正改到的</td>
+        </tr>
+        <tr>
+          <td>T5</td>
+          <td>commit 前清掉夾帶檔案（<code>android/build.gradle</code>、<code>macos/Podfile.lock</code>、
+            <code>native_screenshot/.classpath</code>、<code>app_update_helper.dart</code>、
+            <code>docs/pptx-import-conversion-panic-fix.md</code>）與 <code>debug_credentials.dart</code></td>
+          <td>都是 cherry-pick 夾帶的，與本票無關</td>
+        </tr>
+        <tr>
+          <td>T6</td>
+          <td>評估 <strong>第 4 項（dpr → 固定 ×4/3）</strong>是否併入或另開票</td>
+          <td>實測顯示它是「上限被頻繁觸發」的根因（dpr=3 時 display 48 @ zoom1.23 就越界）</td>
+        </tr>
+        <tr>
+          <td>T7</td>
+          <td>查證存/讀的 <code>fileToScreenScale²</code> 疑似不對稱（存 ×dpr×f2s vs 讀 ÷olfRatio）</td>
+          <td>若成立，是 master 既有的字級縮放誤差，與本票獨立</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- 9 -->
+    <h2 id="open">9. 待決事項</h2>
+    <table>
+      <thead><tr><th>#</th><th>問題</th><th>狀態</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Q1</td>
+          <td><strong>存檔仍在烤 canvas zoom</strong>。<code>toJson</code> 把 matrixScale（含 zoom）烤進字級，
+            所以正規化上限會很常被觸發 —— zoom 400% 時任何 &gt;43.3 的字都會走到。
+            視覺與 round-trip 正確，但不夠乾淨：終局應是<strong>存檔完全不烤 zoom</strong>（font 寫 stored、zoom 全留 matrix，與 mvbW 一致）。</td>
+          <td><span class="badge badge-warn">該做但未做</span> 地雷：<code>toJson</code> 的 <code>data['width']</code> 用 <code>getBounds()</code>（轉換後），不烤 scale 會與 matrix 重複計算 → 屬 x/y/width 的<strong>域改動</strong>，需與 mvbW 對開檔案驗證。<br/> 原本以為會撞 D2，<strong>查證後相反</strong> —— <code>infiniteCanvasScale</code> 只是標籤、不是渲染 transform，Q1 反而讓檔案自洽並修好 D2 的幽靈 zoom。見 <a href="findings.html#v3-d2">findings §11</a></td>
+        </tr>
+        <tr>
+          <td>Q2</td>
+          <td>XML / textarea 存檔路徑（<code>genParagraph</code> 的 xmlBuilder）沒套正規化，只有 content.json（<code>toJson</code>）有。該路徑產出的檔會給 mvbW 讀嗎？</td>
+          <td><span class="badge badge-warn">待確認</span></td>
+        </tr>
+        <tr>
+          <td>Q3</td>
+          <td>舊版 mvbf 開新檔<strong>並進編輯器</strong>會被它自己的 <code>normalizedClone</code> 縮一半（純檢視不會）。可接受嗎？</td>
+          <td><span class="badge badge-mostly">已權衡</span> 選對 mvbW 安全 —— 舊版 mvbf 會隨更新消失，mvbW 的碼動不了</td>
+        </tr>
+        <tr>
+          <td>Q5</td>
+          <td><strong>sticky note 會吃掉 matrix</strong>：內層 text 的 matrix scale 存檔時被無聲丟掉（<code>stickynote_annotation.dart:223/316</code>）。目前安全是「碰巧」（內層 matrix 恆為 identity），需測試釘住。</td>
+          <td><span class="badge badge-warn">要加 invariant 測試</span></td>
+        </tr>
+        <tr>
+          <td>Q4</td>
+          <td><code>normalizedClone</code> 其餘 5 個呼叫點（adorning / element_helper ×2 / pop quiz / sticky note）是否也該檢視？</td>
+          <td><span class="badge badge-na">本次未動</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- 9 -->
+    <h2 id="docs">10. 文件導覽</h2>
+    <table>
+      <thead><tr><th>文件</th><th>內容</th></tr></thead>
+      <tbody>
+        <tr><td><a href="findings.html">🔍 findings</a></td><td>完整調查：D1/D2 驗算、sparrow 跨平台查證（§8）、mvbf 端查證與定案（§9）、實作記錄（§10）</td></tr>
+        <tr><td><a href="superseded-2026-07-29.html">🗄️ 舊修法</a></td><td>2026-07-29 第一版修法的完整記錄與「為什麼被取代」</td></tr>
+        <tr><td><a href="patches/README.md">💾 patch 保存</a></td><td>工作區完整快照 + git 座標 + 還原方式</td></tr>
+        <tr><td><a href="manual-test.html">🧪 手動測試清單</a></td><td>A–L 共 11 節，可勾選、進度存 localStorage</td></tr>
+        <tr><td><a href="jira/VSFT-6964.md">🎫 Jira clone</a></td><td>票面 + 5 則留言（含 2026-07-29 進度暫存）</td></tr>
+      </tbody>
+    </table>
+  </main>
+</div>
+</body>
+</html>

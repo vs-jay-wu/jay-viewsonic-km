@@ -1,0 +1,2069 @@
+diff --git a/android/build.gradle b/android/build.gradle
+index f5d0d0b83..d2bcfc154 100644
+--- a/android/build.gradle
++++ b/android/build.gradle
+@@ -46,6 +46,7 @@ allprojects {
+                             namespace project.group
+                         }
+                     }
++                    compileSdkVersion 36
+                 }
+             }
+         }
+diff --git a/docs/pptx-import-conversion-panic-fix.md b/docs/pptx-import-conversion-panic-fix.md
+new file mode 100644
+index 000000000..6ebeb5ca9
+--- /dev/null
++++ b/docs/pptx-import-conversion-panic-fix.md
+@@ -0,0 +1,157 @@
++# PPTX 匯入失敗根因與修復（parser_v3 容錯解析）
++
++> 調查日期：2026-06-27。本文記錄 PPTX「Open File」匯入失敗的根因、修復，以及
++> 該修復應套用到哪個 repo。**修改不在本 app（edu-droid-flutter）內**，而在 PPTX→OLF
++> 轉換器（Rust `parser_v3` crate）。本文是給之後實際套用改動的紀錄。
++
++## 症狀
++
++- 在 mvbf「File → Open file → Local Drive」選 PPTX 後，匯入失敗，跳
++  「**The file format is incorrect. Whiteboard is not able to open the file.**」(`file_not_supported`)。
++- 預覽 dialog 顯示「**Preview not available**」（無第一頁縮圖）。
++- Android 端轉換 **progress 卡在 16**（`callback(16)` 後再無進展），約 30 秒後
++  watchdog 逾時 → 回 null → 視為不支援。
++
++測試檔：`Artificial Neural Networks Conference.pptx`（20 頁，合法 OOXML，md5 在裝置上驗證完整）。
++
++## 排除的誤判
++
++1. **檔案/傳輸**：裝置上 md5 與 host 一致、unzip 驗證 20 張 slide → 檔案沒問題。
++2. **ABI / .so 缺失或對齊**：模擬器為 arm64-v8a、4KB page；APK 內含
++   `lib/arm64-v8a/mvbx_pptx_olf_api.so`，且 LOAD segment 已 16KB 對齊 → 不是打包問題。
++3. **`CvtRenderAccelerator` / `libAccelerateDraw.so` UnsatisfiedLinkError**（app 啟動時 logcat 可見）
++   → 這是 **app 端「投影片縮圖預覽」** 走硬體加速器渲染失敗（造成「Preview not available」），
++   **與匯入轉換失敗無關**，是紅鯡魚。
++
++## 根因（已本地重現 + 修復驗證）
++
++PPTX→OLF 轉換在 `parser_v3` 內 **panic**：
++
++```
++thread 'slide12.xml.rels' panicked at libs/parser_v3/src/utils.rs:165:20:
++called `Result::unwrap()` on an `Err` value: ParseFloatError { kind: Invalid }
++（slide8.xml.rels 亦同）
++```
++
++- `parser_v3/src/utils.rs` 的 `str_to_f32` / `str_to_f64` / `str_to_i32` 直接 `.parse().unwrap()`。
++- 此測試檔在 **slide 8、slide 12** 有某數值屬性為非法浮點字串 → `unwrap()` panic。
++- panic 發生在 per-slide 的 **worker thread**，經 `olf.rs:137` 的 `handle.join().unwrap()`
++  連鎖 → 整份轉換 panic。
++- 在 Android，FFI（`rs-pptx-ffi`）以 `catch_unwind` 包住 → panic 被吞 → 轉換回空 →
++  `callback(17)` 永遠到不了（故卡在 16）→ 上層得到空頁 → 「file_not_supported」。
++
++呼叫鏈：`convert` → `parser_v3::convert_from_unzip_pptx_folder_olf` →
++`entry_olf::convert_from_pptx_to_olf` → `Presentation::build_olf`（presentation.rs:203，
++`callback(16)` 後）→ `olf.rs:137 handle.join().unwrap()` → worker panic（utils.rs:165）。
++
++## 修復
++
++讓三個解析 helper 容錯（trim + 預設值），單一壞值降級為 0，而非毀掉整份匯入。
++
++**Repo：PPTX 轉換器 parser（`parser_v3` crate）** — 檔案 `libs/parser_v3/src/utils.rs`：
++
++```diff
+++// 容錯解析：PPTX 真實檔案中，數值屬性可能為空字串、含空白或非法值
+++// （例如某些 slide 的 rels/座標）。先前直接 .unwrap() 會在 worker thread panic，
+++// 經 olf.rs:137 `handle.join().unwrap()` 連鎖，導致整份轉換失敗（Android FFI
+++// catch_unwind 吞掉後回空 → 「file format is incorrect」）。改為 trim + 預設值，
+++// 讓單一壞值降級為 0，而非毀掉整份匯入。
++ pub fn str_to_f64(s: &str) -> f64 {
++-  s.parse::<f64>().unwrap()
+++  s.trim().parse::<f64>().unwrap_or(0.0)
++ }
++ pub fn str_to_f32(s: &str) -> f32 {
++-  s.parse::<f32>().unwrap()
+++  s.trim().parse::<f32>().unwrap_or(0.0)
++ }
++ pub fn str_to_i32(s: &str) -> i32 {
++-  s.parse::<i32>().unwrap()
+++  s.trim().parse::<i32>().unwrap_or(0)
++ }
++```
++
++## 驗證（本地 macOS，純 cargo，不需 Android）
++
++parser 是純 Rust，可直接在桌面重現與驗證：
++
++```sh
++# 於 parser repo（edu-pptx-olf-parser-rust）
++cd apps/app
++RUST_BACKTRACE=1 cargo run -- /path/to/test.pptx /tmp/out.olf
++```
++
++- **修復前**：panic（ParseFloatError），無 `out.olf`。
++- **修復後**：無 panic、約 124ms 完成、產出 **22MB 合法 `out.olf`**（23,326,629 bytes）。
++
++## 已實測：on-device 端到端跑綠（2026-06-27）
++
++不只本地 cargo，已實際把修復編成 Android `.so` 並在裝置上驗證：
++
++1. 在含修復的 `parser_v3` 上，於 `rs-pptx-ffi` 交叉編譯 arm64：
++   `cargo build --lib --release --target aarch64-linux-android`（NDK 28 clang 當 linker）
++   → 產出 `libmvbx_pptx_olf_api.so`（AArch64、LOAD 16KB 對齊）。
++2. 去 `lib` 前綴後覆蓋 mvbf 用的 pub-cache jniLib：
++   `~/.pub-cache/git/edu-pptx-olf-rust-ffi-<ref>/mvbx_pptx_olf_api/android/src/main/jniLibs/arm64-v8a/mvbx_pptx_olf_api.so`
++   （原檔已備份為 `*.orig-bak`）。
++3. 重建 mvbf debug edla APK、安裝，跑自動化測試（vsft-7703 匯入 PPTX）：
++
++```
++✓ VSFT-7703：20 頁 PPTX 全部匯入，page indicator total = 20
++  Test Files  1 passed (1) ；Tests  1 passed (1)
++```
++
++→ 修復確實讓 PPTX 匯入成功、頁數正確（20）。
++
++> ⚠️ 上述 pub-cache `.so` 是**本機暫時替換**（驗證用）。一旦 `flutter pub get` 重抓
++> 或清 pub-cache 就會還原成未修復版本。**正式修復仍須走下節的 upstream 流程**
++> （改 parser → 重建 ffi 的 jniLibs → bump mvbf pubspec ref）。
++
++### .so 備份與重新套用（pub get 之後）
++
++修復版與原始版 `.so` 已備份至 pub-cache 之外的 `~/pptx-so-backup/`（含 `README.md` 與還原指令），
++避免 `flutter pub get` 清掉 pub-cache 後遺失。pub get 後要重新套用：
++
++```sh
++SO_DST=~/.pub-cache/git/edu-pptx-olf-rust-ffi-e1d5c937dd7d69097af1ac7479e95d025340c619/mvbx_pptx_olf_api/android/src/main/jniLibs/arm64-v8a/mvbx_pptx_olf_api.so
++cp ~/pptx-so-backup/mvbx_pptx_olf_api.arm64.FIXED.so "$SO_DST"   # 重新套用修復
++# 還原原始版：cp ~/pptx-so-backup/mvbx_pptx_olf_api.arm64.ORIGINAL.so "$SO_DST"
++```
++
++## 要套用到哪個 repo（重要）
++
++涉及的兩個 GitHub repo：
++
++| Repo | 角色 | 是否需改 |
++|------|------|----------|
++| `edu-pptx-olf-parser-rust` | PPTX→OLF parser（`parser_v3` crate） | **要改**（即上面的 utils.rs） |
++| `edu-pptx-olf-rust-ffi` | FFI 包裝 + 產生 Android `.so`/jniLibs | **程式碼不用改** |
++
++關鍵接線：`edu-pptx-olf-rust-ffi/rs-pptx-ffi/Cargo.toml` 以
++`parser_v3 = { path = "../rust_pptx_parser/libs/parser_v3" }` 引用 parser，而
++`rust_pptx_parser` 是 **git submodule**（指向 Azure DevOps：
++`viewsonic-ssi .../whiteboard file format universal/rust_pptx_parser`，branch master）。
++
++→ 換言之，**FFI 實際建置用的 parser 是 `rust_pptx_parser` submodule（Azure DevOps）**；
++GitHub 的 `edu-pptx-olf-parser-rust` 應為同一份 `parser_v3` 程式碼（同 crate、同 `libs/parser_v3` 路徑）。
++
++**套用步驟（待外接硬碟接上後）**：
++1. 在 canonical parser 來源（`rust_pptx_parser` submodule / 或確認 `edu-pptx-olf-parser-rust` 為來源）
++   套用 `libs/parser_v3/src/utils.rs` 的修改。
++2. 在 `edu-pptx-olf-rust-ffi` 重建 Android `.so`（產生新的 `mvbx_pptx_olf_api/android/src/main/jniLibs/*`），
++   更新 submodule 指向含修復的 parser。
++3. 在 mvbf `pubspec.yaml` 把 `mvbx_pptx_olf_api` 的 git `ref` 指到新版（目前為
++   `e1d5c937…` / 1.8.0）。
++
++## 後續建議：稽核其他 `parse().unwrap()`
++
++本修復解掉了集中式數值解析的三個 helper（本測試檔已可完整轉換）。但 `parser_v3` 內仍有
++其他 inline 解析 `.unwrap()`，其他檔案可能在不同 slide 觸發類似 panic，建議一併容錯化：
++
++- `libs/parser_v3/src/color.rs:54`：`split(", ").map(|s| s.parse::<f32>().unwrap())`
++- `libs/parser_v3/src/qb.rs:139-140`：`parse::<i32>().unwrap()`
++- `libs/parser_v3/src/olf.rs:144, 252, 257`：`parse::<i32>().unwrap()`
++- `libs/parser_v3/src/presentation.rs:198`：`parse::<usize>().unwrap()`（slide 編號）
++
++> 補充：Android FFI 用 `catch_unwind` 把 panic 吞成空結果，使根因在裝置上難以察覺
++> （只看到「卡 16% → 不支援」）。可考慮在 FFI 層把 panic 訊息經 callback/log 回報，
++> 加速日後除錯。
+diff --git a/docs/text_annotation_font_size_clean_architecture.md b/docs/text_annotation_font_size_clean_architecture.md
+new file mode 100644
+index 000000000..bbeb2782a
+--- /dev/null
++++ b/docs/text_annotation_font_size_clean_architecture.md
+@@ -0,0 +1,175 @@
++# TextAnnotation font-size clean architecture refactor
++
++Status: planning / follow-up
++Origin: VSFT-6964 (toolbar shows zoom-dependent font size at non-1.0 canvas zoom)
++Owner: TBD
++
++> ⚠️ **真正動工前請重新 review 整個 plan**
++>
++> 這份 plan 是 VSFT-6964 PR 完成當下的快照。實際 refactor 可能是幾週 / 幾個月以後才會排到，
++> 期間下列任何一項都可能讓 plan 的假設失效，需要在開分支之前重新驗證一次：
++>
++> - `TextAnnotation.normalizedClone` 或 `PageDataScaleHelper.updateScale` 的行為有沒有被改過
++> - `flutter_quill` 套件版本有沒有升級，`Transform.scale` 包 RawEditor 的互動有沒有不同
++> - `VSQuillTextEditor` 或 `ResizableRoundRectV2` 的 layout 假設有沒有變
++> - 其他 `normalizedClone` caller 清單是否增減（重跑 `grep -rn normalizedClone lib/`）
++> - 是否已有別的 PR 走過類似路（例如把 canvas zoom 改成 view-level transform），那本 plan 可能可以收掉或大改
++> - 使用者對「lasso resize 後 toolbar 顯示」的期望有沒有變
++>
++> 把這段檢查結果寫在新 PR 的描述裡，不要直接照 plan 跑。
++
++## Background
++
++`TextAnnotation` 內 `jsonList` 的 `size` 屬性目前儲存的是「scaled value」，意義是：
++
++```
++stored_size = display_value × (matrix.scale BEFORE normalize, at last editor close)
++```
++
++`matrix.scale` 會被以下兩種操作 concat 進去：
++
++1. **Canvas zoom 變動** — `PageDataScaleHelper.updateScale` 把 deltaScale concat
++   到 page 上所有 annotation 的 matrix。
++2. **Lasso resize（含「群選縮放」）** — 使用者選文字後拖把手放大縮小，會直接 concat
++   resize factor 到該文字的 matrix。
++
++`TextAnnotation.normalizedClone()` 進編輯器時把 `matrix.scale` 烤回 `size`、並把
++matrix scale 歸 1。也就是說「使用者一進編輯器看到的 fontSize（含 lasso 放大效果）」
++就是儲存格式裡的 `size`。
++
++這套設計讓 Quill widget 直接用 `size` 渲染就能對齊畫布視覺，但缺點是：
++
++- 同一段文字在不同 zoom 開啟，toolbar 顯示的字級會不一樣（VSFT-6964 的核心症狀）
++- 所有讀寫 `size` 的程式碼必須知道 scale 的存在
++- 跨平台 / 跨工具讀檔時，必須知道「`size` 跟畫布 zoom 綁定」這個隱含合約
++
++### 必須保留的 invariant：lasso resize 仍會改變 toolbar 顯示字級
++
++**這是現行正確行為**，refactor 後不能弄丟：
++
++- 使用者 lasso 選一段 `fontSize=20` 的文字，把把手拖到 2 倍 → toolbar 點進編輯應顯示 **40**
++- 即使換 canvas zoom 後再 lasso，編輯時 toolbar 顯示的數字仍應反映 lasso 後的視覺大小
++
++換句話說：**toolbar 顯示的「display value」要對 canvas zoom 不敏感，但仍要 lasso resize 敏感。**
++
++> 📌 **用詞約定**：整份文件講的「display value」是「toolbar 顯示給使用者看的字級」=「在
++> canvas zoom=1.0 時的視覺字級」。**不是**「使用者最初挑的數字」（lasso 後會跟原本挑的不同），
++> 也**不是**「實際儲存的值」（storage 是 scaled，不等於 display value）。會用 "display"
++> 而不是 "absolute" 是因為 "absolute" 在程式碼裡容易被誤讀成「實際存的值」。
++
++在目前實作（VSFT-6964 PR）這個 invariant 是「自動成立」的，因為 bridge 只把 canvas zoom
++從 Quill 字級反推回去，lasso 帶來的 matrix.scale 部分留在字級裡，正好就是要呈現的視覺大小。
++Phase A／B 改寫時要主動驗證此 invariant，不要寫成「除以整個 matrix.scale」。
++
++## 目標終態（scope：MVBF 內部，storage 格式不變）
++
++```
++storage (jsonList.size)  = scaled value（合約完全跟舊版相同）
++                           ＝ 上次編輯關閉時 visual_at_canvas_zoom=1.0 烤回去的數字
++寫出 OLF                 = 跟舊版完全一樣（其他平台讀檔行為 0 變動）
++MVBF 內部處理            = 把 scaled ↔ canvas-zoom-independent 的換算集中在
++                           「TextEditor 開啟／關閉」這兩個邊界做一次，內部一律乾淨
++toolbar                  = 直接讀寫 Quill，無任何 scale 邏輯
++```
++
++達成後（但仍只動 MVBF 端）：
++
++- 同一段文字在任何 zoom 下開啟，toolbar 顯示一致（zoom 無關）
++- Lasso resize 後再開啟，toolbar 顯示為 resized 後的視覺字級（與目前行為一致）
++- TextEditor 內部所有元件不必懂 canvas zoom 的存在
++- **OLF / 跨平台行為完全不變**：其他平台（Windows mVB、IFP、Hub OLF parser、第三方工具）
++  讀 MVBF 產生的 OLF 看到的 `size` 跟舊版同款，無需協調或升級。
++
++> **本 plan 明確不做的事**：把 OLF 內 `size` 的語意改成「使用者最初挑的數字」並做跨平台
++> migration。那是更大層級的架構變動，跨平台影響太大，不在此 plan 範疇。
++
++## 現況（VSFT-6964 PR 後）
++
++只有 **toolbar 顯示** 被「修正」為 display value（canvas zoom 無關）。Storage、Quill 內部、
++render path 都仍走舊「scaled」架構。唯一加上的是 `TextEditor` 邊界的乘除轉換，
++**封裝在 `TextEditor` 內部**（不漏到其他檔案）。
++
++| 元件 | 字級值意義 |
++|------|-----------|
++| `TextAnnotation.jsonList[*].size` (storage) | scaled（保持原合約） |
++| Quill 編輯器內部 | scaled（保持原合約） |
++| Toolbar `TextSizeButton` | display value（透過 bridge 轉換） |
++| Canvas render path | scaled（保持原合約） |
++| 其他 `normalizedClone` caller（sticky note、pop quiz、element_helper） | scaled（保持原合約） |
++
++## 後續 refactor 階段
++
++### Phase A — Quill 內部改用 display value（限縮在 TextEditor）
++
++> ⚠️ 此處 display value =「視覺上在 canvas zoom=1.0 時的字級」，所以 lasso resize 後的效果
++> 會包含在 display value 裡。**不要寫成「除掉整個 matrix.scale」**，只能除掉 canvas zoom 那段。
++> 詳見前面的「必須保留的 invariant」段。
++
++目標：`TextEditor` 開啟後，Quill widget 內部的 `size` 是 display value（canvas zoom 無關），
++但仍反映 lasso resize 帶來的視覺放大／縮小。
++
++實作要點：
++
++1. **開啟時** 寫一個新 helper（暫名 `convertToCanvasZoomIndependentJsonList`），不再呼叫
++   `normalizedClone`。把每個 `size` 除以 **canvas zoom**（不要除以整個 matrix.scale），
++   matrix.scale 中 lasso 帶來的部分仍要烤進 size。可以的話也順便把 matrix.scale 內 canvas zoom
++   那段除掉，避免後續 layout 重算。
++2. **VSQuillTextEditor 外包 `Transform.scale(scale: canvasZoom, alignment: topLeft)`**，
++   讓編輯器內視覺 = (Quill 內 size) × canvasZoom，仍對齊畫布。
++3. **`_textFieldWidth`** 改成「display value 對應的寬度」傳給 Quill，外層用 `SizedBox` /
++   `FittedBox` 或 `OverflowBox` 處理 layout 的 scaled vs display value 落差。
++4. **關閉時** 把 Quill 的 jsonList 乘回 `canvas_zoom` 後再構造 `TextAnnotation`，
++   讓 storage 與舊行為完全一致。
++5. **Toolbar** 完全移除 scale 邏輯：`TextSizeButton` 直接讀寫 Quill 的 `size`（已 zoom-independent），
++   `TextEditorSizeBridge` 也可以拿掉。
++6. **必跑的 manual regression**：在非 1.0 canvas zoom 下對文字 lasso resize、然後點進編輯，
++   toolbar 顯示的數字要是「resize 後的視覺字級」，不是原本挑選的字級。
++
++**最大風險**：`Transform.scale` 包 Quill 後，下列互動需手動 regression：
++
++- Cursor 命中、selection handles、長按 magnifier
++- Auto-width / 手動拖拉左右把手調寬
++- Scroll、textarea 高度自動調整
++- RTL 文字排版
++- 平板觸控 vs IFP 大屏觸控的點擊精度
++- Connector reconnect、indent、bullet list 等舊有功能
++
++**估算**：1 天實作 + 1 天 manual regression。
++
++### Phase B — 把 Phase A 推廣到其他 caller
++
++其餘 `normalizedClone` caller（不影響 storage 合約，僅是各自的編輯／顯示 path）：
++
++| Caller | 用途 |
++|--------|------|
++| `lib/widget/adorning_menu/widget/adorning_text_options.dart` | Sticky note 樣式下拉 |
++| `lib/widget/adorning_menu/widget/sticky_note_text.dart` | Sticky note 內嵌文字編輯 |
++| `lib/widget/dialog/pop_quiz_view/popquiz_view_v2.dart` | Pop quiz 答題輸入 |
++| `lib/annotation_model/text_annotation.dart:1062` | `clone()` 內部使用 |
++| `lib/helper/element_helper.dart`（x2） | Element scale 操作 |
++
++各自評估：
++
++- **Sticky note / pop quiz** 也用 Quill 編輯，可重用 Phase A 的 Transform.scale wrap 模式。
++- **`text_annotation.dart:1062`** 與 **`element_helper.dart`** 是純資料處理路徑（不是 UI），
++  搬遷時要看是否需要保留「matrix.scale 歸 1 後重新計算 width/height」的副作用。
++
++**估算**：每個 caller 0.5~1 天，含對應的 regression。
++
++## 注意事項
++
++- 整個 plan 自始至終 **不改 OLF storage 格式**。寫出 `jsonList[*].size` 跟舊版 byte-for-byte
++  相容（同樣的「上次編輯關閉時的 scaled value」）。其他平台不會發現我們動過 MVBF。
++- Phase A 完成後 toolbar 就完全乾淨；之後 Phase B 可獨立排程。
++- 若 Phase A 在 manual regression 階段發現 `Transform.scale` 對 Quill 互動造成不可修的問題，
++  退回到 VSFT-6964 PR 後的「boundary 乘除」狀態即可，不影響 storage。
++
++### 如果未來真的要動 OLF 格式
++
++把 `size` 語意改成「使用者最初挑的數字」（永遠跟挑選值一致，lasso 後也不變）是更大的架構變動：
++
++- 需要把 canvas zoom 從 annotation matrix 拆出去變 view-level transform
++- 需要 OLF 版本欄位 + migration + 跨平台 reader 升級協調
++
++那是另一個層級的工作，不屬於這個 plan。要做的時候請開新的 design doc，且必須先跟
++Gary Tan（Hub）／Windows mVB owner 對齊。
+diff --git a/lib/annotation_model/text_annotation.dart b/lib/annotation_model/text_annotation.dart
+index dfc6cfc84..1975ef715 100644
+--- a/lib/annotation_model/text_annotation.dart
++++ b/lib/annotation_model/text_annotation.dart
+@@ -2,6 +2,7 @@ import 'dart:math' as math;
+ 
+ import 'package:droid/annotation_model/connector.dart';
+ import 'package:droid/annotation_model/link_type/link_type.dart';
++import 'package:droid/annotation_model/page_set_model.dart';
+ import 'package:droid/annotation_model/stickynote_annotation.dart';
+ import 'package:droid/annotation_model/vs_view_builder.dart';
+ import 'package:droid/data_structure/quad_tree/quad_tree.dart';
+@@ -249,17 +250,229 @@ class TextAnnotation extends Annotation
+     }
+   }
+ 
+-  TextAnnotation normalizedClone({bool convertToIntegerFontSize = true}) {
++  /// mvbW（sparrow）可安全承受的 OLF font-size 上限（**檔案域 px**）。
++  ///
++  /// 來源：`TextEditService.FONT_SIZE_PIXEL_POINT_RATIO`（`Pixel : Point = 20 : 15`）
++  /// 與 `FontSizeHelper.GetFontSizes(10, 130, 2)` —— mvbW 的字級清單是 **pt 域**、
++  /// 上限 130 pt，而 `GetNearestFontSize` 是硬取最近值（無上下限保護）。
++  /// 130 pt ÷ 0.75 = 173.33 px。超過這條線的檔案，只要在 mvbW 被輸入或 resize，
++  /// 字級就會被吸附改寫（永久破壞）。
++  ///
++  /// 我們動不了 mvbW 的碼，所以改成**存檔時保證餵給它的值在射程內**。
++  static const double MVBW_SAFE_MAX_FILE_FONT_SIZE = 130 / 0.75;
++
++  /// annotation matrix 的等比 scale（含 canvas zoom —— pinch zoom 會把 scale
++  /// 烤進所有 annotation matrix）。VSFT-6964 的 TextScaler 與 bridge 都以此為準。
++  double get matrixScale {
++    final Matrix4 m = transformable.transform;
++    final double scaleX = m[0]; //MSCALE_X
++    final double skewY = m[4]; //MSKEW_Y
++    return math.sqrt(scaleX * scaleX + skewY * skewY);
++  }
++
++  /// [bakeMatrixScale] = false 時只做 **json 形狀正規化**（拆行、補 size 屬性），
++  /// 不把 matrix 的 scale 乘進字級、也不把 matrix scale 歸 1、width 維持 stored 域。
++  ///
++  /// VSFT-6964：編輯器改用 `TextScaler` 呈現放大效果後，Quill 內要拿的是
++  /// **stored 域**字級（zoom / resize 一律只存在 matrix 裡），但仍需要這支的
++  /// json 形狀正規化，故拆出這個開關。geometry（width / bounds）仍取
++  /// `bakeMatrixScale: true` 的結果，因為編輯框要在 **視覺域**才會斷行一致。
++  /// VSFT-6964 —— **mvbW 安全格線**：檔案裡的 font-size 應為偶數整數 px。
++  ///
++  /// 推導（依 sparrow 原始碼）：
++  /// * `BridgeClient.OLF.cs` 存檔一律 `Math.Round(...)` → px 必須是整數，否則 mvbW 一存就改值
++  /// * RTF 以半點（half-point）表示字級，pt = px × 0.75 必須是 0.5 的倍數 → **px 必須是偶數**
++  ///   （px=25 → pt=18.75 ✗；px=24 → pt=18 ✓）
++  ///
++  /// 只要我們寫進檔案的值落在這條格線上，mvbW 的 `Math.Round` 與 RTF 量化就**全部變成 no-op**，
++  /// 不需要 Windows 團隊修任何東西。
++  ///
++  /// 注意：吸附會讓字級最多變動 1 px（檔案域），這是**刻意付出的代價** ——
++  /// 不吸附的話 mvbW 第一次存檔就會替我們做同樣的事，而且我們無法預期結果。
++  /// 吸附是 idempotent 的（已在格線上的值不動），所以反覆存檔不會漂移。
++  static double snapToFileGrid(double fileDomainSize) {
++    if (!fileDomainSize.isFinite || fileDomainSize <= 0) return fileDomainSize;
++    double snapped = (fileDomainSize / 2).round() * 2.0;
++    // 吸附有可能把貼齊上限的值往上推過頭（173.33 → 174），要退回格線內。
++    while (snapped > MVBW_SAFE_MAX_FILE_FONT_SIZE) {
++      snapped -= 2;
++    }
++    // 不要吸附到 0（極小字級時）
++    return snapped <= 0 ? 2.0 : snapped;
++  }
++
++  /// VSFT-6964 Q2 —— `.iwb` 路徑（[writeData]）的字級修正倍率。
++  ///
++  /// 該路徑**不烤 matrix scale**（字級寫 stored、transform 寫全矩陣），
++  /// 但 `stored × ratio` 仍可能超過 mvbW 的上限。這裡把最大 run 壓進安全格線，
++  /// 並由 [_iwbCompensatedTransform] 對 transform 做反向補償 → 視覺不變。
++  double _iwbFontFactor(double ratio) =>
++      fileGridFactor(maxStoredFontSize * ratio);
++
++  /// [writeData] 寫出的 transform：把 [_iwbFontFactor] 的縮減反向補回去，
++  /// 讓「字級 × matrix」的乘積維持原本的視覺大小。
++  Matrix4 _iwbCompensatedTransform(double ratio) {
++    final Matrix4 m = transformable.transform.clone();
++    final double f = _iwbFontFactor(ratio);
++    if (f.isFinite && f > 0 && (f - 1.0).abs() > 1e-9) {
++      m.scale(1.0 / f, 1.0 / f);
++    }
++    return m;
++  }
++
++  /// 存檔時的 canvas zoom。與 [_currentFileToScreenScale] 同樣防 `late` 未初始化。
++  /// 取不到時回傳 null —— 呼叫端要走**保守路徑**（用 matrix 補償），
++  /// 因為沒有 zoom 就無法判斷「直接吸附會不會改變 toolbar 顯示值」。
++  static double? get _currentCanvasZoom {
++    try {
++      final zoom = PageSetModel.getInstance().currentPage.infiniteCanvasScale;
++      return (zoom.isFinite && zoom > 0) ? zoom : null;
++    } catch (_) {
++      return null;
++    }
++  }
++
++  /// 檔案域名目值 → 要乘上的修正倍率（1.0 = 不用改）。
++  /// [snapToFileGrid] 本身已含 mvbW 上限保護，所以「上限」與「格線」一次解決。
++  static double fileGridFactor(double nominalFileValue) {
++    if (!nominalFileValue.isFinite || nominalFileValue <= 0) return 1.0;
++    final double target = snapToFileGrid(nominalFileValue);
++    if (!target.isFinite || target <= 0) return 1.0;
++    return target / nominalFileValue;
++  }
++
++  /// 把 [jsonList] 的字級逐一吸附到格線（就地改寫）。
++  /// **只能在「不補償 matrix」的分支使用** —— 逐 run 吸附會改變乘積。
++  static void _snapJsonFontSizesToFileGrid(
++      QuillJsonList jsonList, double gridScale) {
++    final double scale =
++        (!gridScale.isFinite || gridScale <= 0) ? 1.0 : gridScale;
++    for (final json in jsonList) {
++      final attributes = json['attributes'];
++      if (attributes is! Map) continue;
++      final size = double.tryParse(attributes['size']?.toString() ?? '');
++      if (size == null || size <= 0) continue;
++      attributes['size'] = (snapToFileGrid(size * scale) / scale).toString();
++    }
++  }
++
++  /// 「直接吸附、不補償 matrix」會不會改變任何一個 run 的 toolbar 顯示值？
++  ///
++  /// [bakedJson] 的字級已經是烤過的（= stored × matrixScale），
++  /// 所以 display = 字級 ÷ zoom。只要每個 run 吸附前後的 display 都相同，
++  /// 就可以省下 matrix 補償 —— **保住「matrix = 1」這個既有檔案長相**，
++  /// 大幅降低 OLF 格式的曝險面（見 VSFT-6964 討論）。
++  static bool _gridSnapPreservesDisplay(
++      QuillJsonList bakedJson, double gridScale, double? zoom) {
++    if (zoom == null) return false; // 取不到 zoom → 保守走補償
++    final double scale =
++        (!gridScale.isFinite || gridScale <= 0) ? 1.0 : gridScale;
++    for (final json in bakedJson) {
++      final attributes = json['attributes'];
++      if (attributes is! Map) continue;
++      final size = double.tryParse(attributes['size']?.toString() ?? '');
++      if (size == null || size <= 0) continue;
++      final double snapped = snapToFileGrid(size * scale) / scale;
++      if (getNextLargerNumber(snapped / zoom) !=
++          getNextLargerNumber(size / zoom)) {
++        return false;
++      }
++    }
++    return true;
++  }
++
++  /// jsonList 內最大的 stored 字級（沒有 size 屬性的 run 以 app 預設字級計）。
++  /// 0 代表沒有任何可量的字級。
++  double get maxStoredFontSize {
++    double maxSize = 0;
++    bool hasSizelessRun = false;
++    for (final json in jsonList) {
++      final insert = json['insert'];
++      if (insert is! String || insert.replaceAll('\n', '').isEmpty) continue;
++      final attributes = json['attributes'];
++      final rawSize =
++          attributes is Map ? attributes['size'] : null;
++      final size = rawSize == null ? null : double.tryParse(rawSize.toString());
++      if (size == null) {
++        hasSizelessRun = true;
++      } else if (size > maxSize) {
++        maxSize = size;
++      }
++    }
++    if (hasSizelessRun) {
++      final fallback = AppPreferenceSettings.getInstance().fontSize.toDouble();
++      if (fallback > maxSize) maxSize = fallback;
++    }
++    return maxSize;
++  }
++
++  /// 取存檔時字級會被乘上的倍率。`PageSetModel._fileToScreenScale` 是 `late`，
++  /// 在文件尚未初始化時（單元測試、或任何早於 document 建立的存檔路徑）
++  /// 讀取會丟 `LateInitializationError` —— 這裡吞掉並退回 1.0，
++  /// 最壞情況只是上限抓得比較保守，不會讓存檔炸掉。
++  static double get _currentFileToScreenScale {
++    try {
++      return PageSetModel.getInstance().fileToScreenScale;
++    } catch (_) {
++      return 1.0;
++    }
++  }
++
++  /// VSFT-6964 第 2 項 —— **存檔正規化**。
++  ///
++  /// 「視覺大小 = font-size × matrix scale」這條算式在 mvbf / mvbW 兩邊一致
++  /// （已於 sparrow 原始碼查證：讀檔保留 matrix、`RenderTransform` 會縮字形），
++  /// 所以同一個視覺結果有無限多組 `(font, matrix)` 拆法 ——
++  /// 我們挑一組**落在 mvbW 合法射程內**的：字級壓在 [MVBW_SAFE_MAX_FILE_FONT_SIZE]
++  /// 以下，超出的倍率留在 matrix。
++  ///
++  /// 語意完全沒變（沒有新欄位、沒改單位），所以**舊 reader 天然正確、不需要格式版本標記**。
++  ///
++  /// [fileScale] 是存檔時字級會再被乘上的倍率（`fileToScreenScale`，
++  /// 見 `file_olf_save_helper.setTextFontSizeFromMapKey`）；上限要換算回 annotation 域比較。
++  ///
++  /// 回傳「應該烤進字級的倍率」：正常情況等於 matrixScale（行為與過去相同），
++  /// 只有會超標時才小於它。
++  double safeBakeScaleForSave(double fileScale) {
++    final double scale = matrixScale;
++    if (!scale.isFinite || scale <= 0) return scale;
++    final double effectiveFileScale =
++        (!fileScale.isFinite || fileScale <= 0) ? 1.0 : fileScale;
++    final double maxStored = maxStoredFontSize;
++    if (maxStored <= 0) return scale;
++
++    // 上限換算回 annotation 域：存檔時還會再乘 effectiveFileScale。
++    final double capInAnnotationDomain =
++        MVBW_SAFE_MAX_FILE_FONT_SIZE / effectiveFileScale;
++    final double bakedMax = maxStored * scale;
++    if (bakedMax <= capInAnnotationDomain) return scale;
++
++    // 只烤到剛好貼齊上限，剩下的留在 matrix。
++    return capInAnnotationDomain / maxStored;
++  }
++
++  /// [bakeScaleOverride] 指定「只烤這麼多」而不是烤滿整個 matrix scale，
++  /// 剩下的倍率 (`matrixScale / bakeScaleOverride`) 留在 matrix 裡。
++  /// VSFT-6964 存檔正規化用它把字級壓在 mvbW 合法範圍內（見 [safeBakeScaleForSave]）。
++  TextAnnotation normalizedClone({
++    bool convertToIntegerFontSize = true,
++    bool bakeMatrixScale = true,
++    double? bakeScaleOverride,
++  }) {
+     //change Text font size with scale
+     Matrix4 m = transformable.transform.clone();
+     double scaleX = m[0]; //MSCALE_X
+     double skewY = m[4]; //MSKEW_Y
+-    double scale = math.sqrt(scaleX * scaleX + skewY * skewY);
++    double matrixScale = math.sqrt(scaleX * scaleX + skewY * skewY);
++    // 形狀正規化仍以 matrixScale != 0 當守門（退化矩陣不處理），
++    // 但實際乘進字級 / width 的倍率由 [bakeMatrixScale] / [bakeScaleOverride] 決定。
++    double scale =
++        bakeMatrixScale ? (bakeScaleOverride ?? matrixScale) : 1.0;
+     // 拖拉改變font size
+     QuillJsonList newJsonList = [];
+     // 這邊要clone一份 undo才不會有問題
+     final jsonListClone = cloneQuillJson(jsonList);
+-    if (scale != 0) {
++    if (matrixScale != 0) {
+       // 這邊不用setAttributesToJson是因為並不是統一大小而是要乘於一個scale值
+       for (var json in jsonListClone) {
+         if (json.containsKey('attributes')) {
+@@ -356,8 +569,11 @@ class TextAnnotation extends Annotation
+         isInStickyNote: isInStickyNote,
+         verticalAlign: verticalAlign);
+     textAnno.link = link;
+-    //Normalize Transform: Set scale to 1
+-    m.scale(1.0 / scale, 1.0 / scale);
++    if (bakeMatrixScale && scale != 0) {
++      // 把「已經烤進字級」的那份倍率從 matrix 移除。
++      // 烤滿（預設）→ matrix scale 變 1；只烤一部分 → 剩餘倍率留在 matrix。
++      m.scale(1.0 / scale, 1.0 / scale);
++    }
+     textAnno.transformable.transform = m;
+     return textAnno;
+   }
+@@ -432,9 +648,10 @@ class TextAnnotation extends Annotation
+     // 這邊要偷塞預設尺寸與顏色的預設參數，不然toggle button抓不到參數不會更新成預設狀態...wtf
+     QuillJsonList newJsonList = [];
+     final jsonListClone = cloneQuillJson(jsonDataList);
+-    String lastSize =
+-        (defaultFontSize ?? AppPreferenceSettings.getInstance().fontSize)
+-            .toString();
++    // AppPreferenceSettings.fontSize 惰性讀取：只在 json 真的缺 size attribute
++    // 時才需要 fallback（_fontSize 是 late、在登入流程前未初始化，eager 讀取
++    // 會讓「json 都自帶 size」的建構也依賴 singleton 狀態）。
++    String? lastSize = defaultFontSize?.toString();
+     for (var json in jsonListClone) {
+       if (json.containsKey('attributes')) {
+         var attributes = json['attributes'] as Map;
+@@ -443,6 +660,7 @@ class TextAnnotation extends Annotation
+         if (!attributes.containsKey('size')) {
+           // 換行不需要size
+           if (insertText.replaceAll("\n", "").isNotEmpty) {
++            lastSize ??= AppPreferenceSettings.getInstance().fontSize.toString();
+             if (shouldConvertToIntegerFontSize) {
+               attributes['size'] = getNextLargerNumber(double.parse(lastSize)).toString();
+             } else {
+@@ -955,7 +1173,7 @@ class TextAnnotation extends Annotation
+ 
+       //write matrix settings
+       String data = FileSaveHelper.getInstance().getMatrixDataForWrite(
+-          transformable.transform.clone(),
++          _iwbCompensatedTransform(ratio),
+           ratio,
+           getTransformedBounds().center);
+       xmlBuilder.attribute('transform', data);
+@@ -990,11 +1208,20 @@ class TextAnnotation extends Annotation
+               } else {
+                 xmlBuilder.attribute('font-style', 'normal');
+               }
++              // VSFT-6964 Q2（.iwb 路徑）：這條路徑不烤 scale（字級 = stored、
++              // transform 寫全矩陣），但字級 × ratio 仍可能超過 mvbW 的上限
++              // （stored 130 × dpr 3 = 390 px）。乘上 [_iwbFontFactor] 壓進安全格線，
++              // 並由 [_iwbCompensatedTransform] 反向補償，視覺不變。
++              final double iwbFactor = _iwbFontFactor(ratio);
+               if (textSpan.style?.fontSize != null) {
+-                xmlBuilder.attribute('font-size', textSpan.style!.fontSize! * ratio);
++                xmlBuilder.attribute(
++                    'font-size', textSpan.style!.fontSize! * ratio * iwbFactor);
+               } else {
+                 xmlBuilder.attribute(
+-                    'font-size', AppPreferenceSettings.getInstance().fontSize * ratio);
++                    'font-size',
++                    AppPreferenceSettings.getInstance().fontSize *
++                        ratio *
++                        iwbFactor);
+               }
+               if (textSpan.style?.fontFamily != null) {
+                 xmlBuilder.attribute(
+@@ -1072,7 +1299,45 @@ class TextAnnotation extends Annotation
+   Map<String, dynamic> toJson(double ratio) {
+     // 這邊用normalizedClone是因為 https://viewsonic-ssi.visualstudio.com/Droid/_workitems/edit/39024/
+     // 需要拔掉scale。normalizedClone將步驟都做了width height fontSize。
+-    final clone = normalizedClone();
++    //
++    // VSFT-6964: convertToIntegerFontSize: false — 存檔保留精確的 scaled 字級
++    // （= display value × canvas zoom），不 floor 到偶數、也不 clamp。
++    // [MIN_SIZE, MAX_SIZE] 的 clamp 屬於「顯示域」（toolbar / bridge），
++    // scaled 值可以合法超過 MAX_SIZE（例：display 130 @ zoom 400% = 520）。
++    // 之前用整數化版本會在存檔時 floor + clamp，導致 OLF round-trip 後
++    // toolbar 數字漂移（130→106、48→46）。
++    //
++    // VSFT-6964 第 2 項：存檔正規化。字級只烤到 mvbW 的合法上限為止
++    // （130 pt = 173.33 px 檔案域），超出的倍率留在 matrix 裡。
++    // 視覺結果不變、語意不變，但檔案從此不會踩到 mvbW 的破壞性吸附。
++    // 詳見 [safeBakeScaleForSave]。
++    // 檔案域 = annotation 域 × ratio（genParagraph 乘）× fileToScreenScale
++    // （file_olf_save_helper 之後再乘）。mvbW 的上限與格線都定義在檔案域。
++    final double gridScale = ratio * _currentFileToScreenScale;
++    final double scaleOfMatrix = matrixScale;
++
++    // 先烤滿（＝今天的檔案長相：matrix scale 歸 1），再決定要不要補償。
++    var clone = normalizedClone(
++      convertToIntegerFontSize: false,
++      bakeScaleOverride: scaleOfMatrix,
++    );
++
++    // 決策：能不能「直接吸附到格線、不動 matrix」？
++    // 可以的話就這樣做 —— 檔案長相與今天一致（matrix = 1），格式曝險最低，
++    // 而且每個 run 都落在格線上（對 mvbW 更友善）。
++    // 不行（會改變 toolbar 顯示值，或超過 mvbW 上限）才用 matrix 補償。
++    if (_gridSnapPreservesDisplay(
++        clone.jsonList, gridScale, _currentCanvasZoom)) {
++      _snapJsonFontSizesToFileGrid(clone.jsonList, gridScale);
++    } else {
++      // 補償路徑：最大 run 對齊格線，差額留在 matrix，乘積精確守恆。
++      final double nominalMax = maxStoredFontSize * scaleOfMatrix * gridScale;
++      final double f = fileGridFactor(nominalMax);
++      clone = normalizedClone(
++        convertToIntegerFontSize: false,
++        bakeScaleOverride: scaleOfMatrix * f,
++      );
++    }
+     clone.textPainterList = TextAnnotation.jsonToTextSpan(
+       clone.jsonList,
+       strutStyleFontSize: strutStyleFontSize,
+diff --git a/lib/debug_credentials.dart b/lib/debug_credentials.dart
+index 33262c9da..0e3813d8f 100644
+--- a/lib/debug_credentials.dart
++++ b/lib/debug_credentials.dart
+@@ -1,4 +1,4 @@
+ /// Debug 模式下的登入預設帳密。
+ /// 如需在本地開發時自動填入帳密，請直接修改此檔案的值（不要 commit 個人帳密）。
+-const kDebugSignInEmail = '';
+-const kDebugSignInPassword = '';
++const kDebugSignInEmail = 'jay.wj.wu@viewsonic.com';
++const kDebugSignInPassword = '\$Pass9065';
+diff --git a/lib/helper/app_update_helper.dart b/lib/helper/app_update_helper.dart
+index 3ecf3bb89..2d10f03ab 100644
+--- a/lib/helper/app_update_helper.dart
++++ b/lib/helper/app_update_helper.dart
+@@ -81,6 +81,7 @@ class DefaultAppUpdateListener implements AppUpdateListener {
+               title: s.update_title,
+               content: s.update_downloaded,
+               icon: IconStatus.Question,
++              semanticsIds: VSDialogsemanticsIds.UPDATE_DIALOG,
+               secondaryBtnString: s.update_negative,
+               tertiaryBtnString: s.update_positive,
+               onTertiaryBtnPressed: () async {
+@@ -102,6 +103,7 @@ class DefaultAppUpdateListener implements AppUpdateListener {
+               title: s.update_title,
+               content: s.update_downloaded,
+               icon: IconStatus.Question,
++              semanticsIds: VSDialogsemanticsIds.UPDATE_DIALOG,
+               secondaryBtnString: s.update_negative,
+               tertiaryBtnString: s.update_positive,
+               onTertiaryBtnPressed: () {
+diff --git a/lib/helper/filesave_helper.dart b/lib/helper/filesave_helper.dart
+index f1163c7ab..5deee2cb6 100644
+--- a/lib/helper/filesave_helper.dart
++++ b/lib/helper/filesave_helper.dart
+@@ -1747,9 +1747,13 @@ class FileSaveHelper implements VSCopyFileProtocol {
+                                   '#${data.bgColor?.v.toRadixString(16)}';
+                             }
+                             if (data.size != null) {
++                              // VSFT-6964: 保留小數精度、不 clamp——scaled 值可以
++                              // 合法超過 MAX_SIZE（display × zoom），[MIN, MAX]
++                              // 的 clamp 屬於顯示域（toolbar / bridge）。
++                              // 與 content.json 匯入路徑（element_helper
++                              // olfTextParagraphToQuillJson）行為一致。
+                               attributes['size'] =
+-                                  TextAnnotation.getNextLargerNumber(
+-                                      data.size! / ratio).toString();
++                                  (data.size! / ratio).toString();
+                             }
+                             if (data.isBold != null && data.isBold!) {
+                               attributes['bold'] = true;
+diff --git a/lib/model/preference_settings/app_preference_settings.dart b/lib/model/preference_settings/app_preference_settings.dart
+index 3269ac630..7795257d9 100644
+--- a/lib/model/preference_settings/app_preference_settings.dart
++++ b/lib/model/preference_settings/app_preference_settings.dart
+@@ -10,6 +10,7 @@ import 'package:droid/helper/extensions/color_extension.dart';
+ import 'package:droid/helper/third_party_wrapper/vs_shared_preferences.dart';
+ import 'package:droid/model/preference_settings/it_admin_settings.dart';
+ import 'package:droid/model/preference_settings/time_zone_protocol_helper.dart';
++import 'package:droid/model/preference_settings/user_preference/editor_text_preference.dart';
+ import 'package:droid/model/track_event/track_event.dart';
+ import 'package:droid/widget/color_palette.dart';
+ import 'package:droid/widget/dialog/browser/core/browser_dialog_model_interfaces.dart';
+@@ -57,6 +58,12 @@ class AppPreferenceSettings extends ChangeNotifier implements EmbeddedBrowserVis
+       return;
+     }
+     _instance = AppPreferenceSettings._internal();
++    // 給 late 欄位安全的 in-memory 預設，讓純模型測試（如 TextAnnotation）
++    // 不需要跑完整 _load()（會牽入 SecureDataStorage 等 platform channel）
++    // 或登入流程（_fontSize 只在 set fontSize 被賦值，且 setter 依賴
++    // CurrentUser singleton）。
++    _instance!._fontSize = EditorTextPreference.FONT_SIZE;
++    _instance!._fontFamily = TextAnnotation.DEFAULT_FONT_FAMILY;
+   }
+ 
+   late String _language = '';
+diff --git a/lib/widget/dialog/text_editor/ui_v2/text_editor.dart b/lib/widget/dialog/text_editor/ui_v2/text_editor.dart
+index c85605fca..b6b43e5cd 100644
+--- a/lib/widget/dialog/text_editor/ui_v2/text_editor.dart
++++ b/lib/widget/dialog/text_editor/ui_v2/text_editor.dart
+@@ -28,6 +28,7 @@ import 'package:droid/widget/adorning_menu/bloc/adorning_menu_bloc.dart';
+ import 'package:droid/widget/common/mixins/keyboard_paste.dart';
+ import 'package:droid/widget/dialog/text_editor/cubit/text_edit_session_cubit.dart';
+ import 'package:droid/widget/dialog/text_editor/ui_v2/resizable_rect_v2.dart';
++import 'package:droid/widget/dialog/text_editor/ui_v2/text_editor_size_bridge.dart';
+ import 'package:droid/widget/dialog/text_editor/ui_v2/speech_to_text_bar.dart';
+ import 'package:droid/widget/dialog/text_editor/ui_v2/text_recognize_bar.dart';
+ import 'package:droid/widget/theme_png_image.dart';
+@@ -83,6 +84,19 @@ class _TextEditorState extends State<TextEditor> with QuillPasteHandlerMixin {
+ 
+   ///根據 scale 改變 font size and width 的 TextAnnotation
+   late TextAnnotation _initNormalizedTextAnno;
++
++  /// VSFT-6964：進 Quill 的 stored 域版本（字級未烤 matrix scale）。
++  /// commit 時的「有沒有改過」比較也用這份，才不會因為域不同而永遠判定為 changed。
++  late TextAnnotation _initStoredTextAnno;
++
++  /// annotation matrix 的 scale —— 編輯器用它當 `TextScaler`，
++  /// 讓字在視覺上與畫布一致，而不必把 scale 烤進字級。
++  late double _editorScale;
++
++  /// VSFT-6964：把 Quill 內 scaled 字級 ↔ toolbar display value 的轉換集中到 bridge。
++  /// 邏輯封裝細節見 [TextEditorSizeBridge] 與
++  /// `docs/text_annotation_font_size_clean_architecture.md`。
++  late TextEditorSizeBridge _sizeBridge;
+   RemoveAnnoCommand? _removeCommand;
+   final GlobalKey _textFieldKey =
+       GlobalKey(debugLabel: 'text editor text field');
+@@ -136,7 +150,25 @@ class _TextEditorState extends State<TextEditor> with QuillPasteHandlerMixin {
+           onCancel: _cancelSync,
+         );
+     _scrollController = ScrollController();
+-    _initNormalizedTextAnno = widget.initTextAnno.normalizedClone();
++    // VSFT-6964: bridge 把 Quill 內的 scaled 字級反推回 toolbar display value。
++    final double canvasScale =
++        context.read<PageSetModel>().currentPage.infiniteCanvasScale;
++    _editorScale = widget.initTextAnno.matrixScale;
++    _sizeBridge = TextEditorSizeBridge(
++      canvasZoom: canvasScale,
++      elementScale: _editorScale,
++    );
++    // geometry（width / bounds）取「烤過 scale」的版本 —— 編輯框必須在**視覺域**
++    // 才會跟畫布上的斷行一致（字被 TextScaler 放大 k 倍，框也要寬 k 倍）。
++    _initNormalizedTextAnno =
++        widget.initTextAnno.normalizedClone(convertToIntegerFontSize: false);
++    // 進 Quill 的 json 則是 **stored 域**：只做形狀正規化、不烤 matrix scale。
++    // 放大效果改由 _buildBody 的 MediaQuery(textScaler:) 提供，
++    // 字級數值從此不再被 zoom / resize 汙染。
++    _initStoredTextAnno = widget.initTextAnno.normalizedClone(
++      convertToIntegerFontSize: false,
++      bakeMatrixScale: false,
++    );
+     // 根據 TextAnnotation 的 autoWidth 狀態來決定是否允許自動寬度調整
+     // 如果 autoWidth = true，表示之前沒有手動調整過寬度，允許繼續自動調整
+     // 如果 autoWidth = false，表示之前手動調整過寬度，鎖住寬度
+@@ -153,7 +185,7 @@ class _TextEditorState extends State<TextEditor> with QuillPasteHandlerMixin {
+       }
+       setState(() {
+         _controller = QuillController(
+-          document: Document.fromJson(_initNormalizedTextAnno.jsonList),
++          document: Document.fromJson(_initStoredTextAnno.jsonList),
+           selection: const TextSelection.collapsed(offset: 0),
+           defaultFontSize: AppPreferenceSettings.getInstance().fontSize.toInt(),
+         );
+@@ -171,11 +203,12 @@ class _TextEditorState extends State<TextEditor> with QuillPasteHandlerMixin {
+           WidgetsBinding.instance.addPostFrameCallback((_) async {
+             await Future.delayed(const Duration(milliseconds: 400));
+             // 這邊設定預設的text style
+-            _controller.formatSelection(SizeAttribute(
+-                AppPreferenceSettings.getInstance()
+-                    .fontSize
+-                    .round()
+-                    .toString()));
++            // VSFT-6964: 寫入 Quill 的字級要透過 bridge 轉成 scaled 值（顯示時會除回），
++            // 這樣 zoomed 狀態下新建文字 toolbar 顯示的才是 display value。
++            final int defaultFontSize =
++                AppPreferenceSettings.getInstance().fontSize.round();
++            _controller.formatSelection(
++                SizeAttribute(_sizeBridge.quillSizeFromDisplay(defaultFontSize)));
+             if (!CurrentUser.getInstance().isGuest) {
+               EditorTextPreference pref =
+                   CurrentUser.getInstance().userData.editorTextPref;
+@@ -457,8 +490,10 @@ class _TextEditorState extends State<TextEditor> with QuillPasteHandlerMixin {
+     }
+ 
+     //將原本 annotation 再疊加上 dialog 的 translation，就會是新 annotation 的 transform
++    // VSFT-6964：改用**原始** matrix（scale 未被歸 1）。Quill 內是 stored 域字級，
++    // 放大倍率必須留在 matrix 裡，才不會 commit 後視覺縮小 _editorScale 倍。
+     Matrix4 newTransform =
+-        Matrix4.copy(_initNormalizedTextAnno.transformable.transform);
++        Matrix4.copy(widget.initTextAnno.transformable.transform);
+     newTransform.leftTranslate(dx, dy);
+ 
+     if (_controller.document.isEmpty()) return null;
+@@ -466,7 +501,8 @@ class _TextEditorState extends State<TextEditor> with QuillPasteHandlerMixin {
+     QuillJsonList jsonBeans = _controller.document.toDelta().toJson();
+     TextAnnotation textAnno = TextAnnotation(
+       jsonBeans,
+-      width: _textFieldWidth,
++      // _textFieldWidth 是視覺域（編輯框寬度），除回 scale 才是 stored 域的 width。
++      width: _editorScale == 0 ? _textFieldWidth : _textFieldWidth / _editorScale,
+       textDirection: _isRtl ? TextDirection.rtl : TextDirection.ltr,
+     );
+     textAnno.resetTransform(newTransform);
+@@ -486,8 +522,9 @@ class _TextEditorState extends State<TextEditor> with QuillPasteHandlerMixin {
+ 
+     return _CommitData(
+       textAnno: textAnno,
+-      initTextEmpty: _initNormalizedTextAnno.jsonList.isEmpty,
+-      textChanged: !_initNormalizedTextAnno.equals(textAnno),
++      initTextEmpty: _initStoredTextAnno.jsonList.isEmpty,
++      // 兩邊都是 stored 域才比得起來（_initNormalizedTextAnno 是視覺域）。
++      textChanged: !_initStoredTextAnno.equals(textAnno),
+       isClosedByRecognize: _isClosedByRecognize,
+     );
+   }
+@@ -710,8 +747,20 @@ class _TextEditorState extends State<TextEditor> with QuillPasteHandlerMixin {
+   }
+ 
+   Widget _buildBody(BuildContext context) {
+-    final theme = Theme.of(context);
+-    final vsColor = theme.vsColors;
++    // VSFT-6964：Quill 內是 stored 域字級，視覺放大交給 textScaler。
++    // flutter_quill 10.5.5 的 RichText / RichTextProxy 都吃
++    // MediaQuery.textScalerOf(context)（已用 widget test 實測 ratio 精準）。
++    // 編輯框寬度 (_textFieldWidth) 本來就是視覺域，兩者搭配後斷行與畫布一致。
++    return MediaQuery(
++      data: MediaQuery.of(context).copyWith(
++        textScaler: TextScaler.linear(_editorScale),
++      ),
++      child: _buildEditor(context),
++    );
++  }
++
++  Widget _buildEditor(BuildContext context) {
++    final vsColor = Theme.of(context).vsColors;
+     return VSQuillTextEditor(
+       maxHeight: _maxTextFieldHeight,
+       width: _textFieldWidth,
+@@ -800,6 +849,7 @@ class _TextEditorState extends State<TextEditor> with QuillPasteHandlerMixin {
+                             )
+                           : TextToolbarV2(
+                               _controller,
++                              sizeBridge: _sizeBridge,
+                               onWritingRecognizeButtonPressed:
+                                   _prepareWritingRecognition,
+                               onSpeechRecognizeButtonPressed:
+diff --git a/lib/widget/dialog/text_editor/ui_v2/text_editor_size_bridge.dart b/lib/widget/dialog/text_editor/ui_v2/text_editor_size_bridge.dart
+new file mode 100644
+index 000000000..aaf22ff5b
+--- /dev/null
++++ b/lib/widget/dialog/text_editor/ui_v2/text_editor_size_bridge.dart
+@@ -0,0 +1,61 @@
++import 'package:droid/annotation_model/text_annotation.dart';
++
++/// VSFT-6964 — 邊界轉換：Quill 內的 `size` 屬性是 **stored 域**字級
++/// （= 檔案 / annotation 裡真正存的值，zoom 與 resize 一律只存在 matrix 裡，
++/// 永遠不烤進字級）。TextEditor 唯一一個跟「display value」對話的入口就是這個 bridge。
++///
++/// 這裡的「display value」= toolbar 顯示給使用者看的字級 = 「在 canvas zoom=1.0 時的
++/// 視覺字級」。**不是**使用者最初挑的數字（例如 lasso 拉大 2 倍後，原本挑 20 但 display
++/// value 是 40）—— 眼睛看到多大就顯示多少，與 PowerPoint / Slides 的行為一致。
++///
++/// ```
++/// display = stored × elementScale ÷ canvasZoom
++/// ```
++///
++/// [elementScale] 是 annotation matrix 的 scale，**已經包含 canvas zoom**
++/// （pinch zoom 會把 scale 烤進所有 annotation matrix，見 `infinite_canvas.dart`
++/// 的 `_concatenatingTransformByElement`），所以除回 [canvasZoom] 之後剩下的
++/// 才是「使用者自己拉出來的」倍率。
++///
++/// 例：zoom=1.75 新建的文字 → elementScale=1.75、canvasZoom=1.75 → factor=1
++///     → 挑 20 就存 20、toolbar 顯示 20。
++///     同一段文字被 lasso 拉大 2 倍 → elementScale=3.5 → factor=2 → toolbar 顯示 40。
++///
++/// 編輯器的「視覺放大」不再靠把 scale 烤進字級，而是由
++/// `MediaQuery(textScaler: TextScaler.linear(elementScale))` 提供
++/// （flutter_quill 10.5.5 的 `RichText` / `RichTextProxy` 都吃 textScaler，已實測）。
++class TextEditorSizeBridge {
++  TextEditorSizeBridge({
++    required double canvasZoom,
++    required double elementScale,
++  })  : _canvasZoom = _sanitize(canvasZoom),
++        _elementScale = _sanitize(elementScale);
++
++  final double _canvasZoom;
++  final double _elementScale;
++
++  static double _sanitize(double value) =>
++      (value == 0 || value.isNaN || value.isInfinite) ? 1.0 : value;
++
++  /// stored → display 的倍率。
++  double get displayFactor => _elementScale / _canvasZoom;
++
++  bool get _isIdentity => (displayFactor - 1.0).abs() < 0.0001;
++
++  /// Quill 內 stored 字級 → toolbar 顯示用的 display value（floor 到偶數 / clamp 到 [MIN, MAX]）。
++  /// 回傳 null 代表 Quill 沒有 size 屬性。
++  String? displayFromQuillSize(String? rawQuillSize) {
++    if (rawQuillSize == null) return null;
++    final double? raw = double.tryParse(rawQuillSize);
++    if (raw == null) return rawQuillSize;
++    final double displayValue = _isIdentity ? raw : raw * displayFactor;
++    return TextAnnotation.getNextLargerNumber(displayValue).toString();
++  }
++
++  /// 使用者在 toolbar 挑的 display value → 寫回 Quill 的 stored 字級。
++  /// factor ≈ 1 時維持「整數字串」的舊行為，避免在沒必要時引入 float 字串。
++  String quillSizeFromDisplay(int displaySize) {
++    if (_isIdentity) return displaySize.toString();
++    return (displaySize / displayFactor).toString();
++  }
++}
+diff --git a/lib/widget/dialog/text_editor/ui_v2/text_size_button.dart b/lib/widget/dialog/text_editor/ui_v2/text_size_button.dart
+index e159c871b..5f1d5ece4 100644
+--- a/lib/widget/dialog/text_editor/ui_v2/text_size_button.dart
++++ b/lib/widget/dialog/text_editor/ui_v2/text_size_button.dart
+@@ -4,6 +4,7 @@ import 'package:droid/helper/figma_helper.dart';
+ import 'package:droid/theme/theme.dart';
+ import 'package:droid/utils/vs_icons.dart';
+ import 'package:droid/widget/common/vs_dropdown.dart';
++import 'package:droid/widget/dialog/text_editor/ui_v2/text_editor_size_bridge.dart';
+ import 'package:droid/widget/vs_svg_image.dart';
+ import 'package:flutter/material.dart';
+ import 'package:flutter_quill/flutter_quill.dart';
+@@ -19,6 +20,7 @@ class TextSizeButton extends StatefulWidget {
+     this.defaultSize = 20.0,
+     this.semanticsId,
+     this.groupId,
++    this.sizeBridge,
+   });
+ 
+   final double defaultSize;
+@@ -29,6 +31,11 @@ class TextSizeButton extends StatefulWidget {
+ 
+   final Object? groupId;
+ 
++  /// VSFT-6964：當 toolbar 在 [TextEditor] 內使用時注入，把 Quill 內 scaled
++  /// 字級反推成「display value」顯示，避免畫布縮放後 toolbar 數字跟著漂。
++  /// 不傳入即為「不換算」（=既有行為）。
++  final TextEditorSizeBridge? sizeBridge;
++
+   @override
+   State<TextSizeButton> createState() => _TextSizeButtonState();
+ }
+@@ -60,6 +67,18 @@ class _TextSizeButtonState extends State<TextSizeButton> {
+     return attrs.containsKey(Attribute.size.key);
+   }
+ 
++  String? _toDisplay(String? rawQuillSize) {
++    final bridge = widget.sizeBridge;
++    if (bridge == null) return rawQuillSize;
++    return bridge.displayFromQuillSize(rawQuillSize);
++  }
++
++  String _toQuillSize(int displaySize) {
++    final bridge = widget.sizeBridge;
++    if (bridge == null) return displaySize.toString();
++    return bridge.quillSizeFromDisplay(displaySize);
++  }
++
+   void genSizeList() {
+     if (_items.isEmpty) {
+       _items = [
+@@ -92,8 +111,12 @@ class _TextSizeButtonState extends State<TextSizeButton> {
+     final figma = FigmaHelper.getInstance();
+     final theme = Theme.of(context);
+     final s = S.of(context);
++    // VSFT-6964: 只在從 Quill 拿來的字級才用 bridge 反推（Quill 內是 scaled）。
++    // [defaultSize] 來自 AppPreferenceSettings.fontSize，本身就是 display value
++    // （使用者在偏好設定挑的絕對數字），不需要再除 canvas zoom，否則第一個 frame
++    // 會顯示「72/zoom」之後才被 postFrame 寫入的 Quill size 蓋過去 → 數字會閃一下。
+     final sizeValue = _isToggledSize
+-        ? _selectionStyle.attributes[Attribute.size.key]?.value
++        ? _toDisplay(_selectionStyle.attributes[Attribute.size.key]?.value)
+         : widget.defaultSize.round().toString();
+ 
+     return Material(
+@@ -134,12 +157,12 @@ class _TextSizeButtonState extends State<TextSizeButton> {
+               onTap: () {
+                 if (mounted) {
+                   setState(() {
+-                    final int size =
+-                        int.tryParse(sizeValue) ?? widget.defaultSize.round();
++                    final int size = int.tryParse(sizeValue ?? '') ??
++                        widget.defaultSize.round();
+                     if (size == _items.last) return;
+                     final index = _items.indexOf(size) + 1;
+                     widget.controller.formatSelection(
+-                        SizeAttribute(_items[index].toString()));
++                        SizeAttribute(_toQuillSize(_items[index])));
+                   });
+                 }
+               },
+@@ -154,12 +177,12 @@ class _TextSizeButtonState extends State<TextSizeButton> {
+               ),
+               onTap: () {
+                 setState(() {
+-                  final int size =
+-                      int.tryParse(sizeValue) ?? widget.defaultSize.round();
++                  final int size = int.tryParse(sizeValue ?? '') ??
++                      widget.defaultSize.round();
+                   if (size == _items.first) return;
+                   final index = _items.indexOf(size) - 1;
+-                  widget.controller
+-                      .formatSelection(SizeAttribute(_items[index].toString()));
++                  widget.controller.formatSelection(
++                      SizeAttribute(_toQuillSize(_items[index])));
+                 });
+               },
+             ),
+@@ -168,7 +191,10 @@ class _TextSizeButtonState extends State<TextSizeButton> {
+         onChanged: (string) {
+           if (mounted) {
+             setState(() {
+-              widget.controller.formatSelection(SizeAttribute(string));
++              final int picked = int.tryParse(string ?? '') ??
++                  widget.defaultSize.round();
++              widget.controller
++                  .formatSelection(SizeAttribute(_toQuillSize(picked)));
+             });
+           }
+         },
+diff --git a/lib/widget/dialog/text_editor/ui_v2/text_toolbar_v2.dart b/lib/widget/dialog/text_editor/ui_v2/text_toolbar_v2.dart
+index fd10d7dfa..d3cfb8e1d 100644
+--- a/lib/widget/dialog/text_editor/ui_v2/text_toolbar_v2.dart
++++ b/lib/widget/dialog/text_editor/ui_v2/text_toolbar_v2.dart
+@@ -10,6 +10,7 @@ import 'package:droid/widget/dialog/text_editor/ui_v2/text_align_icon.dart';
+ import 'package:droid/widget/dialog/text_editor/ui_v2/text_bullet_icon.dart';
+ import 'package:droid/widget/dialog/text_editor/ui_v2/text_color_button.dart';
+ import 'package:droid/widget/dialog/text_editor/ui_v2/text_font_button.dart';
++import 'package:droid/widget/dialog/text_editor/ui_v2/text_editor_size_bridge.dart';
+ import 'package:droid/widget/dialog/text_editor/ui_v2/text_size_button.dart';
+ import 'package:droid/widget/dialog/text_editor/ui_v2/text_speech_to_text_button.dart';
+ import 'package:droid/widget/dialog/text_editor/ui_v2/text_style_icon.dart';
+@@ -26,12 +27,17 @@ class TextToolbarV2 extends StatelessWidget {
+     super.key,
+     required this.onWritingRecognizeButtonPressed,
+     required this.onSpeechRecognizeButtonPressed,
++    this.sizeBridge,
+   });
+ 
+   final QuillController _controller;
+   final VoidCallback? onWritingRecognizeButtonPressed;
+   final VoidCallback? onSpeechRecognizeButtonPressed;
+ 
++  /// VSFT-6964：toolbar 字級顯示要透過 bridge 轉成「display value」。
++  /// 由 [TextEditor] 從 canvas zoom 構造後注入；其他使用情境若不需要換算則傳 null。
++  final TextEditorSizeBridge? sizeBridge;
++
+   @override
+   Widget build(BuildContext context) {
+     final figma = FigmaHelper.getInstance();
+@@ -89,6 +95,7 @@ class TextToolbarV2 extends StatelessWidget {
+               controller: _controller,
+               semanticsId: '[QA][text toolbar: size dropdown button]',
+               defaultSize: AppPreferenceSettings.getInstance().fontSize,
++              sizeBridge: sizeBridge,
+             ),
+           ),
+           verticalDivider,
+diff --git a/lib/widget/dialog/vs_dialog.dart b/lib/widget/dialog/vs_dialog.dart
+index 3b5bdff44..a5a0ba99b 100644
+--- a/lib/widget/dialog/vs_dialog.dart
++++ b/lib/widget/dialog/vs_dialog.dart
+@@ -77,6 +77,13 @@ class VSDialogsemanticsIds {
+     secondary: '[QA][delete page confirmation: yes]',
+     tertiary: '[QA][delete page confirmation: no]',
+   );
++
++  /// OTA 更新提示（已下載 / in-app）：secondary=「No thanks」、tertiary=「Update」。
++  /// 提供測試用 ValueKey，便於自動化關閉（不需要時）或互動（測 OTA 時）。
++  static const VSDialogsemanticsIds UPDATE_DIALOG = VSDialogsemanticsIds(
++    secondaryKey: 'update-dialog-no-thanks',
++    tertiaryKey: 'update-dialog-confirm',
++  );
+ }
+ 
+ class VSDialog extends StatelessWidget {
+diff --git a/macos/Podfile.lock b/macos/Podfile.lock
+index b405a9a9a..fba4d49ef 100644
+--- a/macos/Podfile.lock
++++ b/macos/Podfile.lock
+@@ -1,4 +1,6 @@
+ PODS:
++  - a_bridge (0.0.1):
++    - FlutterMacOS
+   - amplitude_flutter (4.4.0):
+     - AmplitudeSwift (~> 1.17.5)
+     - Flutter
+@@ -233,6 +235,7 @@ PODS:
+     - FlutterMacOS
+ 
+ DEPENDENCIES:
++  - a_bridge (from `Flutter/ephemeral/.symlinks/plugins/a_bridge/macos`)
+   - amplitude_flutter (from `Flutter/ephemeral/.symlinks/plugins/amplitude_flutter/darwin`)
+   - app_links (from `Flutter/ephemeral/.symlinks/plugins/app_links/macos`)
+   - audioplayers_darwin (from `Flutter/ephemeral/.symlinks/plugins/audioplayers_darwin/darwin`)
+@@ -300,6 +303,8 @@ SPEC REPOS:
+     - SQLCipher
+ 
+ EXTERNAL SOURCES:
++  a_bridge:
++    :path: Flutter/ephemeral/.symlinks/plugins/a_bridge/macos
+   amplitude_flutter:
+     :path: Flutter/ephemeral/.symlinks/plugins/amplitude_flutter/darwin
+   app_links:
+@@ -380,6 +385,7 @@ EXTERNAL SOURCES:
+     :path: Flutter/ephemeral/.symlinks/plugins/window_to_front/macos
+ 
+ SPEC CHECKSUMS:
++  a_bridge: daba7052d0276a1723b1a12d54e3165184d84883
+   amplitude_flutter: a430a891abbd9e486f53d2ab499af9ead0bb8047
+   AmplitudeCore: 2da469fb74c71c8f46ae29a4586c4bf63ad02f58
+   AmplitudeSwift: 89f675b8b81a2710ef244324d2083641ffb702b6
+diff --git a/plugin/flutter_quill-10.5.5/lib/src/editor/widgets/cursor.dart b/plugin/flutter_quill-10.5.5/lib/src/editor/widgets/cursor.dart
+index 1a9e5bc74..da19ad298 100644
+--- a/plugin/flutter_quill-10.5.5/lib/src/editor/widgets/cursor.dart
++++ b/plugin/flutter_quill-10.5.5/lib/src/editor/widgets/cursor.dart
+@@ -322,24 +322,31 @@ class CursorPainter {
+         // TextPosition when not on iOS. iOS has special handling that
+         // creates a taller caret.
+         //
+-        // VSFT-6521: anchor caret around the line's baseline (estimated as
+-        // ~82% of line box height for typical fonts). Extend BELOW the
+-        // baseline by the caret's own descent so descender glyphs (g, p, q,
+-        // y, j) are fully covered. Caret height already includes ascent +
+-        // descent (font size * 1.3), so the descent share is ~18% of the
+-        // caret height. The prototype caret's own bottom is unreliable for
+-        // mid-positions in mixed-size lines, so we compute baseline from the
+-        // line box height instead.
++        // VSFT-6521 + VSFT-6964 follow-up：用該 visual sub-line 的 baseline 當錨點。
++        //   - prototype（caretRect 的原始大小）是用 line 的 base style 算出來的
++        //     prototype rect：top = baseline - prototype.ascent,
++        //     bottom = baseline + prototype.descent。
++        //     對 Roman font 來說 ascent / descent 大致 = font * 0.82 / font * 0.18,
++        //     baseline ≈ caretRect.bottom - caretRect.height * 0.18。
++        //   - cursor 高度（caretHeight）來自 [caretHeightForPosition] = 該位置
++        //     glyph 字級本身（不再乘 1.3 倍率，避免超出 Flutter 預設 line-height
++        //     把 editor 撐高）。所以 cursor 範圍 = glyph 範圍，font-agnostic
++        //     的 layout 表現（不撐高 editor）。
++        //
++        // 0.82/0.18 是 Latin font 的 ascent/descent 近似值，CJK ~0.88/0.12，
++        // CJK 下 cursor 會稍微偏（~1-2 px），但不會跳到別處。
++        //
++        // 原本 VSFT-6521 用 `editable.size.height * 0.82` 當 baseline，在
++        // 「single paragraph + mixed size + word-wrap」時拿到整段 paragraph 的
++        // 底部，cursor 就被畫到 sub-line 2 區域。
+         //
+         // 相關 upstream issue：caret 高度不會跟著 font size 改變。
+         // https://github.com/singerdmx/flutter-quill/issues/2169
+-        final lineHeight = editable?.size.height ?? caretRect.bottom;
+-        final baseline = lineHeight * 0.82;
+-        final descent = caretHeight * 0.18;
+-        final caretBottom = baseline + descent;
++        final baseline = caretRect.bottom - caretRect.height * 0.18;
++        final ascent = caretHeight * 0.82;
+         caretRect = Rect.fromLTWH(
+           caretRect.left,
+-          caretBottom - caretHeight,
++          baseline - ascent,
+           caretRect.width,
+           caretHeight,
+         );
+diff --git a/plugin/flutter_quill-10.5.5/lib/src/editor/widgets/text/text_line.dart b/plugin/flutter_quill-10.5.5/lib/src/editor/widgets/text/text_line.dart
+index 2f408a04c..78973202c 100644
+--- a/plugin/flutter_quill-10.5.5/lib/src/editor/widgets/text/text_line.dart
++++ b/plugin/flutter_quill-10.5.5/lib/src/editor/widgets/text/text_line.dart
+@@ -269,43 +269,21 @@ class _TextLineState extends State<TextLine> {
+     return TextSpan(children: children, style: lineStyle);
+   }
+ 
+-  // VSFT-6521: Build strut from the LINE'S MAX inline font size, not just the
+-  // line's base style. The line's TextSpan tree carries each inline run's font
+-  // size (including the "active inline format" applied to the empty placeholder
+-  // leaf right after Enter), so scanning it covers:
+-  //   1. mixed-size lines (cursor must grow to the tallest glyph's metric)
+-  //   2. empty new lines that inherit the previous line's active size
+-  // No `forceStrutHeight` — that would force the line height even when a
+-  // shorter glyph is alone, and would clamp the per-position caret height in
+-  // mid-position cases (e.g. between H@20 and i@80).
++  // VSFT-6521: 原本這個 helper 會掃 line 內所有 span 找 max font size、
++  // 用 max 建 strut（並開 forceStrutHeight）來解決 cursor 高度不跟 inline font size
++  // 變動的問題。
++  //
++  // VSFT-6964 follow-up: cursor 高度現在直接由 [_caretHeightAtPosition] 提供給
++  // [CursorPainter.caretHeightForPosition]，**不再依賴 strut** 去拉高 line。
++  //
++  // 留著 max-size strut 反而會壞掉「single paragraph + mixed size + word-wrap」
++  // 這個組合的 hit-test：RichText 拿 strut 算 line metrics，wrap 後第一個
++  // visual sub-line 的 y range 被算成超出實際視覺範圍 → 點 line 1 命中 line 2。
++  // 也會跟同 frame 的 `contextMenuAnchors` 競爭，觸發 `!debugNeedsLayout` assert。
++  //
++  // 所以這裡退回 VSFT-6521 之前的行為：只用 line 的 base style 建 strut。
+   StrutStyle _buildStrutStyleFromSpan(InlineSpan span) {
+-    final baseStyle = span.style ?? const TextStyle();
+-    double maxFontSize = baseStyle.fontSize ?? 0;
+-    void visit(InlineSpan node) {
+-      final size = node.style?.fontSize;
+-      if (size != null && size > maxFontSize) {
+-        maxFontSize = size;
+-      }
+-      if (node is TextSpan) {
+-        final children = node.children;
+-        if (children != null) {
+-          for (final child in children) {
+-            visit(child);
+-          }
+-        }
+-      }
+-    }
+-    visit(span);
+-    if (maxFontSize > (baseStyle.fontSize ?? 0)) {
+-      // forceStrutHeight: true 必要 — 在這版 Flutter 上 strut 即使設了 fontSize
+-      // 也不會作為 minimum 拉高 line，要強制才能讓 getFullHeightForCaret 在
+-      // mixed-size line 的 end-of-line position 回傳 line metric。
+-      return StrutStyle.fromTextStyle(
+-        baseStyle.copyWith(fontSize: maxFontSize),
+-        forceStrutHeight: true,
+-      );
+-    }
+-    return StrutStyle.fromTextStyle(baseStyle);
++    return StrutStyle.fromTextStyle(span.style ?? const TextStyle());
+   }
+ 
+   TextStyle _getLineStyle(DefaultStyles defaultStyles) {
+@@ -1295,9 +1273,14 @@ class RenderEditableTextLine extends RenderEditableBox {
+       );
+ 
+   // VSFT-6521: walk the line's leaf nodes to find the one containing [pos],
+-  // return its font size * 1.3 (matches strut line-height factor). Returns
+-  // null when no per-run size attribute is present. Prefers the run on the
+-  // LEFT side of the caret (e.g. between H@20 and i@80 at offset=1 → H@20).
++  // return its font size. Returns null when no per-run size attribute is
++  // present. Prefers the run on the LEFT side of the caret (e.g. between
++  // H@20 and i@80 at offset=1 → H@20).
++  //
++  // VSFT-6964 follow-up: 原本用 size * 1.3（匹配 strut line-height factor）
++  // 但 1.3 大於 Flutter 預設 line-height multiplier，cursor 高度會超出 line
++  // bounds 把 editor 撐高。改成 size 本身（無倍率），cursor 高度 = glyph 高度，
++  // 剛好落在 glyph extent 內，不影響 layout。
+   double? _caretHeightAtPosition(TextPosition pos) {
+     final offset = pos.offset;
+     int cursor = 0;
+@@ -1322,7 +1305,14 @@ class RenderEditableTextLine extends RenderEditableBox {
+       size = double.tryParse(raw);
+     }
+     if (size == null || size <= 0) return null;
+-    return size * 1.3;
++    // VSFT-6964: attribute 是 stored 域字級，實際 glyph 由 textScaler 放大
++    // （編輯器用 MediaQuery(textScaler:) 呈現 canvas zoom / resize 的倍率）。
++    // 這裡不跟著 scale 的話，字放大 k 倍時 cursor 高度仍是 1 倍。
++    final body = _body;
++    if (body is RenderParagraphProxy) {
++      return body.child!.textScaler.scale(size);
++    }
++    return size;
+   }
+ 
+   @override
+diff --git a/plugin/native_screenshot-1.0.0/android/.classpath b/plugin/native_screenshot-1.0.0/android/.classpath
+index d0113bb60..bbe97e501 100644
+--- a/plugin/native_screenshot-1.0.0/android/.classpath
++++ b/plugin/native_screenshot-1.0.0/android/.classpath
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <classpath>
+-	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-15/"/>
++	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-17/"/>
+ 	<classpathentry kind="con" path="org.eclipse.buildship.core.gradleclasspathcontainer"/>
+ 	<classpathentry kind="output" path="bin/default"/>
+ </classpath>
+diff --git a/test/annotation_model/text_annotation_font_size_test.dart b/test/annotation_model/text_annotation_font_size_test.dart
+new file mode 100644
+index 000000000..97339faf0
+--- /dev/null
++++ b/test/annotation_model/text_annotation_font_size_test.dart
+@@ -0,0 +1,527 @@
++import 'dart:ui' show PlatformDispatcher;
++
++import 'package:droid/annotation_model/text_annotation.dart';
++import 'package:droid/model/preference_settings/app_preference_settings.dart';
++import 'package:flutter/widgets.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:shared_preferences/shared_preferences.dart';
++
++/// VSFT-6964 — TextAnnotation 字級處理的單元測試。
++///
++/// 涵蓋三塊：
++/// 1. [TextAnnotation.getNextLargerNumber] — toolbar 顯示用的「round 後 floor
++///    到偶數 + clamp」，是既有行為的回歸保護（bridge 依賴它）。
++/// 2. [TextAnnotation.clampedPreciseSizeString] — OLF 匯入時保留小數精度、
++///    只 clamp 的序列化（round-trip 的關鍵一步）。
++/// 3. [TextAnnotation.normalizedClone] 的兩條路徑 —
++///    `convertToIntegerFontSize: true`（預設，既有呼叫點的回歸保護）與
++///    `false`（TextEditor 走的新路徑，保留精確 scaled 值）。
++///
++/// 注意：測試的 jsonList 一律讓非換行的 insert 自帶 `size` attribute，
++/// 避開沒有 size 時 fallback 到 AppPreferenceSettings singleton 的路徑
++/// （該 singleton 在測試中未初始化）。
++void main() {
++  TestWidgetsFlutterBinding.ensureInitialized();
++
++  setUpAll(() async {
++    // TextAnnotation 建構時 getDefaultStyle() 會讀 AppPreferenceSettings 的
++    // fontFamily / fontSize；testEnsureInitialized 會給這些 late 欄位
++    // in-memory 預設值（不跑 _load，避免牽入 platform channel）。
++    SharedPreferences.setMockInitialValues({});
++    await AppPreferenceSettings.testEnsureInitialized();
++  });
++
++  group('getNextLargerNumber — round 後 floor 到偶數', () {
++    test('偶數整數原樣回', () {
++      expect(TextAnnotation.getNextLargerNumber(20), 20);
++      expect(TextAnnotation.getNextLargerNumber(52), 52);
++    });
++
++    test('奇數 floor 到偶數', () {
++      expect(TextAnnotation.getNextLargerNumber(21), 20);
++      expect(TextAnnotation.getNextLargerNumber(35), 34);
++    });
++
++    test('小數先 round 再 floor 到偶數（21.6 → 22，不是 20）', () {
++      expect(TextAnnotation.getNextLargerNumber(21.6), 22);
++      expect(TextAnnotation.getNextLargerNumber(53.33), 52);
++    });
++
++    test('低於 MIN_SIZE clamp 到 MIN_SIZE', () {
++      expect(TextAnnotation.getNextLargerNumber(5), TextAnnotation.MIN_SIZE);
++      expect(TextAnnotation.getNextLargerNumber(0), TextAnnotation.MIN_SIZE);
++    });
++
++    test('高於 MAX_SIZE clamp 到 MAX_SIZE', () {
++      expect(TextAnnotation.getNextLargerNumber(999), TextAnnotation.MAX_SIZE);
++    });
++
++    test('MIN / MAX 邊界值原樣回', () {
++      expect(TextAnnotation.getNextLargerNumber(
++              TextAnnotation.MIN_SIZE.toDouble()),
++          TextAnnotation.MIN_SIZE);
++      expect(TextAnnotation.getNextLargerNumber(
++              TextAnnotation.MAX_SIZE.toDouble()),
++          TextAnnotation.MAX_SIZE);
++    });
++  });
++
++  group('toJson — OLF 存檔保留精確 scaled 字級（VSFT-6964 D1 修正）', () {
++    // toJson 內部 genParagraph 的 font-size = span 字級 × devicePixelRatio。
++    final double dpr =
++        PlatformDispatcher.instance.views.first.devicePixelRatio;
++
++    double savedFontSizeOf(TextAnnotation anno) {
++      final json = anno.toJson(dpr);
++      final blocks =
++          json['textarea']['text-blocks-container'] as List<dynamic>;
++      final textList = blocks.first['paragraph']['text-list-container']
++          as List<dynamic>;
++      return (textList.first['text']['font-size'] as num).toDouble();
++    }
++
++    TextAnnotation buildAnno({required double scale, required String size}) {
++      final anno = TextAnnotation([
++        {
++          'insert': 'Hello',
++          'attributes': {'size': size, 'color': '#ff000000', 'font': 'Roboto'},
++        },
++        {'insert': '\n'},
++      ]);
++      anno.transformable.transform = Matrix4.identity()..scale(scale);
++      return anno;
++    }
++
++    // 存檔語意（第 2 項 + 格線對齊後）：
++    //   * 檔案值 ≤ mvbW 上限、且落在偶數整數 px 格線上
++    //   * 「字級 × 殘餘 matrix scale」的乘積**完全不變** → 顯示不漂移
++    // 注意：檔案域 = annotation 域 × dpr × fileToScreenScale，
++    // 所以 dpr 越大越容易觸發上限（dpr=3 時 display 48 @ zoom1.23 就會被壓）。
++    // 測試環境取不到 canvas zoom → toJson 走「保守補償」分支，
++    // 對應的烤入倍率 = matrixScale × fileGridFactor(名目最大值)
++    double bakeOf(TextAnnotation anno) {
++      final nominal = anno.maxStoredFontSize * anno.matrixScale * dpr;
++      return anno.matrixScale * TextAnnotation.fileGridFactor(nominal);
++    }
++
++    test('存檔值落在 mvbW 偶數整數 px 格線上', () {
++      for (final size in ['20', '48', '130']) {
++        final anno = buildAnno(scale: 1.2265710829939889, size: size);
++        final fileValue = double.parse(size) * bakeOf(anno) * dpr;
++        expect(fileValue % 2, closeTo(0, 1e-6),
++            reason: 'size=$size 檔案值 $fileValue 不在偶數格線上');
++        expect(fileValue,
++            lessThanOrEqualTo(TextAnnotation.MVBW_SAFE_MAX_FILE_FONT_SIZE + 1e-6),
++            reason: 'size=$size 檔案值 $fileValue 超過 mvbW 上限');
++      }
++    });
++
++    test('乘積守恆：字級 × 殘餘 matrix scale == 原視覺大小', () {
++      const zoom = 1.2265710829939889;
++      for (final size in [20.0, 48.0, 130.0]) {
++        final anno = buildAnno(scale: zoom, size: '${size.toInt()}');
++        final bake = bakeOf(anno);
++        final savedSize = size * bake;
++        final remainingMatrixScale = anno.matrixScale / bake;
++        expect(savedSize * remainingMatrixScale, closeTo(size * zoom, 1e-6),
++            reason: 'size=$size 乘積被改變了 → 顯示會漂移');
++      }
++    });
++
++    test('round-trip：重開後 toolbar 顯示值不變（130/48/20 全案例）', () {
++      const zoom = 1.2265710829939889;
++      for (final display in [130, 48, 20]) {
++        final anno = buildAnno(scale: zoom, size: '$display');
++        final bake = bakeOf(anno);
++        // 重開：讀回 font-size 與 matrix，display = 乘積 ÷ zoom
++        final product = (display * bake) * (anno.matrixScale / bake);
++        final reopened = TextAnnotation.getNextLargerNumber(product / zoom);
++        expect(reopened, display,
++            reason: 'display $display @ zoom $zoom 應完整 round-trip');
++      }
++    });
++  });
++
++  group('normalizedClone — convertToIntegerFontSize 兩條路徑', () {
++    TextAnnotation buildAnno({required double scale, required String size}) {
++      // attributes 自帶 size / color / font，避開缺屬性時 fallback 到
++      // AppPreferenceSettings singleton 的填充路徑（測試中未初始化）。
++      final anno = TextAnnotation([
++        {
++          'insert': 'Hello',
++          'attributes': {'size': size, 'color': '#000000', 'font': 'Roboto'},
++        },
++        {'insert': '\n'},
++      ]);
++      anno.transformable.transform = Matrix4.identity()..scale(scale);
++      return anno;
++    }
++
++    String? sizeOf(TextAnnotation anno) {
++      final attrs = anno.jsonList.first['attributes'] as Map?;
++      return attrs?['size'] as String?;
++    }
++
++    test('預設（true）：scaled 字級 round 後 floor 到偶數 — 既有行為回歸保護', () {
++      final anno = buildAnno(scale: 1.75, size: '20');
++      // 不帶參數呼叫 = 既有呼叫點的行為，預設值改變會直接讓這條爆掉
++      final clone = anno.normalizedClone();
++      // 20 × 1.75 = 35 → floor 到偶數 34
++      expect(sizeOf(clone), '34');
++    });
++
++    test('false：scaled 字級保留精確 float（TextEditor 新路徑）', () {
++      final anno = buildAnno(scale: 1.75, size: '20');
++      final clone = anno.normalizedClone(convertToIntegerFontSize: false);
++      expect(sizeOf(clone), '35.0');
++    });
++
++    test('false：scale=1 時整數字串會變 float 字串（documented 行為）', () {
++      // (double.parse('20') * 1.0).toString() = '20.0'——render path 一律
++      // double.parse，視覺無差異；此測試把行為釘住避免被「順手修正」。
++      final anno = buildAnno(scale: 1.0, size: '20');
++      final clone = anno.normalizedClone(convertToIntegerFontSize: false);
++      expect(sizeOf(clone), '20.0');
++    });
++
++    test('true：scale=1 時奇數字級仍會被 floor 到偶數', () {
++      final anno = buildAnno(scale: 1.0, size: '21');
++      final clone = anno.normalizedClone();
++      expect(sizeOf(clone), '20');
++    });
++
++    test('縮小（scale=0.5）：false 保留精度、true floor 到偶數', () {
++      final annoA = buildAnno(scale: 0.5, size: '35');
++      expect(sizeOf(annoA.normalizedClone(convertToIntegerFontSize: false)),
++          '17.5');
++
++      final annoB = buildAnno(scale: 0.5, size: '35');
++      // 35 × 0.5 = 17.5 → round = 18 → 偶數 18
++      expect(sizeOf(annoB.normalizedClone()), '18');
++    });
++
++    test('兩條路徑都會把 transform 的 scale 歸一', () {
++      for (final convert in [true, false]) {
++        final anno = buildAnno(scale: 1.75, size: '20');
++        final clone =
++            anno.normalizedClone(convertToIntegerFontSize: convert);
++        final m = clone.transformable.transform;
++        // MSCALE_X / MSKEW_Y 反推 scale（normalizedClone 內的同款算法）
++        expect(m[0], closeTo(1.0, 0.0001),
++            reason: 'scale normalized (convert=$convert)');
++        expect(m[4], closeTo(0.0, 0.0001));
++      }
++    });
++
++    test('兩條路徑都會把 width 乘上 scale', () {
++      for (final convert in [true, false]) {
++        final anno = buildAnno(scale: 1.75, size: '20');
++        final originalWidth = anno.width;
++        final clone =
++            anno.normalizedClone(convertToIntegerFontSize: convert);
++        expect(clone.width, closeTo(originalWidth * 1.75, 0.0001),
++            reason: 'width scaled (convert=$convert)');
++      }
++    });
++
++    test('不會改到原本的 jsonList（undo 依賴此行為）', () {
++      final anno = buildAnno(scale: 1.75, size: '20');
++      anno.normalizedClone(convertToIntegerFontSize: false);
++      expect(sizeOf(anno), '20');
++    });
++  });
++
++  _saveNormalizationTests();
++  _fileGridTests();
++  _compensationPolicyTests();
++}
++
++/// VSFT-6964 第 2 項 —— 存檔正規化（不改 mvbW 也能跨平台相容）。
++///
++/// 「視覺 = font-size × matrix scale」兩平台一致，所以存檔時把字級壓進
++/// mvbW 的合法射程（130pt = 173.33px 檔案域）、超出的倍率留在 matrix，
++/// 視覺與語意都不變，但檔案不再會被 mvbW 的破壞性吸附改寫。
++void _saveNormalizationTests() {
++  TextAnnotation buildAnno({required double scale, required String size}) {
++    final anno = TextAnnotation([
++      {
++        'insert': 'A',
++        'attributes': {'size': size},
++      },
++      {'insert': '\n'},
++    ]);
++    anno.transformable.transform = Matrix4.identity()..scale(scale);
++    return anno;
++  }
++
++  group('safeBakeScaleForSave — 存檔正規化', () {
++    test('沒超標時完全不介入（回傳整個 matrixScale = 既有行為）', () {
++      final anno = buildAnno(scale: 2.0, size: '20');
++      // 20 × 2 = 40，遠低於 173.33
++      expect(anno.safeBakeScaleForSave(1.0), 2.0);
++    });
++
++    test('剛好貼齊上限時不介入', () {
++      final anno = buildAnno(scale: 1.0, size: '173.33');
++      expect(anno.safeBakeScaleForSave(1.0), 1.0);
++    });
++
++    test('超標時只烤到上限，剩餘倍率留在 matrix', () {
++      // 130 × 4 = 520 → 遠超 173.33
++      final anno = buildAnno(scale: 4.0, size: '130');
++      final bake = anno.safeBakeScaleForSave(1.0);
++      // 烤完的字級應該剛好是上限
++      expect(130 * bake, closeTo(TextAnnotation.MVBW_SAFE_MAX_FILE_FONT_SIZE, 0.001));
++      // 剩餘倍率 = 4 / bake，留在 matrix
++      expect(bake, lessThan(4.0));
++    });
++
++    test('視覺大小不變 —— 烤進去的 × 留在 matrix 的 = 原本的 scale', () {
++      final anno = buildAnno(scale: 4.0, size: '130');
++      final bake = anno.safeBakeScaleForSave(1.0);
++      final clone = anno.normalizedClone(
++          convertToIntegerFontSize: false, bakeScaleOverride: bake);
++      final storedSize = double.parse(
++          (clone.jsonList.first['attributes'] as Map)['size'] as String);
++      // 字級 × 殘餘 matrix scale == 原本的視覺大小 130 × 4
++      expect(storedSize * clone.matrixScale, closeTo(130 * 4.0, 0.001));
++    });
++
++    test('正規化後的字級必定 ≤ mvbW 上限', () {
++      for (final scale in [1.0, 2.0, 4.0, 10.0]) {
++        for (final size in ['10', '20', '130']) {
++          final anno = buildAnno(scale: scale, size: size);
++          final bake = anno.safeBakeScaleForSave(1.0);
++          final clone = anno.normalizedClone(
++              convertToIntegerFontSize: false, bakeScaleOverride: bake);
++          final storedSize = double.parse(
++              (clone.jsonList.first['attributes'] as Map)['size'] as String);
++          expect(storedSize,
++              lessThanOrEqualTo(TextAnnotation.MVBW_SAFE_MAX_FILE_FONT_SIZE + 0.001),
++              reason: 'scale=$scale size=$size 存檔後仍超標');
++        }
++      }
++    });
++
++    test('fileScale 會被算進去（存檔時字級還會再被乘一次）', () {
++      final anno = buildAnno(scale: 1.0, size: '130');
++      // fileScale=2 → 檔案值 = 130 × 2 = 260 > 173.33 → 必須介入
++      final bake = anno.safeBakeScaleForSave(2.0);
++      expect(bake, lessThan(1.0));
++      final clone = anno.normalizedClone(
++          convertToIntegerFontSize: false, bakeScaleOverride: bake);
++      final storedSize = double.parse(
++          (clone.jsonList.first['attributes'] as Map)['size'] as String);
++      expect(storedSize * 2.0,
++          closeTo(TextAnnotation.MVBW_SAFE_MAX_FILE_FONT_SIZE, 0.001));
++    });
++
++    test('退化輸入不炸：scale=0 / NaN / fileScale=0', () {
++      final zero = buildAnno(scale: 0.0, size: '20');
++      expect(zero.safeBakeScaleForSave(1.0), 0.0);
++      final normal = buildAnno(scale: 2.0, size: '20');
++      expect(normal.safeBakeScaleForSave(0.0), 2.0);
++      expect(normal.safeBakeScaleForSave(double.nan), 2.0);
++    });
++  });
++
++  group('normalizedClone — bakeMatrixScale: false（TextScaler 路徑）', () {
++    test('字級不被乘 scale、matrix scale 原封不動', () {
++      final anno = buildAnno(scale: 1.75, size: '20');
++      final clone = anno.normalizedClone(
++          convertToIntegerFontSize: false, bakeMatrixScale: false);
++      expect(
++          double.parse(
++              (clone.jsonList.first['attributes'] as Map)['size'] as String),
++          20.0);
++      expect(clone.matrixScale, closeTo(1.75, 0.0001));
++    });
++
++    test('預設路徑仍把 matrix scale 歸 1（既有行為回歸保護）', () {
++      final anno = buildAnno(scale: 1.75, size: '20');
++      final clone = anno.normalizedClone(convertToIntegerFontSize: false);
++      expect(clone.matrixScale, closeTo(1.0, 0.0001));
++    });
++  });
++}
++
++/// VSFT-6964 —— mvbW 安全格線（偶數整數 px）＋ sticky note invariant。
++///
++/// 目的：讓 mvbW 的 `Math.Round` 與 RTF 半點量化變成 no-op，
++/// 使「第 5 項（mvbW 端修正）」不再是本票的前提條件。
++void _fileGridTests() {
++  group('snapToFileGrid — mvbW 安全格線', () {
++    test('已在格線上的值不動（idempotent）', () {
++      for (final v in [10.0, 24.0, 48.0, 130.0, 172.0]) {
++        expect(TextAnnotation.snapToFileGrid(v), v, reason: '$v 應原地不動');
++        expect(TextAnnotation.snapToFileGrid(TextAnnotation.snapToFileGrid(v)), v,
++            reason: '$v 反覆吸附不應漂移');
++      }
++    });
++
++    test('奇數 / 小數吸附到最近的偶數', () {
++      expect(TextAnnotation.snapToFileGrid(25.0), 26.0);
++      expect(TextAnnotation.snapToFileGrid(24.53), 24.0);
++      expect(TextAnnotation.snapToFileGrid(58.88), 58.0);
++      expect(TextAnnotation.snapToFileGrid(27.4), 28.0);
++    });
++
++    test('吸附後的 pt 一定是 0.5 的倍數（RTF 半點可表示）', () {
++      for (var raw = 1.0; raw < 200; raw += 0.37) {
++        final px = TextAnnotation.snapToFileGrid(raw);
++        final pt = px * 0.75;
++        expect((pt * 2) % 1, closeTo(0, 1e-9),
++            reason: 'px=$px → pt=$pt 不是半點的倍數');
++      }
++    });
++
++    test('吸附後的 px 一定是整數（mvbW Math.Round 變 no-op）', () {
++      for (var raw = 1.0; raw < 200; raw += 0.37) {
++        final px = TextAnnotation.snapToFileGrid(raw);
++        expect(px % 1, 0, reason: 'px=$px 不是整數');
++      }
++    });
++
++    test('吸附不會把貼齊上限的值推過頭', () {
++      final snapped =
++          TextAnnotation.snapToFileGrid(TextAnnotation.MVBW_SAFE_MAX_FILE_FONT_SIZE);
++      expect(snapped, lessThanOrEqualTo(TextAnnotation.MVBW_SAFE_MAX_FILE_FONT_SIZE));
++      expect(snapped, 172.0);
++    });
++
++    test('吸附誤差不超過 1 px（檔案域）', () {
++      for (var raw = 4.0; raw < 170; raw += 0.13) {
++        final px = TextAnnotation.snapToFileGrid(raw);
++        expect((px - raw).abs(), lessThanOrEqualTo(1.0 + 1e-9),
++            reason: 'raw=$raw → $px 偏差過大');
++      }
++    });
++
++    test('退化輸入不炸', () {
++      expect(TextAnnotation.snapToFileGrid(0), 0);
++      expect(TextAnnotation.snapToFileGrid(-5), -5);
++      expect(TextAnnotation.snapToFileGrid(double.nan).isNaN, isTrue);
++    });
++  });
++
++  group('sticky note invariant（Q5）', () {
++    // stickynote_annotation.dart:223 / :316-329 取的是內層 text 的**原始 size 屬性**，
++    // 完全不看內層 matrix；element_helper.dart:1453 讀回來也只還原純量。
++    // 也就是說 sticky note 會「吃掉」內層 text 的 matrix scale。
++    //
++    // 目前安全是因為內層 text 的 matrix 恆為 identity（它被移出 pageData.annotations，
++    // pinch zoom 不會把 scale 烤進它）。這條測試把那個前提釘住 ——
++    // 一旦有人讓內層 text 帶 scale，就會在這裡爆掉，而不是變成使用者才看得到的縮放 bug。
++    test('內層 text 帶 scale 時，純量字級會漏掉倍率（記錄現況，非期望行為）', () {
++      final text = TextAnnotation([
++        {
++          'insert': 'A',
++          'attributes': {'size': '20'},
++        },
++        {'insert': '\n'},
++      ]);
++      text.transformable.transform = Matrix4.identity()..scale(2.0);
++
++      // 原始 size 屬性完全沒有反映 matrix 的 2 倍
++      final rawSize =
++          (text.jsonList.first['attributes'] as Map)['size'] as String;
++      expect(rawSize, '20');
++      expect(text.matrixScale, closeTo(2.0, 1e-9));
++
++      // → 視覺是 40，但 sticky note 只會存 20。這就是「matrix 救不回來」的路徑。
++      expect(double.parse(rawSize) * text.matrixScale, closeTo(40.0, 1e-9));
++    });
++
++    test('不帶 scale 時純量字級即為視覺字級（sticky note 依賴的前提）', () {
++      final text = TextAnnotation([
++        {
++          'insert': 'A',
++          'attributes': {'size': '20'},
++        },
++        {'insert': '\n'},
++      ]);
++      expect(text.matrixScale, closeTo(1.0, 1e-9));
++      final rawSize =
++          (text.jsonList.first['attributes'] as Map)['size'] as String;
++      expect(double.parse(rawSize) * text.matrixScale, closeTo(20.0, 1e-9));
++    });
++  });
++}
++
++/// VSFT-6964 —— 「只在必要時才用 matrix 補償」的決策，以及 .iwb 路徑（Q2）。
++void _compensationPolicyTests() {
++  TextAnnotation buildAnno({required double scale, required List<String> sizes}) {
++    final anno = TextAnnotation([
++      for (final s in sizes)
++        {
++          'insert': 'A',
++          'attributes': {'size': s},
++        },
++      {'insert': '\n'},
++    ]);
++    anno.transformable.transform = Matrix4.identity()..scale(scale);
++    return anno;
++  }
++
++  group('fileGridFactor — 上限與格線一次解決', () {
++    test('已在格線上 → 倍率 1（不需要任何調整）', () {
++      expect(TextAnnotation.fileGridFactor(48.0), 1.0);
++      expect(TextAnnotation.fileGridFactor(172.0), 1.0);
++    });
++
++    test('未在格線上 → 倍率把它挪到最近偶數', () {
++      expect(TextAnnotation.fileGridFactor(25.0), closeTo(26 / 25, 1e-9));
++      expect(TextAnnotation.fileGridFactor(58.88), closeTo(58 / 58.88, 1e-9));
++    });
++
++    test('超過 mvbW 上限 → 倍率把它壓回格線內', () {
++      final f = TextAnnotation.fileGridFactor(390.0);
++      expect(390.0 * f,
++          lessThanOrEqualTo(TextAnnotation.MVBW_SAFE_MAX_FILE_FONT_SIZE));
++      expect((390.0 * f) % 2, closeTo(0, 1e-9));
++    });
++
++    test('退化輸入回 1.0（不改任何東西）', () {
++      expect(TextAnnotation.fileGridFactor(0), 1.0);
++      expect(TextAnnotation.fileGridFactor(-1), 1.0);
++      expect(TextAnnotation.fileGridFactor(double.nan), 1.0);
++    });
++  });
++
++  group('.iwb 路徑（Q2）—— 字級壓進安全區、transform 反向補償', () {
++    test('字級 × ratio 未超標時不動任何東西', () {
++      final anno = buildAnno(scale: 1.0, sizes: ['20']);
++      // 20 × 2 = 40，遠低於上限且已在格線上
++      expect(TextAnnotation.fileGridFactor(20 * 2.0), 1.0);
++    });
++
++    test('stored 130 @ dpr 3 = 390 超標 → 被壓回格線內', () {
++      final anno = buildAnno(scale: 1.0, sizes: ['130']);
++      final f = TextAnnotation.fileGridFactor(anno.maxStoredFontSize * 3.0);
++      final written = 130 * 3.0 * f;
++      expect(written,
++          lessThanOrEqualTo(TextAnnotation.MVBW_SAFE_MAX_FILE_FONT_SIZE));
++      expect(written % 2, closeTo(0, 1e-9));
++    });
++
++    test('補償後乘積守恆：字級 × (1/f) 還原成原本的視覺大小', () {
++      final f = TextAnnotation.fileGridFactor(130 * 3.0);
++      // 寫出的字級 × 補償後的 matrix scale == 原本的字級
++      expect((130 * f) * (1 / f), closeTo(130.0, 1e-9));
++    });
++  });
++
++  group('補償決策 — 只在必要時才動 matrix', () {
++    test('吸附不改變 display → 判定為「不需補償」', () {
++      // zoom=1、字級 25：吸附成 26，display 25→24 vs 26→26 會變 → 需要補償
++      // 字級 26（已在格線）：不變 → 不需補償
++      final onGrid = buildAnno(scale: 1.0, sizes: ['26']);
++      expect(TextAnnotation.fileGridFactor(onGrid.maxStoredFontSize * 1.0), 1.0);
++    });
++
++    test('多 run 取最大值當名目值', () {
++      final anno = buildAnno(scale: 1.0, sizes: ['20', '48', '130']);
++      expect(anno.maxStoredFontSize, 130.0);
++    });
++  });
++}
+diff --git a/test/widget/dialog/text_editor/text_editor_size_bridge_test.dart b/test/widget/dialog/text_editor/text_editor_size_bridge_test.dart
+new file mode 100644
+index 000000000..7e5ae732a
+--- /dev/null
++++ b/test/widget/dialog/text_editor/text_editor_size_bridge_test.dart
+@@ -0,0 +1,161 @@
++import 'package:droid/annotation_model/text_annotation.dart';
++import 'package:droid/widget/dialog/text_editor/ui_v2/text_editor_size_bridge.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++/// VSFT-6964：bridge 的語意在「編輯器改用 TextScaler」之後改變 ——
++/// Quill 內從「baked scaled 值」變成 **stored 域**字級。
++///
++///   display = stored × elementScale ÷ canvasZoom
++///
++/// elementScale 是 annotation matrix 的 scale，**已含 canvas zoom**
++/// （pinch zoom 會把 scale 烤進 annotation matrix），所以：
++///   * 單純 zoom（沒 resize 過）→ elementScale == canvasZoom → factor = 1
++///   * lasso 拉大 k 倍 → elementScale == canvasZoom × k → factor = k
++void main() {
++  group('factor = 1（純 zoom，沒被 resize 過）', () {
++    // zoom 1.75 建立 / 開啟的文字：matrix scale 也是 1.75 → factor = 1
++    final bridge =
++        TextEditorSizeBridge(canvasZoom: 1.75, elementScale: 1.75);
++
++    test('stored 字級原樣顯示 —— 這就是本票的核心目標', () {
++      expect(bridge.displayFromQuillSize('20'), '20');
++      expect(bridge.displayFromQuillSize('130'), '130');
++    });
++
++    test('quillSizeFromDisplay 不再乘 zoom，直接存 display value', () {
++      expect(bridge.quillSizeFromDisplay(20), '20');
++      expect(bridge.quillSizeFromDisplay(22), '22');
++    });
++
++    test('任何 zoom 下 stored=20 都顯示 20（zoom 不再汙染字級）', () {
++      for (final zoom in [0.1, 0.75, 0.9, 1.0, 1.75, 4.0]) {
++        final b = TextEditorSizeBridge(canvasZoom: zoom, elementScale: zoom);
++        expect(b.displayFromQuillSize('20'), '20',
++            reason: 'zoom=$zoom 時 stored=20 應顯示 20');
++      }
++    });
++  });
++
++  group('factor ≠ 1（lasso resize 後）', () {
++    test('zoom=1.0、lasso 2x：stored 20 顯示 40', () {
++      final bridge =
++          TextEditorSizeBridge(canvasZoom: 1.0, elementScale: 2.0);
++      expect(bridge.displayFromQuillSize('20'), '40');
++    });
++
++    test('zoom=1.0、lasso 0.5x：stored 20 顯示 10', () {
++      final bridge =
++          TextEditorSizeBridge(canvasZoom: 1.0, elementScale: 0.5);
++      expect(bridge.displayFromQuillSize('20'), '10');
++    });
++
++    test('zoom=1.75、lasso 2x：elementScale=3.5 → 仍顯示 40（zoom 被除掉）', () {
++      final bridge =
++          TextEditorSizeBridge(canvasZoom: 1.75, elementScale: 3.5);
++      expect(bridge.displayFromQuillSize('20'), '40');
++    });
++
++    test('挑 display value 會反算回 stored（除以 factor）', () {
++      final bridge =
++          TextEditorSizeBridge(canvasZoom: 1.0, elementScale: 2.0);
++      expect(bridge.quillSizeFromDisplay(40), '20.0');
++    });
++
++    test('round-trip：挑 N → 寫回 → 讀回顯示應為 N', () {
++      final bridge =
++          TextEditorSizeBridge(canvasZoom: 1.75, elementScale: 3.5);
++      for (final n in [10, 12, 20, 22, 38, 64, 128, 130]) {
++        final stored = bridge.quillSizeFromDisplay(n);
++        expect(bridge.displayFromQuillSize(stored), n.toString(),
++            reason: 'round-trip for display=$n at factor=2');
++      }
++    });
++  });
++
++  group('clamp 只發生在顯示域', () {
++    test('低於 MIN_SIZE clamp 到 MIN_SIZE', () {
++      final bridge =
++          TextEditorSizeBridge(canvasZoom: 1.0, elementScale: 1.0);
++      expect(bridge.displayFromQuillSize('5'),
++          TextAnnotation.MIN_SIZE.toString());
++    });
++
++    test('高於 MAX_SIZE clamp 到 MAX_SIZE', () {
++      final bridge =
++          TextEditorSizeBridge(canvasZoom: 1.0, elementScale: 1.0);
++      expect(bridge.displayFromQuillSize('999'),
++          TextAnnotation.MAX_SIZE.toString());
++    });
++
++    test('顯示被 clamp 不代表 stored 被改 —— stored 130 × 4x 仍原樣存在', () {
++      final bridge =
++          TextEditorSizeBridge(canvasZoom: 1.0, elementScale: 4.0);
++      // 顯示端吸附到 130（清單上限），但這只是 UI 呈現
++      expect(bridge.displayFromQuillSize('130'),
++          TextAnnotation.MAX_SIZE.toString());
++      // factor 本身沒有被 clamp
++      expect(bridge.displayFactor, 4.0);
++    });
++
++    test('odd 字級 floor 到偶數', () {
++      final bridge =
++          TextEditorSizeBridge(canvasZoom: 1.0, elementScale: 1.0);
++      expect(bridge.displayFromQuillSize('21'), '20');
++      expect(bridge.displayFromQuillSize('23'), '22');
++    });
++  });
++
++  group('edge cases', () {
++    test('canvasZoom = 0 fallback 為 1.0（避免除以零）', () {
++      final bridge =
++          TextEditorSizeBridge(canvasZoom: 0.0, elementScale: 1.0);
++      expect(bridge.quillSizeFromDisplay(20), '20');
++      expect(bridge.displayFromQuillSize('20'), '20');
++    });
++
++    test('elementScale = 0 fallback 為 1.0（退化矩陣）', () {
++      final bridge =
++          TextEditorSizeBridge(canvasZoom: 1.0, elementScale: 0.0);
++      expect(bridge.displayFromQuillSize('20'), '20');
++    });
++
++    test('NaN / Infinity 都 fallback 為 1.0', () {
++      final nan =
++          TextEditorSizeBridge(canvasZoom: double.nan, elementScale: double.nan);
++      expect(nan.displayFromQuillSize('20'), '20');
++      final inf = TextEditorSizeBridge(
++          canvasZoom: double.infinity, elementScale: double.infinity);
++      expect(inf.displayFromQuillSize('20'), '20');
++    });
++
++    test('displayFromQuillSize 對 null 回 null', () {
++      final bridge =
++          TextEditorSizeBridge(canvasZoom: 1.75, elementScale: 1.75);
++      expect(bridge.displayFromQuillSize(null), isNull);
++    });
++
++    test('displayFromQuillSize 對無法解析的字串原樣回（避免炸）', () {
++      final bridge =
++          TextEditorSizeBridge(canvasZoom: 1.75, elementScale: 1.75);
++      expect(bridge.displayFromQuillSize('not-a-number'), 'not-a-number');
++    });
++  });
++
++  group('VSFT-6964 使用者重現步驟', () {
++    // 1. zoom=1.0 放 fontSize=20 文字 → 存檔
++    // 2. zoom → 1.75，再點文字進入編輯模式
++    // 3. 預期 toolbar 顯示 20
++    test('zoom 變 1.75 後開啟編輯，toolbar 顯示 20', () {
++      // pinch zoom 把 1.75 烤進 annotation matrix → elementScale = 1.75
++      final bridge =
++          TextEditorSizeBridge(canvasZoom: 1.75, elementScale: 1.75);
++      expect(bridge.displayFromQuillSize('20'), '20');
++    });
++
++    test('關閉後再開啟仍顯示 20（stored 從頭到尾沒被改過）', () {
++      final bridge =
++          TextEditorSizeBridge(canvasZoom: 1.75, elementScale: 1.75);
++      expect(bridge.displayFromQuillSize('20'), '20');
++    });
++  });
++}

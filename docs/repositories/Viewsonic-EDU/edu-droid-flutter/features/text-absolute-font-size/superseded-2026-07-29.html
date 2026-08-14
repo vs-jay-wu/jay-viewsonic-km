@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>VSFT-6964 舊修法（commit 04b2c3571）— 已被取代</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#what">1. 這是什麼 / 為什麼保留</a></li>
+      <li><a href="#fix">2. 修正實作（2026-07-29）</a>
+        <ul>
+          <li><a href="#fix-decision" class="sub">當時的設計決策</a></li>
+          <li><a href="#fix-items" class="sub">三個動作</a></li>
+          <li><a href="#fix-open" class="sub">當時的待驗證</a></li>
+        </ul>
+      </li>
+      <li><a href="#superseded">3. 原分析（更早的版本）</a></li>
+      <li><a href="#why">4. 為什麼被取代</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>舊修法：commit <code>04b2c3571</code> <span class="badge badge-na">已被取代 · 保留備查</span></h1>
+    <div class="meta">
+      VSFT-6964 &middot; 分支 <code>Jay/VSFT-6964-tmp-font-size</code> &middot;
+      實作於 2026-07-29 &middot; 取代於 2026-08-14
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="findings.html">🔍 調查記錄 (findings)</a>
+      <a href="superseded-2026-07-29.html" class="active">🗄️ 舊修法（04b2c3571）</a>
+      <a href="manual-test.html">🧪 手動測試清單</a>
+      <a href="jira/VSFT-6964.md">🎫 Jira clone</a>
+    </div>
+
+    <h2 id="what">1. 這是什麼 / 為什麼保留</h2>
+    <div class="callout warn">
+      這頁記錄的是 <strong>2026-07-29 的第一版修法</strong>，存在於分支
+      <code>Jay/VSFT-6964-tmp-font-size</code>（commit <code>04b2c3571</code>）。
+      該分支<strong>刻意不刪</strong>，因為它與現行方向的取捨不同，留著對照。
+      現行實作在 <code>Jay/VSFT-6964-text-font-size</code>，記錄於
+      <a href="findings.html#impl">findings §10</a>。
+    </div>
+    <p>一句話差異：</p>
+    <table>
+      <thead><tr><th></th><th>舊修法（本頁）</th><th>現行修法</th></tr></thead>
+      <tbody>
+        <tr><td>核心主張</td><td>clamp 屬於顯示域，<strong>存的 scaled 值可無限大</strong></td><td>clamp 仍屬顯示域，但存的值<strong>不得超過 mvbW 的 173.33</strong>，超出改由 matrix 承載</td></tr>
+        <tr><td>編輯器</td><td>把 matrix scale 烤進 Quill 字級（<code>normalizedClone</code>），toolbar 再除回去</td><td>Quill 內是 stored 域，放大交給 <code>TextScaler</code></td></tr>
+        <tr><td>跨平台</td><td><span class="badge badge-err">未考慮</span> 檔案可能落在 mvbW 破壞區</td><td><span class="badge badge-ok">存檔正規化</span> 保證落在 mvbW 合法射程</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="fix">2. 修正實作（2026-07-29，已完成並 hot restart 到實體機）</h2>
+
+    <h3 id="fix-decision">Jay 的設計決策</h3>
+    <div class="callout ok">
+      <strong>clamp 屬於顯示域</strong>（toolbar 的 10~130），<strong>實際存的 scaled 值可合法超過 130</strong>。
+    </div>
+
+    <h3 id="fix-items">三個動作</h3>
+    <table>
+      <thead><tr><th>#</th><th>對象</th><th>做法</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-err">D1</span></td>
+          <td><code>text_annotation.dart</code> · <code>toJson</code></td>
+          <td>改用 <code>normalizedClone(convertToIntegerFontSize: false)</code> —— 保留 float、<strong>不 floor、不 clamp</strong></td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-phase">匯入端</span></td>
+          <td>XML textarea 路徑</td>
+          <td>拿掉 scaled 域 clamp（與 <code>content.json</code> 路徑一致），刪除 <code>clampedPreciseSizeString</code></td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-na">D2</span></td>
+          <td><code>olf_reader.dart</code></td>
+          <td><strong>不需修</strong>：檔案存 display×zoom + 開檔還原 zoom 標籤剛好互相抵消，存檔端不再損毀後 round-trip 天然成立</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>單元測試：</strong><code>toJson</code> round-trip 覆蓋 130 / 48 / 20 @ 122.66%（使用者實測案例）
+      ＋ 130@400%=520 極端案例；<code>make test</code> 全套 <strong>2798 通過</strong>。
+    </div>
+
+    <h3 id="fix-open">待驗證（Jay 進行中）</h3>
+    <div class="callout warn">
+      <strong>mvbW 對超過 130（或 float）的 font-size 是否會丟值 / clamp？</strong>
+      若會，需再議存檔上限相容策略。
+      <strong>舊檔已損毀的數值無法救回。</strong>
+      <br/><br/>
+      <span class="badge badge-ok">已於 2026-08-13 查證</span>
+      <strong>會。</strong>結論與確切上限見 <a href="findings.html#crossplatform">findings §8 跨平台查證</a>。
+    </div>
+    <div class="callout new">
+      <strong>⚠️ 本節（§5）記錄的是 2026-07-29 的實作，與後來收斂的方向不同，保留不動。</strong>
+      該版本存在 <code>Jay/VSFT-6964-tmp-font-size</code>（commit <code>04b2c3571</code>），
+      刻意保留供對照；<code>Jay/VSFT-6964-text-font-size</code> 為 cherry-pick 後的續做分支。
+    </div>
+
+    <!-- 6. Superseded -->
+    <h2 id="superseded">3. 原分析（已被第 2 節決策取代，保留脈絡）</h2>
+    <div class="callout new">
+      以下為修正前的方向盤點，<strong>已由上方決策取代</strong>，僅保留作為推導脈絡。
+    </div>
+    <p><strong>先決問題：</strong>mvbW / mvbX 渲染 OLF 時會不會 apply pageset matrix 的 scale？
+      （我們存的檔案 page matrix 有 1.2266 —— 其他平台開啟時畫面會放大 1.2266 倍嗎？）</p>
+    <table>
+      <thead><tr><th>假設</th><th>當時推導的修法</th><th>後果</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>會</strong> apply</td>
+          <td>存檔不把 zoom 烤進字級（保留 display 域數值 + page matrix 記 zoom），開檔把 page scale 烤回 annotation matrix（D2 選項 A）</td>
+          <td>Round-trip 完美（48→48），跨平台視覺也一致</td>
+        </tr>
+        <tr>
+          <td><strong>不會</strong>（其他平台只看 font-size 數字）</td>
+          <td>存檔烤 zoom 是視覺相容的必要之惡 → 開檔後 <code>infiniteCanvasScale</code> 歸 1（D2 選項 B）</td>
+          <td>toolbar 會顯示烤過的值（48@122.66% 重開顯示 58）—— 視覺一致但數字仍變，需 PM/QA 確認可接受度</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>無論選哪邊，D1 的整數化都該處理：</strong><code>toJson</code> 的 <code>normalizedClone</code> 應改為
+      <code>convertToIntegerFontSize: false</code>（或至少把 clamp 拿掉），否則 WIP 的 float 精度在存檔時照樣被毀
+      （例：zoom 175% 建的 20 → quill 35.0 → 存檔變 34）。
+    </div>
+    <h2 id="why">4. 為什麼被取代</h2>
+    <div class="callout new">
+      <strong>它讓 mvbf 自己 round-trip 對了，代價是把破壞風險推給 mvbW。</strong>
+      2026-08-13 查了 sparrow 原始碼後才確認：mvbW 的字級清單是 pt 域、上限 130，
+      <code>GetNearestFontSize</code> 硬取最近值且無上下限保護 ——
+      本修法存出的「可無限大」的值（例：display 130 @ zoom 400% = 520），
+      只要在 mvbW 被輸入或 resize 就會被吸附改寫，<strong>永久損毀</strong>。
+      完整查證見 <a href="findings.html#crossplatform">findings §8</a>。
+    </div>
+    <p>另外兩點在後續查證中也被推翻或修正：</p>
+    <ul class="compact">
+      <li><strong>「D2 不需修」</strong>依賴的是「存檔烤 zoom × 開檔還原 zoom 標籤剛好互相抵消」——
+        這種正確性是脆的，任一端被動到就會無聲壞掉。見 <a href="findings.html#mv-scope">findings §9</a>。</li>
+      <li>把 scale 烤進 Quill 字級這件事本身（<code>normalizedClone</code>）才是病根；
+        現行修法改用 <code>TextScaler</code> 從根拔掉，而不是在它之上補精度。</li>
+    </ul>
+  </main>
+</div>
+</body>
+</html>
