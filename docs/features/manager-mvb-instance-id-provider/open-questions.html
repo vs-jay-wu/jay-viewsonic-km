@@ -4,24 +4,76 @@
 <meta charset="UTF-8" />
 <title>Manager 讀取 MVB Instance ID — Open Questions</title>
 <link rel="stylesheet" href="assets/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  #np { position: fixed; right: 20px; bottom: 20px; z-index: 100; font-size: 13px; }
+  #np .np-toggle {
+    display: flex; align-items: center; gap: 7px;
+    font: inherit; padding: 9px 15px; cursor: pointer;
+    border: 1px solid var(--c-border); border-radius: 22px;
+    background: #fff; color: var(--c-fg); box-shadow: 0 2px 10px rgba(0,0,0,.12);
+  }
+  #np .np-toggle:hover { border-color: var(--c-accent); color: var(--c-accent); }
+  #np .np-toggle .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-border); }
+  #np.has-content .np-toggle .dot { background: var(--c-reuse); }
+  #np .np-body {
+    display: none; flex-direction: column;
+    width: min(420px, calc(100vw - 40px));
+    background: #fff; border: 1px solid var(--c-border); border-radius: 8px;
+    box-shadow: 0 6px 28px rgba(0,0,0,.18); overflow: hidden;
+  }
+  #np[data-open="1"] .np-body { display: flex; }
+  #np[data-open="1"] .np-toggle { display: none; }
+  #np .np-head {
+    display: flex; align-items: center; gap: 8px; padding: 9px 12px;
+    background: var(--c-accent-bg); border-bottom: 1px solid var(--c-border);
+  }
+  #np .np-head strong { color: var(--c-accent); }
+  #np .np-head .grow { flex: 1; }
+  #np .np-status { color: var(--c-muted); font-size: 11.5px; }
+  #np .np-x {
+    font: inherit; line-height: 1; padding: 3px 9px; cursor: pointer;
+    border: 1px solid var(--c-border); border-radius: 5px; background: #fff; color: var(--c-muted);
+  }
+  #np .np-x:hover { color: var(--c-fg); border-color: var(--c-accent); }
+  #np textarea {
+    display: block; width: 100%; height: 42vh; min-height: 150px; padding: 11px 13px;
+    border: 0; font-family: inherit; font-size: 13.5px; line-height: 1.65;
+    resize: vertical; outline: none; color: var(--c-fg);
+  }
+  #np .np-foot {
+    display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+    padding: 9px 12px; border-top: 1px solid var(--c-border); background: var(--c-bg);
+  }
+  #np .np-foot button {
+    font: inherit; font-size: 12.5px; padding: 5px 11px; cursor: pointer;
+    border: 1px solid var(--c-border); border-radius: 5px; background: #fff; color: var(--c-fg);
+  }
+  #np .np-foot button:hover { background: var(--c-accent-bg); border-color: var(--c-accent); }
+  #np .np-foot button.danger:hover { background: #fef2f2; border-color: var(--c-new); color: var(--c-new); }
+  #np .np-hint { flex-basis: 100%; color: var(--c-muted); font-size: 11px; }
+  @media print { #np { display: none; } }
+</style>
 </head>
 <body>
 <div class="layout">
   <nav class="toc" aria-label="目錄">
     <h2>目錄</h2>
     <ul>
-      <li><a href="#q1">Q1. entity name 的定義與來源</a></li>
-      <li><a href="#q2">Q2. dmagent 的簽章 key</a></li>
-      <li><a href="#q3">Q3. 未 enroll 時 provider 行為</a></li>
-      <li><a href="#q4">Q4. Provider contract 細節</a></li>
-      <li><a href="#q5">Q5. 兩票都未指派</a></li>
+      <li><a href="#q1">Q1. entity 欄位</a> <span class="badge badge-ok">已定案</span></li>
+      <li><a href="#q2">Q2. 存取控制</a> <span class="badge badge-ok">已定案</span></li>
+      <li><a href="#q3">Q3. 未初始化行為</a> <span class="badge badge-ok">已定案</span></li>
+      <li><a href="#q4">Q4. contract 細節</a> <span class="badge badge-warn">待對齊</span>
+        <ul><li><a href="#q4-versioning-example">版本演進：具體範例</a></li></ul>
+      </li>
     </ul>
   </nav>
 
   <main>
     <h1>Open Questions</h1>
     <div class="meta">
-      建立 2026-07-30 &middot; 開工前需要 PM（Peja）/ Stephen / Manager team（VB-1399）回答的問題
+      建立 2026-07-30 &middot; 更新 2026-08-17 &middot; <strong>會議討論用</strong>——與 Manager team（VB-1399）對齊 contract 與行為
+      <br />每題標示現況：<span class="badge badge-ok">已定案</span> 只需知會／覆核，<span class="badge badge-warn">待對齊</span> 需雙方拍板。調查與實作細節見 <a href="findings.html">findings</a> / <a href="contract-proposal.html">contract 草案</a>。
     </div>
     <div class="doc-nav">
       <a href="overview.html">📘 總覽 (overview)</a>
@@ -29,65 +81,328 @@
       <a href="open-questions.html" class="active">❓ open questions</a>
       <a href="contract-proposal.html">📐 contract 草案</a>
     </div>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart LR
+  subgraph DEVICE["同一台裝置（IFP / EDLA / A31）"]
+    direction LR
+    MVB["myViewBoard<br/>com.viewsonic.droid"]
+    PROV{{"ContentProvider（本次要定的東西）<br/>content://…instanceinfo.provider/v1/info"}}
+    DM["Manager agent<br/>com.viewsonic.dmagent"]
+    MVB -->|"鏡射"| PROV
+    PROV -->|"query ＋ ContentObserver"| DM
+  end
+  DM -->|"serial ↔ instance_id 對應"| CLOUD["Manager 雲端"]
+      </pre>
+      <div class="diagram-caption">
+        <strong>四個問題各自落在哪一段：</strong>
+        <strong>Q1</strong> provider 要<u>給什麼值</u>（已定案：entity_id） ·
+        <strong>Q2</strong> <u>誰能讀</u>（箭頭上的門） ·
+        <strong>Q3</strong> <u>還沒有值</u>時怎麼辦 ·
+        <strong>Q4</strong> 回傳<u>長什麼形狀</u>
+      </div>
+    </div>
 
-    <h2 id="q1">Q1. entity name 的定義與來源？</h2>
-    <p><span class="badge badge-mvb">問誰</span> Peja / Stephen</p>
-    <p>Stephen comment 說 provider 要提供「entity name」，但 codebase 裡 entity 有三種語意，且<strong>目前沒有任何一處持久化 entity name 字串</strong>（詳見 <a href="findings.html#entity">findings §2</a>）：</p>
-    <ul>
-      <li>(a) 裝置 enroll 的 entity——目前只存 <code>app_entityID</code>，沒有 name</li>
-      <li>(b) 從 Manager agent / Activator 讀來的 entityName——transient，不落地；而且<strong>這個值本來就是 Manager 給的</strong>，若票要的是這個，Manager 自己就有，不合理</li>
-      <li>(c) 登入帳號的 entity——帳號層概念，跟「裝置 ↔ instance 對應」無關</li>
-    </ul>
-    <p>推測是 (a)，但需要確認：</p>
-    <ul>
-      <li>後端 <code>GET /api/v1/application/viewboard/{uid}/entity</code> 的 response 是否已含 entity name？（若有，只需擴充解析；若無，要請後端加或另打 API）</li>
-    </ul>
-    <div class="callout warn">2026-07-30 本機實驗補強：dmagent 端 <code>DMService</code> 從 DataStore 收 <code>enrollEntityFlow</code>（含 <code>entityName</code> + <code>deviceName</code>）——<strong>agent 自己就持有 entity name</strong>，要 MVB provider 回 entity name 的目的更需釐清（見 <a href="findings.html#experiment">findings §7</a>）。</div>
-    <div class="callout ok"><strong>✅ 目的已釐清（Aaron Chang，2026-07-31）</strong>：entity name 是<strong>授權護欄（tenancy guard）</strong>，不是識別資料的重複——
-      (1) entity name 不會重複，可作識別；
-      (2) dm 拿 MVB 的 entity name 與<strong>自己持有的</strong>比對，<strong>不同就不對該 MVB 做事</strong>；
-      (3) 「MVB 註冊 entity A、Manager 註冊 entity B」雖少見，但同一台裝置上不同 entity ≠ 該 Manager 有權管理。
-      <br /><strong>仍待解</strong>：MVB 端 entity name 的<strong>來源</strong>（後端 <code>/{uid}/entity</code> 是否回 name）與持久化——且回傳字串必須與 Manager 雲端的 entity name <strong>逐字元一致</strong>（大小寫/空白正規化要跟 dm 對齊），否則護欄會誤攔。</div>
-    <div class="callout ok"><strong>✅ 來源已查證（2026-07-31，edu-mvb-api-core）：後端不用改。</strong>
-      <code>GET /{instance_id}/entity</code> 的 response（<code>InstanceEntityObj</code>，<code>apps/mvb-app-api/src/module/whiteboard/dto/res-body.dto.ts:35-46</code>）<strong>已含</strong> <code>entity_id</code> / <code>organization</code> / <code>name</code> / <code>beta_program</code>——MVB 目前只解析 <code>entity_id</code>（<code>mvb_activator.dart:433</code>），其餘丟掉。只需擴充解析並持久化。
-      <br /><strong>該用哪個欄位</strong>：dm 的 entityName 在 auto-enroll 走 <code>POST /install/inspect</code> body <code>{organization: entityName}</code> → 後端 <code>Entity.findOne({where:{organization}})</code>（<code>entity.service.ts:53-57</code>）<strong>精確等值比對 <code>organization</code></strong> → provider 的 <code>entity_name</code> 應回 <code>organization</code>；後端是逐字元等值，MVB 原樣存、原樣回即可，無自訂正規化空間。會議上與 Manager team 確認 dm 端比對邏輯同為精確等值。</div>
+    <h2 id="q1">Q1. entity 欄位 <span class="badge badge-ok">已定案 2026-08-17</span></h2>
+    <div class="callout ok">
+      <strong>✅ 決議：provider 只給 <code>entity_id</code>，<u>不給 entity name</u>。</strong>
+      <br />背景：票面原寫「提供 instance id ＋ <strong>entity name</strong>」，但那源於<strong>當初討論的誤會</strong>；本次會議釐清後確認需要的是 <code>entity_id</code>。
+      <br />→ 文件中所有以「provider 要提供 entity name」為前提的規劃<strong>均已作廢</strong>，非我們偏離規格。
+    </div>
+    <table>
+      <tbody>
+        <tr><td style="width:7em"><strong>給什麼</strong></td><td><code>entity_id</code>（Hive <code>app_entityID</code>，鏡射即可）</td></tr>
+        <tr><td><strong>是哪個 entity</strong></td><td><strong>裝置層 entity</strong>（該裝置 enroll 所屬），非登入帳號的 entity</td></tr>
+        <tr><td><strong>比對在哪做</strong></td><td><strong>雲端</strong>——dm 端只存 <code>entityName</code>、沒有 id（<code>EnrollEntity.kt:3</code>），故本地比不了；由 dm 回報 <code>entity_id</code>、Manager 雲端判定 tenancy</td></tr>
+        <tr><td><strong>為何 id 更好</strong></td><td>穩定主鍵（<strong>組織改名不變</strong>）、<strong>零網路</strong>、<strong>既有安裝的 Hive 早已存著</strong>——升級後立即可用</td></tr>
+      </tbody>
+    </table>
+    <div class="callout ok">
+      <strong>🎉 這個決議消掉了一整串原本必做的工作</strong>（詳見 <a href="contract-proposal.html#entity-id-only">contract §3.1</a>）：
+      <ul>
+        <li>不需擴充 <code>_getEntityID()</code> 解析 <code>organization</code>、不需新增 Hive 欄位</li>
+        <li><strong>不需「每次啟動重打 <code>/{uid}/entity</code>」的 backfill</strong>——原本「既有安裝的值永久補不上」是本票最嚴重的實作坑，<strong>現在整個消失</strong></li>
+        <li>不需 refresh 的「只在成功時覆寫」guard、不需擔心離線 edge case、不需約定字串正規化規則</li>
+      </ul>
+    </div>
+    <div class="callout ok">
+      <strong>✅ 已確認（會議中，Manager team 同意）：dm 走<u>雲端</u>用 <code>entity_id</code> 換 name。</strong>
+      本地不做 entity 比對——與「權威 tenancy 檢查留在雲端」一致（<a href="findings.html#entity-tamper">findings §2.1</a>），連帶讓「本地字串護欄被高估」的顧慮徹底消失。
+    </div>
 
-    <h2 id="q2">Q2. Manager agent（com.viewsonic.dmagent）用哪把簽章 key？</h2>
-    <p><span class="badge badge-cs">問誰</span> Manager team（VB-1399）</p>
-    <p>決定存取控制方案：</p>
-    <ul>
-      <li>若與 MVB ifp/edla 同為 <code>MVBA_PlatForm.jks</code> → 可用 <code>protectionLevel="signature"</code> 的自訂 permission，但 open/store flavor（Google Play key）會失效</li>
-      <li>若不同 key、或需支援所有 flavor → provider 內做 runtime 檢查：<code>getCallingPackage()</code> + <code>GET_SIGNING_CERTIFICATES</code> 比對 SHA-256 allowlist</li>
-    </ul>
-    <p>也需確認：這個 provider 是否只需要 ifp/edla flavor 提供？（Manager agent 場景應該只有 IFP 裝置，若確定，open/store 可直接不註冊 provider，signature permission 方案就成立）</p>
-    <div class="callout">2026-07-30 本機實驗補強：dmagent repo 的 <code>keystore.properties</code> 用的正是 <code>MVBA_PlatForm.jks</code>（alias <code>platform</code>）——與 MVB ifp/edla 同 key，signature 方案可行性高，待與 Manager team 確認正式包板也是同把 key。</div>
-    <div class="callout ok"><strong>✅ 範圍已確認（Jay，2026-07-31）：dm 只需要 ifp/edla，open/store 不管。</strong>
-      → 存取控制定向為 <strong>signature permission</strong>（<code>protectionLevel="signature"</code>），provider 註冊移到 flavor 專屬 manifest（<code>src/ifp/</code>、<code>src/edla/</code>），main manifest 不註冊——open/store 連 provider 都不存在。
-      剩餘確認項只剩：dmagent <strong>正式包板</strong>是否同為 <code>MVBA_PlatForm.jks</code>（本機證據已支持，會議上一句話確認即可）。詳見 <a href="contract-proposal.html#access">contract 草案 §2</a>。</div>
+    <h2 id="q2">Q2. Provider 的存取控制 <span class="badge badge-ok">已定案</span></h2>
+    <div class="callout ok">
+      <strong>provider 全 flavor 提供（維持註冊在 main manifest），存取控制採 runtime SHA-256 allowlist。</strong>
+      決定性事實是 <strong>A31</strong>——該機型裝 dm（簽 system key，Evis 2026-08-14 確認「Manager 都要簽 system key」），但其上的 mvbf 是 <strong>store 包（Google Play key）</strong>，兩者跨 key。
+    </div>
+    <table>
+      <thead><tr><th>flavor</th><th>mvbf key</th><th>dm key</th><th><code>protectionLevel="signature"</code></th></tr></thead>
+      <tbody>
+        <tr><td>ifp / edla</td><td><code>MVBA_PlatForm.jks</code></td><td>同一把</td><td>✅ 成立</td></tr>
+        <tr><td><strong>store（A31）</strong></td><td>Google Play key</td><td><code>MVBA_PlatForm.jks</code></td><td>❌ <strong>失效（跨 key）</strong></td></tr>
+      </tbody>
+    </table>
+    <p>採 runtime 檢查而非 signature permission 的理由：store 既然必須支援，runtime 檢查就非做不可，再疊一套只是多一條測試路徑；且 <strong>runtime 更嚴</strong>——signature permission 授予<strong>所有</strong>同簽章 app，runtime 則<strong>釘住 package + 憑證</strong>。實作細節見 <a href="contract-proposal.html#access">contract §2</a>，決策軌跡見 <a href="findings.html#flavor-scope-trace">findings §5.1</a>。</p>
+    <div class="callout warn">
+      <strong>❗ 要告知 Manager team：<u>store flavor 也在支援範圍</u></strong>——這會影響你們對裝置涵蓋的預期（A31 等 VPC 抽取式模組）。
+    </div>
 
-    <h2 id="q3">Q3. 未 enroll 時 provider 該回什麼？</h2>
-    <p><span class="badge badge-cs">問誰</span> Manager team + Stephen</p>
-    <p>instance ID 在首次啟動 <code>ensureInitialized()</code> 才產生；entity ID/name 要 enroll 成功後才有。情境：</p>
-    <ul>
-      <li>MVB 已安裝但從未啟動 → instance ID 不存在</li>
-      <li>已啟動但未 enroll → 有 instance ID、無 entity</li>
-    </ul>
-    <p>Provider 應回空 cursor？null？部分欄位？Manager 端的 retry/polling 策略是什麼？</p>
-    <div class="callout ok">2026-07-31 已有完整方案比較與建議（含舊版相容狀態機、<code>ContentObserver</code> 訂閱機制），見 <a href="contract-proposal.html#empty-handling">contract 草案 §8</a>。待與 Manager team 確認採納。</div>
+    <h2 id="q3">Q3. 未 enroll / 未初始化時 provider 回什麼 <span class="badge badge-ok">已定案</span> <span class="badge badge-warn">一項待實驗</span></h2>
+    <p>instance ID 首次啟動才產生、entity 要 enroll 後才有。provider 一律<strong>缺值列不出現</strong>，由 dm 以 presence 判斷狀態。
+    <br /><strong>注意欄位分工</strong>：中間欄是 <u>provider 端</u>的回應（或「查不到 provider」這件事本身）；右欄是 <u>dm 端</u>自行歸類後回報雲端的狀態碼——<strong>不是 provider 回傳的值</strong>（前兩列根本沒有 provider 可回答）。</p>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TD
+  Q["dm query provider"] --> A{"cursor 回來了？"}
+  A -->|"null ＋ 查無 package"| S1["NO_MVB<br/>（沒裝 MVB）"]
+  A -->|"null ＋ package 存在"| S2["MVB_TOO_OLD<br/>（舊版，雲端可提示升級）"]
+  A -->|"是"| E{"有 error_code？"}
+  E -->|"有"| ERR["⛔ 回報錯誤<br/>UNAUTHORIZED / UNSUPPORTED_URI / STORAGE_ERROR"]
+  E -->|"沒有"| B{"有 instance_id？"}
+  B -->|"否，只有 contract_version"| S3["NOT_INITIALIZED<br/>→ 註冊 ContentObserver 等通知"]
+  B -->|"是"| C{"activated ＝ true？"}
+  C -->|"false"| S4["有 instance_id、尚未 enroll"]
+  C -->|"true"| S5["✅ 對應完成"]
+  S3 -.->|"MVB 首次啟動 → notifyChange"| S5
+      </pre>
+      <div class="diagram-caption">這是 <strong>dm 端</strong>的判斷流程。狀態碼由 dm 自行歸類，<strong>不是 provider 回傳的值</strong>；只有 <code>error_code</code> 是 provider 給的。虛線是「未初始化」的自我修復路徑：不需輪詢。<br /><strong>注意「未初始化」走的是右下那條、不是 error 那條</strong>——沒有值不算錯誤。</div>
+    </div>
+    <table>
+      <thead><tr><th>裝置狀態</th><th>dm 觀察到（provider 側）</th><th>dm 回報雲端的狀態（dm 側自行判定）</th></tr></thead>
+      <tbody>
+        <tr><td>未裝 MVB</td><td>query 回 <code>null</code>；<code>PackageManager</code> <strong>查無</strong> <code>com.viewsonic.droid</code></td><td><code>NO_MVB</code></td></tr>
+        <tr><td>舊版 MVB（尚無 provider）</td><td>query 回 <code>null</code>；但 package <strong>存在</strong></td><td><code>MVB_TOO_OLD</code>（附 versionName，雲端可提示升級 MVB 即可取得 instance ID）</td></tr>
+        <tr><td>新版但未啟動過</td><td>只回 <code>contract_version</code></td><td><code>NOT_INITIALIZED</code> + 註冊 <code>ContentObserver</code></td></tr>
+        <tr><td>已啟動未 enroll</td><td>有 <code>instance_id</code>、<code>activated=false</code></td><td>instance_id + 未啟用</td></tr>
+        <tr><td>已 enroll</td><td>有 <code>instance_id</code> + <code>entity_id</code>、<code>activated=true</code></td><td>✅ 對應完成</td></tr>
+        <tr><td><strong>query 失敗</strong></td><td>cursor 有 <code>error_code</code>、無資料列</td><td>依 <code>error_code</code> 回報異常</td></tr>
+      </tbody>
+    </table>
+    <div class="callout ok">
+      <strong>✅ 已定案（2026-08-17）</strong>
+      <ul>
+        <li><strong>「更新後未開啟」的 edge case：PM（Peja）判定可接受</strong>——需要被管理的裝置通常本來就有人在用 MVB；且 <strong>mvbf 更新週期早於 dm</strong>（dm 下次更新為 <strong>12 月</strong>），該比例會大幅下降。真的發生時以<strong>客服回報 ＋ 提示使用者</strong>處理</li>
+        <li><strong>dm 主動開啟 MVB（有 UI）的做法：排除</strong>——行為太怪，雙方一致</li>
+        <li><strong>dm 端更新接收方式</strong>：MVB 已在鏡射後 <code>notifyChange</code>；建議 dm 用 <code>JobScheduler.addTriggerContentUri()</code>（process 沒跑也收得到）＋ 組 <code>static_info</code> 時現讀 provider 作為最終保證。詳見 <a href="contract-proposal.html#propagation">contract §8.2</a></li>
+      </ul>
+    </div>
+    <div class="callout warn">
+      <strong>🔬 待 MVB 側實驗（Jay）→ 結果會決定要不要給你們 edge case 對策清單</strong>
+      <br />正在研究「<strong>不開啟 MVB 也能完成初始化</strong>」的 headless 做法。<strong>若可行且 effort 不高就實作</strong>——那麼「必須有人開過 MVB」的前提就消失，上述 edge case 不再存在。
+      <br />若不可行，我們會提供<strong>完整的 edge case 敘述</strong>（觸發條件、dm 觀察到什麼、影響範圍、自我修復方式、建議對策），供你們擬定雲端提示／客服流程。詳見 <a href="contract-proposal.html#pm-risk-accept">contract §8.1</a>。
+    </div>
 
-    <h2 id="q4">Q4. Provider contract 細節</h2>
-    <p><span class="badge badge-cs">問誰</span> 與 VB-1399 共同定義（工程師討論）</p>
-    <ul>
-      <li>authority 命名（參考對向：<code>com.viewsonic.dmagent.provider</code>；MVB 側 applicationId 因 flavor 而異，authority 建議用 <code>${applicationId}.xxx</code> 還是固定字串？固定字串在多 flavor 同裝置共存時會衝突）</li>
-      <li>URI path 與 column 名（對向 dmagent 是單欄 cursor 無 column 名慣例）</li>
-      <li>是否需要 query 單欄或一次回兩值</li>
-      <li>版本演進策略（之後要加欄位怎麼辦）</li>
-    </ul>
-    <div class="callout ok">草案已成形：key-value cursor + 版本演進策略方案比較（Stephen 傾向 key 版本制），見 <a href="contract-proposal.html">contract 草案</a> §1 / §7。POC 已依草案打通 end-to-end（<a href="findings.html#poc">findings §8</a>）。</div>
+    <h2 id="q4">Q4. Provider contract 細節 <span class="badge badge-warn">草案待對齊</span></h2>
+    <table>
+      <tbody>
+        <tr><td style="width:8em"><strong>URI</strong></td><td><code>content://com.viewsonic.droid.instanceinfo.provider/v1/info</code></td></tr>
+        <tr><td><strong>Cursor</strong></td><td>key-value 多列（columns: <code>key</code>, <code>value</code>），<strong>缺值列不出現</strong>，不認得的 key 忽略</td></tr>
+        <tr><td><strong>v1 keys</strong></td><td><code>contract_version</code> / <code>instance_id</code> / <code>entity_id</code> / <code>error_code</code> / <code>error_message</code>（＋已實作可選：<code>activated</code>、<code>whiteboard_name</code>）<br /><small>2026-08-17 定案：<strong>不含 entity name</strong>，見 <a href="#q1">Q1</a></small></td></tr>
+        <tr><td><strong>版本策略</strong></td><td>key 版本制為主幹（Stephen 傾向）+ <code>contract_version</code> 僅供 log + 行為分支一律用 presence 偵測。
+          <br /><small><strong>URI 裡的 <code>/v1</code> 不是「path 版控」</strong>——它是命名空間標記、日常不變；加欄位／改語意都走 key 版本制。<strong>只有 cursor shape 本身要變</strong>才會出現 <code>/v2/info</code>（逃生門）。</small></td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>❓ 要和 Manager team 對齊：</strong>
+      <ol>
+        <li>authority 命名慣例（<code>${applicationId}</code> 前綴 vs 固定字串——<strong>現況兩者字串相同</strong>，純慣例；對向 dmagent 用固定字串）</li>
+        <li>版本演進策略定案（見下方範例）</li>
+        <li>你們 Story 8+ 的 roadmap 還需要哪些欄位？<a href="contract-proposal.html#reserved">contract §4</a> 已備妥候選（含設定 drift 偵測用的 <code>setting_*</code>），用真需求決定要不要提前進 v1</li>
+      </ol>
+    </div>
 
-    <h2 id="q5">Q5. 兩張票都未指派</h2>
-    <p>VSFT-9654 已進 Sprint 25（7/30–8/10）但 assignee 是 Unassigned，VB-1399 也未指派。需確認雙方窗口，contract 才有人拍板。</p>
-  </main>
+<h3 id="q4-versioning-example">版本演進策略：具體範例（會議討論用）</h3>
+    <p>建議方案＝<strong>B（key 版本）為主幹 + C（<code>contract_version</code>）僅供 log + E（presence 偵測）決定行為</strong>，加三條紀律。以下用一條時間線把它演完，看得出「加欄位」「改語意」兩種變更各自怎麼落地。</p>
+
+    <h4>① v1 — 今天（本票 scope）</h4>
+    <p><code>content://com.viewsonic.droid.instanceinfo.provider/v1/info</code> 回傳的 cursor（key-value 多列，缺值列不出現）：</p>
+    <pre><code>key                | value
+-------------------+----------------------------------
+contract_version   | 1
+instance_id        | 8E28AD2200B4D06A06E456FB70C45B4F
+entity_id          | 3327</code></pre>
+
+    <h4>② v2 — <span class="badge badge-ok">加欄位</span>（最常見的變更，B 的 happy path）</h4>
+    <p>情境：Manager 想同時知道「有沒有 enroll」與這台機器的別名。<strong>只是多兩列</strong>：</p>
+    <pre><code>contract_version   | 2      ← bump（僅供 log）
+instance_id        | 8E28AD2200B4D06A06E456FB70C45B4F
+entity_id          | 3327
+activated          | true            ← 新增
+whiteboard_name    | 3F-Meeting-Room ← 新增</code></pre>
+    <div class="callout ok"><strong>舊版 dm 一行都不用改</strong>——它只讀自己認得的 key，不認得的列直接忽略。MVB 側成本＝白名單加兩個欄位。這就是選 key-value cursor（而非固定欄位單列）的整個理由。</div>
+
+    <h4>③ v3 — <span class="badge badge-warn">改語意 / 改格式</span>（B 的重點，也是 Stephen 擔心的 case）</h4>
+    <p>情境（假設）：instance ID 從 md5 hex 改為 UUID 格式。<strong>絕不改 <code>instance_id</code> 這個 key 的值定義</strong>，而是<strong>新開一個語意化的 key，兩者並存回傳</strong>：</p>
+    <pre><code>contract_version   | 3
+instance_id        | 8E28AD2200B4D06A06E456FB70C45B4F   ← 保留舊值，標 deprecated
+instance_uuid      | 550e8400-e29b-41d4-a716-446655440000  ← 新 key
+entity_id          | 3327
+activated          | true
+whiteboard_name    | 3F-Meeting-Room</code></pre>
+    <table>
+      <thead><tr><th></th><th>做法</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>❌ 反例</td>
+          <td>沿用 <code>instance_id</code> 這個 key，直接把值換成 UUID</td>
+          <td><strong>silent 破壞</strong>：舊 dm 照樣讀到值、格式卻變了，回報雲端後與既有 mapping 對不上，且<strong>沒有任何錯誤訊號</strong>可察覺</td>
+        </tr>
+        <tr>
+          <td>✅ 建議</td>
+          <td>新增 <code>instance_uuid</code>，<code>instance_id</code> 原值不動</td>
+          <td>新舊 dm <strong>在同一次回應裡各取所需</strong>，可逐個版本、無停機遷移；等 dm 全面升級後才移除舊 key</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>命名建議：優先取<strong>語意化名稱</strong>（<code>instance_uuid</code>）而非 <code>instance_id_v2</code>——前者自我描述，後者半年後沒人記得 v2 差在哪。</p>
+
+    <h4>④ dm 端讀法（三條紀律的落地）</h4>
+    <pre><code>Map&lt;String, String&gt; info = queryMvbProvider();   // key → value
+
+// ✅ 行為分支一律用 presence 偵測（方案 E）
+String id = info.containsKey("instance_uuid")
+          ? info.get("instance_uuid")
+          : info.get("instance_id");
+
+// ✅ contract_version 只進 log，方便客服/除錯「對面是哪一版」
+Log.i(TAG, "mvb contract v" + info.get("contract_version"));
+
+// ❌ 禁止：拿版本號做行為分支
+// if (Integer.parseInt(info.get("contract_version")) &gt;= 3) { ... }
+//    版本號 ≠ 能力。一旦這樣寫，MVB 之後任何 bump 都可能誤觸 dm 的分支</code></pre>
+
+    <h4>⑤ 逃生門：cursor shape 本身要變 → 才開新 path</h4>
+    <p>key 版本制唯一蓋不住的洞，是<strong>回傳結構本身</strong>改變（例如從 key-value 兩欄改成一列多欄）。這種情況才開 <code>/v2/info</code>，<code>/v1/info</code> 於 deprecation 週期內繼續服務。日常加欄位/改語意都不該動到 path。</p>
+
+    <table>
+      <thead><tr><th>紀律</th><th>內容</th></tr></thead>
+      <tbody>
+        <tr><td>1. Published key 永久凍結</td><td>一旦發布，該 key 的語意與格式不再變。要改 → 新 key（如 ③）</td></tr>
+        <tr><td>2. 舊 key 進 deprecation 週期</td><td>文件標 deprecated + 預告移除版本，等 dm 全面遷移後才真正移除</td></tr>
+        <tr><td>3. <code>contract_version</code> 只用於 log</td><td>任何 key 新增/棄用都 bump，但 dm <strong>不得</strong>拿它做行為分支——分支一律用 presence</td></tr>
+      </tbody>
+    </table>
+    <p>完整方案比較（A–E 五案優缺點）見 <a href="contract-proposal.html#versioning">contract 草案 §7</a>。</p>
+</main>
 </div>
+<div id="np" data-open="0">
+  <button type="button" class="np-toggle" id="npToggle"><span class="dot"></span>📝 會議筆記</button>
+  <div class="np-body">
+    <div class="np-head">
+      <strong>會議筆記</strong>
+      <span class="grow"></span>
+      <span class="np-status" id="npStatus"></span>
+      <button type="button" class="np-x" id="npClose" title="收合">—</button>
+    </div>
+    <textarea id="npText" placeholder="會議決議、待辦、對方的說法…&#10;（自動儲存於本機瀏覽器）"></textarea>
+    <div class="np-foot">
+      <button type="button" data-act="copy">複製</button>
+      <button type="button" data-act="download">下載 .md</button>
+      <span class="grow"></span>
+      <button type="button" data-act="clear" class="danger">清除</button>
+      <div class="np-hint">存在這台瀏覽器的 localStorage，不會進 git——<strong>會後請務必複製或下載</strong>。</div>
+    </div>
+  </div>
+</div>
+
+<script>mermaid.initialize({ startOnLoad: true });</script>
+<script>
+(function () {
+  var KEY = 'vsft9654-oq-notes:v1';
+  var OPEN_KEY = 'vsft9654-oq-notes-open';
+  var panel = document.getElementById('np');
+  var ta = document.getElementById('npText');
+  var statusEl = document.getElementById('npStatus');
+  var timer = null;
+
+  function setStatus(t) { statusEl.textContent = t; }
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function now() { var d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  function refresh() { panel.classList.toggle('has-content', !!ta.value.trim()); }
+
+  function save() {
+    try {
+      localStorage.setItem(KEY, ta.value);
+      setStatus(ta.value.trim() ? '已存 ' + now() : '');
+    } catch (e) {
+      setStatus('⚠️ 無法儲存，請立即複製');
+    }
+    refresh();
+  }
+  function toMarkdown() {
+    var body = ta.value.trim();
+    return ['# VSFT-9654 / VB-1399 會議筆記', '', '匯出時間：' + new Date().toLocaleString('zh-TW'), '',
+            body || '_（尚無筆記）_', ''].join('\n');
+  }
+  function fallbackCopy(text) {
+    var t = document.createElement('textarea');
+    t.value = text; t.style.cssText = 'position:fixed;top:-9999px;';
+    document.body.appendChild(t); t.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(t);
+    setStatus(ok ? '✅ 已複製' : '⚠️ 複製失敗，請用下載');
+  }
+  function copy(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(function () { setStatus('✅ 已複製'); },
+                                               function () { fallbackCopy(text); });
+    } else { fallbackCopy(text); }
+  }
+  function setOpen(v) {
+    panel.setAttribute('data-open', v ? '1' : '0');
+    try { localStorage.setItem(OPEN_KEY, v ? '1' : '0'); } catch (e) {}
+    if (v) ta.focus();
+  }
+
+  try { ta.value = localStorage.getItem(KEY) || ''; } catch (e) {}
+  refresh();
+  setStatus(ta.value.trim() ? '已載入' : '');
+  try { if (localStorage.getItem(OPEN_KEY) === '1') panel.setAttribute('data-open', '1'); } catch (e) {}
+
+  document.getElementById('npToggle').addEventListener('click', function () { setOpen(true); });
+  document.getElementById('npClose').addEventListener('click', function () { save(); setOpen(false); });
+
+  ta.addEventListener('input', function () {
+    setStatus('編輯中…');
+    clearTimeout(timer);
+    timer = setTimeout(save, 400);
+  });
+  ta.addEventListener('blur', save);
+  window.addEventListener('beforeunload', save);
+
+  // Esc 收合；Cmd/Ctrl+Shift+N 開啟
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && panel.getAttribute('data-open') === '1') { save(); setOpen(false); }
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'N' || e.key === 'n')) {
+      e.preventDefault(); setOpen(panel.getAttribute('data-open') !== '1');
+    }
+  });
+
+  panel.querySelectorAll('.np-foot button').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var act = btn.getAttribute('data-act');
+      if (act === 'copy') {
+        copy(toMarkdown());
+      } else if (act === 'download') {
+        var blob = new Blob([toMarkdown()], { type: 'text/markdown;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        var d = new Date();
+        a.href = url;
+        a.download = 'vsft9654-notes-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '.md';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        setStatus('✅ 已下載');
+      } else if (act === 'clear') {
+        if (!confirm('確定清除筆記？無法復原——建議先下載 .md。')) return;
+        ta.value = '';
+        try { localStorage.removeItem(KEY); } catch (e) {}
+        refresh(); setStatus('已清除');
+      }
+    });
+  });
+})();
+</script>
 </body>
 </html>

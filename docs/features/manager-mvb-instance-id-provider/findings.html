@@ -11,7 +11,13 @@
     <h2>目錄</h2>
     <ul>
       <li><a href="#current">0. 現況：instance ID 怎麼給 Manager</a></li>
-      <li><a href="#instance-id">1. Instance ID 現況</a></li>
+      <li><a href="#instance-id">1. Instance ID 現況</a>
+        <ul>
+          <li><a href="#hive-format">1.1 Hive 機制與「讀不到」的正確說法</a></li>
+          <li><a href="#storage-protection">1.2 儲存保護等級與 adb 實測</a></li>
+          <li><a href="#no-encryption">1.3 搬到 prefs 會失去加密嗎</a></li>
+        </ul>
+      </li>
       <li><a href="#entity">2. Entity 現況（三種語意）</a></li>
       <li><a href="#provider">3. ContentProvider / permission 現況</a></li>
       <li><a href="#agent">4. Manager agent 整合現況</a></li>
@@ -44,7 +50,7 @@
       <li><strong>雲端側（Manager 看得到 instance ID 的原因）</strong>：MVB enroll 時把 instance ID 當 <code>uid</code> 上報 myViewBoard 後端（<code>POST /api/v2/application/whiteboard</code>，<code>mvb_activator.dart:177-204</code>）。裝置 enroll 進 entity 後，Manager 雲端「Software Instances」頁即可列出該 entity 下所有 instance ID 並套設定（票面附圖的列表就是這個）。所以 Manager <strong>知道有哪些 instance</strong>。</li>
       <li><strong>裝置側（缺口）</strong>：Manager agent（<code>com.viewsonic.dmagent</code>）在裝置上管理本機，但 MVB 沒有任何對外介面提供本機的 instance ID，agent <strong>無從得知本機 MVB 是哪個 instance</strong>。結果是雲端有一排 instance ID，卻對不上「哪個 ID 是哪台裝置」。</li>
       <li><strong>既有跨 app 通道只有反方向</strong>：裝置上 MVB ↔ Manager agent 唯一的整合，是 MVB 去讀 agent 的 provider <code>content://com.viewsonic.dmagent.provider/entity</code> 拿 entity name 做 auto-enroll（<code>MainActivity.java:1855-1906</code>）——資料方向 Manager → MVB，沒有 MVB → Manager。</li>
-      <li>本票即是把方向反過來：MVB 開對稱的 ContentProvider 讓 agent 讀 instance ID（+ entity name），agent 回報雲端後，Manager 才能建立「instance ID ↔ 裝置」對應。</li>
+      <li>本票即是把方向反過來：MVB 開對稱的 ContentProvider 讓 agent 讀 instance ID（＋ <code>entity_id</code>），agent 回報雲端後，Manager 才能建立「instance ID ↔ 裝置」對應。</li>
     </ul>
 
     <h2 id="instance-id">1. Instance ID 現況</h2>
@@ -71,7 +77,86 @@
       <li>同 box 還有：<code>app_entityID</code>、<code>app_whiteboardName</code>、<code>app_email</code>、<code>app_activated</code>、<code>StartupCount</code>、<code>native_analytics</code></li>
       <li>class 名為 <code>SecureDataStorage</code> 但<strong>未加密</strong>（無 <code>HiveCipher</code>），檔案在 app documents dir 下 <code>activate_db/activate.hive</code></li>
     </ul>
-    <div class="callout warn"><strong>Hive 是 Dart 專有 binary 格式，Kotlin/Java 側（ContentProvider）讀不到</strong>——這是本票最大的實作障礙。</div>
+    <div class="callout warn"><strong>Hive 是 Dart 專有 binary 格式，原生側沒有可用的 parser</strong>——這是本票最大的實作障礙。<br />
+    ⚠️ 措辭修正（2026-08-14）：早期版本寫成「Java/Kotlin 讀不到」<strong>不精確</strong>——檔案原生完全存取得到（同 app-private 目錄、同 uid），障礙在<strong>格式沒有 Java parser、自己刻等於逆向 undocumented 內部格式</strong>。詳見 <a href="#hive-format">§1.1</a>。</div>
+
+    <h3 id="hive-format">1.1 Hive 的實際機制與「原生讀不到」的正確說法（2026-08-14 實機查證）</h3>
+    <div class="callout"><strong>結論：不是「看不到」，是「沒有 parser」。</strong>否決直讀 Hive 的理由，與 POC v2 否決直讀 <code>FlutterSharedPreferences</code> 內部格式<strong>是同一個理由</strong>（依賴 undocumented 實作細節），這樣論述才自洽。</div>
+    <h4>檔案位置與格式</h4>
+    <ul>
+      <li>路徑：<code>/data/data/com.viewsonic.droid/app_flutter/activate_db/activate.hive</code>（實測 2046 bytes、權限 <code>-rw-------</code>）</li>
+      <li>格式：<strong>append-only frame log</strong>——<code>[uint32 frame長度][keyLen][key ASCII][typeId][value][uint32 CRC32]</code>
+        <ul>
+          <li>改值<strong>不是原地覆寫</strong>，而是再 append 一個新 frame，讀取時同 key <strong>取最後一筆</strong></li>
+          <li>刪除＝寫 tombstone frame（<code>Frame.deleted</code>）</li>
+          <li>檔案膨脹到閾值才 compaction 重寫整檔（版面因此會變）</li>
+          <li>來源：<code>hive_ce-2.19.3/lib/src/binary/frame.dart</code>（string key 上限 255 bytes）、<code>src/crypto/crc32.dart</code></li>
+        </ul>
+      </li>
+    </ul>
+    <p>實機證據——此 box 邏輯上只有 7 個 key，實體 frame 數卻是：</p>
+    <pre><code>app_instanceID ×1   app_entityID ×1   app_whiteboardName ×1   app_email ×1
+app_activated  ×1   StartupCount ×9   native_analytics    ×9</code></pre>
+    <p><code>StartupCount</code> 每次開機 +1 就多一個 frame——append-only 的直接證明。且值是<strong>明文</strong>：</p>
+    <pre><code>0000000: 3d00 0000 010e 6170 705f 696e 7374 616e  =.....app_instan
+0000010: 6365 4944 0420 0000 0034 3732 4342 3741  ceID. ...472CB7A
+0000020: 4433 4335 4139 4533 3838 3144 4446 4343  D3C5A9E3881DDFCC</code></pre>
+    <h4>為什麼還是不在 provider 內直讀</h4>
+    <p>要讀就得自己刻 frame 掃描器：長度前綴、typeId、tombstone、同 key 取最後一筆、CRC 驗證、compaction 後的版面變化——而這是<strong>套件的 undocumented 內部格式</strong>，hive_ce 升版即可能改。技術上做得到，但這正是 <a href="#poc-v2">POC v2</a> 否決「直讀 <code>FlutterSharedPreferences</code>」的那類耦合（silent desync 風險）。</p>
+
+    <h3 id="storage-protection">1.2 儲存保護等級：Hive vs SharedPreferences（實機實測，2026-08-14）</h3>
+    <div class="callout ok"><strong>結論：兩者保護等級相同，鏡射到 prefs <u>不會</u>降低安全性。</strong>同一個 app-private 目錄、同 uid、<strong>都沒有加密</strong>（<code>SecureDataStorage</code> 名不符實，無 <code>HiveCipher</code>）。實測權限 <code>activate.hive</code> = <code>-rw-------</code>、prefs = <code>-rw-rw----</code>，差在 group 位但同 uid 存取結果一致——碰得到其中一個的，另一個也碰得到。</div>
+    <h4>adb 到底能不能改？（Pixel Tablet <code>3629105H804NHC</code> 實測）</h4>
+    <table>
+      <thead><tr><th>測試</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr><td><code>adb shell id</code></td><td><code>uid=2000(shell)</code></td></tr>
+        <tr><td><code>ls /data/data/com.viewsonic.droid/</code></td><td><strong>Permission denied</strong></td></tr>
+        <tr><td><code>getprop ro.build.type</code></td><td><code>user</code></td></tr>
+        <tr><td><code>adb root</code></td><td><code>adbd cannot run as root in production builds</code></td></tr>
+        <tr><td><code>run-as com.viewsonic.droid ls</code></td><td>✅ 成功（<strong>因為裝的是 POC debug 包</strong>）</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><strong>release（不可 debug）build</strong>：光靠 adb <strong>讀不了也改不了</strong>——shell 是 uid 2000 進不去私有目錄、<code>run-as</code> 只對 debuggable app 有效、user build 連 <code>adb root</code> 都被擋</li>
+      <li><strong>debuggable build</strong>：<code>run-as</code> 全開、讀寫皆可（上表的 hexdump 就是這樣 dump 出來的）</li>
+      <li>⚠️ <strong>前提在韌體</strong>：以上保護取決於裝置是 <code>user</code> build。若某些 IFP 出 <code>userdebug</code>/eng 韌體（<code>adb root</code> 可用），app 私有目錄全開——這與選 Hive 或 prefs <strong>無關</strong>，是裝置層前提</li>
+    </ul>
+    <div class="callout warn">
+      <strong>📌 真正新增的暴露面不是「換一個檔案存」，而是「多開了一個 exported component」。</strong>
+      鏡射只是把同等保護的資料換個容器；provider 才是新的對外介面——這就是存取控制（<a href="contract-proposal.html#access">contract §2</a>）要守的東西，也是 POC 的裸 export 只能留在測試機的原因。
+    </div>
+
+    <h3 id="no-encryption">1.3 「搬到 SharedPreferences 會不會失去加密？」——沒有加密可失去（2026-08-17）</h3>
+    <div class="callout ok">
+      <strong>結論：Hive 現在也是明文，鏡射到 prefs 不降低任何保護。</strong>
+      誤解來源是類別名 <code>SecureDataStorage</code>——它<strong>沒有 <code>HiveCipher</code></strong>，名不符實。實機 hexdump 已證明 instance ID 以明文 ASCII 存放（見 <a href="#hive-format">§1.1</a>）。兩者都是 app-private 目錄的明文檔，靠 uid 隔離 + SELinux 保護，等級相同（見 <a href="#storage-protection">§1.2</a>）。
+    </div>
+    <h4>⚠️ 但查證時發現一個既有設計弱點（與本票無關，但值得記錄）</h4>
+    <p>先前文件寫「instanceID <em>參與</em>認證加密」<strong>過於含糊</strong>。精確地說——<code>instance_id</code> <strong>就是 AES 金鑰本身</strong>：</p>
+    <pre><code>// aes_cipher.dart:15 —— 第一個參數是 KEY
+String aesEncryptWithBase64(String keyStr, String data)
+
+// mvb_activator.dart:179, 212
+final String key = aesEncryptWithBase64(instanceID, sessionID);   // instanceID 當金鑰</code></pre>
+    <p>但同一個值又<strong>公開暴露於多處</strong>：</p>
+    <table>
+      <thead><tr><th>通道</th><th>誰拿得到</th></tr></thead>
+      <tbody>
+        <tr><td>Settings &gt; About 顯示（<code>about_list_view_bloc.dart:59</code>）</td><td>任何站在機器前的人</td></tr>
+        <tr><td>SSO URL query param（<code>...&amp;instance_id=</code>，<code>vs_urls.dart</code>）</td><td>可能進入 log／referrer</td></tr>
+        <tr><td>後端 <code>uid</code>、Cast dialog、登入 QR code</td><td>—</td></tr>
+        <tr><td><strong>本票的 provider</strong></td><td><strong>只有 dm（釘 package + 憑證）</strong></td></tr>
+      </tbody>
+    </table>
+    <p>用一個會出現在畫面與網址列的值當 AES 金鑰是<strong>既有弱點</strong>；<strong>本票沒有讓它變糟</strong>——provider 反而是上表中最受控的通道。</p>
+    <h4>該不該改成加密儲存？<strong>不建議在本票做</strong></h4>
+    <ol>
+      <li><strong>金鑰要存哪？</strong>存在同一個 app-private 目錄等於沒加密（能讀檔就能讀金鑰）。真要做需用 <strong>Android Keystore</strong>（硬體支撐），屬獨立重構</li>
+      <li><strong>威脅模型不成立</strong>：要讀到這些檔案已需 root／平台簽章，到那一步攻擊者可直接掛勾 process 或讀記憶體</li>
+      <li><strong>加密不改變可及性</strong>：<code>instance_id</code> 本來就印在 Settings 畫面上</li>
+    </ol>
+    <p>值得單獨記住的是：<strong><code>SecureDataStorage</code> 這個名字已經誤導過一次，將來還會再誤導</strong>——正式 PR 時可考慮加註解說明它未加密。</p>
 
     <h3>後端使用（instanceID = 裝置 identity key）</h3>
     <table>
@@ -86,8 +171,14 @@
     </table>
     <p>其他用途：<code>x-vs-key</code>/<code>x-vs-session</code> 認證 header、MQTT remote control client id/topic（<code>lib/remote_control_manager.dart</code>）、WebView 注入（<code>MvbAppInfo.java</code>）、Cast、登入/啟用 QR code、IT Admin settings 抓取、Settings &gt; About 顯示。</p>
 
-    <h2 id="entity">2. Entity 現況（三種語意，⚠️ 需釐清票要哪個）</h2>
-    <h3>(a) 裝置層 entity ID — 最可能是票要的</h3>
+    <h2 id="entity">2. Entity 現況（三種語意）</h2>
+    <div class="callout ok">
+      <strong>✅ 已定案（Jay，2026-08-17）：票要的是 (a) 裝置層 entity。</strong>
+      與查證結果自洽——<code>GET /{uid}/entity</code> 是拿 instance ID 換<strong>該裝置所屬</strong>的 entity，回傳的 <code>organization</code> 即 (a) 的名稱。
+      (b) 是 Manager 自己給 MVB 的值（回頭給它沒意義）、(c) 是帳號層概念（與「裝置 ↔ instance 對應」無關），均排除。
+      <br /><strong>✅ 2026-08-17 會議進一步定案：provider <u>只給 <code>entity_id</code></u>，不給 entity name</strong>（票面原寫 entity name 係當初討論的誤會）。詳見 <a href="contract-proposal.html#entity-id-only">contract §3.1</a>。
+    </div>
+    <h3>(a) 裝置層 entity ID — <span class="badge badge-ok">✅ 即本票所需</span></h3>
     <ul>
       <li><code>mvb_activator.dart:153-155 getEntityID()</code> / <code>419-441 _getEntityID()</code></li>
       <li>來源 <code>GET /api/v1/application/viewboard/{uid}/entity</code> → response <code>entity_id</code>（line 433）</li>
@@ -104,6 +195,40 @@
       <li><code>lib/model/user_data.dart:51 entityId</code>（login response <code>default_entity</code>），存 <code>VSSharedPreferences</code></li>
       <li>name 要另打 <code>GET /me/entity</code>（<code>lib/helper/rest_api_helper.dart:1170-1200</code>，model <code>lib/model/mvb_entity.dart</code>），只用於 Amplitude user properties，不常駐儲存</li>
     </ul>
+
+    <h3 id="entity-tamper">2.1 entity id / name 存 Hive 的篡改風險與護欄定位（2026-08-14 評估）</h3>
+    <div class="callout ok">
+      <strong>結論：風險可忽略。</strong>三根支柱——
+      (1) MVB 只是<strong>唯讀的資訊提供者</strong>，不執行動作、不因 dm 的話改變自身狀態；
+      (2) 要篡改需先 root / 平台簽章，到那一步攻擊者能做的事遠比謊報 entity name 嚴重；
+      (3) 真正有後果的動作（套設定、管理）都在雲端，有獨立的 tenancy 檢查。
+    </div>
+    <table>
+      <thead><tr><th>層次</th><th>結論</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>檔案本身的保護</td>
+          <td><code>activate.hive</code> 在 app-private dir、<strong>無 cipher</strong>。一般 app 讀不到（uid 隔離 + SELinux），non-root adb 也動不了（<code>run-as</code> 只對 debuggable app 有效）——實測見 <a href="#storage-protection">§1.2</a></td>
+        </tr>
+        <tr>
+          <td>既有 <code>entity_id</code> 為何多年無事</td>
+          <td><strong>因為它沒被拿去做任何判斷</strong>——全 repo 唯一消費者是 <code>analytics_helper.dart:105</code> 的 <code>'EntityID'</code>（Amplitude user property）。篡改它最多污染自家分析數據</td>
+        </tr>
+        <tr>
+          <td>本票的差異點</td>
+          <td>原本擔心 <code>entity_name</code> 成為 dm 的本地護欄後，會從「純上報資料」變成<strong>會影響行為的輸入</strong>。<br />✅ <strong>2026-08-17 定案後此顧慮消失</strong>：只給 <code>entity_id</code>，而 dm 手上沒有 id 可本地比對 → 判定必然在雲端</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout ok">
+      <strong>護欄的正確定位：防誤配置，不是防攻擊者。</strong>
+      <ul>
+        <li>真正擋的是：MVB 在 entity A、Manager 在 entity B 的誤註冊——<strong>設定錯誤</strong>，護欄對此非常有效，這是它的價值</li>
+        <li>但<strong>不構成安全邊界</strong>：要偽造得先 root / 平台簽章，而到那地步攻擊者能做的遠比謊報 entity name 嚴重（直接改 provider 回傳、換掉整個 app）</li>
+        <li>→ <strong>權威 tenancy 檢查要留在雲端</strong>；本地字串比對只是<strong>前置快篩</strong>，非最終授權依據<br /><small>✅ <strong>2026-08-17 定案後這點自然成立</strong>：provider 只給 <code>entity_id</code>，而 dm 端沒有 id 可在本地比對（<code>EnrollEntity.kt:3</code> 只有 entityName），比對必然落在雲端。本節「本地護欄被高估」的顧慮因此消失</small></li>
+        <li>⚠️ 上述第 (3) 根支柱「dm 側有雲端複驗」為<strong>合理推定，未查證 Manager 後端</strong>——需向 dm 端確認他們<strong>不會因為有了本地護欄而省掉</strong>雲端檢查（已列入 <a href="contract-proposal.html#meeting">contract §9</a>）</li>
+      </ul>
+    </div>
 
     <h2 id="provider">3. ContentProvider / permission 現況：零先例</h2>
     <ul>
@@ -135,6 +260,23 @@ String entity = cursor.getString(0);  // 單欄 cursor，column 0 = entity name<
       </tbody>
     </table>
     <p>→ 若用 <code>android:protectionLevel="signature"</code>，只在 Manager agent 與 MVB 同 key 的 flavor 成立；跨 key 需在 provider 內用 <code>getCallingPackage()</code> + SHA-256 簽章 allowlist 做 runtime 檢查。</p>
+    <div class="callout new">
+      <strong>❗ 2026-08-14 關鍵補充：A31 使「跨 key」成為必經情境。</strong>
+      Evis Cheng 確認 <strong>dm 全產品線都簽 system key</strong>；而 mvbf 在 A31 上是 <strong>store flavor（Google Play key）</strong>——見 <code>MainActivity.java:1073</code> 註解「mvbF A31 sign store key，與系統 key 不同」，A31 亦在 dm 支援清單內（<code>ModelFactory.kt:45</code>）。
+      → <strong>store flavor 必須支援，<code>signature</code> permission 不能當唯一機制</strong>，存取控制定案為 runtime SHA-256 allowlist。詳見 <a href="contract-proposal.html#access">contract §2</a>、<a href="open-questions.html#q2">Q2</a>。
+    </div>
+    <h3 id="flavor-scope-trace">5.1 範圍判定的決策軌跡（內部紀錄）</h3>
+    <div class="callout warn">
+      <strong>曾有一版錯誤結論</strong>：「dm 只需 ifp/edla → open/store 不註冊 provider → signature permission 即可」（2026-07-31 初判，2026-08-14 以 dm repo 佐證後仍維持）。
+      <br /><strong>佐證本身沒錯</strong>：<code>ModelFactory.kt</code> dispatch 全數 ViewSonic 機型、VSApi/systemapi 為 <code>compileOnly</code>、<code>Undefined -> vsApiDevice</code> 在非 VS 韌體啟動即 crash；dm 產品型態只有 <code>app_aosp</code>/<code>app_edla</code>（release tag 僅 <code>release/AOSP/*</code>・<code>release/EDLA/*</code>）；正式包板簽 <code>MVBA_PlatForm.jks</code>（<code>basic-vars.yml</code> <code>KEYSTORE_NAME</code>）。
+      <br /><strong>錯的是從這些前提推出的結論。</strong>
+      <br />→ <strong>教訓：「dm 只跑 ViewSonic 韌體」不等於「dm 遇到的 mvbf 一定是 ifp/edla 包」。</strong>
+      flavor 對應的是「<u>那台機器上裝了哪個 mvbf 包</u>」，不是「那台機器是什麼硬體」——A31 即兩者脫鉤之處。VPC 系列本就是抽取式模組，日後仍可能出現類似機型，判斷時要直接查「該機型出貨裝哪個 flavor」，不要從硬體類別推。
+    </div>
+    <div class="callout">
+      <strong>📌 附帶情報（同串對話，Evis）：「Manager 會自己 OTA，不用跟著 FW」</strong>——dm 可獨立於韌體升級。
+      對版本演進是好消息（舊 key 的 deprecation 週期好推）；反面是 mvbf / dm 版號各自漂移，更確認「行為分支一律用 presence 偵測、不看 <code>contract_version</code>」這條紀律（<a href="contract-proposal.html#versioning">contract §7</a>）。
+    </div>
 
     <h2 id="native">6. Native ↔ Flutter 與資料可及性</h2>
     <ul>
@@ -144,7 +286,7 @@ String entity = cursor.getString(0);  // 單欄 cursor，column 0 = entity name<
     <table>
       <thead><tr><th>資料</th><th>儲存</th><th>Java 可直接讀？</th></tr></thead>
       <tbody>
-        <tr><td>instanceID / entityID / activated 等</td><td>Hive box <code>activate</code></td><td>❌</td></tr>
+        <tr><td>instanceID / entityID / activated 等</td><td>Hive box <code>activate</code></td><td>❌ 無 parser（<strong>檔案本身存取得到</strong>，缺的是格式解析——見 <a href="#hive-format">§1.1</a>）</td></tr>
         <tr><td>Flutter 一般設定 / user token</td><td><code>FlutterSharedPreferences</code>（key 前綴 <code>flutter.</code>）/ <code>VSSharedPreferences</code></td><td>✅</td></tr>
       </tbody>
     </table>
@@ -193,13 +335,25 @@ String entity = cursor.getString(0);  // 單欄 cursor，column 0 = entity name<
     <h2 id="poc">8. POC 實作與結果（2026-07-30，Pixel Tablet 全通）</h2>
     <p>依 <a href="contract-proposal.html">contract 草案</a> 打通 MVB provider → Manager agent 的 end-to-end 讀取。</p>
     <h3>MVB 端改動（edu-droid-flutter，正式版雛形，可演進成 PR）</h3>
+    <div class="callout ok">
+      <strong>📍 POC 成果的落點（2026-08-14 補記，之前漏記）</strong>
+      <table>
+        <tbody>
+          <tr><td>repo</td><td><code>Orgs/Viewsonic-EDU/edu-droid-flutter</code></td></tr>
+          <tr><td>branch</td><td><code>feature/VSFT-9654-instance-info-provider</code>（<strong>未合進 master</strong>）</td></tr>
+          <tr><td>commit</td><td><code>02a4c99e6</code>（單一 commit，11 files / +935 −7），2026-07-31</td></tr>
+          <tr><td>用途</td><td>commit message 明載「供未來正式開票時 cherry-pick」</td></tr>
+        </tbody>
+      </table>
+      正式開票時直接 cherry-pick 此 commit 再補下方「待收尾」項目即可。
+    </div>
     <table>
       <thead><tr><th>檔案</th><th>內容</th></tr></thead>
       <tbody>
         <tr><td><code>lib/mvb_activator/provider_info_mirror.dart</code>（新）</td><td>白名單欄位鏡射到 FlutterSharedPreferences（<code>provider_info_*</code> 前綴）</td></tr>
         <tr><td><code>lib/mvb_activator/secure_data_storage.dart</code></td><td><code>_save()</code> / <code>_load()</code> 各加一行鏡射呼叫（<code>_load</code> 也鏡射 → 既有安裝啟動即生效）</td></tr>
-        <tr><td><code>android/app/src/main/java/com/viewsonic/droid/InstanceInfoProvider.java</code>（新）</td><td><code>/v1/info</code> key-value cursor、read-only、簽章檢查留 TODO</td></tr>
-        <tr><td><code>android/app/src/main/AndroidManifest.xml</code></td><td>註冊 <code>${applicationId}.instanceinfo.provider</code>，<code>exported="true"</code></td></tr>
+        <tr><td><code>android/app/src/main/java/com/viewsonic/droid/InstanceInfoProvider.java</code>（新）</td><td><code>/v1/info</code> key-value cursor、read-only（insert/delete/update 皆 throw）、<strong>簽章檢查未實作</strong>——<code>query()</code> 內只有 <code>TODO(VSFT-9654)</code> 註解，無 <code>getCallingPackage()</code> / <code>GET_SIGNING_CERTIFICATES</code></td></tr>
+        <tr><td><code>android/app/src/main/AndroidManifest.xml</code></td><td>註冊 <code>${applicationId}.instanceinfo.provider</code>，<code>exported="true"</code> <strong>且未加 <code>android:permission</code>→ 任何 app 皆可 query</strong>（這也是 <code>adb shell content query</code> 能直接驗通的原因）</td></tr>
       </tbody>
     </table>
     <h3>dmagent 端 POC（勿 commit）</h3>
@@ -217,11 +371,15 @@ String entity = cursor.getString(0);  // 單欄 cursor，column 0 = entity name<
     <pre><code>MvbInstanceInfoPoc: contract_version = 1
 MvbInstanceInfoPoc: instance_id = 8E28AD2200B4D06A06E456FB70C45B4F
 MvbInstanceInfoPoc: activated = true</code></pre>
-    <p>（<code>entity_id</code> / <code>whiteboard_name</code> 空值缺列，符合合約「缺值列不出現」設計；<code>entity_name</code> 仍卡 Q1）</p>
+    <p>（<code>entity_id</code> / <code>whiteboard_name</code> 空值缺列，符合合約「缺值列不出現」設計）</p>
     <h3 id="poc-v2">8.1 POC v2（2026-07-31）：entity name、即時更新、Pigeon 解耦</h3>
     <p>三項升級，皆已在 Pixel Tablet 驗證通過。</p>
 
-    <h4>(a) entity name 持久化</h4>
+    <h4>(a) entity name 持久化 <span class="badge badge-na">2026-08-17 已不需要</span></h4>
+    <div class="callout new">
+      <strong>❌ 會議定案 provider <u>只給 <code>entity_id</code></u>、不給 entity name（票面原寫 entity name 係當初討論的誤會）。</strong>
+      本小節的三項改動<strong>正式版都不用做</strong>，cherry-pick commit <code>02a4c99e6</code> 時可整段拿掉。詳見 <a href="contract-proposal.html#entity-id-only">contract §3.1</a>。
+    </div>
     <ul>
       <li><code>_getEntityID()</code> 改回傳 record <code>({String entityID, String organization})</code>，一併解析後端已回的 <code>organization</code>（兩處呼叫點同步更新）</li>
       <li><code>DataStorage</code> 介面 + <code>SecureDataStorage</code> 新增 <code>entityOrganization</code>（Hive key <code>app_entityOrganization</code>）</li>
@@ -268,9 +426,14 @@ MvbInstanceInfoPoc: activated = true</code></pre>
 
     <h3>待收尾</h3>
     <ul>
-      <li>簽章 permission（等 Q2 最終確認）；POC 的裸 export 只可留在測試機，正式版 provider 註冊須移至 ifp/edla flavor manifest</li>
-      <li><code>entity_name</code> 目前為空值缺列——open flavor 在 dev 環境 auto-enroll 未掛 entity（<code>entity_id</code> 同樣為空）。程式路徑已就緒，需以有 entity 的帳號手動 enroll 才能完整驗證</li>
-      <li>連續多次 <code>onChange</code>（init 期間 <code>mirror()</code> 被呼叫多次）——正式版可在 Dart 側加「值有變才通知」的 debounce</li>
+      <li><strong>【新增】<code>error_code</code> / <code>error_message</code> 回報</strong>（2026-08-17 會議需求）——POC 目前錯誤路徑是<strong>回 <code>null</code></strong>（<code>InstanceInfoProvider.query()</code> 的 path 不符與 <code>context == null</code> 兩處），需改為回傳帶 <code>error_code</code> 列的 cursor。
+        <br />⚠️ <strong>「未初始化」不可回 error_code</strong>——那是合法狀態，維持「缺值列不出現」。合約見 <a href="contract-proposal.html#error-contract">contract §3.2</a></li>
+      <li><strong>【最高優先】存取控制完全未做</strong>——commit <code>02a4c99e6</code> 的 provider 是<strong>裸 export</strong>（無 permission、無 runtime 簽章檢查，只有 TODO 註解），任何 app 都讀得到，只可留在測試機。
+        <br /><strong>正式版做法（2026-08-14 定案）＝ runtime SHA-256 allowlist</strong>：<code>query()</code> 內 <code>getCallingPackage()</code> + <code>PackageManager.hasSigningCertificate(pkg, sha256, CERT_INPUT_SHA256)</code> 比對 <code>MVBA_PlatForm.jks</code> 憑證；<strong>provider 維持註冊在 main manifest（全 flavor）</strong>。
+        <br />⚠️ 原計畫「signature permission + 搬到 ifp/edla flavor manifest」<strong>已作廢</strong>——A31（store flavor）上 dm 與 mvbf 跨 key，signature 方案在該裝置必然失效。詳見 <a href="contract-proposal.html#access">contract §2</a></li>
+      <li><code>entity_id</code> 目前為空值缺列——open flavor 在 dev 環境 auto-enroll 未掛 entity。需以<strong>有 entity 的帳號手動 enroll</strong> 才能完整驗證這個欄位<br /><small>（原條目也提到 <code>entity_name</code>——已隨「只給 entity_id」的決議移除）</small></li>
+      <li><strong>【正式版必做，非可選】dirty check：值有變才寫、才通知</strong>——POC 在 <code>_load()</code> 無條件鏡射，約 99.9% 的啟動是寫入完全相同的值；同時造成 init 期間連續多次 <code>onChange</code>。改為「先讀回 prefs 比對」後，穩態啟動變成零寫入、零通知。詳見 <a href="contract-proposal.html#mirror-cost">contract §6.1 (b)</a></li>
+      <li><strong>【正式版必做】mirror 移出啟動關鍵路徑</strong>——掛第一帧之後（post-frame callback），讓啟動成本歸零；短窗口未就緒已被 <code>NOT_INITIALIZED</code> 狀態機涵蓋。詳見 <a href="contract-proposal.html#mirror-cost">contract §6.1 (c)</a></li>
       <li>既有安裝殘留的 <code>flutter.provider_info_*</code> 值無害（已無程式讀取），正式 PR 可視需要加一次性清除</li>
       <li>dmagent repo 本地 hack 累計 4 處（ModelFactory、DMService receiver、POC hook、EnrollmentActivity overlay + observer），勿 commit</li>
     </ul>
@@ -280,7 +443,7 @@ MvbInstanceInfoPoc: activated = true</code></pre>
       <li><strong>資料鏡射</strong>：Dart 側把 instanceID / entity name 鏡射寫進 <code>FlutterSharedPreferences</code>（鏡射點 <code>secure_data_storage.dart _save()/_load()</code>，POC 已實作），ContentProvider 從 prefs 讀。</li>
       <li><strong>entity name 需新增取得與儲存</strong>：擴充 <code>_getEntityID()</code> 解析（若後端 response 有 name），或改抓 <code>GET /me/entity</code>——取決於 Q1 答案。</li>
       <li><strong>ContentProvider</strong>：以 <code>MainActivity.java:1855-1906</code>（讀 dmagent provider）為對稱範本設計 contract（POC 已實作 <code>InstanceInfoProvider.java</code>）。</li>
-      <li><strong>存取控制</strong>：視 Manager agent 簽章 key（Q2）決定 signature permission 或 runtime SHA-256 allowlist（需支援所有 flavor 的話大概率要走 allowlist）。</li>
+      <li><strong>存取控制</strong>：<strong>runtime SHA-256 allowlist</strong>（<code>getCallingPackage()</code> + <code>hasSigningCertificate()</code>），單一機制、全 flavor 一致，provider 留在 main manifest。<code>signature</code> permission 僅作 ifp/edla 的 defense-in-depth——A31（store）跨 key 使其無法作為唯一機制。</li>
     </ol>
   </main>
 </div>

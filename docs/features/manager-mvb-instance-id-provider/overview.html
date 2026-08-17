@@ -44,7 +44,8 @@
     <div class="callout warn">
       <strong>🚦 狀態（2026-07-30）：ANALYSIS，已進 Sprint 25（7/30–8/10）但兩票皆未指派。</strong>
       技術方向由 Stephen Yang 於 07-29 comment 定調：MVB 以 ContentProvider 提供
-      <code>instance id</code> + <code>entity name</code> 給 Manager agent，並限制 signed key。
+      <code>instance id</code> + <s><code>entity name</code></s> 給 Manager agent，並限制 signed key。
+      <br />⚠️ <strong>2026-08-17 會議定案改為 <code>entity_id</code></strong>——票面原寫 entity name 係當初討論的誤會（詳見 <a href="open-questions.html#q1">Q1</a>）。
       開工前有 4 個 open question 待釐清（見 §7）。
     </div>
 
@@ -77,7 +78,7 @@ flowchart LR
     subgraph MVB["myViewBoard（edu-droid-flutter）— VSFT-9654 本票"]
       HIVE[("Hive box 'activate'<br/>app_instanceID / app_entityID")]
       MIRROR["鏡射到 FlutterSharedPreferences<br/>（Java 讀得到）"]
-      CP["新增 ContentProvider<br/>instance id + entity name<br/>🔒 限制 signed key"]
+      CP["新增 ContentProvider<br/>instance_id + entity_id<br/>🔒 簽章限制"]
       HIVE --> MIRROR --> CP
     end
     subgraph AGENT["Manager agent（com.viewsonic.dmagent）— VB-1399"]
@@ -120,7 +121,7 @@ flowchart LR
         </tr>
       </tbody>
     </table>
-    <p>本票即是把方向反過來：MVB 開對稱的 ContentProvider 讓 agent 讀 instance ID（+ entity name），agent 回報雲端後才能建立「instance ID ↔ 裝置」對應（見 §2 資料流圖）。</p>
+    <p>本票即是把方向反過來：MVB 開對稱的 ContentProvider 讓 agent 讀 instance ID（＋ <code>entity_id</code>），agent 回報雲端後才能建立「instance ID ↔ 裝置」對應（見 §2 資料流圖）。</p>
 
     <h3 id="value">3.2 補上 join 帶來的價值（對 PM 的論述）</h3>
     <p>精確地說，缺的不是機器資訊——MVB enroll 時有上傳自述硬體資訊（Brand / Manufacturer / OS 版本等，<code>mvb_activator.dart</code> <code>hardwareProperty</code>）——缺的是<strong>兩個資料世界之間的 join key</strong>：</p>
@@ -159,7 +160,7 @@ flowchart LR
         <tr>
           <td>3</td>
           <td><strong>生命週期與新鮮度</strong></td>
-          <td>enroll 是一次性事件：MVB 重裝（instance ID 換新）、換 entity、主機板維修（serial 變）後 mapping 靜默過期。provider 方向 dm 可隨時重查 + <code>ContentObserver</code> 訂閱，且 dm 本來就有週期回報（dynamic_info / 180s）的管線</td>
+          <td>enroll 是一次性事件：MVB 重裝（instance ID 換新）、換 entity、主機板維修（serial 變）後 mapping 靜默過期。provider 方向 dm 可隨時重查 + <code>ContentObserver</code> 訂閱，且 dm 本來就有「雲端詢問 → 回報裝置屬性」的管線（<code>static_info</code> / <code>dynamic_info</code>）可搭載<br /><small>⚠️ 2026-08-14 更正：早期版本此處寫「週期回報 dynamic_info / 180s」<strong>有誤</strong>——那兩者是 <strong>MQTT command handler（雲端問、dm 答）</strong>，非本地定時器（<code>DynamicInfoCommandHandler.kt</code>、<code>InfoDispatcher.kt:74</code>）；dm 的 <code>PeriodicWorkRequest</code> 只有 OTA／MQTT 重連（小時）與 location（天）。詳見 <a href="contract-proposal.html#propagation">contract §8.2</a></small></td>
         </tr>
         <tr>
           <td>4</td>
@@ -173,7 +174,7 @@ flowchart LR
         </tr>
       </tbody>
     </table>
-    <p>附帶一提：Aaron 的 entity 護欄（dm 比對 entity name 決定是否管理）本來就需要 dm 在<strong>本地、行動前</strong>讀到 MVB 的狀態——這件事 serial-at-enroll 方案完全給不了。</p>
+    <p>附帶一提：Aaron 的 entity 護欄（比對 entity 決定是否管理）本來就需要 dm 在<strong>行動前</strong>讀到 MVB 的狀態——這件事 serial-at-enroll 方案完全給不了。<br /><small>（2026-08-17 定案只給 <code>entity_id</code> 後，該比對移至<strong>雲端</strong>執行——dm 端沒有 id 可本地比對。此處論點不受影響：dm 仍須先在裝置上讀到 MVB 的 instance/entity 才有東西可回報。）</small></p>
 
     <h2 id="scope">4. Scope 與技術方向</h2>
     <ul>
@@ -181,7 +182,7 @@ flowchart LR
       <li>提供一個方法讓 Manager 讀到該裝置 MVB 的 instance ID，細節由工程師討論。</li>
       <li>技術方向（Stephen Yang, 07-29）：
         <ul>
-          <li>MVB 透過 <strong>ContentProvider</strong> 提供 <code>instance id</code>、<code>entity name</code> 給 Manager agent</li>
+          <li>MVB 透過 <strong>ContentProvider</strong> 提供 <code>instance_id</code>、<code>entity_id</code> 給 Manager agent<br /><small>（原 comment 寫 entity name，2026-08-17 會議釐清為誤會，定案 <code>entity_id</code>）</small></li>
           <li>ContentProvider <strong>限制 signed key</strong></li>
         </ul>
       </li>
@@ -197,9 +198,9 @@ flowchart LR
           <td>⚠️ Hive 是 Dart 專有格式，<strong>Java/Kotlin 的 provider 讀不到</strong>，需鏡射到 SharedPreferences</td>
         </tr>
         <tr>
-          <td>entity name</td>
+          <td>entity（定案：<code>entity_id</code>）</td>
           <td><strong>完全沒有持久化</strong>。Hive 只存 <code>app_entityID</code>（<code>GET /viewboard/{uid}/entity</code> 只取 <code>entity_id</code>）</td>
-          <td>需新增取得與儲存；且 codebase 有三種 entity 語意，要先釐清（Q1）</td>
+          <td>✅ <strong>已無影響</strong>——2026-08-17 定案只給 <code>entity_id</code>，而它 Hive 早已存著、<strong>直接鏡射即可</strong>（原本規劃的取得＋儲存＋backfill 全部不需要）</td>
         </tr>
         <tr>
           <td>ContentProvider 先例</td>
@@ -214,7 +215,7 @@ flowchart LR
         <tr>
           <td>簽章配置</td>
           <td>ifp/edla 用 <code>MVBA_PlatForm.jks</code>（ifp 為 system app）；open/store 用 Google Play key</td>
-          <td>⚠️ <code>protectionLevel="signature"</code> 只在同 key flavor 成立；跨 key 需 runtime SHA-256 allowlist（Q2）</td>
+          <td>⚠️ <strong>A31 是跨 key 交集</strong>（2026-08-14 Evis 確認：dm 全線簽 system key，但 A31 的 mvbf 是 store 包）→ <code>protectionLevel="signature"</code> 在 store 必然失效，<strong>store 也必須支援</strong> → 改以 <strong>runtime SHA-256 allowlist</strong> 為單一主要防線</td>
         </tr>
         <tr>
           <td>Java 讀 Flutter 資料</td>
@@ -227,21 +228,20 @@ flowchart LR
 
     <h2 id="plan">6. 實作方向</h2>
     <ol>
-      <li><strong>資料鏡射</strong>：Dart 側將 instanceID / entity name 鏡射寫入 <code>FlutterSharedPreferences</code>（建議鏡射點：<code>secure_data_storage.dart _save()</code> 或 <code>mvb_activator.dart:277-285</code>）。</li>
-      <li><strong>entity name 取得與儲存</strong>：擴充 <code>_getEntityID()</code> 解析或改抓 <code>GET /me/entity</code> — 取決於 Q1 答案。</li>
+      <li><strong>資料鏡射</strong>：Dart 側將 <code>instanceID</code> / <code>entityID</code> 經 Pigeon 交給原生層寫入自持 prefs（鏡射點 <code>secure_data_storage.dart _save()/_load()</code>；POC v2 已實作，見 <a href="findings.html#poc-v2">findings §8.1</a>）。</li>
+      <li><s><strong>entity name 取得與儲存</strong></s>——<strong>已不需要</strong>（定案只給 <code>entity_id</code>，Hive 既有值直接鏡射）</li>
       <li><strong>新增 ContentProvider</strong>：以 <code>MainActivity.java:1855-1906</code>（讀 dmagent provider）為對稱範本，與 VB-1399 共同定 contract（Q4）。</li>
-      <li><strong>存取控制</strong>：視 Manager agent 簽章 key（Q2）決定 signature permission 或 runtime SHA-256 allowlist；若 provider 只需 ifp/edla flavor 註冊，signature 方案可行性大增。</li>
+      <li><strong>存取控制</strong>：provider <code>query()</code> 內做 <strong>runtime SHA-256 allowlist</strong>（<code>getCallingPackage()</code> + <code>PackageManager.hasSigningCertificate()</code> 比對 <code>MVBA_PlatForm.jks</code> 憑證），<strong>單一機制、全 flavor 一致</strong>，provider 維持註冊在 main manifest。<br />（2026-08-14 改寫：A31 上 dm 與 mvbf 跨 key，<code>signature</code> permission 不能當唯一機制；它比 runtime 檢查更寬鬆——授予所有同簽章 app，故僅留作 ifp/edla 的 defense-in-depth。詳見 <a href="contract-proposal.html#access">contract §2</a>）</li>
     </ol>
 
     <h2 id="open">7. Open Questions</h2>
     <table>
       <thead><tr><th>#</th><th>問題</th><th>問誰</th></tr></thead>
       <tbody>
-        <tr><td>Q1</td><td>entity name 的定義與來源？（裝置 entity 還是登入帳號 entity？後端 <code>/{uid}/entity</code> response 是否已含 name？）</td><td>Peja / Stephen</td></tr>
-        <tr><td>Q2</td><td>Manager agent（<code>com.viewsonic.dmagent</code>）用哪把簽章 key？provider 是否只需 ifp/edla flavor 提供？</td><td>Manager team（VB-1399）</td></tr>
+        <tr><td>Q1</td><td>✅ <strong>已定案（2026-08-17）</strong>：只給 <code>entity_id</code>，不給 entity name</td><td>—</td></tr>
+        <tr><td>Q2</td><td>✅ <strong>已定案（2026-08-14）</strong>：runtime SHA-256 allowlist、全 flavor 一致（A31 跨 key 使 signature 方案不足）</td><td>—（Evis 已確認 dm 全線簽 system key）</td></tr>
         <tr><td>Q3</td><td>未 enroll / 未啟動（instance ID 尚不存在）時 provider 回什麼？Manager 端 retry 策略？</td><td>Manager team + Stephen</td></tr>
-        <tr><td>Q4</td><td>Provider contract：authority 命名（flavor 差異）、URI path、column、版本演進</td><td>與 VB-1399 工程師共同定義</td></tr>
-        <tr><td>Q5</td><td>兩票皆未指派，需確認雙方窗口</td><td>Scrum</td></tr>
+        <tr><td>Q4</td><td>Provider contract：authority 命名慣例、URI path、column、版本演進</td><td>與 VB-1399 工程師共同定義</td></tr>
       </tbody>
     </table>
     <p>詳細討論見 <a href="open-questions.html">open-questions.html</a>。</p>

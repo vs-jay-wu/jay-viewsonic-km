@@ -12,12 +12,21 @@
     <ul>
       <li><a href="#shape">1. 合約形狀</a></li>
       <li><a href="#access">2. 存取控制</a></li>
-      <li><a href="#v1-keys">3. v1 keys（本票 scope）</a></li>
+      <li><a href="#v1-keys">3. v1 keys（本票 scope）</a>
+        <ul><li><a href="#entity-id-only">3.1 只給 entity_id、不給 entity_name</a></li></ul>
+      </li>
       <li><a href="#reserved">4. 保留候選 keys</a></li>
       <li><a href="#excluded">5. 明確排除（機敏）</a></li>
-      <li><a href="#mirror">6. 鏡射機制</a></li>
+      <li><a href="#mirror">6. 鏡射機制</a>
+        <ul>
+          <li><a href="#mirror-cost">6.1 成本與時機（dirty check / 移出啟動路徑）</a></li>
+          <li><a href="#no-ondemand-read">6.2 為何不能 query 時現讀 Hive</a></li>
+        </ul>
+      </li>
       <li><a href="#versioning">7. 版本演進策略比較</a></li>
-      <li><a href="#empty-handling">8. instance_id 空值處理</a></li>
+      <li><a href="#empty-handling">8. instance_id 空值處理</a>
+        <ul><li><a href="#init-trigger">8.1 「MVB 從未啟動」的補救</a><ul><li><a href="#pm-risk-accept">風險接受 / 待驗 / TODO</a></li></ul></li><li><a href="#propagation">8.2 更新傳播（push/pull 分工）</a></li></ul>
+      </li>
       <li><a href="#meeting">9. 會議待對事項</a></li>
     </ul>
   </nav>
@@ -45,8 +54,9 @@
 
     <h2 id="shape">1. 合約形狀</h2>
     <ul>
-      <li><strong>Authority</strong>：<code>&lt;applicationId&gt;.instanceinfo.provider</code>（用 <code>${applicationId}</code> 前綴避免多 flavor 同裝置衝突；對向先例 <code>com.viewsonic.dmagent.provider</code> 是固定字串，可在會議上對齊）</li>
-      <li><strong>URI</strong>：<code>content://&lt;authority&gt;/v1/info</code></li>
+      <li><strong>Authority</strong>：<code>com.viewsonic.droid.instanceinfo.provider</code>（POC 以 <code>${applicationId}</code> 前綴寫成；<strong>現況兩種寫法字串完全相同</strong>，見下方註記。對向先例 <code>com.viewsonic.dmagent.provider</code> 是固定字串，可在會議上對齊慣例）</li>
+      <li><strong>URI</strong>：<code>content://&lt;authority&gt;/v1/info</code>
+        <br /><small>⚠️ <strong><code>/v1</code> 不代表採用「path 版控」</strong>——它是<strong>命名空間標記，日常不會變</strong>。加欄位／改語意一律走 <a href="#versioning">§7</a> 的 key 版本制；<strong>只有 cursor shape 本身變更</strong>（key-value 兩欄改成別的形狀）才會出現 <code>/v2/info</code>。保留版本段是為了讓那個逃生門有乾淨的命名。</small></li>
       <li><strong>Cursor 形狀</strong>：<strong>key-value 多列</strong>（不是固定欄位單列）</li>
     </ul>
     <table>
@@ -60,14 +70,45 @@
       <li>Agent 以「有哪些列」做 feature detection，遇到不認得的 key 忽略——加 key 不破壞舊 agent</li>
       <li>版本演進策略見 <a href="#versioning">§7</a>（2026-07-30 與 Stephen 討論後傾向 key 版本制，path 版本待定）</li>
     </ul>
+    <div class="callout">
+      <strong>📌 <code>${applicationId}</code> 前綴 vs 固定字串——實質差異為零（2026-08-14 查證）</strong><br />
+      mvbf 的 <code>applicationId "com.viewsonic.droid"</code> 宣告在 <code>defaultConfig</code>，<strong>四個 flavor（ifp/edla/open/store）都沒有自己的 applicationId 或 <code>applicationIdSuffix</code></strong>（<code>android/app/build.gradle:137</code>；beta 環境也只換 <code>appLabel</code>/<code>appIcon</code>，package 不變）。因此：
+      <ul>
+        <li><strong>「多 flavor 同裝置共存」不會發生</strong>——同 applicationId 的 app 在 Android 上無法並存。先裝 edla 再裝 ifp 是<strong>覆蓋</strong>（兩者同 <code>MVBA_PlatForm.jks</code>，覆蓋成功、只有一份 provider）；跨簽章（如 edla → open）則安裝直接被拒（<code>INSTALL_FAILED_UPDATE_INCOMPATIBLE</code>）。兩種情況都不會有兩份 provider，也就沒有 authority 衝突</li>
+        <li><strong>前綴的真正用途</strong>：Android 要求 provider authority <strong>全裝置唯一</strong>（兩個 app 宣告同 authority → 後安裝者 <code>INSTALL_FAILED_CONFLICTING_PROVIDER</code>），拿 package name 當前綴是官方保證唯一的慣例——與 flavor 無關</li>
+        <li><strong>唯一的實質差異在未來假設</strong>：若哪天真的加 <code>applicationIdSuffix</code>（例如要讓 beta 與正式版並存），<code>${applicationId}</code> 會讓 authority 跟著變，而 dm 端 query 是<strong>硬編字串</strong> → 反而讀不到。這個情境下<strong>固定字串對 dm 更穩定</strong></li>
+        <li>結論：現況兩種寫法產出的字串一模一樣（<code>com.viewsonic.droid.instanceinfo.provider</code>），選擇僅是慣例對齊問題，不是正確性問題</li>
+      </ul>
+    </div>
 
     <h2 id="access">2. 存取控制</h2>
-    <div class="callout ok"><strong>2026-07-31 定向：signature permission。</strong>已確認（Jay）provider 只需 ifp/edla flavor 提供，open/store 不管——ifp/edla 與 dmagent 同為 <code>MVBA_PlatForm.jks</code> 簽章，signature 方案成立。</div>
+    <div class="callout new">
+      <strong>❗ 2026-08-14 定案改寫：改以 runtime SHA-256 allowlist 為主要防線（原「signature permission + 只做 ifp/edla」方案作廢）。</strong>
+      觸發原因：Evis Cheng 確認「<strong>Manager 都要簽 system key</strong>」，而 A31 上的 mvbf 是 <strong>store flavor（Google Play key）</strong>——
+      A31 因此是「dm 在、mvbf 非平台簽章」的真實交集，<code>protectionLevel="signature"</code> 在該裝置必然失效，且 <strong>store flavor 必須支援</strong>。
+      詳見 <a href="open-questions.html#q2">open questions Q2</a>。
+    </div>
+    <table>
+      <thead><tr><th>flavor</th><th>mvbf key</th><th>dm key</th><th><code>protectionLevel="signature"</code></th></tr></thead>
+      <tbody>
+        <tr><td>ifp / edla</td><td><code>MVBA_PlatForm.jks</code></td><td>同一把</td><td>✅ 成立</td></tr>
+        <tr><td><strong>store（A31）</strong></td><td>Google Play key</td><td><code>MVBA_PlatForm.jks</code></td><td>❌ <strong>失效（跨 key）</strong></td></tr>
+      </tbody>
+    </table>
     <ul>
-      <li><strong>採用方案</strong>：MVB 宣告自訂 <code>&lt;permission android:protectionLevel="signature"&gt;</code>，provider 掛 <code>android:permission=</code>。系統只將此 permission 授予與 MVB 同簽章的 app——dm（MVBA key）自動取得，第三方 app 安裝時即被拒</li>
-      <li><strong>Flavor 範圍</strong>：provider 註冊放 flavor 專屬 manifest（<code>android/app/src/ifp/AndroidManifest.xml</code>、<code>src/edla/</code>），main manifest 不註冊——open/store 上 provider 根本不存在（POC 目前註冊在 main，正式版要搬）</li>
-      <li>備案（若正式包板 key 不同才啟用）：provider <code>query()</code> 內做 runtime SHA-256 簽章 allowlist（<code>getCallingPackage()</code> + <code>GET_SIGNING_CERTIFICATES</code>）</li>
-      <li>安全模型備忘：ContentProvider 本身沒有「同簽章才能用」的內建限制——<code>exported=true</code> 未加 permission 時任何 app 皆可 query（POC 即是）；簽章限制是靠 signature-level permission 的授予機制達成</li>
+      <li><strong>採用方案</strong>：provider <code>query()</code> 內做 runtime 檢查——<code>getCallingPackage()</code> 取呼叫端，以 <strong><code>PackageManager.hasSigningCertificate(pkg, sha256, CERT_INPUT_SHA256)</code></strong> 比對 <code>MVBA_PlatForm.jks</code> 憑證的 SHA-256 allowlist。<strong>單一機制、全 flavor 行為一致</strong></li>
+      <li><strong>為何不做混合方案</strong>（ifp/edla signature + store runtime）：兩套機制＝兩條測試路徑卻換不到安全性。而且 <strong>runtime 檢查比 signature permission 更嚴</strong>——signature permission 授予<strong>所有</strong>同簽章 app（IFP 上平台簽章的 ViewSonic app 不只 dm），runtime 則<strong>釘住 package + 憑證</strong>。改用 runtime 是收緊不是降級</li>
+      <li><strong>Flavor 範圍</strong>：provider 註冊維持在 <strong>main manifest（全 flavor）</strong>——安全性由 runtime gate 保證，而非靠 manifest 分 flavor；也免掉「將來發現 A31 其實走 open flavor」之類的意外。（原計畫「搬到 <code>src/ifp/</code>、<code>src/edla/</code>」<strong>作廢</strong>）</li>
+      <li>signature permission 可在 ifp/edla 額外掛著當 <strong>defense-in-depth</strong>（零成本），但<strong>不是主要防線</strong>，不得作為 store 上的替代</li>
+      <li><strong>「OEM board-flash 是否另外重簽」已排除，不需詢問</strong>（2026-08-17）：dm 只有<strong>一條 packing pipeline、一把 keystore、單一 APK</strong>，卻要跨 CVTE/KTC/ATop/OStar 等所有機型；而 <code>app_aosp</code> 宣告 <code>sharedUserId="android.uid.system"</code>——這要求它必須用<strong>該裝置韌體的平台 key</strong> 簽章。單一 APK 能在所有機型當 system app，反推 <code>MVBA_PlatForm.jks</code> <strong>就是</strong> ViewSonic IFP 韌體的平台 key。若真被重簽成別把 key，dm 自己就裝不成 system app</li>
+      <li><strong>實作陷阱</strong>：
+        <ul>
+          <li>用 <code>hasSigningCertificate()</code> 而非自行比對 <code>GET_SIGNING_CERTIFICATES</code>——它會正確處理<strong>簽章輪替</strong>的歷史憑證。API 28 起可用，mvbf <code>minSdk = 30</code>（<code>android/build.gradle:19</code>）無虞</li>
+          <li><code>getCallingPackage()</code> <strong>可能回 <code>null</code></strong>（非直接 binder 路徑）→ null 即拒絕；保險可再用 <code>Binder.getCallingUid()</code> + <code>getPackagesForUid()</code> 交叉驗證</li>
+          <li><strong>allowlist 做成憑證集合（set）而非單一常數</strong>——不是懷疑目前有第二把 key，而是簽章輪替本來就可能發生；做成 set 的成本是零，將來要加不必改結構</li>
+        </ul>
+      </li>
+      <li>安全模型備忘：ContentProvider 本身沒有「同簽章才能用」的內建限制——<code>exported=true</code> 未加保護時任何 app 皆可 query（POC 即是）</li>
     </ul>
 
     <h2 id="v1-keys">3. v1 keys（本票 scope）</h2>
@@ -76,16 +117,106 @@
       <tbody>
         <tr><td><code>contract_version</code></td><td>hardcode</td><td>無</td><td><code>"1"</code></td></tr>
         <tr><td><code>instance_id</code></td><td>Hive <code>app_instanceID</code>（鏡射）</td><td>低</td><td>票面要求</td></tr>
-        <tr><td><code>entity_name</code></td><td><code>GET /{uid}/entity</code> response 的 <strong><code>organization</code></strong> 欄位（後端已回，MVB 擴充解析並持久化即可，<strong>後端不用改</strong>）</td><td>低</td><td>票面要求。<strong>用途（Aaron Chang, 07-31）：授權護欄</strong>——dm 比對 MVB 的 entity name 與自己持有的，不同就不管理該 MVB。<strong>選 <code>organization</code> 的依據</strong>：dm 的 entityName 在 auto-enroll 即以 <code>{organization: entityName}</code> 送後端做精確等值查詢（<code>entity.service.ts:53</code>）；MVB 原樣存、原樣回，比對即逐字元一致</td></tr>
+        <tr><td><code>error_code</code></td><td>provider 自行判定</td><td>無</td><td><strong>2026-08-17 會議新增需求</strong>：發生錯誤時回報給 Manager。<strong>字串</strong>（自我描述、免對照表），詳見 <a href="#error-contract">§3.2</a></td></tr>
+        <tr><td><code>error_message</code></td><td>provider 自行判定</td><td>無</td><td>人可讀的補充說明，<strong>僅供 log／除錯</strong>——dm <strong>不得</strong>用它做行為分支（同 <code>contract_version</code> 紀律）</td></tr>
+        <tr><td><code>entity_id</code></td><td>Hive <code>app_entityID</code>（<strong>既有安裝早已存著</strong>，鏡射即可）</td><td>低</td><td><strong>2026-08-17 會議定案：只給 <code>entity_id</code>，不給 <code>entity_name</code>。</strong>供<strong>雲端</strong>做 tenancy 比對；穩定主鍵（組織改名不變）、<strong>零網路、既有安裝升級後立即可用</strong>。POC 的 <code>EXPOSED_KEYS</code> 本就在送，成本為零。詳見 <a href="#entity-id-only">§3.1</a></td></tr>
       </tbody>
     </table>
+
+    <h3 id="entity-id-only">3.1 只給 <code>entity_id</code>、不給 <code>entity_name</code>（2026-08-17 會議定案）</h3>
+    <div class="callout ok">
+      <strong>✅ 決議：provider 只提供 <code>entity_id</code>。</strong>
+      <code>entity_id</code> ↔ <code>organization</code> 在後端是 1:1，而 <code>entity_id</code> 是<strong>穩定主鍵</strong>（組織改名不變）、<strong>零網路</strong>、<strong>既有安裝的 Hive 早已存著</strong>。
+    </div>
+    <h4>🎉 這個決定消掉了一整串複雜度</h4>
+    <table>
+      <thead><tr><th>原本必須做的事</th><th>現在</th></tr></thead>
+      <tbody>
+        <tr><td><code>_getEntityID()</code> 改回傳 record、一併解析 <code>organization</code></td><td>❌ <strong>不用做</strong></td></tr>
+        <tr><td><code>DataStorage</code> / <code>SecureDataStorage</code> 新增 <code>entityOrganization</code>（Hive key <code>app_entityOrganization</code>）</td><td>❌ <strong>不用做</strong></td></tr>
+        <tr><td><strong>每次啟動重打 <code>GET /{uid}/entity</code> 做 backfill</strong>（既有安裝的 <code>entity_name</code> 永久為空問題）</td><td>❌ <strong>整個問題消失</strong>——<code>entity_id</code> 早就在 Hive 裡</td></tr>
+        <tr><td>refresh「只在成功時覆寫」的 guard（一次網路失敗會清空既有值）</td><td>❌ <strong>不需要</strong>（沒有 refresh 就沒有這個坑）</td></tr>
+        <tr><td>「MVB 曾離線啟動 → 只有 id 沒有 name」的 edge case</td><td>❌ <strong>不存在</strong></td></tr>
+        <tr><td>組織改名造成的漂移／新鮮度補丁</td><td>❌ <strong>不存在</strong>（id 不隨改名變動）</td></tr>
+        <tr><td>兩邊 entity name 字串正規化必須逐字元一致的約定</td><td>❌ <strong>不需要</strong>（比對數字主鍵，無大小寫／空白問題）</td></tr>
+      </tbody>
+    </table>
+    <p>換言之，<a href="open-questions.html#q1-backfill">Q1 延伸 (a)</a> 記錄的那個「最嚴重的實作坑」——既有安裝升級後永遠補不上值——<strong>因為這個決議而不再存在</strong>。</p>
+    <h4>⚠️ 一個推論：護欄的比對位置移到雲端</h4>
+    <div class="callout warn">
+      dm 端目前<strong>只存 <code>entityName</code>、沒有 <code>entity_id</code></strong>（<code>EnrollEntity.kt:3</code>：<code>data class EnrollEntity(val entityName: String, val deviceName: String)</code>）。
+      因此 provider 只給 <code>entity_id</code> 時，<strong>dm 無法在本地完成 Aaron 原先描述的「與自己持有的 entity name 比對」</strong>——該比對必然落在<strong>雲端</strong>（Manager 後端有 entity 表，resolve 得了 id）。
+      <br />這與我們原本的建議一致（<strong>權威 tenancy 檢查本就該留在雲端</strong>，見 <a href="findings.html#entity-tamper">findings §2.1</a>），也讓「本地字串護欄 ≠ 安全邊界」的顧慮自然消失。
+      <br /><strong>✅ 已確認（2026-08-17 會議，Manager team 同意）</strong>：dm 走<strong>雲端用 <code>entity_id</code> 換 name</strong>，本地不做 entity 比對。
+    </div>
+
+    <h3 id="error-contract">3.2 錯誤回報（<code>error_code</code> / <code>error_message</code>）——2026-08-17 會議新增</h3>
+    <div class="callout ok">
+      <strong>做法：錯誤以<u>資料列</u>回傳，不丟 exception、不回 null。</strong>
+      cursor 仍帶 <code>contract_version</code>，另加 <code>error_code</code>（＋選配 <code>error_message</code>），且<strong>不回任何資料列</strong>。
+      <br />dm 以 <code>error_code</code> 的 <strong>presence</strong> 判斷這次 query 是否失敗——與合約既有的 presence 偵測紀律一致，無需新機制。
+    </div>
+
+    <div class="callout new">
+      <strong>❗ 最重要的一條紀律：「資料還沒有值」<u>不是錯誤</u>，不可回 <code>error_code</code>。</strong>
+      未初始化／未 enroll 是<strong>語意正確的合法狀態</strong>（見 <a href="#empty-handling">§8</a>），表現方式是<strong>該列不出現</strong>而非錯誤。
+      若把它當錯誤回報，dm 會把<strong>正常的部署過程</strong>當成故障上報雲端——製造大量假警報。
+    </div>
+
+    <h4>為何不用其他傳遞方式</h4>
+    <table>
+      <thead><tr><th>方式</th><th>評估</th></tr></thead>
+      <tbody>
+        <tr><td>丟 exception</td><td>❌ 跨 binder 只有少數 exception 型別能正確傳遞；且會迫使 dm 用 try/catch 處理正常分支。<small>例外：<code>SecurityException</code> 是 Android 對權限拒絕的慣例，但我們用 cursor row 更一致、且能附帶原因</small></td></tr>
+        <tr><td>回 <code>null</code> cursor</td><td>⚠️ <strong>保留給「provider 不存在／完全無法回應」</strong>——dm 需要靠它區分「舊版 MVB 沒這個 provider」。若錯誤也回 null，這兩件事就分不開了</td></tr>
+        <tr><td><code>Cursor.setExtras()</code> Bundle</td><td>⚠️ 可行且是正式 API，但比資料列難發現、也與現有 key-value 形狀不一致</td></tr>
+        <tr><td><strong>error 資料列（採用）</strong></td><td>✅ 沿用既有形狀與 presence 紀律；dm 端零新概念</td></tr>
+      </tbody>
+    </table>
+
+    <h4>v1 錯誤碼（字串，非數字）</h4>
+    <table>
+      <thead><tr><th><code>error_code</code></th><th>何時發生</th><th>dm 應如何反應</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>UNAUTHORIZED</code></td>
+          <td>呼叫端未通過 package ＋ 憑證檢查（<a href="#access">§2</a>）</td>
+          <td>回報異常。<strong>實務上最常見於開發期</strong>——用非 MVBA key 簽的測試包會落在這裡，明確的錯誤碼可省下大量排查時間（若回 null 會被誤認為「provider 不存在」）</td>
+        </tr>
+        <tr>
+          <td><code>UNSUPPORTED_URI</code></td>
+          <td>path 不是 <code>/v1/info</code></td>
+          <td>檢查是否用了未來版本的 path（見 <a href="#three-versions">§7</a> 逃生門）</td>
+        </tr>
+        <tr>
+          <td><code>STORAGE_ERROR</code></td>
+          <td>provider 讀自持 prefs 失敗（檔案損壞等）</td>
+          <td>回報異常並重試；非「未初始化」</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>為何用字串而非數字</strong>：自我描述、不必維護對照表、log 直接看得懂——與 key 版本制「取語意化名稱」的原則一致。新增錯誤碼時舊 dm 只會看到不認得的字串，<strong>應一律視為「未知錯誤」而非崩潰</strong>。</p>
+
+    <h4>回傳範例</h4>
+    <pre><code>// 正常（已 enroll）
+contract_version | 1
+instance_id      | 8E28AD2200B4D06A06E456FB70C45B4F
+entity_id        | 3327
+
+// 正常（尚未初始化）—— 注意：這不是錯誤，只是列不出現
+contract_version | 1
+
+// 錯誤（未授權）
+contract_version | 1
+error_code       | UNAUTHORIZED
+error_message    | caller signature mismatch</code></pre>
+    <p>⚠️ <code>error_message</code> 內容<strong>不列入合約穩定性保證</strong>（措辭可隨時調整），因此 dm 只能寫 log、不可解析。</p>
 
     <h2 id="reserved">4. 保留候選 keys（已調查、不敏感、暫不實作）</h2>
     <p>原則：<strong>只放裝置/軟體狀態，不放使用者身分</strong>。</p>
     <table>
       <thead><tr><th>key</th><th>來源</th><th>何時可能要</th></tr></thead>
       <tbody>
-        <tr><td><code>entity_id</code></td><td>Hive <code>app_entityID</code>（鏡射即可）</td><td>Manager 想直接對 entity API</td></tr>
         <tr><td><code>activated</code></td><td>Hive <code>app_activated</code></td><td>agent 判斷「未 enroll」情境（Q3）；比空 cursor 語意清楚</td></tr>
         <tr><td><code>whiteboard_name</code></td><td>Hive <code>app_whiteboardName</code></td><td>Manager 顯示 instance 別名</td></tr>
         <tr><td><code>setting_local_save</code></td><td><code>ITAdminSettings.saveFileToLocalStorageEnabled</code></td><td>Manager 比對「雲端設定 vs 裝置實際生效值」（設定 drift 偵測）</td></tr>
@@ -103,12 +234,34 @@
     </ul>
 
     <h2 id="excluded">5. 明確排除（機敏，不給）</h2>
+    <div class="callout warn">
+      <strong>⚠️ 判準原則：「UI 上看得到」<u>不等於</u>「可以透過 provider 提供」。</strong>
+      Settings &gt; About 其實也顯示 <strong>email</strong>（<code>about_list_view_bloc.dart:53-56</code>），但它<strong>明確排除</strong>於本合約——這兩件事不衝突，因為兩種暴露性質不同：
+      <table>
+        <thead><tr><th></th><th>螢幕顯示</th><th>provider</th></tr></thead>
+        <tbody>
+          <tr><td>取得條件</td><td>人須<strong>站在機器前</strong>、手動翻頁</td><td><strong>程式化</strong>讀取</td></tr>
+          <tr><td>規模</td><td>一次一台</td><td>可跨<strong>全機隊</strong>批次</td></tr>
+          <tr><td>後續流向</td><td>停在眼睛裡</td><td>可<strong>回報雲端</strong>、進資料庫、被關聯</td></tr>
+        </tbody>
+      </table>
+      → 判斷「能不能給」的依據是<strong>「這個欄位是否為 join 與護欄所必需」</strong>，而非「使用者本來就看得到」。日後若有人提議「反正 UI 都看得到，多給幾個欄位」，以此條回應。
+    </div>
+    <h3>各欄位的實際可見度（2026-08-17 查證，供判斷參考）</h3>
+    <table>
+      <thead><tr><th>欄位</th><th>MVB UI 可見？</th><th>性質</th></tr></thead>
+      <tbody>
+        <tr><td><code>instance_id</code></td><td>✅ Settings &gt; About（<code>activated</code> 時）、SSO URL query、Cast、登入 QR</td><td>⚠️ <strong>矛盾</strong>：程式碼當它是 <strong>AES 金鑰</strong>，產品當它是<strong>公開識別碼</strong>。本票不擴大暴露（provider 為各通道中最受控者），但<strong>不可推論成「不機敏、可隨意放」</strong>——寫入 log／給第三方／放進未受保護介面時，金鑰角色會成為真問題（見 <a href="findings.html#no-encryption">findings §1.3</a>）</td></tr>
+        <tr><td><code>entity_id</code></td><td>❌ MVB UI <strong>不顯示</strong>（僅進 Amplitude）</td><td>低：組織識別碼、非個資</td></tr>
+        <tr><td><code>entity_name</code></td><td>❌ MVB UI <strong>不顯示</strong>；但 <strong>dm 自己的 enroll 畫面會顯示</strong>（<code>PairFragment.kt:47</code>）</td><td>低：組織名稱、非個資，且 <strong>dm 本來就持有</strong></td></tr>
+      </tbody>
+    </table>
     <table>
       <thead><tr><th>項目</th><th>理由</th></tr></thead>
       <tbody>
         <tr><td><code>app_email</code>（enroll email）</td><td>個資</td></tr>
         <tr><td>登入使用者資訊（帳號、display name、entity 角色）</td><td>個資；且與「裝置 ↔ instance 對應」無關</td></tr>
-        <tr><td>user token / session / <code>x-vs-key</code> 材料</td><td>憑證。instanceID 本身參與認證 header 加密（<code>aesEncryptWithBase64(instanceID, sessionID)</code>），這也是 provider 必須做簽章限制、不能裸 export 的原因</td></tr>
+        <tr><td>user token / session / <code>x-vs-key</code> 材料</td><td>憑證。<strong>精確地說：<code>instanceID</code> 就是該處的 AES 金鑰本身</strong>（<code>aesEncryptWithBase64(keyStr, data)</code> 第一參數為 key，<code>mvb_activator.dart:179,212</code>）——這是 provider 必須做存取控制、不能裸 export 的原因。<br />⚠️ 但同一個值也顯示於 Settings &gt; About、出現在 SSO URL query param——<strong>既有設計弱點，非本票造成</strong>；provider 反而是各通道中最受控的（分析見 <a href="findings.html#no-encryption">findings §1.3</a>）</td></tr>
         <tr><td><code>native_analytics</code> 等 analytics id</td><td>追蹤識別碼，無此需求</td></tr>
       </tbody>
     </table>
@@ -122,6 +275,31 @@
       <li>鏡射點：<code>SecureDataStorage._save()</code> 與 <code>_load()</code>（<code>_load</code> 也鏡射 → 既有安裝啟動即生效），以及 <code>ITAdminSettings</code> 寫入處（若日後曝光設定值）</li>
       <li>未 enroll 時：<code>instance_id</code> 缺列（只回 <code>contract_version</code>），行為與 <a href="#empty-handling">§8</a> 對齊</li>
     </ul>
+    <h3 id="mirror-cost">鏡射的成本與時機——dirty check + 移出啟動關鍵路徑（2026-08-14 定案）</h3>
+    <div class="callout ok">
+      <strong>原則：provider 曝光是旁路關注點（side concern），不進 app 初始化序列。</strong>
+      對啟動關鍵路徑的增加成本要是 <strong>0</strong>，不是「小」。
+    </div>
+    <h4>(a) set 路徑：mirror 是既有成本的零頭</h4>
+    <p><code>_save()</code> 現況已是「開 box → 7 次 <code>put()</code> → 關 box」（<code>secure_data_storage.dart</code>）。多一個 mirror＝1 次 platform channel + 1 個小 XML 寫，相對既有成本是零頭，且為 <strong>O(1) 固定成本</strong>——不隨資料量或啟動次數增長，<strong>不存在「越來越慢」的機制</strong>。（結構比較，未實測數字。）</p>
+    <h4>(b) ⚠️ <code>_load()</code> 的無條件鏡射應改為 dirty check</h4>
+    <p>POC 在 <code>_load()</code> 無條件寫一次，而<strong>其中約 99.9% 是寫入完全相同的值</strong>——一個永遠在跑、幾乎永遠沒用的動作。改成「先讀回 prefs 比對，值有變才寫 + 才 <code>notifyChange</code>」：</p>
+    <table>
+      <thead><tr><th>情境</th><th>成本</th></tr></thead>
+      <tbody>
+        <tr><td>穩態啟動（絕大多數）</td><td>1 次小檔 prefs 讀取，<strong>零寫入、零 <code>notifyChange</code></strong></td></tr>
+        <tr><td>舊版升級 backfill（見 <a href="open-questions.html#q1-backfill">Q1 延伸 (a)</a>）</td><td>第一次啟動寫一次，之後不再寫</td></tr>
+        <tr><td>enroll / entity 更新</td><td>正常寫 + 通知（真事件，本來就該做）</td></tr>
+      </tbody>
+    </table>
+    <p>附帶解掉 <a href="findings.html#poc">findings 待收尾</a>的「連續多次 <code>onChange</code>」——原本列為 nice-to-have 的 debounce，<strong>其實是讓 <code>_load()</code> 鏡射站得住腳的前提條件</strong>。</p>
+    <h4>(c) mirror 移出初始化關鍵路徑</h4>
+    <ul>
+      <li>dm 是<strong>非同步讀</strong>且有 <code>ContentObserver</code> 訂閱——不在乎 <code>instance_id</code> 是啟動後 50ms 或 3 秒才就緒</li>
+      <li>→ mirror 掛在<strong>第一帧之後</strong>（post-frame callback / post-init microtask），啟動關鍵路徑增加成本 <strong>= 0</strong></li>
+      <li>代價：冷啟動後有短窗口 provider 尚無值——<strong>已被 <a href="#empty-handling">§8</a> 的 <code>NOT_INITIALIZED</code> + <code>ContentObserver</code> 狀態機涵蓋，無功能退化</strong>。當初為「舊版/未啟動」設計的狀態機，順便讓這個延後合法化</li>
+    </ul>
+
     <h3>為什麼不直接讀 <code>FlutterSharedPreferences</code>（否決 POC v1 做法）</h3>
     <table>
       <thead><tr><th>方案</th><th>評估</th></tr></thead>
@@ -135,19 +313,70 @@
           <td>✅ 合約資料的所有權回到自己手上；key 名即 contract key；型別安全 codegen 且符合 repo 既有 <code>pigeons/</code> 慣例；<strong>寫入與通知併為單次原生呼叫</strong>（<code>commit()</code> 後才 notify），消除排序縫隙</td>
         </tr>
         <tr>
-          <td>Provider 直讀 Hive</td>
-          <td>❌ Dart 專有 binary 格式，原生層讀不到</td>
+          <td>Provider 直讀 Hive（原生自刻 parser）</td>
+          <td>❌ <strong>與否決直讀 <code>FlutterSharedPreferences</code> 同一個理由</strong>：Hive 是 <strong>append-only frame log</strong>（同 key 多筆取最後、tombstone、CRC32、compaction 重排），屬套件 <strong>undocumented 內部格式</strong>，自己刻 parser 等於逆向且隨升版可能失效。<br />⚠️ 注意措辭：<strong>不是「原生讀不到檔案」</strong>——檔案同 app-private 目錄、同 uid 完全存取得到，缺的是格式解析（實機驗證見 <a href="findings.html#hive-format">findings §1.1</a>）</td>
+        </tr>
+        <tr>
+          <td>Provider 於 <code>query()</code> 內起 <strong>headless Flutter engine</strong> 讀 Hive<br />（＝「不鏡射、要用時才現讀」）</td>
+          <td>❌ <strong>會阻塞呼叫端</strong>——見下方 §6.2</td>
         </tr>
       </tbody>
     </table>
     <p>邊界說明：Pigeon 呼叫需 Flutter engine 存活——但鏡射本來就只發生在 Dart 執行期，非新增限制；provider <strong>讀取端不需要 engine</strong>（冷啟動 query 讀的是已落地的 prefs 檔），未初始化情境不受影響。</p>
-    <h3>entity name 的持久化決策（2026-07-31）</h3>
+    <h3>entity name 的持久化決策 <span class="badge badge-na">2026-08-17 整段作廢</span></h3>
+    <div class="callout new">
+      <strong>❌ 本節規劃的工作<u>全部不需要</u>：會議定案 provider 只給 <code>entity_id</code>。</strong>見 <a href="#entity-id-only">§3.1</a>。
+      <ul>
+        <li>不需擴充 <code>_getEntityID()</code> 解析 <code>organization</code> / 改回傳 record</li>
+        <li>不需在 <code>DataStorage</code> 新增 <code>entityOrganization</code>（Hive <code>app_entityOrganization</code>）</li>
+        <li><strong>不需「每次啟動重打 <code>GET /{uid}/entity</code>」的 refresh／backfill</strong>，連帶也不需要它必須配的「只在成功時覆寫」guard</li>
+      </ul>
+      <code>entity_id</code> 既有安裝的 Hive 早已存著——<strong>直接鏡射即可，零網路、零額外請求</strong>。
+    </div>
+    <p><strong>保留供追溯的兩個論點</strong>（其中第二點正是本次決議選 id 的依據）：</p>
     <ul>
-      <li><strong>採「持久化 + 鏡射」</strong>：<code>_getEntityID()</code> 解析 <code>/{uid}/entity</code> response 時一併取 <code>organization</code> 存 Hive（如 <code>app_entityOrganization</code>），鏡射為 <code>entity_name</code>。後端已回此欄位，零額外請求</li>
-      <li><strong>否決「query 時打 API 換 name」</strong>：provider query 須快速同步（網路呼叫 = ANR）；冷啟動時 Flutter 未跑，Kotlin 重刻 <code>x-vs-key</code> 認證不可取；離線答不出來，護欄失效</li>
-      <li><strong>否決「只留 name、刪 entity_id」</strong>：name 可變（組織改名）、id 是穩定主鍵，角色不同（id 對帳、name 護欄）；且 <code>entityID</code> 有既有用途（analytics），刪除超出 scope</li>
-      <li><strong>新鮮度補丁</strong>：MVB 每次啟動且 <code>activated</code> 時重打 <code>GET /{uid}/entity</code> 更新 Hive + 鏡射 + <code>notifyChange</code>——組織改名的漂移窗口縮到下次啟動前（IFP 幾乎天天重開）</li>
+      <li><strong>否決「query 時打 API 換 name」</strong>：provider query 須快速同步返回（網路呼叫 ＝ 阻塞呼叫端／ANR）；冷啟動時 Flutter 未跑，而認證在 Dart 側</li>
+      <li><strong>「name 可變、id 是穩定主鍵」</strong>：組織改名會動到 name，不會動到 id——<strong>這正是只給 id 更穩健的理由</strong></li>
     </ul>
+
+    <h2 id="no-ondemand-read">6.2 為什麼不能「不鏡射、query 時才用 Dart 現讀 Hive」（2026-08-17）</h2>
+    <p>常見的追問：既然 <a href="#init-trigger">§8.1 (3″)</a> 可以 headless 跑 Dart，那 provider 何不在 <code>query()</code> 時直接起 engine 讀 Hive？這樣就<strong>一份資料、沒有同步問題</strong>。答案是不行，理由與拒絕「query 時打 API」相同，且更嚴重。</p>
+    <div class="callout warn">
+      <strong>⚠️ 先修正一個常見誤解：沒有「只啟動 Dart、不啟動 Flutter」這種選項。</strong>
+      本 codebase 的 Dart VM <strong>內嵌在 Flutter engine 內</strong>；headless 指的是「engine 照常啟動、但不掛 UI（無 <code>FlutterActivity</code>／render surface）」，<strong>不是更輕量的 runtime</strong>。啟動成本仍是完整 engine 啟動（數百 ms～數秒＋記憶體），省下的只有畫面。
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>阻礙</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td><strong>query() 是同步 binder 呼叫，呼叫端會被阻塞</strong>。流程會變成：dm 呼叫 → MVB 起 engine（數百 ms～數秒）→ 開 Hive → 回傳，<strong>dm 全程卡住</strong>，ANR 風險落在對方身上</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td><strong>provider 可能在冷進程被喚起</strong>——<code>ContentProvider.onCreate()</code> 執行於 <code>Application.onCreate()</code> <u>之前</u>，在該時點拉起 Flutter engine 既重且脆弱</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td><strong>若 engine 已在跑</strong>，query 需跨執行緒等 Dart isolate 回應，而 isolate 可能正忙 → 延遲不可控，並有 deadlock 風險</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>→ <strong>provider 必須從原生可直接讀取的儲存同步服務</strong>。鏡射不是為了方便，是為了讓 <code>query()</code> 能在毫秒內返回。</p>
+    <h3>那「同步問題」現在有多嚴重？</h3>
+    <ul>
+      <li>鏡射發生在 <code>_save()</code> 與 <code>_load()</code> 兩處，且 POC v2 已把「寫入 + <code>notifyChange</code>」合併為<strong>單次原生呼叫</strong>（<code>commit()</code> 落地後才通知）</li>
+      <li>→ 只要 Dart 跑過，兩邊即一致。這是「<strong>每次 Dart 執行就收斂</strong>」的最終一致性，對「provider 提供快照」這個用途足夠</li>
+      <li>→ <strong>唯一的分歧窗口是「Hive 有值但 Dart 從未跑過」</strong>（升級後未開啟），而 <a href="#init-trigger">§8.1 (3″)</a> 正是為它設計</li>
+    </ul>
+    <h3>若真要「一份資料」，方向是反過來（<strong>v1 不建議做</strong>）</h3>
+    <p>讓原生 prefs 成為這幾個欄位的<strong>唯一真相源</strong>，Dart 也改經 Pigeon getter 讀它、不再寫 Hive。確實能消除同步問題，但代價：</p>
+    <ul>
+      <li><code>SecureDataStorage</code> 仍存 email／whiteboardName／analytics 等欄位，<strong>Hive 不會消失</strong>，只是部分欄位搬家——複雜度未降反升</li>
+      <li>遷移本身<strong>仍需 Dart 跑一次</strong>，同樣的雞生蛋沒有解掉</li>
+      <li>Dart 每次存取都要過 platform channel，比現行的記憶體快取難用</li>
+    </ul>
+    <p><strong>結論：維持鏡射。</strong>純度不值得這個重構，唯一的破口已由 (3″) 兜住。</p>
 
     <h2 id="versioning">7. 版本演進策略——方案比較（2026-07-31 補充）</h2>
     <p>背景：Stephen（2026-07-30 口頭）傾向 <strong>key 版本制</strong>（語意/格式變更 → 新 key 如 <code>instance_id_v2</code>），而非 path 版本（<code>/v1</code> → <code>/v2</code>）。以下為完整比較：</p>
@@ -186,12 +415,33 @@
         </tr>
       </tbody>
     </table>
+    <h3 id="three-versions">先釐清：這份合約裡有<u>三個</u>不同的「版本」概念</h3>
+    <div class="callout warn">
+      最常見的誤讀是把 URI 的 <code>/v1</code> 和回傳裡的 <code>contract_version</code> 當成同一件事。它們<strong>正交</strong>，管的東西不同。
+    </div>
+    <table>
+      <thead><tr><th></th><th>path <code>/v1</code></th><th><code>contract_version</code> 那一列</th><th>key 名稱本身</th></tr></thead>
+      <tbody>
+        <tr><td><strong>管什麼</strong></td><td>回傳的<strong>結構形狀</strong>（兩欄 key/value、多列）</td><td><strong>診斷用流水號</strong></td><td><strong>個別欄位</strong>的語意與格式</td></tr>
+        <tr><td><strong>何時變</strong></td><td>shape 改變時（幾乎不會）</td><td>任何 key 新增／棄用就 +1</td><td>該欄位語意或格式改變時</td></tr>
+        <tr><td><strong>怎麼變</strong></td><td><code>/v1/info</code> → <code>/v2/info</code></td><td><code>1</code> → <code>2</code> → <code>3</code></td><td>新增 <code>instance_uuid</code>，舊 key 保留</td></tr>
+        <tr><td><strong>可否做行為分支</strong></td><td>✅ 可（不同 path ＝ 不同解析器）</td><td>❌ <strong>絕對不可</strong></td><td>✅ 以 presence 偵測</td></tr>
+        <tr><td><strong>預期頻率</strong></td><td>幾乎不變</td><td>偶爾</td><td>少</td></tr>
+      </tbody>
+    </table>
+    <p>比喻：<strong>path</strong> ＝ 這份文件是 CSV 還是 JSON（格式）；<strong><code>contract_version</code></strong> ＝ 文件角落的版次編號（對帳用，看不出改了什麼）；<strong>key</strong> ＝ 文件裡有哪些欄位（內容）。</p>
+    <p><strong>為何 <code>contract_version</code> 不能做判斷</strong>：它告訴你的是<u>身分</u>不是<u>能力</u>——版本號本身不指出哪個 key 變了。更麻煩的是反向情況：<code>entity_id</code> 可能因<strong>執行期原因</strong>缺席（尚未 enroll），此時 <code>contract_version</code> 完全沒變，靠它判斷就會誤以為讀得到。<strong>presence 才是唯一可靠訊號</strong>。</p>
+    <p>三者正交：實務上最可能的情形是 <code>contract_version</code> 一路 1→2→3→4，而 path 永遠停在 <code>/v1</code>。</p>
+
     <h3>建議：B 為主幹 + C 輔助 + 三條紀律（B/C/E 不互斥）</h3>
+    <div class="callout">📖 <strong>會議展示用的具體範例</strong>（v1 → v2 加欄位 → v3 改格式的時間線、dm 端讀法程式碼、反例對照）見 <a href="open-questions.html#q4-versioning-example">open questions Q4 範例</a>。</div>
     <ol>
       <li><strong>Published key 永久凍結</strong>——一旦發布，語意與格式不再變。要改 → 新 key（<code>instance_id_v2</code>，或更好的做法：取語意化名稱，如假設 v2 是改成 UUID 格式，命名 <code>instance_uuid</code> 比 <code>_v2</code> 自我描述）</li>
       <li><strong>舊 key 進 deprecation 週期</strong>——文件標註 deprecated + 預告移除版本，等 agent 全面遷移後才移除</li>
       <li><strong><code>contract_version</code> 保留</strong>——任何 key 新增/棄用都 bump，僅供 log 與除錯，agent <strong>不得</strong>拿它做行為分支（行為分支一律用 presence 偵測，方案 E）</li>
-      <li>Path 固定單一 <code>/info</code>（對 Stephen 的方向讓步），但文件保留「cursor shape 若真要變 → 新 path」作為逃生門——shape 變更是 key 版本制唯一蓋不住的洞</li>
+      <li><strong>Path 維持 <code>/v1/info</code> 不動</strong>——<code>/v1</code> 只是命名空間標記，<strong>不作為日常演進機制</strong>：加欄位、改語意一律走 key 版本制（紀律 1），<code>/v1</code> 完全不變。
+        <br />只有 <strong>cursor shape 本身要變</strong>（例如從 key-value 兩欄改為一列多欄）才 bump 到 <code>/v2/info</code>——這是 key 版本制唯一蓋不住的洞，也是保留版本段的用意。
+        <br /><small>⚠️ 2026-08-17 更正措辭：本條原寫「Path 固定單一 <code>/info</code>」，與 <a href="#shape">§1</a> 及 POC 實作的 <code>/v1/info</code> 不一致。<strong>實作是對的</strong>——帶著 <code>/v1</code> 讓逃生門更乾淨（否則 shape 變更時得取 <code>/info2</code> 這類醜名字）。</small></li>
     </ol>
 
     <h2 id="empty-handling">8. <code>instance_id</code> 空值（MVB 未初始化）處理——方案比較（2026-07-31 補充）</h2>
@@ -200,7 +450,10 @@
       <li>instance ID <strong>不只是識別碼</strong>：它是 MVB 後端的 identity key，參與認證加密（<code>x-vs-key</code>）、MQTT topic、enroll——<strong>所有權在 MVB</strong>，產生演算法（<code>md5(ts+androidId+uuid)</code>）是其內部細節</li>
       <li>MVB 沒啟動過 → instance ID 不存在 → <strong>後端也沒有這個 instance</strong> → Manager 雲端根本沒有可對應的 Software Instance 頁。所以「空」是語意正確的狀態（「這台裝置尚無 MVB instance」），不是錯誤</li>
       <li><strong>query 未啟動 app 的 provider 會拉起其 process</strong>（Android 標準行為），provider 能回應——但 Flutter/Dart 未跑、鏡射未發生，所以回傳只有 <code>contract_version</code> 一列。這天然就是「未初始化」的訊號</li>
-      <li>IFP 實務上 MVB 常設開機自啟（<code>BootReceiver</code> + <code>app_startAppAtBootUp</code>），「從未啟動」的窗口很小，但仍必須定義行為</li>
+      <li><strong>⚠️ 2026-08-17 更正：「從未啟動」的窗口<u>可能不小</u>。</strong>
+        早期版本寫「IFP 實務上 MVB 常設開機自啟，窗口很小」——<strong>此宣稱無根據</strong>：<code>app_startAppAtBootUp</code> <strong>預設為 <code>false</code></strong>（<code>app_preference_settings.dart:70</code>；<code>BootReceiver.java</code> 讀取時 default 亦為 <code>false</code>），是使用者自行在 Settings &gt; System Config 開啟的選項（<code>system_config_list_view.dart:261,268</code>），我們<strong>沒有現場開啟率的資料</strong>。
+        <br />真正縮小窗口的是「總會有人打開白板來用」——但這個假設<strong>恰在本功能最有價值的場景失效</strong>：IT <strong>零接觸批次部署</strong>（例如一次上架 100 台，尚無人到機器前操作）時 instance ID 全都不存在。
+        <br />→ 因此下方方案 <strong>(3)「dm 觸發 MVB 初始化」值得認真評估</strong>，不應以「開機自啟已覆蓋」為由略過</li>
     </ol>
     <h3>方案比較</h3>
     <table>
@@ -219,7 +472,8 @@
         <tr>
           <td>(2a) dm 生成後回寫 mvbf</td>
           <td>dm 產 ID 寫入 MVB 儲存</td>
-          <td>❌ 強烈反對：(i) 所有權倒置——外部 app 操縱 MVB 的認證身分材料，嚴重安全問題；(ii) 產生演算法是 MVB 內部細節，dm 無從正確生成；(iii) race——dm 寫入後 MVB 首啟又自己生成，衝突；(iv) <strong>恰恰無法解決舊版相容</strong>：舊版 MVB 沒有回寫介面，而它正是最需要 fallback 的對象</td>
+          <td>❌ 強烈反對：(i) 所有權倒置——外部 app 操縱 MVB 的認證身分材料，嚴重安全問題；(ii) 產生演算法是 MVB 內部細節，dm 無從正確生成；(iii) race——dm 寫入後 MVB 首啟又自己生成，衝突；(iv) <strong>恰恰無法解決舊版相容</strong>：舊版 MVB 沒有回寫介面，而它正是最需要 fallback 的對象。
+            <br /><strong>(v) 2026-08-17 補：跨 uid 根本寫不進去</strong>（edla/store 上 dm 與 mvbf 不同 uid），且「Hive 有值、prefs 沒值」時 dm 會生出第二個身分——完整分析與正解見 <a href="#init-trigger">§8.1 (3″)</a></td>
         </tr>
         <tr>
           <td>(2b) 雙 ID + 後端 mapping</td>
@@ -229,7 +483,8 @@
         <tr>
           <td>(3) dm 觸發 MVB 初始化</td>
           <td>MVB 加一個受簽章保護的「ensure initialized」入口（broadcast/service），dm 呼叫後 MVB 背景產生 instance ID</td>
-          <td>⚠️ 可作 phase 2：解「零接觸部署後立即要看到 instance」需求；但同樣需要新版 MVB（對舊版無效），且多數 IFP 開機自啟已覆蓋此場景</td>
+          <td>⚠️ <strong>值得評估，但<u>可能不需要 MVB 出力</u></strong>——見下方 §8.1 的 (3′) 方案。
+            <br />⚠️ 早期評估寫「多數 IFP 開機自啟已覆蓋此場景」——<strong>該理由已撤回</strong>，<code>app_startAppAtBootUp</code> 預設為關（見上方關鍵事實 4）</td>
         </tr>
       </tbody>
     </table>
@@ -241,18 +496,264 @@
         <tr><td><strong>舊版 MVB（無 provider）</strong></td><td>provider 不存在 + package 存在</td><td><code>MVB_TOO_OLD</code>（附 versionName，雲端可提示升級）</td></tr>
         <tr><td>新版 MVB、未啟動過（或更新後未啟動）</td><td>provider 回應但只有 <code>contract_version</code></td><td><code>NOT_INITIALIZED</code>，註冊 <code>ContentObserver</code> 等通知</td></tr>
         <tr><td>已啟動、未 enroll</td><td>有 <code>instance_id</code>，<code>activated=false</code></td><td>instance_id + 未啟用</td></tr>
-        <tr><td>已 enroll</td><td>全欄位</td><td>instance_id + 對應完成</td></tr>
+        <tr><td>已 enroll</td><td><code>instance_id</code> + <code>entity_id</code>，<code>activated=true</code></td><td>✅ 對應完成，雲端可據 <code>entity_id</code> 判定 tenancy</td></tr>
+        <tr><td><strong>query 失敗</strong>（未授權／URI 錯／儲存損壞）</td><td>cursor 有 <code>error_code</code> 列、<strong>無資料列</strong></td><td>依 <code>error_code</code> 回報異常（<strong>非</strong>「未初始化」）——見 <a href="#error-contract">§3.2</a></td></tr>
+      </tbody>
+    </table>
+    <div class="callout ok">
+      <strong>分層原則：join 回報 fail-open，管理動作 fail-closed。</strong>
+      「回報 serial ↔ instance_id」只是<strong>觀測</strong>、不改變任何狀態，只需 <code>instance_id</code>，缺 <code>entity_id</code>（尚未 enroll）也該照常回報；
+      「套 template / 改設定」才需要 entity 驗證，缺 <code>entity_id</code> 時不動作。
+      <br /><small>⚠️ 2026-08-17：原本的 <code>ENTITY_UNVERIFIED</code> 狀態是為「有 instance_id 但 entity_name 補不上」設計的——<strong>該情境已隨「只給 entity_id」消失</strong>（entity_id 與 enroll 同時存在）。分層原則仍適用於「尚未 enroll」。</small>
+    </div>
+
+    <h2 id="init-trigger">8.1 「MVB 從未啟動」的補救——dm 側可能已有現成解（2026-08-17 查證）</h2>
+    <h3>dm 的初次部署其實需要人到機器前</h3>
+    <ul>
+      <li><code>EnrollmentActivity</code> 是 <strong>LAUNCHER activity</strong>（<code>app_edla/src/main/AndroidManifest.xml:260-267</code>）——要有人開啟它</li>
+      <li>畫面顯示 enrollment code + QR 供 IT 掃描／輸入配對（<code>CodeFragment.kt:41</code>，<code>"device-management-$code"</code>）；<code>PairFragment</code> 顯示 entityName + deviceName 供確認</li>
+      <li>EDLA 另有 Device Owner provisioning（<code>PROFILE_PROVISIONING_COMPLETE</code>）</li>
+    </ul>
+    <div class="callout warn">
+      <strong>⚠️ 修正 §8 關鍵事實 4 的推論</strong>：先前擔心的「零接觸部署、完全沒人碰過機器」<strong>其實不太存在</strong>——dm 自己的 enroll 就要人到機器前。
+      但缺口仍在，只是性質不同：<strong>那個人是去 enroll dm，不一定會打開 MVB</strong>。所以 <code>NOT_INITIALIZED</code> 是<strong>流程落差</strong>，不是零接觸落差。
+    </div>
+    <h3>(3′) 由 dm 啟動 MVB <span class="badge badge-err">2026-08-17 排除</span></h3>
+    <div class="callout new">
+      <strong>❌ 排除（產品決定，雙方一致）：dm 主動打開一個有 UI 的 app <u>行為太怪</u>，不可接受。</strong>
+      即使技術上 MVB 端零改動、且對舊版 MVB 有效，使用者會看到白板莫名跳出來——這在教室／會議室情境不可能接受。
+      <br />→ 以下內容僅保留供追溯。
+    </div>
+    <div class="callout ok">
+      dm 已有現成 helper <code>Utilities.startActivityByLaunchIntent(context, packageName)</code>（<code>app_edla/.../Utilities.kt:409-411</code>），
+      且持有 <code>QUERY_ALL_PACKAGES</code>，解析得到 <code>com.viewsonic.droid</code> 的 launch intent。
+      <br />→ dm enroll 完成後啟動一次 MVB → MVB 產生 instance_id + auto-enroll → <code>notifyChange</code> → dm 讀到。
+    </div>
+    <table>
+      <thead><tr><th></th><th>(3) MVB 加受簽章保護的初始化入口</th><th><s>(3′) dm 啟動 MVB</s><br /><small>已排除</small></th></tr></thead>
+      <tbody>
+        <tr><td>MVB 端工作量</td><td>新增入口 + 設計其安全模型</td><td>✅ <strong>零</strong></td></tr>
+        <tr><td>dm 端工作量</td><td>呼叫該入口</td><td>接上既有 helper（目前<strong>三個 launch helper 皆零呼叫者</strong>，能力已在、未使用）</td></tr>
+        <tr><td>對舊版 MVB</td><td>❌ 無效</td><td>✅ 仍會生出 instance_id，待 MVB 升級後即可讀</td></tr>
+        <tr><td>代價</td><td>—</td><td>會把白板 UI 推到前景；但若時機是「IT 剛 enroll 完 dm、人還在機器前」則不算干擾</td></tr>
+      </tbody>
+    </table>
+    <p><strong>另有零工程方案</strong>：把「開一次 MVB」寫進部署 SOP。既然人本來就在機器前，這可能比任何程式碼都便宜——值得在會議上先問這條路可不可行。</p>
+    <p>備忘：dm 現有遠端 command 有 <code>install_app</code> / <code>uninstall_app</code> / <code>enable_app</code>，<strong>但沒有 launch/open app</strong>（<code>Config.kt:145-147</code>）——(3′) 若要做成可遠端觸發，需新增一個 command；若只在 enroll 完成後自動做一次，則不必。</p>
+
+    <h3>(3″) MVB 開 headless 初始化觸發點——唯一同時滿足「不彈 UI」+「全 flavor」+「所有權正確」</h3>
+    <p>MVB 提供受簽章保護的 <code>BroadcastReceiver</code>／<code>Service</code>，dm 送 intent 後 MVB <strong>在背景</strong>跑自己的 <code>ensureInitialized()</code> + auto-enroll，<strong>不彈任何畫面</strong>。</p>
+    <div class="callout ok">
+      <strong>🔑 關鍵：不需要原生判斷「是否已初始化」，也不需要任何 flag。</strong>
+      <br />dm 只負責<strong>送觸發訊號</strong>；<strong>決策者是 Dart</strong>，而 Dart 讀得到 Hive。既有程式碼本來就是 idempotent：
+      <pre><code>// mvb_activator.dart:94-104
+static Future ensureInitialized() async {
+  if (mvbActivator.getInstanceID().isEmpty) {   // ← 值來自 Hive
+    ...產生並寫入
+  }
+}</code></pre>
+      因此「<strong>Hive 有值但 prefs 沒值</strong>」（新版已安裝但從未開啟）這個最棘手的情境會自動走到正確結果：
+      <ol>
+        <li>dm query provider → 無 <code>instance_id</code> → 送觸發</li>
+        <li>MVB headless 醒來 → Dart <code>_load()</code> 讀 Hive → <strong>發現已有值 → 不重新產生</strong> → 鏡射寫入 prefs → <code>notifyChange</code></li>
+        <li>dm 再讀 → 拿到<strong>原本那個</strong>正確的 id</li>
+      </ol>
+      該情境退化成「補做一次鏡射」，<strong>不會生出第二個身分、無 race</strong>。
+    </div>
+    <div class="callout warn">
+      <strong>對照 (2a)「dm 代寫 prefs」為何無解</strong>：那裡的決策者是 <strong>dm</strong>，而 dm <u>只看得到 prefs</u>——看到空的就以為要初始化，於是在「Hive 有值」時憑空生出第二個身分。
+      舊身分已在後端註冊、有 entity 關聯與歷史；prefs 優先則<strong>拋棄既有身分</strong>（雲端該筆 instance 記錄變孤兒），Hive 優先則 dm 已把錯的 id 報給雲端。
+      <br /><strong>「MVB 開啟時寫 flag」的 workaround 救不了它</strong>——flag 同樣是原生寫的、同樣反映不出 Hive 狀態，除非 Dart 跑過才寫得對，又回到同一個雞生蛋。
+      <br />＋ 硬阻斷：<strong>跨 uid 根本寫不進去</strong>（見下表），<code>MODE_WORLD_WRITEABLE</code> 自 Android N 起丟 <code>SecurityException</code>。
+    </div>
+    <table>
+      <thead><tr><th>裝置</th><th>mvbf 的 uid</th><th>dm 的 uid</th><th>dm 能直接寫 MVB 檔案嗎</th></tr></thead>
+      <tbody>
+        <tr><td>ifp</td><td><code>android.uid.system</code></td><td><code>app_aosp</code> 同為 <code>android.uid.system</code></td><td>✅ 同 uid</td></tr>
+        <tr><td>edla</td><td>（無 sharedUserId）</td><td><code>app_edla</code>（無）</td><td>❌ 各自獨立 uid</td></tr>
+        <tr><td>store（A31）</td><td>（無）</td><td>同上</td><td>❌</td></tr>
       </tbody>
     </table>
 
+    <h3 id="pm-risk-accept">「更新後未開啟」的風險接受與待驗事項（2026-08-17 會議）</h3>
+    <div class="callout ok">
+      <strong>✅ PM（Peja）判定：此 edge case 可接受，不阻擋本功能上線。</strong>
+      <ul>
+        <li><strong>理由 1</strong>：真正需要被管理的裝置，通常<u>本來就有人在用 MVB</u>——沒開過 MVB 的機器，管理需求也低</li>
+        <li><strong>理由 2</strong>：<strong>mvbf 的更新週期一定早於 dm</strong>。dm 下一次更新是 <strong>12 月</strong>，屆時絕大多數機器的 MVB 早已更新並被開啟過 → 「更新後未開啟」的比例會<strong>大幅下降</strong></li>
+        <li><strong>若真的發生</strong>：傾向以<strong>客服回報</strong>＋<strong>錯誤顯示／提示使用者</strong>處理，而非為它增加工程機制</li>
+      </ul>
+    </div>
+    <div class="callout warn">
+      <strong>🔬 待實驗（Jay，MVB 側）：不開啟 MVB 也能把 Hive 值寫進 prefs 的可行性。</strong>
+      即 <a href="#init-trigger">(3‴)/(3″)</a> 的 headless 路徑——<strong>若 effort 不高就實作</strong>。
+      <br />→ <strong>實驗成功的話，「必須有人開過 MVB」這個前提整個消失</strong>，上面的 edge case 不再存在，下方 TODO 亦可取消。
+      <br />→ 實驗失敗或成本過高，才需要走下方 TODO 的溝通路線。
+    </div>
+    <div class="callout new">
+      <strong>📋 TODO（條件性，取決於上述實驗結果）：向 Manager team 提供<u>完整的 edge case 敘述</u>，供他們擬定對策。</strong>
+      應涵蓋：
+      <ol>
+        <li><strong>觸發條件</strong>：MVB 更新到有 provider 的新版本後 <u>從未被開啟</u>（Dart 未執行 → 鏡射未發生 → provider 只回 <code>contract_version</code>）</li>
+        <li><strong>dm 觀察到什麼</strong>：<code>NOT_INITIALIZED</code>（<a href="#empty-handling">§8</a>）——<strong>不是錯誤</strong>，不會有 <code>error_code</code></li>
+        <li><strong>影響範圍</strong>：該台裝置的 serial ↔ instance_id 對應無法建立 → Manager 雲端看不到這台的 MVB instance 關聯</li>
+        <li><strong>自我修復條件</strong>：使用者（或任何人）開啟 MVB 一次即永久解決；之後 <code>notifyChange</code> 會通知 dm</li>
+        <li><strong>為何不做工程補救</strong>：dm 啟動 MVB UI 已排除（行為太怪）；MVB headless 初始化<u>待實驗</u></li>
+        <li><strong>建議對策方向</strong>：雲端對停留在 <code>NOT_INITIALIZED</code> 的裝置顯示提示（例如「請於該裝置開啟一次 myViewBoard」），並作為客服可查詢的狀態</li>
+      </ol>
+    </div>
+
+    <h3 id="headless-answer">先回答核心問題：「能不能不啟動就完成初始化？」（2026-08-17 定論）</h3>
+    <div class="callout warn">
+      <strong>必須先拆解「啟動」的三個層次，答案才明確：</strong>
+      <table>
+        <thead><tr><th>層次</th><th>能否避免</th></tr></thead>
+        <tbody>
+          <tr><td>① 啟動 <strong>UI</strong>（白板畫面彈出）</td><td>✅ <strong>可以避免</strong></td></tr>
+          <tr><td>② 拉起 <strong>process</strong></td><td>❌ 無法避免，但使用者無感</td></tr>
+          <tr><td>③ 執行 <strong>Dart 程式碼</strong></td><td>❌ <strong>無法避免</strong></td></tr>
+        </tbody>
+      </table>
+      ③ 是硬限制：instance_id 的演算法在 Dart、儲存在 Hive（Dart 專有格式）、後端註冊亦在 Dart。
+      <strong>沒有任何方法能在「MVB 程式碼從未執行」的前提下產生合法的 instance_id</strong>——該值的定義與所有權都在 MVB 手上（這也是否決 <a href="#empty-handling">(2a) dm 代寫</a> 的根本理由）。
+      <br />→ <strong>結論：UI 可以不啟動，但 Dart 一定要跑一次。</strong>
+    </div>
+    <h4>舊版 MVB：不可能——所有入口都查過了</h4>
+    <table>
+      <thead><tr><th>既有入口</th><th>為何不可用</th></tr></thead>
+      <tbody>
+        <tr><td><code>BootReceiver</code></td><td>收 <code>BOOT_COMPLETED</code>（protected broadcast，一般 app 送不了）；且它做的事就是<strong>開 MainActivity（UI）</strong>，還被預設 <code>false</code> 的 <code>app_startAppAtBootUp</code> 擋著</td></tr>
+        <tr><td><code>ClassSwiftReceiver</code></td><td><code>exported=true</code> 且無 permission，但<strong>只在 engine 已在跑時轉發</strong>（<code>getBinaryMessengerForClassSwift()</code> 為 null 即 skip），<strong>不會拉起 engine</strong></td></tr>
+        <tr><td>兩個 FileProvider</td><td><code>exported=false</code></td></tr>
+        <tr><td>MainActivity / FileOpenActivity</td><td>本身就是 UI</td></tr>
+      </tbody>
+    </table>
+    <div class="callout new">
+      <strong>「不啟動 UI」與「相容舊版」<u>互斥</u></strong>——headless 入口必須由 MVB 提供，而那就意味著新版。
+      而 <strong>(3′) dm 啟動 MVB UI 已被排除</strong>（產品決定：行為太怪）→ <strong>舊版 MVB 只能等使用者自然開啟</strong>，或由 dm 回報 <code>MVB_TOO_OLD</code> 交由雲端提示升級。
+    </div>
+
+    <h3>(3‴) 最便宜也最完整的變體：MVB 自行 headless 初始化（<strong>建議主線</strong>）</h3>
+    <div class="callout ok">
+      <strong>🔑 關鍵：instance_id 的產生<u>完全不需要網路</u></strong>——<code>md5(timestampMillis + androidId + uuidV4)</code> 是純本地計算。
+      <br />→ headless 初始化可以<strong>只做「產生 instance_id ＋ 鏡射」，不碰網路、不做 enroll</strong>。這消除了「開機時偷偷連網」的產品疑慮，也讓它極輕量。
+      <br />→ entity 相關值等使用者真正開啟 MVB 或下次 refresh 再補；而 <strong>join（本票核心價值）當下就成立</strong>。
+    </div>
+    <h4>觸發時機：兩個 MVB 自己就收得到的廣播，<strong>零 dm 依賴</strong></h4>
+    <table>
+      <thead><tr><th>廣播</th><th>覆蓋情境</th></tr></thead>
+      <tbody>
+        <tr><td><code>ACTION_MY_PACKAGE_REPLACED</code><br /><small>（MVB 目前<strong>未註冊</strong>）</small></td><td><strong>升級到新版的瞬間</strong>，不必等重開機。<small>（原本也用於解「既有安裝 entity_name 為空」的 backfill——該問題已因「只給 entity_id」消失，此觸發現在單純用於<strong>讓 instance_id 及早就緒</strong>。）</small>屬 Android 8+ 隱式廣播限制的<strong>豁免項目</strong>，送給 app 自己，可靠</td></tr>
+        <tr><td><code>BOOT_COMPLETED</code><br /><small>（已註冊，但目前只用來開 UI）</small></td><td>重開機。IFP 出廠 MVB 預裝於韌體，<strong>第一次開機即觸發</strong></td></tr>
+      </tbody>
+    </table>
+    <h4>完整情境矩陣</h4>
+    <table>
+      <thead><tr><th>情境</th><th>能否不啟動 UI 完成初始化</th></tr></thead>
+      <tbody>
+        <tr><td>舊版 MVB</td><td>❌ <strong>不可能</strong>（(3′) 彈 UI 已排除 → 只能等人開，或回報 <code>MVB_TOO_OLD</code>）</td></tr>
+        <tr><td>新版・韌體預裝</td><td>✅ 首次開機 <code>BOOT_COMPLETED</code></td></tr>
+        <tr><td>新版・自舊版升級</td><td>✅ <code>MY_PACKAGE_REPLACED</code> 立即觸發</td></tr>
+        <tr><td>新版・已重開機</td><td>✅ <code>BOOT_COMPLETED</code></td></tr>
+        <tr><td>新版・剛裝好且未重開機</td><td>⚠️ 需 dm 觸發 (3″)，或等下次開機</td></tr>
+        <tr><td>dm 為舊版、不會送觸發</td><td>✅ <strong>不受影響</strong>——(3‴) 不依賴 dm</td></tr>
+      </tbody>
+    </table>
+    <p><strong>建議組合</strong>：新版走 (3‴) 兩個廣播（覆蓋絕大多數、零 dm 依賴、不彈 UI、不連網）；<strong>(3″) dm 主動觸發降為「要立即拿到」的加分項</strong>；舊版一律 <code>MVB_TOO_OLD</code>。</p>
+    <h4>原始評估（保留）</h4>
+    <p><code>BootReceiver</code> 已註冊 <code>BOOT_COMPLETED</code>（目前受 <code>app_startAppAtBootUp</code> 開關控制、且是直接開 <code>MainActivity</code>）。改為「開機時若尚未初始化則<strong>背景</strong>跑一次 <code>ensureInitialized()</code>（不開 UI、不受該開關影響）」即可。</p>
+    <ul>
+      <li>✅ <strong>完全不需要 dm 出力</strong>，無跨 app 介面、無新增攻擊面、無 contract 協商</li>
+      <li>⚠️ 代價：每台裝置開機都會做，不論 Manager 是否在意；且涉及開機時的網路行為（auto-enroll），屬<strong>產品決策</strong>而非純技術決策</li>
+    </ul>
+
+    <h3>四個方案對照</h3>
+    <table>
+      <thead><tr><th></th><th>(2a) dm 代寫 prefs</th><th>(3) MVB 開入口<br />（原始版）</th><th><s>(3′) dm 啟動 MVB</s><br /><small>已排除</small></th><th>(3″) headless 觸發</th><th>(3‴) 開機自行 headless</th></tr></thead>
+      <tbody>
+        <tr><td>edla / store 可行</td><td>❌ 跨 uid</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr>
+        <tr><td>身分所有權</td><td>❌ 倒置</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr>
+        <tr><td>會不會彈 UI</td><td>不會</td><td>不會</td><td><strong>會</strong></td><td>不會</td><td>不會</td></tr>
+        <tr><td>MVB 工作量</td><td>中（且有 race）</td><td>中</td><td><strong>零</strong></td><td>中</td><td>中</td></tr>
+        <tr><td>dm 工作量</td><td>中</td><td>小</td><td>小</td><td>小</td><td><strong>零</strong></td></tr>
+        <tr><td>對舊版 MVB</td><td>—</td><td>❌</td><td>✅</td><td>❌</td><td>❌</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>⚠️ (3″)/(3‴) 共同的未知數：MVB 目前<u>沒有 headless 執行 Dart 的先例</u></strong>（<code>BootReceiver</code> 是直接開 <code>MainActivity</code>）。
+      需實測「背景啟動 Flutter engine 跑 Hive + 認證」的可行性，並注意 Android 8+ 的背景執行限制——receiver 內只有數秒，engine 啟動可能更久，應改用 <code>WorkManager</code>／<code>JobIntentService</code> 或前景服務承接。
+      <br />另備忘：MVB 的 auto-enroll <strong>本來就會讀 dm 的 provider 取 entity name</strong>（<code>MainActivity.java:1855-1906</code>），故觸發後整條 enroll 鏈是通的，<strong>不需要 dm 額外餵資料</strong>。
+    </div>
+
+    <h2 id="propagation">8.2 更新傳播：push 求延遲、pull 求正確（2026-08-14）</h2>
+    <div class="callout ok">
+      <strong>結論：MVB 端不需要任何額外的通知設計</strong>（現有 <code>notifyChange</code> 已足夠）；<strong>要補的是 dm 端「別只靠 <code>ContentObserver</code>」的紀律</strong>。<strong>不加跨後端通知。</strong>
+    </div>
+    <h3>三種選項的釐清</h3>
+    <table>
+      <thead><tr><th>選項</th><th>評估</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>(a) MVB set 時本地通知 dm<br /><code>notifyChange</code> + <code>ContentObserver</code></td>
+          <td>✅ <strong>已實作並實測</strong>（<a href="findings.html#poc-v2">POC v2</a>，實測 <code>update #6</code>）。成本＝一行，且在同一次 Pigeon 呼叫內與寫入一起完成。<strong>保留</strong></td>
+        </tr>
+        <tr>
+          <td>(b) 靠既有 enroll 流程就好</td>
+          <td>⚠️ 概念錯位：enroll 是 <strong>MVB 端寫入的時機</strong>（本來就是這樣做），但 <strong>dm 觀察不到 enroll 事件</strong>——它只看得到 provider。所以 (b) 不是 (a) 的替代品</td>
+        </tr>
+        <tr>
+          <td>(c) enroll 後由後端通知 dm</td>
+          <td>❌ <strong>不需要且應避免</strong>。這正是 <a href="overview.html#alternative">overview §3.3 理由 #4「組織耦合」</a>要避開的：provider 方案的主要優點就是<strong>兩邊後端 schema 都不動、無需後端對後端呼叫</strong>；加這條就把優點還回去，換到的只有延遲，而延遲已被 (a) 解掉</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3>⚠️ <code>notifyChange</code> 的限制——為什麼 push 不能是唯一機制</h3>
+    <ul>
+      <li><code>notifyChange</code> <strong>不會喚醒沒在跑的 process，通知也不會排隊</strong>。若 MVB 寫入的那一刻 dm 未註冊 observer（process 被殺、開機順序較晚、observer 尚未 register），該次通知<strong>永久遺失</strong></li>
+      <li><strong>反直覺但關鍵：「變更很少」讓 fallback 更重要，不是更不重要。</strong><code>instance_id</code> 產生一次幾乎不再變、entity 只在 enroll／改名時變——下次變更可能是幾個月後。<strong>一次遺失的通知不會被後續變更自動修正</strong>，那台機器就一直對不上</li>
+    </ul>
+    <h3>ContentObserver 的成本與定位</h3>
+    <p><code>registerContentObserver(uri, false, observer)</code> <strong>不是輪詢</strong>——沒有計時器、沒有自己的背景執行緒，註冊只是在系統 <code>ContentService</code> 留一筆記錄。</p>
+    <table>
+      <thead><tr><th>狀態</th><th>成本</th></tr></thead>
+      <tbody>
+        <tr><td>閒置（無變更）</td><td><strong>≈ 0</strong>——system_server 內一筆註冊記錄 ＋ 一個 binder reference</td></tr>
+        <tr><td>收到 <code>notifyChange</code></td><td>一次回呼 ＋ dm 重新 query（毫秒級）</td></tr>
+      </tbody>
+    </table>
+    <p>→ <strong>「值很少變」不構成反對理由</strong>：閒置成本為零的機制不會因閒置而浪費。真正的成本來自<strong>通知過於頻繁</strong>（POC init 期間連續多次 <code>onChange</code>），已由 <a href="#mirror-cost">§6.1 dirty check</a> 解決；加上之後穩態幾乎不會觸發。</p>
+    <p><strong>定位：延遲優化，不是正確性機制。</strong>它唯一真正派上用場的時刻，剛好是整個功能最關鍵的一次轉換——<code>NOT_INITIALIZED</code> → 取得 instance_id。每台機器一生只發生一次，但那一次決定對應建不建得起來。</p>
+
+    <h3>建議做法（dm 端分層）</h3>
+    <ol>
+      <li><strong>保留 <code>notifyChange</code></strong>（MVB 端已完成）——一行、與寫入同一次 Pigeon 呼叫內完成</li>
+      <li><strong>優先建議 dm 用 <code>JobScheduler</code> 的 TriggerContentUri</strong>，而非單純 ContentObserver：
+        <pre><code>new JobInfo.Builder(id, componentName)
+    .addTriggerContentUri(new JobInfo.TriggerContentUri(uri, 0))
+    .build();</code></pre>
+        系統<strong>代為監看該 URI，變更時主動拉起 JobService——即使 dm 當下沒在執行</strong>。這正好補上 ContentObserver「process 沒跑就永久遺失」的缺口，而本情境（一次性、可能發生在 dm 未執行時）恰恰如此。
+        <br />代價：有批次延遲（可用 <code>setTriggerContentMaxDelay</code> 調整），且 force-stop 後失效——但「等一次初始化」延遲數秒完全可接受</li>
+      <li><strong>dm 在組 <code>static_info</code> payload 時現讀 provider</strong>——<strong>最終正確性保證</strong>：雲端每次詢問都會自我修正，遺失的通知不會累積成永久錯誤。且 <code>instance_id</code> 語意上就屬於 <code>static_info</code>，<strong>不需新機制，只是既有 payload 多一個欄位</strong></li>
+      <li>ContentObserver 作為 dm 前景執行時的即時加分項（可選）</li>
+      <li><strong>不碰後端</strong></li>
+    </ol>
+    <div class="callout warn">
+      <strong>📌 dm 的回報管線實情（2026-08-14 查證，修正早期誤述）</strong>：<code>static_info</code> / <code>dynamic_info</code> 是 <strong>MQTT command handler——雲端下指令、dm 回答</strong>（<code>DynamicInfoCommandHandler.kt</code>、<code>InfoDispatcher.kt:74</code>、<code>Config.kt:103-105</code>），<strong>不是本地週期回報</strong>。
+      dm 的 <code>PeriodicWorkRequest</code> 僅有 OTA／MQTT 重連（小時級）與 location（天級）（<code>WorkerController.kt:32-58</code>）。
+      早期文件曾寫「dm 本來就有週期回報（dynamic_info / 180s）」——<strong>該敘述有誤</strong>。這不影響建議：雲端問的時候現讀 provider，效果與週期回報等價。
+    </div>
+
     <h2 id="meeting">9. 會議上要跟 Manager team 對的事</h2>
     <ol>
-      <li>Q1/Q2/Q3 剩餘部分（見 <a href="open-questions.html">open questions</a>）——Q1 用途已釐清（授權護欄），剩 entity name <strong>來源與正規化規則</strong>（須與 dm 比對邏輯逐字元相容）；Q2 剩 dmagent <strong>正式包板 key</strong> 一句話確認；Q3 有建議方案待採納</li>
+      <li>Q1/Q3 剩餘部分（見 <a href="open-questions.html">open questions</a>）——Q1 用途已釐清（授權護欄）、來源已查證（後端已回 <code>organization</code>）；Q3 有建議方案待採納。<strong>Q2 已定案</strong>（Evis 2026-08-14 確認 dm 全線簽 system key → A31 跨 key → runtime SHA-256 allowlist、全 flavor 一致），僅剩告知 Manager team <strong>store flavor 亦在支援範圍</strong>（影響他們的裝置涵蓋預期）</li>
       <li>他們 Story 8+ 的 roadmap 還需要什麼——用真需求決定要不要把 §4 的哪些 key 提前進 v1</li>
-      <li>authority 命名慣例（<code>${applicationId}</code> 前綴 vs 固定字串）</li>
+      <li>authority 命名慣例（<code>${applicationId}</code> 前綴 vs 固定字串——<strong>現況兩者字串相同，純慣例選擇</strong>，見 <a href="#shape">§1</a> 註記；對向 dmagent 用固定字串）</li>
       <li>§4「設定 drift 偵測」對他們有沒有價值（Manager 頁面顯示的是雲端期望值，裝置實際值可能因版本/離線而不同）</li>
       <li>版本演進策略定案（<a href="#versioning">§7</a>——key 版本制紀律 + path 是否固定單一 <code>/info</code>）</li>
       <li>未初始化狀態機（<a href="#empty-handling">§8</a>——agent 端狀態對應與 <code>ContentObserver</code> 訂閱；(3) 觸發初始化是否列 phase 2）</li>
+      <li><strong>dm 不可只依賴 <code>ContentObserver</code></strong>（<a href="#propagation">§8.1</a>）——通知不排隊、不喚醒未執行的 process，遺失即永久遺失；請在組 <code>static_info</code> 時現讀 provider 作為自我修正。<strong>MVB 端無需額外通知設計，也不加跨後端通知</strong></li>
+      <li><span class="badge badge-ok">✅ 已解</span> <strong>entity 欄位</strong>——2026-08-17 定案<strong>只給 <code>entity_id</code></strong>（<a href="#entity-id-only">§3.1</a>），原「缺 entity_name 時如何降級」的問題隨之消失</li>
+      <li><strong>確認 dm 改為「回報 <code>entity_id</code> 給雲端、由雲端判定 tenancy」</strong>——dm 端只存 <code>entityName</code>、沒有 id（<code>EnrollEntity.kt:3</code>），故本地比對已不可行。此走向與「權威檢查留雲端」一致（<a href="findings.html#entity-tamper">findings §2.1</a>）</li>
     </ol>
   </main>
 </div>
