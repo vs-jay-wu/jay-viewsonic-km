@@ -1,14 +1,20 @@
-# MVBF Data Tracking（VSFT-8368）
+# MVBF Data Tracking（VSFT-8368 / VSFT-9941）
 
 > 跨產品需求：在 **mvbf** 加入 Amplitude 事件埋點，與既有 **cs (ClassSwift)** 的 tracking 對齊，
-> 並評估 **mvbw** 的對應實作。Beta Program 與 App Launch / Login 兩個範疇。
+> 並評估 **mvbw** 的對應實作。
+>
+> 目前涵蓋三個範疇：Beta Program、App Launch / Login（皆 VSFT-8368），
+> 以及 Engagement Tools 六個課中互動工具（VSFT-9941）。
 
 ## 來源
 
-- Jira：[VSFT-8368 \[Data\] MVBF data tracking](https://viewsonic-vsi.atlassian.net/browse/VSFT-8368)
+- Jira：
+  - [VSFT-8368 \[Data\] MVBF data tracking](https://viewsonic-vsi.atlassian.net/browse/VSFT-8368)
+  - [VSFT-9941 \[mVB\] \[Flutter\] Engagement Tools Event Tracking](https://viewsonic-vsi.atlassian.net/browse/VSFT-9941)
 - Confluence：
   - [Beta Program](https://viewsonic-vsi.atlassian.net/wiki/spaces/myViewboar/pages/529629261/BetaProgram)（page id `529629261`, v16）
   - [App Launch & Login](https://viewsonic-vsi.atlassian.net/wiki/spaces/myViewboar/pages/525729796/AppLaunch+Login)（page id `525729796`, v17）
+  - [Engagement Tools Event Tracking](https://viewsonic-vsi.atlassian.net/wiki/spaces/myViewboar/pages/602669510/EngagementToolsEvent+Tracking)（page id `602669510`, v6）
   - [User Properties（VSX ClassSwift Amplitude Event Tracking）](https://viewsonic-vsi.atlassian.net/wiki/spaces/VCAET/pages/96043154)（page id `96043154`, v95）— spec 引用的 user properties 定義來源
 
 ## 為什麼放在 `docs/features/` 而不是 `docs/repositories/<repo>/`
@@ -30,6 +36,7 @@
 mvbf-data-tracking/
 ├── README.md                    ← 本檔（索引）
 ├── user-properties-sources.md   ← mvbf 端 user property 逐欄位來源／現況／落差表
+├── engagement-tools-implementation.md  ← VSFT-9941 六個事件的觸發點對照表
 ├── next-actions.md              ← 已決定要做、尚未實作的後續工作
 ├── open-questions.md            ← 需要他人決策的疑問（VSFT-8368 範圍內）
 ├── out-of-scope-suggestions.md  ← 不屬於 VSFT-8368 的後續建議（給其他 team 參考）
@@ -40,7 +47,8 @@ mvbf-data-tracking/
 └── confluence/                  ← Confluence 頁面本機快照（依 space 分組，一頁一檔）
     ├── myViewboar/                  ← Confluence space key
     │   ├── beta-program.md
-    │   └── app-launch-and-login.md
+    │   ├── app-launch-and-login.md
+    │   └── engagement-tools-event-tracking.md
     └── VCAET/                       ← VSX ClassSwift Amplitude Event Tracking
         └── user-properties.md
 ```
@@ -51,7 +59,9 @@ mvbf-data-tracking/
 |------|------|------|
 | [`confluence/myViewboar/beta-program.md`](confluence/myViewboar/beta-program.md) | clone 自 Confluence「Beta Program」(v16) | 📥 Confluence clone |
 | [`confluence/myViewboar/app-launch-and-login.md`](confluence/myViewboar/app-launch-and-login.md) | clone 自 Confluence「App Launch & Login」(v17) | 📥 Confluence clone |
+| [`confluence/myViewboar/engagement-tools-event-tracking.md`](confluence/myViewboar/engagement-tools-event-tracking.md) | clone 自 Confluence「Engagement Tools Event Tracking」(v6) | 📥 Confluence clone |
 | [`confluence/VCAET/user-properties.md`](confluence/VCAET/user-properties.md) | clone 自 cs Amplitude「User Properties」(v95) | 📥 Confluence clone |
+| [`engagement-tools-implementation.md`](engagement-tools-implementation.md) | **VSFT-9941 六個事件的觸發點對照表**（檔案／條件／值映射／去重旗標） | 📝 本機文件 |
 | [`investigation/investigation.md`](investigation/investigation.md) | 開始調查前列的問題清單、產品/repo 對應、調查順序 | 📝 本機文件 |
 | [`investigation/findings.md`](investigation/findings.md) | **調查結果**：每個 repo 的現況、跨產品結論、技術限制 | 📝 本機文件 |
 | [`user-properties-sources.md`](user-properties-sources.md) | mvbf 端 user property 逐欄位來源／現況／落差表 | 📝 本機文件 |
@@ -62,18 +72,26 @@ mvbf-data-tracking/
 
 ## 當前狀態
 
-**mvbf 端基礎實作已完成**（user property 注入、Beta event 補 `email`、App Ended 拔 `end reason` + flush、
-device EDID 等）。VSFT-8368 的最終形態仍待 `open-questions.md` 中的決策題定案
-（Q1 login method enum、Q5 App Ended 是否保留、Q10 role 對齊、Q12 plan 詞彙等）—— 屆時可能再調整。
+**VSFT-8368：mvbf 端基礎實作已完成**（user property 注入、Beta event 補 `email`、
+App Ended 拔 `end reason` + flush、device EDID 等）。最終形態仍待 `open-questions.md`
+中的決策題定案（Q1 login method enum、Q5 App Ended 是否保留、Q10 role 對齊、Q12 plan 詞彙等）
+—— 屆時可能再調整。
+
+**VSFT-9941：六個 engagement tool 事件已實作完成**（分支
+`Jay/VSFT-9941-engagement-tools-tracking`），觸發點見
+[`engagement-tools-implementation.md`](engagement-tools-implementation.md)。
+三個 spec 沒寫死的判斷（Q17 Timer 續跑 / Q18 Flashcard gesture / Q19 Throw PDF 時機）
+先照 spec 字面實作，待 Gina 回覆；Q20（Throw present 入口）已與 PM 定案為維持 spec、不納入。
 
 ## 閱讀順序
 
 1. **`user-properties-sources.md`** — mvbf 端各欄位來源／實作狀態，工作主參考
-2. **`investigation/findings.md`** — 跨 repo 調查結論
-3. **`open-questions.md`** — 看尚待決策的疑問
-4. **`investigation/role-investigation.md`** — role 欄位的深度調查（cs/mvb 多套定義對照）
-5. **`confluence/*.md`** — 需要查原始需求或 user property 定義時翻查
-6. **`investigation/investigation.md`** — 想了解最初的調查思路與 repo 對應
+2. **`engagement-tools-implementation.md`** — VSFT-9941 六個事件掛在哪、什麼條件才送
+3. **`investigation/findings.md`** — 跨 repo 調查結論
+4. **`open-questions.md`** — 看尚待決策的疑問
+5. **`investigation/role-investigation.md`** — role 欄位的深度調查（cs/mvb 多套定義對照）
+6. **`confluence/*.md`** — 需要查原始需求或 user property 定義時翻查
+7. **`investigation/investigation.md`** — 想了解最初的調查思路與 repo 對應
 
 ## Confluence Clone 維護紀律
 

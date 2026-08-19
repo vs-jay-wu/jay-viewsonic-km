@@ -477,6 +477,125 @@ mvbf 在 `ifp_account_manager._signInIfNeed`（app 啟動以 saved token 自動�
 
 ---
 
+## Q17【中優先】Timer Started 是否要把「暫停後續跑」算成一次開始（VSFT-9941）
+
+**背景**
+spec 寫「使用者按下 Play 且計時成功開始。**每次開始計時記一次**」。mvbf code 裡按 Play
+有兩種情境，兩者都會讓計時真的跑起來：
+
+| 情境 | count down code path | 說明 |
+| --- | --- | --- |
+| 從頭開始（含改過時間後） | `_timer.onStartTimer()` | 全新一輪倒數 |
+| 暫停後續跑 | `_timer.startAfterPause()` | 同一輪，剩餘秒數繼續 |
+
+碼表（count up）只有 `startAfterPause()` 一條路徑，暫停/續跑無法區分。
+
+**現況實作**：兩種都送（照 spec 字面）。`preset seconds` 取
+`anno.defaultCountDownValue`（原本設定的總長），續跑時**不會**變成剩餘秒數。
+
+> 第一版誤用輸入框換算的值 —— 計時中輸入框每個 tick 都被改寫成剩餘時間，
+> 導致續跑時送出剩餘秒數。已修正，見
+> [`engagement-tools-implementation.md`](engagement-tools-implementation.md)。
+
+**需要決定**
+1. 續跑要不要算一次 `Timer Started`？
+2. 若不算：碼表端要另外加狀態才分得出來（目前 code 分不出「第一次按 Play」與「暫停後續跑」）
+
+**影響**
+- spec 想看的「常用時長分佈」：續跑會讓同一個 preset seconds 被重複計數，拉高熱門時長的權重
+- 「Timer 使用次數」指標會偏高（一堂課暫停三次 = 4 次事件）
+
+### 🤖 AI 建議
+
+🟢 **維持現狀（都送）**，理由：Amplitude 端可以事後用 session 內去重來收斂，但漏送的資料
+救不回來。若 Zoe 確認只要「全新一輪」，count down 端一行條件就能改；count up 端要加旗標。
+
+**建議找誰**：Gina Lu（VSFT-9941 reporter）
+
+---
+
+## Q18【低優先】Flashcard Flipped 的 spec 觸發描述與 Flutter UI 不符（VSFT-9941）
+
+**背景**
+spec 寫「**雙擊**卡片成功翻面（flip）」。mvbf Flutter 端沒有雙擊翻面 —— 卡片上有一顆
+明確的 Flip 按鈕（`flash_card_view.dart` `_buildFlipButton` → `_flip()`）。
+
+**現況實作**：掛在 `_flip()`，也就是「按下 Flip 按鈕且成功翻面」。行為語意等價，
+只是入口 gesture 不同。
+
+**需要決定**：spec 文字要不要更新成跨平台通用的描述（如「觸發翻面動作」），
+以免 Windows / Mac 端照字面實作而三端不一致。
+
+**影響**：純文件；不影響 Amplitude 資料。
+
+**建議找誰**：Gina Lu（順手改 Confluence 即可）
+
+---
+
+## Q19【低優先】Throw File Imported 的 PDF 匯入算在哪一刻（VSFT-9941）
+
+**背景**
+spec 定義「檔案成功下載並**放上畫布**」。實際上三個入口對不同檔型的行為不同：
+
+| 檔型 | 行為 |
+| --- | --- |
+| 圖片 | 下載完直接加到當前頁 → 真的「放上畫布」 |
+| PDF | 下載完開「選頁 dialog」，使用者還要選頁才會放上畫布（可能中途取消） |
+
+**現況實作**：兩者都在「成功交給 import 流程」時就送，三個入口一致。
+也就是說 PDF 若使用者在選頁 dialog 按取消，事件已經送出去了。
+
+**需要決定**：PDF 要不要改成「選完頁真的插入」才送？
+
+### 🤖 AI 建議
+
+🟢 **維持現狀**。這個事件的分析目的是「師生內容互動的證據」——學生丟檔、老師去拿，
+互動已經發生了；選頁取消是編輯決策，不是互動沒發生。改成選頁後才送還會讓三個入口的
+計數時機不一致，反而難解讀。
+
+**建議找誰**：Gina Lu（若在意精準度再調）
+
+---
+
+## Q20【已定案】Throw File Imported 不含 `file-import-present`（VSFT-9941）
+
+**決議（2026-08-19，Jay 與 PM 討論）：維持 spec 的三個入口，Companion App 的
+「立即呈現」不納入埋點。** mvbf 端已把 `ThrowHelper.presentFile` 的埋點移除。
+
+以下為當初的疑問與完整查證過程，保留供日後回頭參考。
+
+---
+
+**背景**
+spec 的 Trigger Conditions 只列三個入口：Throw 面板雙擊、Throw 面板多選匯入、通知中心點擊。
+但 mvbf 還有第四條路：MQTT `file-import-present` 進來時，`ThrowHelper.presentFile`
+會直接下載並置入畫布 —— 不發通知、老師不用點任何東西。當時懷疑「學生能不能靠這條路
+亂推圖片干擾上課」。
+
+**查證結果（2026-08-19，含 offloaded repo 外接碟）**
+
+| 問題 | 結論 | 依據 |
+| --- | --- | --- |
+| 誰在發 `file-import-present`？ | **Companion App**（`edu-droid-companion-flutter`） | `lib/helper/json_helper.dart:202` `buildMqttPresentThrowString` |
+| 使用者做了什麼？ | Throw 檔案後跳確認 dialog「要在白板上呈現嗎」→ 按 Yes | `lib/screen/throw_screen.dart:288-308` |
+| 推去哪台？ | `mvbHost.id`，而 `mvbHost.id` 是用**自己帳號名**查 API 拿到的、該帳號當前登入的白板 | `mvb_host_controller.dart:459-462`（`hostName = _user.name`） |
+| 所以是誰在推？ | **同一個帳號用自己手機推到自己登入的白板** —— 不是學生 | 同上 |
+| 學生用的 `/preview/<mvbName>` 網頁能發嗎？ | **不能**，只送 `file-import`（→ 產生通知）與 `file-import-recall` | `edu-mvb-web-original-portal/.../remote-transfer.component.ts:445-446` |
+| 學生上傳有無門檻？ | 有兩道：① 老師帳號需有 `THROW` permission ② secure mode OTP，但 `secure_mode` **預設 false** | `remote-transfer.component.ts:234-254`、`user_data.dart:131-132` |
+| 「Join Whiteboard」輸入別人 host name 那條呢？ | 那是 **Join Quiz**（pop quiz）流程，與 throw present 無關 | `join_whiteboard_screen.dart:156-195` |
+
+**結論**：正常產品路徑上，`file-import-present` 是**老師自己**的行為（用 Companion App
+把手機上的檔案推到自己的白板），不是學生端互動。當初「學生亂推圖片」的疑慮在產品 UI 上
+不成立。
+
+**埋點決定**：因此它既不屬於「老師匯入學生上傳的檔案」（spec Definition），也不該算進
+「學生端互動」的分析口徑 —— 不納入。若日後要量測 Companion 推檔，應另開事件。
+
+> ⚠️ 查證過程另外發現 MQTT broker 的授權缺口（與埋點無關，但值得後續處理），
+> 已記在 [`out-of-scope-suggestions.md`](out-of-scope-suggestions.md)。
+
+---
+
 ## 決策追蹤
 
 > 拿到答案後請更新此區，附日期與決策者。
@@ -493,3 +612,7 @@ mvbf 在 `ifp_account_manager._signInIfNeed`（app 啟動以 saved token 自動�
 | Q13 | 🟢 已改真實品牌，待 Zoe 確認格式 | — | — | — |
 | Q15 | 🔴 待回覆（建議加 source project 標記） | — | — | — |
 | Q16 | 🔴 待回覆（mvbf code 暫改 `'auto'`，命名對齊 Q1） | — | — | — |
+| Q17 | 🔴 待回覆（現況：續跑也送） | — | — | — |
+| Q18 | 🔴 待回覆（純文件，不擋實作） | — | — | — |
+| Q19 | 🔴 待回覆（現況：交給 import 流程即送） | — | — | — |
+| Q20 | 🟢 已定案：維持 spec 三入口，不含 present | Jay + PM | 2026-08-19 |
