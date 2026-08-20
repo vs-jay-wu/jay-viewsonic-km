@@ -28,7 +28,7 @@
 | 2 | `Throw File Imported` | `lib/widget/dialog/magic_box/widgets/throw/throw_files_view.dart` `_onItemDoubleClick` / `_onMultiImport` | `FileUtilityHelper.importFile` 沒拋錯。多選匯入**每個成功檔案各一次** |
 | 2 | `Throw File Imported`（通知中心） | `lib/widget/dialog/notification/dialog_v2.dart` `_itemClick`（`TYPE_THROW` / `TYPE_THROW_RECALL`） | 重新抓 throw 檔案清單 → 下載 → `importFile` 沒拋錯 |
 | 3 | `Dice Rolled` | `dice_container.dart` `diceWidget` `onTap` → `diceRolled()` | 點擊當下**沒有骰子正在轉**（動畫中再點不會真的重擲）。一次點擊擲全部骰子＝一個事件 |
-| 4 | `Participate Mode Used` | `participate_mode_bloc.dart` `onChange` → `_tryTrackParticipateModeUsed` → `participateModeUsed(session: this, ...)` | `state.isModified` 首次為 true（老師或學生任一有書寫）。`ParticipateModeNewSession` 重置 |
+| 4 | `Participate Mode Used` | `participate_mode_bloc.dart` `onChange` → `_tryTrackParticipateModeUsed` → `participateModeUsed(session: this, ...)` | `state.isModified` 首次為 true（老師或學生任一有書寫）。session 邊界見下方 |
 | 5 | `Flashcard Flipped` | `flash_card_view.dart` `_flip()` → `flashcardFlipped(card)` | 畫布上的卡片首次翻面（`FlashCardAnnotation.hasTrackedFlip`）。**編輯器 dialog 內的預覽翻面不算** |
 | 6 | `Sticky Note Created` | `adorning_sticky_options.dart` `dispose` 的 post-frame callback → `stickyNoteCreated(note)` | 內容從**空 → 非空**的那一次（`SNAnnotation.hasContent`）。取消選取便利貼時判定 |
 
@@ -75,7 +75,7 @@ spec 有三個「一個 X 只記一次」的要求。第一版把旗標直接掛
 |---|---|---|
 | `Flashcard Flipped` | `FlashCardAnnotation` 物件本身 | 物件被 GC（新卡片＝可再記） |
 | `Sticky Note Created` | `SNAnnotation` 物件本身 | 同上 |
-| `Participate Mode Used` | participate mode bloc 實例 | `participateModeSessionReset()`（bloc 在 `ParticipateModeNewSession` 呼叫） |
+| `Participate Mode Used` | participate mode bloc 實例 | ① 每次進場且白板乾淨（`ParticipateModeScreen.initState` → `bloc.onParticipateModeEntered()`）② 按 New Session |
 
 呼叫端只表達「這件事發生了」，要不要真的送由 tracker 決定。
 
@@ -115,9 +115,21 @@ tearDown(EngagementToolsTracker.resetInstanceForTest);
 
 兩個 API 都標了 `@visibleForTesting`，正式程式碼誤用會被 analyzer 擋。
 
-### tracker 自己的 test
+### 測試檔
 
-`test/helper/amplitude/engagement_tools_tracker_test.dart`（15 個 case）。
+- `test/helper/amplitude/engagement_tools_tracker_test.dart`（15 個 case）
+- `test/annotation_model/stickynote_annotation_test.dart`（3 個 case）
+
+### `SNAnnotation.hasContent` 的文字分支測不到
+
+建一個真的 `TextAnnotation` 會拉出一條 late field bootstrap 鏈：
+`AppPreferenceSettings.getInstance()` → `fontSize` setter → `CurrentUser.getInstance()`
+→ `UserData._userData`，缺任一層就 `LateInitializationError`。
+`grep -rln "TextAnnotation(" test/` 目前 0 筆 —— 全 repo 沒有任何測試建得出它。
+
+所以只蓋了「全空 → false」「只有筆跡 → true」；文字分支（`trim().isNotEmpty`）
+靠實機驗證。日後若有可重用的 annotation fixture，補「只有空白字元 → false」與
+「有實際文字 → true」兩個 case。
 透過 `EngagementToolsTracker.forTest(EventTracker)` 注入假的 tracker，驗證：
 
 - 倒數帶 `preset seconds`、碼表不帶
@@ -126,6 +138,45 @@ tearDown(EngagementToolsTracker.resetInstanceForTest);
 - Flashcard / Sticky Note 同物件只送一次、不同物件各送一次
 - Participate session 去重 + reset 後可再送 + `board count` 取首次書寫當下的值
 - `setInstanceForTest` / `resetInstanceForTest` 接縫本身
+
+## Participate Mode 的 session 邊界（code review 抓到）
+
+第一版拿 bloc 生命週期當 session 邊界，**錯的** —— `ParticipateModeBloc` 是 **app-scoped**：
+
+- `app_multi_provider.dart:236` 在 root 建立，全 repo 只有這一處 `ParticipateModeBloc()`
+- `participate_mode_event.dart` 沒有任何 close / exit / leave 事件
+- state 跨進出存活（`participate_mode_screen.dart` 重新進入時仍讀得到 `bloc.state.isModified`）
+
+所以 `session: this` 從頭到尾同一把 key，整個 app process 只會送出**一次**
+`Participate Mode Used`。IFP 上 app 可能連續開好幾天，屬系統性少計。
+
+### 為什麼是「進場時重置」而不是「離開時重置」
+
+離開不會清空白板。下次進場 `isModified` 仍為 true，而進場後必定會有版面尺寸之類的
+emit，`onChange` 會立刻誤判成「有書寫」→ 重複計數。等於把少計換成多計。
+
+現在的規則：**進場時、且白板乾淨才重置**。
+
+| 情境 | 行為 |
+|---|---|
+| 進場白板乾淨 → 書寫 | 送 ✓ |
+| 進場乾淨 → 沒寫 | 不送 ✓ |
+| 進場時上輪內容還在 → 繼續寫 | 不送（上輪已記過，視為同一 session 延續） |
+| 按 New Session → 書寫 | 送 ✓ |
+
+代價：「留著上輪內容再進來寫」會少記一次。取捨上優於誤報，且那批內容確實已計過。
+
+## 已知會略微高估：Throw File Imported
+
+`FileUtilityHelper.importFile` 是 `Future<void>`，有幾條「什麼都沒進畫布」的路徑
+**正常返回而非拋錯**，呼叫端無從分辨：
+
+- `directory == null` 早退（`file_utility_helper.dart:1181`）
+- iwb / olf 讀不到內容 → `return`（`:1281`、`:1294`）
+- 不支援的副檔名 → `showFileUnsupportedDialog()` 後正常結束
+
+所以下載失敗與匯入拋錯不會送，但上述幾種失敗會被計為一次匯入。根治要讓 `importFile`
+回傳成功與否 —— 該 helper 有 11 個呼叫端、switch 十餘個分支，不在 VSFT-9941 範圍。
 
 ## 待 spec owner 拍板的判斷
 
