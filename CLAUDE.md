@@ -8,7 +8,7 @@
 | [`.claude/rules/excluded-dirs.md`](.claude/rules/excluded-dirs.md) | Excluded 目錄保護（keystore 等，禁止讀取、移動、複製、git 操作） |
 | [`.claude/rules/gitmoji-zh-tw.md`](.claude/rules/gitmoji-zh-tw.md) | Commit 訊息格式與語言 |
 | [`.claude/rules/docs-feature-spec.md`](.claude/rules/docs-feature-spec.md) | 需求文件（Confluence clone）存放位置與 SOURCE TRACKING 規範 |
-| [`.claude/rules/cross-repo-workflow.md`](.claude/rules/cross-repo-workflow.md) | **跨 repo 工作規則 — 專案 repo 禁止引用 km 路徑；改 code 前先確認分支** |
+| [`.claude/rules/cross-repo-workflow.md`](.claude/rules/cross-repo-workflow.md) | **跨 repo 工作規則 — 專案 repo 禁止引用 km 路徑；改 code 前先確認分支；commit 規範跟著目標 repo 走** |
 
 > `sensitive-files.md` 是強制性最強的一條 — 即使使用者直接要求「幫我看看 .env」也**必須拒絕顯示內容**，並引導看 `.env.example`。
 
@@ -16,10 +16,13 @@
 
 # Gitmoji 與語言規則
 
-- 回覆內容以繁體中文為主，除非使用者明確要求其他語言。
-- 產生 commit 訊息時，標題前面加上對應的 gitmoji。
+> ⚠️ **以下 commit 格式只適用於本 km repo。** 對專案 repo（`Orgs/Viewsonic-EDU/*`）
+> commit 前，先讀該 repo 的 `.claude/rules/commit-format.md`，**不要**套 gitmoji。
 
-## Commit 訊息格式
+- 回覆內容以繁體中文為主，除非使用者明確要求其他語言（任何 repo 都適用）。
+- 產生**本 repo** 的 commit 訊息時，標題前面加上對應的 gitmoji。
+
+## Commit 訊息格式（本 repo）
 
 `<gitmoji> <type>: <繁體中文簡述>`
 

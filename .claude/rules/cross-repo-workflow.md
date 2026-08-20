@@ -70,3 +70,39 @@ VSFT-9941 交付完切回 `master`，接著處理 PR review 時忘了切回 feat
 在 `master` 上改了 `participate_mode_screen.dart`（由使用者發現）。
 當下幾個字串比對失敗其實就是徵兆 —— `master` 沒有該票的 commit，所以對不上。
 **比對失敗時先懷疑「是不是在錯的分支」，而不是急著調整比對字串。**
+
+---
+
+## 3. Commit 規範跟著「你正在 commit 的那個 repo」走
+
+**每個 repo 有自己的 commit 慣例，不會共用。** 最常犯的錯是把本 km repo 的 gitmoji
+格式套到專案 repo 上。
+
+| Repo | 格式 | 規範位置 |
+|---|---|---|
+| 本 km repo | `<gitmoji> <type>: <繁體中文簡述>` | [`gitmoji-zh-tw.md`](gitmoji-zh-tw.md) |
+| `edu-droid-flutter`（mvbf） | `[Type] 標題` + `What:` / `Why:` / `How:` / `Changes:`，**無 gitmoji** | 該 repo 的 `.claude/rules/commit-format.md` |
+| 其他專案 repo | 先找該 repo 的 `.claude/rules/` 或 `CLAUDE.md` | 同上 |
+
+### 動手前的固定動作
+
+要對任何**專案 repo** 下 commit 之前：
+
+1. `ls <repo>/.claude/rules/` 看有沒有 commit 相關規範，有就讀完再寫
+2. 沒有規範檔就 `git log -5 --format='%s%n%b%n---'` 看既有 commit 長什麼樣，照著寫
+3. **不要**預設套用 km 的 gitmoji
+
+### 容易連帶弄錯的細節
+
+- **type 標記**：mvbf 用 `[Task VSFT-x]` / `[BUG VSFT-x]` / `[User Story VSFT-x]`，
+  要對照 Jira 的 issue type 挑，不是隨便選一個
+- **一個 commit 動到多張票**：mvbf 要求所有 VSFT key 都列在 subject
+  （例：`[User Story VSFT-9941][VSFT-8368] ...`）
+- **`Co-Authored-By`**：看該 repo 既有 commit 有沒有這個慣例（mvbf 有），
+  不確定就 `git log --format='%b' -80 | grep -c 'Co-Authored-By'` 數一下
+
+### 由來
+
+反覆發生：對專案 repo commit 時套用 km 的 gitmoji 格式。根因是 km 的
+`gitmoji-zh-tw.md` 與 `CLAUDE.md` 原本把規則寫得像全域適用、沒有標範圍，
+現已在兩處加上「僅限本 repo」的但書。
