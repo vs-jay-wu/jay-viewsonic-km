@@ -5,6 +5,26 @@
 
 ---
 
+## 0. 動專案 repo 的檔案前，先叫該 repo 的 skill
+
+**專案 repo 的 `.claude/rules/` 與 `CLAUDE.md` 不會跨 repo 自動載入。** 在 km 工作時
+它們完全不在 context 裡 —— 不會有任何提示，只會安靜地照 km 的規則做事（已多次發生）。
+
+所以要對任何專案 repo 做事（**改檔、review、commit 都算**）之前：
+
+1. **先呼叫對應的 repo skill**，例如 `mvbf`（= `edu-droid-flutter`）、`mvbf-commit`。
+   skill 裡有該 repo 的個人層慣例，以及「該讀哪些團隊 rules」的清單。
+2. **沒有該 repo 的 skill 時**，自己做最小版本：
+   ```bash
+   ls <repo>/.claude/rules/ && cat <repo>/CLAUDE.md 2>/dev/null
+   ```
+   讀完與本次任務相關的再動手；順手把學到的東西補成新的 skill。
+
+> skill 只放**個人層**補充與編排步驟，**不要複製團隊 rules 的內容**進 km ——
+> 那些檔由團隊維護、會變，複製一份就會漂移而且不會被發現。
+
+---
+
 ## 1. 專案 repo 的程式碼**禁止**引用 km repo 的檔案路徑
 
 **km repo 是 Jay 個人使用的知識庫，不是團隊共用資產。** 團隊成員 clone 專案 repo 後
