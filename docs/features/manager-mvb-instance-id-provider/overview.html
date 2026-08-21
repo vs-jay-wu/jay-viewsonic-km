@@ -39,6 +39,8 @@
       <a href="findings.html">🛠️ 調查 findings</a>
       <a href="open-questions.html">❓ open questions</a>
       <a href="contract-proposal.html">📐 contract 草案</a>
+      <a href="basics.html">🎓 基礎知識</a>
+      <a href="dm-handoff.html">🤝 dm handoff</a>
     </div>
 
     <div class="callout warn">
@@ -46,7 +48,9 @@
       技術方向由 Stephen Yang 於 07-29 comment 定調：MVB 以 ContentProvider 提供
       <code>instance id</code> + <s><code>entity name</code></s> 給 Manager agent，並限制 signed key。
       <br />⚠️ <strong>2026-08-17 會議定案改為 <code>entity_id</code></strong>——票面原寫 entity name 係當初討論的誤會（詳見 <a href="open-questions.html#q1">Q1</a>）。
-      開工前有 4 個 open question 待釐清（見 §7）。
+      <br /><strong>2026-08-19 進度</strong>：Q1／Q2／Q3 已定案，<strong>MVB 端與 dm 端皆已實作並在實機驗證通過</strong>
+      （含 headless 初始化、provider 存取控制、dm 主動觸發初始化）——見 <a href="findings.html#five-requirements">findings §13</a>。
+      僅 Q4（contract 細節）待與 Manager team 對齊。
     </div>
 
     <h2 id="sources">1. 原始文件</h2>

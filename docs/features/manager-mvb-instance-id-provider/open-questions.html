@@ -72,7 +72,7 @@
   <main>
     <h1>Open Questions</h1>
     <div class="meta">
-      建立 2026-07-30 &middot; 更新 2026-08-17 &middot; <strong>會議討論用</strong>——與 Manager team（VB-1399）對齊 contract 與行為
+      建立 2026-07-30 &middot; 更新 2026-08-19 &middot; <strong>會議討論用</strong>——與 Manager team（VB-1399）對齊 contract 與行為
       <br />每題標示現況：<span class="badge badge-ok">已定案</span> 只需知會／覆核，<span class="badge badge-warn">待對齊</span> 需雙方拍板。調查與實作細節見 <a href="findings.html">findings</a> / <a href="contract-proposal.html">contract 草案</a>。
     </div>
     <div class="doc-nav">
@@ -80,6 +80,8 @@
       <a href="findings.html">🛠️ 調查 findings</a>
       <a href="open-questions.html" class="active">❓ open questions</a>
       <a href="contract-proposal.html">📐 contract 草案</a>
+      <a href="basics.html">🎓 基礎知識</a>
+      <a href="dm-handoff.html">🤝 dm handoff</a>
     </div>
     <div class="diagram">
       <pre class="mermaid">
@@ -98,7 +100,7 @@ flowchart LR
         <strong>四個問題各自落在哪一段：</strong>
         <strong>Q1</strong> provider 要<u>給什麼值</u>（已定案：entity_id） ·
         <strong>Q2</strong> <u>誰能讀</u>（箭頭上的門） ·
-        <strong>Q3</strong> <u>還沒有值</u>時怎麼辦 ·
+        <strong>Q3</strong> <u>還沒有值</u>時怎麼辦（已定案＋已實作） ·
         <strong>Q4</strong> 回傳<u>長什麼形狀</u>
       </div>
     </div>
@@ -147,7 +149,7 @@ flowchart LR
       <strong>❗ 要告知 Manager team：<u>store flavor 也在支援範圍</u></strong>——這會影響你們對裝置涵蓋的預期（A31 等 VPC 抽取式模組）。
     </div>
 
-    <h2 id="q3">Q3. 未 enroll / 未初始化時 provider 回什麼 <span class="badge badge-ok">已定案</span> <span class="badge badge-warn">一項待實驗</span></h2>
+    <h2 id="q3">Q3. 未 enroll / 未初始化時 provider 回什麼 <span class="badge badge-ok">已定案且已實作驗證</span></h2>
     <p>instance ID 首次啟動才產生、entity 要 enroll 後才有。provider 一律<strong>缺值列不出現</strong>，由 dm 以 presence 判斷狀態。
     <br /><strong>注意欄位分工</strong>：中間欄是 <u>provider 端</u>的回應（或「查不到 provider」這件事本身）；右欄是 <u>dm 端</u>自行歸類後回報雲端的狀態碼——<strong>不是 provider 回傳的值</strong>（前兩列根本沒有 provider 可回答）。</p>
     <div class="diagram">
@@ -186,10 +188,22 @@ flowchart TD
         <li><strong>dm 端更新接收方式</strong>：MVB 已在鏡射後 <code>notifyChange</code>；建議 dm 用 <code>JobScheduler.addTriggerContentUri()</code>（process 沒跑也收得到）＋ 組 <code>static_info</code> 時現讀 provider 作為最終保證。詳見 <a href="contract-proposal.html#propagation">contract §8.2</a></li>
       </ul>
     </div>
-    <div class="callout warn">
-      <strong>🔬 待 MVB 側實驗（Jay）→ 結果會決定要不要給你們 edge case 對策清單</strong>
-      <br />正在研究「<strong>不開啟 MVB 也能完成初始化</strong>」的 headless 做法。<strong>若可行且 effort 不高就實作</strong>——那麼「必須有人開過 MVB」的前提就消失，上述 edge case 不再存在。
-      <br />若不可行，我們會提供<strong>完整的 edge case 敘述</strong>（觸發條件、dm 觀察到什麼、影響範圍、自我修復方式、建議對策），供你們擬定雲端提示／客服流程。詳見 <a href="contract-proposal.html#pm-risk-accept">contract §8.1</a>。
+    <div class="callout ok">
+      <strong>✅ 實驗完成（2026-08-19）：不開啟 MVB 也能讓 dm 拿到資料——<u>五種情境全數實機驗證通過</u>。</strong>
+      <ul>
+        <li>新版<strong>首裝未開</strong>：dm 讀到 <code>NOT_INITIALIZED</code> → 呼叫 provider 的 <code>call("ensureInitialized")</code> → MVB <strong>headless 產生</strong> id → <code>notifyChange</code> → dm 取得。<strong>且之後開啟 MVB 不會重複產生</strong></li>
+        <li>新版<strong>自舊版升級未開</strong>：<code>MY_PACKAGE_REPLACED</code> → headless 鏡射 Hive 既有 id（完全相同）</li>
+        <li>舊版（有／無資料）：一律 <code>MVB_TOO_OLD</code>，附 versionName 供雲端提示升級</li>
+      </ul>
+      → <strong>「必須有人開過 MVB」的前提已消除</strong>，原本要給你們的 edge case 對策清單<strong>不需要了</strong>。
+      <br />新增的介面見 <a href="contract-proposal.html#call-trigger">contract §3.3</a>；驗證紀錄見 <a href="findings.html#five-requirements">findings §13</a>。
+      <br /><strong>❗ 給 dm 端的三個實作提醒</strong>（都是我們實測踩過的）：
+      <ol>
+        <li><strong>觸發點不能放在只執行一次的生命週期</strong>——放在 <code>Service.onCreate</code> 會<u>永遠卡在 <code>NOT_INITIALIZED</code></u>（process 活著就不重跑）。建議放在<strong>組 <code>static_info</code> payload 時</strong>與 <code>JobScheduler.addTriggerContentUri</code></li>
+        <li><strong>節流要狀態感知</strong>——若用固定時間冷卻防迴圈，「資料被清掉後再次 NOT_INITIALIZED」會被誤擋。讀到有效值就重置冷卻</li>
+        <li><strong>訂閱要包 try/catch</strong>——<code>registerContentObserver</code> / <code>addTriggerContentUri</code> 在 authority 不存在（舊版 MVB／未安裝）時會丟 <code>SecurityException</code>，與 <code>query()</code> 回 null 不同（實測會 crash）</li>
+      </ol>
+      實測端到端延遲：<strong>約 4 秒</strong>完成（dm 觸發 → MVB headless 產生 → notifyChange → dm 讀到），且最後一步是 <code>notifyChange</code> 送達、非輪詢。詳見 <a href="findings.html#latency">findings §14</a>。
     </div>
 
     <h2 id="q4">Q4. Provider contract 細節 <span class="badge badge-warn">草案待對齊</span></h2>
@@ -197,7 +211,9 @@ flowchart TD
       <tbody>
         <tr><td style="width:8em"><strong>URI</strong></td><td><code>content://com.viewsonic.droid.instanceinfo.provider/v1/info</code></td></tr>
         <tr><td><strong>Cursor</strong></td><td>key-value 多列（columns: <code>key</code>, <code>value</code>），<strong>缺值列不出現</strong>，不認得的 key 忽略</td></tr>
-        <tr><td><strong>v1 keys</strong></td><td><code>contract_version</code> / <code>instance_id</code> / <code>entity_id</code> / <code>error_code</code> / <code>error_message</code>（＋已實作可選：<code>activated</code>、<code>whiteboard_name</code>）<br /><small>2026-08-17 定案：<strong>不含 entity name</strong>，見 <a href="#q1">Q1</a></small></td></tr>
+        <tr><td><strong>v1 keys</strong></td><td><strong>資料</strong>：<code>contract_version</code> / <code>instance_id</code> / <code>entity_id</code> / <code>activated</code>
+          <br /><strong>錯誤</strong>：<code>error_code</code> / <code>error_message</code>
+          <br /><small>刻意排除：<code>entity_name</code>（2026-08-17 定案）、<code>whiteboard_name</code>（2026-08-19 移除——auto-enroll 產生的是無意義的「機型:timestamp」，有意義的手動命名雲端 enroll 時已取得）</small><br /><small>2026-08-17 定案：<strong>不含 entity name</strong>，見 <a href="#q1">Q1</a></small></td></tr>
         <tr><td><strong>版本策略</strong></td><td>key 版本制為主幹（Stephen 傾向）+ <code>contract_version</code> 僅供 log + 行為分支一律用 presence 偵測。
           <br /><small><strong>URI 裡的 <code>/v1</code> 不是「path 版控」</strong>——它是命名空間標記、日常不變；加欄位／改語意都走 key 版本制。<strong>只有 cursor shape 本身要變</strong>才會出現 <code>/v2/info</code>（逃生門）。</small></td></tr>
       </tbody>

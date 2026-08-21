@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>Android / Flutter 基礎知識筆記（本票用）</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#why">這份文件是什麼</a></li>
+      <li><a href="#process">1. Process 與 IPC</a>
+        <ul>
+          <li><a href="#ipc">1.1 IPC / Binder</a></li>
+          <li><a href="#static">1.2 為什麼 <code>static</code> 能當共享狀態</a></li>
+          <li><a href="#layers">1.3 「哪一層是分開的」對照表</a></li>
+          <li><a href="#system-server">1.4 <code>system_server</code>：「系統」到底是誰</a></li>
+        </ul>
+      </li>
+      <li><a href="#components">2. 四大元件與生命週期</a>
+        <ul>
+          <li><a href="#resolver">2.1 ContentResolver（客戶端）</a></li>
+          <li><a href="#provider">2.2 ContentProvider（伺服端）</a></li>
+          <li><a href="#observer">2.3 notifyChange / ContentObserver</a></li>
+          <li><a href="#caller">2.4 「呼叫我的是誰」</a></li>
+          <li><a href="#jobservice">2.5 JobService</a></li>
+          <li><a href="#receiver">2.6 BroadcastReceiver</a></li>
+          <li><a href="#full-flow">2.7 一次完整的呼叫流程</a></li>
+        </ul>
+      </li>
+      <li><a href="#flutter">3. Flutter 側</a>
+        <ul>
+          <li><a href="#engine">3.1 Engine / isolate / entry point</a></li>
+          <li><a href="#plugin-vs-channel">3.2 plugin vs 手寫 MethodChannel</a></li>
+          <li><a href="#pigeon">3.3 MethodChannel 與 Pigeon</a></li>
+        </ul>
+      </li>
+      <li><a href="#storage">4. 儲存</a>
+        <ul>
+          <li><a href="#prefs">4.1 SharedPreferences</a></li>
+          <li><a href="#hive">4.2 Hive</a></li>
+          <li><a href="#concurrency">4.3 多開 ≠ 多寫：併發存取怎麼解</a></li>
+        </ul>
+      </li>
+      <li><a href="#adb">5. adb 小抄與陷阱</a></li>
+      <li><a href="#glossary">6. 名詞速查</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Android / Flutter 基礎知識筆記</h1>
+    <div class="meta">
+      VSFT-9654 [Manager integration] 附帶產物 &middot; 建立 2026-08-20 &middot;
+      用途：<strong>純學習</strong>，不是規格也不是決策紀錄
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="findings.html">🛠️ 調查 findings</a>
+      <a href="open-questions.html">❓ open questions</a>
+      <a href="contract-proposal.html">📐 contract 草案</a>
+      <a href="basics.html" class="active">🎓 基礎知識</a>
+      <a href="dm-handoff.html">🤝 dm handoff</a>
+    </div>
+
+    <h2 id="why">這份文件是什麼</h2>
+    <p>做這張票的過程中冒出來的<strong>基礎</strong> Android／Flutter 觀念，集中放這裡。
+    每一則都用<u>本票的實際情境</u>當例子，這樣不是背定義，而是知道「它在我們的架構裡是哪一塊」。</p>
+    <div class="callout">
+      <strong>邊界：</strong>決策與查證結果寫在
+      <a href="findings.html">findings</a>／<a href="contract-proposal.html">contract</a>；
+      這裡只放「通用知識」——換一張票也還是對的東西。
+    </div>
+
+    <h2 id="process">1. Process 與 IPC</h2>
+
+    <h3 id="ipc">1.1 IPC / Binder</h3>
+    <p><strong>IPC = Inter-Process Communication，跨 process 通訊。</strong></p>
+    <p>每個 app 預設跑在自己的 process，而 process 之間的記憶體是<strong>作業系統強制隔離</strong>的
+    ——A 的 heap、A 的 <code>static</code> 欄位，B 完全看不到，也拿不到指標。這是 Android 安全模型的地基
+    （否則任何 app 都能直接讀別人記憶體裡的密碼）。所以資料要跨 process，就<strong>必須</strong>走 OS 提供的管道，那個管道就叫 IPC。</p>
+    <p>Android 的 IPC 底層是 <strong>Binder</strong>（一個 kernel driver）。日常寫的 API 幾乎都是它包出來的：</p>
+    <table>
+      <thead><tr><th>你寫的東西</th><th>是 IPC 嗎</th><th>說明</th></tr></thead>
+      <tbody>
+        <tr><td><code>contentResolver.query(...)</code></td><td>✅</td><td>dm process → binder → MVB process</td></tr>
+        <tr><td><code>contentResolver.call(...)</code></td><td>✅</td><td>同上</td></tr>
+        <tr><td><code>notifyChange</code> → 對方的 ContentObserver 被喚醒</td><td>✅</td><td>反方向的 binder callback</td></tr>
+        <tr><td><code>getCallingUid()</code> / <code>getCallingPackage()</code></td><td>✅</td><td>就是在問 binder「這通是誰打來的」</td></tr>
+        <tr><td><code>jobScheduler.schedule(...)</code></td><td>✅</td><td>你的 app → <code>system_server</code></td></tr>
+        <tr><td><code>sMainEngineAlive</code> 讀寫</td><td>❌</td><td>同 process，純記憶體</td></tr>
+        <tr><td><code>MethodChannel</code> / Pigeon</td><td>❌</td><td>同 process 內 Java ↔ Dart，走 Flutter 自己的橋</td></tr>
+      </tbody>
+    </table>
+    <p>本票兩種通訊剛好對比得很乾淨：</p>
+    <pre><code>dm  ──IPC(binder)──▶  MVB 的 InstanceInfoProvider     ← 跨 process，一定要 IPC
+                          │
+                          ├── sMainEngineAlive          ← 同 process，static 就夠
+                          └── MethodChannel / Pigeon    ← 同 process，Java ↔ Dart</code></pre>
+    <p>三個延伸重點：</p>
+    <ol>
+      <li><strong>IPC 有成本</strong>：參數要序列化（marshalling）、過 kernel、對端反序列化。
+        單筆 binder transaction 有 <strong>約 1MB 上限</strong>（超過丟 <code>TransactionTooLargeException</code>）
+        ——這也是 provider 只回幾個短字串、不回整包資料的理由之一。</li>
+      <li><strong>隔離是 OS 強制的，所以存取控制才有意義</strong>：dm 只能走我們開的那一扇門（provider），
+        門上檢查 package name ＋ 簽章 SHA-256。它沒有別的路摸到 MVB 的記憶體或 Hive 檔。</li>
+      <li><strong>binder 呼叫是在對方 process 的執行緒上跑的</strong>：provider 的 <code>query()</code>／<code>call()</code>
+        由 binder thread pool 執行，<u>不是</u> MVB 的 UI thread。所以碰到的共享狀態要考慮執行緒安全
+        （這就是 <code>volatile</code> 的來由，見下一節）。</li>
+    </ol>
+
+    <h3 id="static">1.2 為什麼 <code>static</code> 能當共享狀態</h3>
+    <pre><code>private static volatile boolean sMainEngineAlive = false;</code></pre>
+    <p><code>static</code> 欄位屬於 <strong>class</strong>，class 屬於 <strong>ClassLoader</strong>，ClassLoader 屬於 <strong>process</strong>。
+    MVB 的 manifest 整份都沒有 <code>android:process</code>，所以 <code>MainActivity</code>、
+    <code>InstanceInfoSyncJobService</code>、<code>InstanceInfoProvider</code>、receiver
+    <strong>全部在同一個 <code>com.viewsonic.droid</code> process、同一個 ClassLoader</strong>
+    → 看到的是<u>同一個</u> <code>sMainEngineAlive</code>。一邊寫、另一邊立刻讀得到，不需要任何 IPC。</p>
+    <ul>
+      <li><strong><code>volatile</code> 是必要的</strong>：MainActivity 在 UI thread 寫，
+        <code>schedule()</code> 可能在 binder thread 讀。少了 <code>volatile</code>，
+        不同 CPU core 可能各讀自己 cache 裡的舊值。</li>
+      <li><strong>process 死掉自動回 <code>false</code></strong>——剛好是正確語意（新 process 裡本來就沒有 Activity engine 活著），
+        所以不需要持久化。</li>
+      <li>⚠️ <strong>這是隱性依賴</strong>：若有人給該 service 加 <code>android:process=":headless"</code>，
+        就變成兩份 static、永遠讀到 <code>false</code>，競態<u>靜默</u>回歸，沒有編譯期保護。
+        （已寫進程式碼註解。）</li>
+    </ul>
+
+    <h3 id="layers">1.3 「哪一層是分開的」對照表</h3>
+    <p>直覺容易以為「headless 跟正常啟動當然是分開的」，但分開的其實是<u>別的層</u>：</p>
+    <table>
+      <thead><tr><th>層級</th><th>分開嗎</th><th>說明</th></tr></thead>
+      <tbody>
+        <tr><td>Android process</td><td>❌ 不分開</td><td>沒有 <code>android:process</code> → 所有元件同 process、同 Java heap</td></tr>
+        <tr><td>Java <code>static</code></td><td>❌ 不分開</td><td>上一層的直接結果</td></tr>
+        <tr><td><strong>Dart isolate</strong></td><td>✅ 分開</td><td><code>main</code> 與 headless entry point 是兩個 isolate，記憶體不共享 → <strong>各有一份單例</strong></td></tr>
+        <tr><td>FlutterEngine</td><td>✅ 分開</td><td>兩顆獨立 engine，各自的 channel 註冊</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>這張表就是本票競態的成因。</strong>Dart 兩個 isolate 各有一份 <code>SecureDataStorage</code> 記憶體快取、
+      彼此看不到對方，才會出現「headless 寫了 Hive，主 isolate 仍用舊快取判斷『還沒有 id』又產生一個」。
+      Dart 側沒有共享狀態可用，就往下借 Java 那層唯一共享的東西——<code>static</code>。
+      （案例見 <a href="findings.html#race">findings §15</a>。）
+    </div>
+
+    <h3 id="system-server">1.4 <code>system_server</code>：「系統」到底是誰</h3>
+    <p>前面一直說「<u>系統</u>決定何時執行 job」「<u>系統</u>把 process 拉起來」「<u>系統</u>保證 process 不被回收」。
+    那個「系統」有具體的身分——它是一個叫 <strong><code>system_server</code></strong> 的 process。</p>
+
+    <h4>開機到 app 啟動的鏈</h4>
+    <pre><code>Linux kernel
+  └─ init                          （PID 1）
+       └─ zygote                   ← 預先載入好 framework 類別的「模板」process
+            ├─ system_server       ← 第一個 fork 出來的孩子
+            └─ 你的 app process    ← 每個 app 都是從 zygote fork 出來</code></pre>
+    <p>實機確認（Pixel Tablet）：</p>
+    <pre><code>USER      PID  PPID   RSS      NAME
+root      860    1     99444    zygote64
+system   1268  860    631432    system_server     ← 父程序就是 zygote</code></pre>
+    <p>兩個附帶知識點：</p>
+    <ul>
+      <li><strong>app 啟動很快是因為 fork zygote</strong>——framework 類別已經載好、記憶體 copy-on-write 共享，
+        不必每個 app 從零載入。</li>
+      <li><strong><code>system_server</code> 不是 kernel</strong>，它就是一個（很大的）Java process。
+        實機上 RSS 約 <strong>600MB</strong>、將近 <strong>290 個 thread</strong>。</li>
+    </ul>
+
+    <h4>它裡面住著什麼</h4>
+    <p>Android 的系統服務幾乎都是它裡面的一個模組（各自跑在自己的 thread）。
+    <code>adb shell dumpsys -l</code> 在這台列出 <strong>313</strong> 個服務，本票碰到的有：</p>
+    <table>
+      <thead><tr><th>服務</th><th>做什麼</th><th>本票的哪個行為</th></tr></thead>
+      <tbody>
+        <tr><td><strong>AMS</strong>（ActivityManagerService）</td><td>管 process、Activity、廣播</td>
+            <td>dm query 一個沒在跑的 provider → <strong>把 MVB process 拉起來</strong>；<code>am force-stop</code> 的 <code>stopped=true</code> 旗標也是它維護的</td></tr>
+        <tr><td><strong>JobSchedulerService</strong></td><td>排程 job</td>
+            <td><code>schedule()</code> 記下來、挑時機、綁定你的 <code>JobService</code>、算 <code>onStartJob</code> 的 watchdog</td></tr>
+        <tr><td><strong>PMS</strong>（PackageManagerService）</td><td>裝了哪些 app、誰註冊了什麼 authority、簽章是什麼</td>
+            <td>authority → 找到 MVB；<code>hasSigningCertificate()</code> 驗簽章</td></tr>
+        <tr><td><strong>ContentService</strong></td><td>分派 <code>notifyChange</code></td>
+            <td>MVB <code>notifyChange</code> → 喚醒 dm 的 ContentObserver</td></tr>
+        <tr><td>WMS / PowerManagerService / AlarmManagerService…</td><td>視窗、電源、定時</td><td>（本票沒直接用，但同一個 process）</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>所以 <code>getSystemService(...)</code> 拿到的不是本機物件，是<u>代理</u>。</strong>
+      <code>jobScheduler.schedule(job)</code> 看起來像普通方法呼叫，實際上是一次 <strong>binder IPC</strong>
+      打到 <code>system_server</code>。你寫的每一行「跟系統要東西」的程式碼都是跨 process 呼叫。
+      <br />⚠️ 一個例外要分清楚：<code>Binder.getCallingUid()</code> <u>不是</u>問 <code>system_server</code>，
+      而是 <strong>binder driver（kernel）</strong>直接提供的——所以它<u>無法被冒用</u>，這正是它能當存取控制依據的原因
+      （見 <a href="#caller">§2.4</a>）。
+    </div>
+
+    <h4>為什麼值得知道這件事</h4>
+    <ol>
+      <li><strong>log 裡的小 PID 就是它，而它印的 log 比你自己的更權威。</strong>
+        本票測試時看到的這兩行都來自 PID <code>1268</code>——就是上面那個 <code>system_server</code>：
+        <pre><code>1268 11503 W JobInfo     : Job '…#96540001' has a deadline with no functional constraints…
+1268  1775 W JobScheduler: Job didn't exist in JobStore: … #u0a404/96540001</code></pre>
+        那是「<u>系統對你的看法</u>」——你的 job 到底有沒有被收下、被取代、被判逾時，問它最準。</li>
+      <li><strong><code>system_server</code> 掛掉 ＝ 整台機器 soft reboot。</strong>
+        所以系統對 app 極度防禦性：各種 watchdog（<code>No response to onStartJob</code>、ANR）、
+        背景限制、隱式廣播限制，動機都是「不能讓 app 拖垮我」。
+        理解這點之後，那些看起來很煩的限制就有邏輯可循，而不是規則背誦。</li>
+      <li><strong>它是唯一有權限做這些事的地方，所以繞不過去。</strong>
+        「把別的 app 拉起來」「保證 process 不被回收」「跨 app 傳訊」都只有它能做——
+        這也是為什麼跨 app 一定要走它認得的機制（provider、broadcast、job），
+        不能自己想辦法。</li>
+    </ol>
+
+    <h4><code>dumpsys</code> 就是問它要狀態</h4>
+    <p><code>dumpsys &lt;service&gt;</code> 等於「叫 <code>system_server</code> 裡的某個服務把內部狀態印出來」，
+    debug 時非常有用：</p>
+    <table>
+      <thead><tr><th>指令</th><th>看什麼</th></tr></thead>
+      <tbody>
+        <tr><td><code>dumpsys jobscheduler</code></td><td>我的 job 到底排進去了沒、條件、上次執行</td></tr>
+        <tr><td><code>dumpsys activity activities</code></td><td>現在前景是誰、Activity 堆疊</td></tr>
+        <tr><td><code>dumpsys package &lt;pkg&gt;</code></td><td>權限、簽章、provider／receiver 註冊狀況、<code>stopped</code> 旗標</td></tr>
+        <tr><td><code>dumpsys -l</code></td><td>列出所有服務（這台 313 個）</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="components">2. 四大元件與生命週期</h2>
+    <p>Android app 由四種元件組成，都要在 manifest 宣告，都由系統（<code>system_server</code>）決定何時實例化：</p>
+    <table>
+      <thead><tr><th>元件</th><th>用途</th><th>本票用到嗎</th></tr></thead>
+      <tbody>
+        <tr><td>Activity</td><td>有畫面的一頁</td><td>MVB 的 <code>MainActivity</code>（headless <u>不</u>經過）</td></tr>
+        <tr><td>Service</td><td>沒有畫面的長時間工作</td><td><code>InstanceInfoSyncJobService</code></td></tr>
+        <tr><td>BroadcastReceiver</td><td>接系統／app 事件</td><td><code>InstanceInfoSyncReceiver</code></td></tr>
+        <tr><td>ContentProvider</td><td>把資料以 URI 形式曝光給別的 app</td><td><code>InstanceInfoProvider</code></td></tr>
+      </tbody>
+    </table>
+    <p>另外有一個不是元件、但每個 process 都有的東西：<strong><code>Application</code></strong>。
+    它代表<u>整個 process</u>——<strong>一個 process 一份</strong>，
+    <code>Application.onCreate()</code> <strong>一個 process 只跑一次</strong>。</p>
+
+    <h4>⚠️ 一個 process 一份，不是一個元件一份</h4>
+    <p>這是很容易誤解的地方：<strong>啟動元件不會各自產生 process、也不會各自產生 <code>Application</code></strong>。</p>
+    <pre><code>第一個被需要的元件  → 系統發現沒有 process → 建立 process → Application.onCreate()   ← 只有這一次
+之後其他元件        → 直接在同一個 process 裡 new 出來 → Application 不再跑</code></pre>
+    <p>元件只是那個 process 裡的<strong>普通 Java 物件</strong>，由系統幫你 new 出來、呼叫它的
+    <code>onCreate()</code>。它們共享同一個 <code>Application</code> 實例、同一個 heap、同一份
+    <code>static</code>（＝ <a href="#static">§1.2</a> 的前提）。
+    只有 process 被殺掉之後又被需要時，<code>Application.onCreate()</code> 才會再跑一次。</p>
+    <p>本票的實測就是證據——一個 <code>PID 10504</code> 裡同時裝著 provider、JobService、
+    以及（bug 那次）兩顆 engine：</p>
+    <pre><code>10504 10504 I InstanceInfoSync: starting headless Flutter engine
+10504 10504 I InstanceInfoSync: headless mirror: instance_id=present</code></pre>
+    <pre><code>process 起來（一次）  → Application.onCreate ＋ init providers      ← headless 也會跑
+  ├─ MainActivity     → engine #1 → main
+  └─ JobService       → engine #2 → instanceInfoHeadlessMain        ← 沒有 Activity</code></pre>
+
+    <h4>⚠️ ContentProvider 比 <code>Application.onCreate()</code> <u>還早</u></h4>
+    <p>直覺會以為「<code>Application</code> 一定最早」，但實際順序是
+    （<code>ActivityThread.handleBindApplication</code>）：</p>
+    <pre><code>1. Application 建構子
+2. Application.attachBaseContext()
+3. ContentProvider.onCreate()        ← 比 Application.onCreate 還早！
+4. Application.onCreate()
+5. Activity / Service / Receiver 的 onCreate()</code></pre>
+    <p><strong>provider 是唯一比 <code>Application.onCreate()</code> 早的元件。</strong>
+    這個冷知識有很實際的用途：Firebase、<code>GoogleTagManager</code>、<code>ProfileInstaller</code>、
+    androidx startup 都是<strong>故意把自己註冊成 ContentProvider</strong>，
+    來取得「最早的初始化 hook」——函式庫因此不需要你在 <code>Application</code> 裡寫任何一行 code
+    就能自動初始化。</p>
+    <p>這也解釋了為什麼 headless 的 log 裡會看到 <code>GoogleTagManager</code>、
+    <code>AdvertisingIdClient</code>、<code>ProfileInstaller</code>、<code>TextToSpeech</code>
+    ——那些是 <strong>process 級</strong>初始化，process 因<u>任何</u>原因被拉起就會跑，
+    跟我們的 engine 無關，也關不掉。</p>
+
+    <h3 id="resolver">2.1 ContentResolver（客戶端）</h3>
+    <p><strong>ContentProvider 是伺服端，ContentResolver 是客戶端。</strong>
+    提供資料的 app 寫 provider；要資料的 app 用 resolver 去拿。同一個 app 可以同時是兩者。</p>
+    <pre><code>// dm（客戶端）
+Cursor c = context.getContentResolver()
+        .query(Uri.parse("content://com.viewsonic.droid.instanceinfo.provider/info"), …);</code></pre>
+    <p><code>getContentResolver()</code> 拿到的<strong>不是「連到某個 app」的連線</strong>，而是
+    「通往<u>全裝置所有 provider</u> 的單一入口」。你只給它一個 URI，它負責：</p>
+    <ol>
+      <li>從 URI 取出 <strong>authority</strong>（<code>com.viewsonic.droid.instanceinfo.provider</code>）</li>
+      <li>問 <code>PackageManager</code>：<strong>誰</strong>註冊了這個 authority</li>
+      <li>那個 app 沒在跑 → <strong>把它的 process 拉起來</strong></li>
+      <li>透過 <strong>binder</strong> 呼叫過去（＝ IPC）</li>
+      <li>把結果（<code>Cursor</code> 或 <code>Bundle</code>）帶回來</li>
+    </ol>
+    <div class="callout">
+      <strong>為什麼要有這層間接？</strong>因為呼叫端<u>不需要知道</u>對方的 package name、class 名稱、
+      有沒有在跑、跑在哪個 process。它只認一個 URI——概念上跟「你發 HTTP 請求只認 URL，
+      不需要知道對方跑在哪台機器」是同一件事。
+    </div>
+    <p>常用方法（前四個是 CRUD，後三個本票都用到）：</p>
+    <table>
+      <thead><tr><th>方法</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><code>query()</code></td><td>讀，<strong>同步</strong>回 <code>Cursor</code>（找不到 authority → 回 <code>null</code>）</td></tr>
+        <tr><td><code>insert()</code> / <code>update()</code> / <code>delete()</code></td><td>寫（本票的 provider 是唯讀，不實作）</td></tr>
+        <tr><td><code>call()</code></td><td>雜項 RPC：不是查資料，而是<u>叫對方做事</u>，回 <code>Bundle</code></td></tr>
+        <tr><td><code>registerContentObserver()</code></td><td>訂閱變更（⚠️ 找不到 authority → <strong>丟 <code>SecurityException</code></strong>，見 <a href="#observer">§2.3</a>）</td></tr>
+        <tr><td><code>notifyChange()</code></td><td>發出「我變了」的通知（<u>provider 端</u>用）</td></tr>
+      </tbody>
+    </table>
+    <p>⚠️ <strong>ContentResolver 是原生 API，Dart 側沒有對應物</strong>。
+    所以 dm 讀 MVB 是在 Kotlin 端做（<code>MvbInstanceInfoReader.kt</code>）；
+    如果哪天 Flutter app 要當客戶端，得自己寫 plugin 包一層。</p>
+
+    <h3 id="provider">2.2 ContentProvider（伺服端）</h3>
+    <p>把資料用 <code>content://</code> URI 曝光給別的 app 的標準機制。核心概念：</p>
+    <ul>
+      <li><strong>authority</strong>：URI 裡的「網域」，<u>全裝置唯一</u>（兩個 app 用同一個 authority，後裝的裝不起來）。
+        慣例是拿 package name 當前綴，如 <code>com.viewsonic.droid.instanceinfo.provider</code>。</li>
+      <li><strong><code>exported="true"</code></strong>：外部 app 才進得來。設 <code>false</code> 就只有自己用。</li>
+      <li><strong><code>query()</code> 是<u>同步</u>的</strong>：呼叫端 <code>query()</code> 回來就拿到結果（或 <code>null</code>）。
+        它<u>不能</u>「等一下再回答」。這正是本票要另外設計 <code>call("ensureInitialized")</code> ＋
+        <code>notifyChange</code> 的原因：資料還沒準備好時，同步回一個「尚未初始化」，非同步把它做出來，做完再通知。</li>
+      <li><strong><code>Cursor</code></strong>：query 的回傳型別，概念上是「一張表 + 一個游標」。
+        本票不是真的資料庫，所以用 <code>MatrixCursor</code> 手工造列（key-value 兩欄）。
+        設計上「<u>缺值就不列出那一列</u>」，讓呼叫端用 presence 判斷、而不是比對版本號。</li>
+      <li><strong><code>call()</code></strong>：provider 的「雜項 RPC 出口」，不是查資料而是<u>叫對方做事</u>，
+        回傳一個 <code>Bundle</code>。本票用它觸發 headless 初始化。</li>
+      <li>⚠️ <strong>provider 會讓 process 被拉起</strong>：外部 app 一 query，若 MVB 沒在跑，系統會為它啟動 process。
+        這是「MVB 從未被開啟也能回答」能成立的前提。</li>
+    </ul>
+
+    <h3 id="observer">2.3 notifyChange / ContentObserver</h3>
+    <p>provider 端資料變了就呼叫 <code>getContext().getContentResolver().notifyChange(uri, null)</code>；
+    對方若有 <code>registerContentObserver(uri, ...)</code>，就會被喚醒去重新 query。等於「push 通知」，
+    省掉呼叫端無腦輪詢。</p>
+    <div class="warn">
+      ⚠️ <strong>踩過的坑</strong>：當 authority <u>不存在</u>（沒裝 MVB、或裝的是舊版）時，
+      <code>query()</code> 只是回 <code>null</code>，但 <code>registerContentObserver()</code> 會直接
+      <strong>丟 <code>SecurityException</code></strong>。兩者行為不一致，一定要 try/catch，否則呼叫端會 crash。
+    </div>
+
+    <h3 id="caller">2.4 「呼叫我的是誰」——存取控制的基礎</h3>
+    <p>provider 是 <code>exported="true"</code>，任何 app 都能敲門，所以要在程式裡驗身分。三種手段：</p>
+    <table>
+      <thead><tr><th>手段</th><th>意思</th><th>強度</th></tr></thead>
+      <tbody>
+        <tr><td><code>getCallingPackage()</code></td><td>binder 告訴你的呼叫端 package name</td><td>⚠️ 只驗「名字」，名字可以被冒用</td></tr>
+        <tr><td><code>Binder.getCallingUid()</code> ＋ <code>getPackagesForUid()</code></td><td>交叉確認 uid 與 package 對得上</td><td>中</td></tr>
+        <tr><td><code>hasSigningCertificate(pkg, sha256, CERT_INPUT_SHA256)</code></td><td>驗<strong>簽章</strong>——只有握有私鑰的人簽得出來</td><td>✅ 強（且能處理 key rotation）</td></tr>
+      </tbody>
+    </table>
+    <p>另有一個 manifest 層的做法：<code>android:protectionLevel="signature"</code>。它比較<u>寬</u>——
+    授權給<strong>所有</strong>同簽章的 app；而執行期比對 allowlist 是「指定的那幾個 package ＋指定的那把簽章」，更嚴。</p>
+    <p>驗證存取控制要做<strong>反向測試</strong>：故意改呼叫端的 package name／簽章，確認真的被拒。
+    只測「允許的情況會過」是不夠的——那不能證明拒絕邏輯有效。</p>
+
+    <h3 id="jobservice">2.5 JobService</h3>
+    <p><strong>一句話：把「要做的事」登記給系統的排程器，由<u>系統</u>決定何時執行、並在執行期間保證你的 process 不被殺。</strong></p>
+    <p>關鍵差異在「<u>誰啟動它</u>」：</p>
+    <table>
+      <thead><tr><th></th><th>一般 <code>Service</code></th><th><code>JobService</code></th></tr></thead>
+      <tbody>
+        <tr><td>誰啟動</td><td><strong>你</strong>（<code>startService</code> / <code>bindService</code>）</td><td><strong>系統</strong>（你只 <code>schedule</code> 一次，之後不管）</td></tr>
+        <tr><td>背景限制</td><td>⚠️ Android 8+ 背景 app <u>不能</u>隨意啟動 service</td><td>✅ 這就是官方指定的替代方案</td></tr>
+        <tr><td>執行期間 process</td><td>不保證</td><td>✅ 系統保證不回收</td></tr>
+        <tr><td>可以附條件嗎</td><td>不行</td><td>✅ 充電中／連 Wi-Fi／閒置／延遲 N 秒…</td></tr>
+      </tbody>
+    </table>
+    <p>那為什麼不用更簡單的做法？</p>
+    <ul>
+      <li><strong>開一個 <code>Thread</code> 就好？</strong>——不行。工作跑在 process 裡，而 process
+        隨時可能整個被系統回收，thread 跟著沒了。</li>
+      <li><strong>在 receiver 裡做完？</strong>——不行。receiver 只有<u>數秒</u>（約 10s），
+        而我們要啟動 Flutter engine（實測慢機要十幾秒）。</li>
+      <li><strong><code>AlarmManager</code>？</strong>——語意不同。那是「時間到了叫我」，
+        不含「保證我能跑完」，而且省電限制（Doze）會把它推遲。</li>
+    </ul>
+    <p>呼叫流程（三方：你的 code、<code>system_server</code> 裡的 JobScheduler、你的 process）：</p>
+    <pre><code>你的 code                    system_server                 你的 process
+scheduler.schedule(job) ─IPC─▶ 記下來
+                               （挑時機、檢查條件）
+                               ─── 綁定 service ───▶ onStartJob()   ← main thread！
+                                                     return true    ← 「還沒做完」
+                                                     …真正的工作…
+                               ◀──── jobFinished() ───              ← 你要主動回報
+                               ─── onStopJob() ───▶                 ← 若系統要提前收回</code></pre>
+    <p>接下來是實作上真正會咬人的細節：</p>
+    <ul>
+      <li><strong><code>onStartJob()</code> 的回傳值語意</strong>：
+        <code>true</code> = 「我還在做，做完會呼叫 <code>jobFinished()</code>」；
+        <code>false</code> = 「已經做完了」。</li>
+      <li>⚠️ <strong><code>onStartJob()</code> 不能久留</strong>：它在 main thread 上跑，且系統有 watchdog。
+        本票踩過——在裡面同步啟動 Flutter engine（debug 版含解壓，好幾秒）→ 系統判定
+        <code>No response to onStartJob</code> 並把服務拆掉，Dart 根本來不及跑。
+        正解：<u>立刻</u> <code>return true</code>，把真正的工作 <code>post</code> 到 main looper。</li>
+      <li><strong><code>onStopJob()</code></strong>：系統要收回資源時叫你收工，回傳值代表「要不要重排」。</li>
+      <li><strong>同一個 <code>JOB_ID</code> 再 schedule 會<u>取代</u>舊的</strong>——但如果前一次已經在跑，
+        取代的是「排程」而不是「執行中的工作」，於是可能同時有兩份工作在跑。
+        本票因此需要一個 in-flight 旗標（案例見 <a href="findings.html#inflight-bug">findings §17.4</a>）。</li>
+    </ul>
+    <h4><code>JOB_ID</code> 怎麼定：技術上沒有規則，只有唯一性</h4>
+    <p>JobScheduler 以 <strong><code>(uid, jobId)</code></strong> 為 key。所以：</p>
+    <ul>
+      <li>它活在<strong>你自己 app 的命名空間</strong>裡——跟別的 app 不會撞（uid 不同）。</li>
+      <li>唯一的硬性約束是<strong>同一個 app 內要唯一</strong>。任何 int 都可以，沒有規定要挑什麼。</li>
+      <li>撞號的表現是<strong>「取代」</strong>（cancel 舊的 ＋ 排新的），<u>不是</u>錯誤——
+        所以撞到時<strong>沒有任何訊息</strong>，只是某一邊的 job 悄悄消失。</li>
+    </ul>
+    <div class="warn">
+      ⚠️ <strong>真正的碰撞風險來自函式庫，不是你自己。</strong>
+      WorkManager 底層也是 JobScheduler，會自己產生 job id 且<u>預設從小數字遞增</u>。
+      所以 <code>JOB_ID = 1</code> 這種寫法最危險——症狀是「我的 job 沒跑」或「別人的背景工作不見了」，
+      而且兩邊都不會報錯。
+      <br />結構性的解法是 <code>WorkManager.Configuration.Builder.setJobSchedulerJobIdRange(…)</code>
+      把 WorkManager 明確圈在一個區段；沒做的話就只能靠「挑一個不可能落在低位區的數字」這種<b>慣例式避讓</b>。
+    </div>
+    <p>各種常見做法的評價：</p>
+    <table>
+      <thead><tr><th>做法</th><th>評價</th></tr></thead>
+      <tbody>
+        <tr><td>集中在一個常數檔（<code>JobIds</code>）</td><td>✅ 最有效。「唯一」是<strong>全 app</strong> 的性質，各 class 各自寫 private 常數在結構上無法保證</td></tr>
+        <tr><td>從 <code>1</code> 開始遞增</td><td>⚠️ 很常見，但正是會撞函式庫的做法</td></tr>
+        <tr><td>功能／票號編碼（如 <code>96540001</code>）</td><td>少見；可回溯，但可讀性 100% 靠註解</td></tr>
+        <tr><td><code>R.id.xxx</code> 或字串 hashCode</td><td>❌ 別用。<code>R.id</code> 重新編譯就會變，而 job id 需要<u>跨版本穩定</u>（否則 <code>cancel()</code> 找不到舊 job）</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>⚠️ 不要用 Java 7＋／Kotlin 的數字底線寫成 <code>9654_0001</code>。</strong>
+      它與 <code>96540001</code> 完全等價（純編譯期），可讀性也更好——但要查
+      「這個 id 有沒有被用過」的人會直接 grep 數字，<strong>底線會讓搜尋落空，
+      而落空看起來就像「沒有重複」</strong>。在沒有集中登錄檔的情況下，<u>可被 grep</u> 比視覺分組重要。
+      <br />這是一個通則：<strong>當某個字面值是別人未來會用文字搜尋的東西時，不要把它拆開。</strong>
+    </div>
+    <p>另外，「跨版本穩定」這條的強度取決於 job 是否持久化：
+      沒有 <code>setPersisted(true)</code> 且 <code>setOverrideDeadline(0)</code> 的 job（排了就馬上跑完、
+      不跨重開機）不會留下孤兒，改 id 的風險小得多。</p>
+
+    <h4><code>BIND_JOB_SERVICE</code> 常見誤解</h4>
+    <div class="callout">
+      <code>android:permission="android.permission.BIND_JOB_SERVICE"</code> 寫在 <code>&lt;service&gt;</code> 上，
+      它是<strong>「限制」而不是「申請」</strong>：意思是「<u>只有</u>持有這個權限的人可以綁定我」，
+      而持有者只有系統。它<u>不是</u> <code>&lt;uses-permission&gt;</code>，
+      <strong>不會</strong>出現在上架權限清單、<strong>不需要</strong>使用者授權、
+      呼叫端（dm）<strong>也不需要</strong>宣告任何東西。
+      沒寫反而是問題：任何 app 都能綁你的 service。
+    </div>
+
+    <h3 id="receiver">2.6 BroadcastReceiver</h3>
+    <ul>
+      <li><strong><code>MY_PACKAGE_REPLACED</code></strong>：<u>自己</u>被更新後收到（首次安裝<u>不會</u>）。
+        它<strong>豁免</strong> Android 8+ 的隱式廣播限制，所以 manifest 靜態註冊有效。</li>
+      <li><strong><code>BOOT_COMPLETED</code></strong>：開機完成。需要 <code>RECEIVE_BOOT_COMPLETED</code> 權限（normal 級，不需使用者授權）。</li>
+      <li>⚠️ <strong>receiver 只有數秒</strong>（約 10s）。要做久的事就在 receiver 裡排 job，不要在裡面做完。</li>
+      <li>⚠️ <strong>觸發點不要放在「只執行一次」的生命週期</strong>：本票踩過——把讀取放在
+        <code>Service.onCreate</code>／<code>Activity.onCreate</code>，結果 process 還活著時就<u>不會再跑</u>，
+        畫面永遠停在舊狀態。要放在每次「觀察」的時機（如 <code>onResume</code>）。</li>
+    </ul>
+    <div class="warn">
+      ⚠️ <strong>測試陷阱：<code>am force-stop</code> 之後收不到廣播。</strong>
+      它會設 <code>stopped=true</code> 旗標，而 <code>am kill</code> <u>清不掉</u>。
+      要「殺掉 process 但保留可收廣播」，用 <code>am kill</code>。這個坑本票踩了兩次。
+    </div>
+    <h4><code>stopped</code> 旗標到底擋什麼（實機釐清）</h4>
+    <p>「永久收不到」講得太重了——實測後精確的說法是：</p>
+    <table>
+      <thead><tr><th>行為</th><th><code>stopped=true</code> 時</th></tr></thead>
+      <tbody>
+        <tr><td>收廣播（含 <code>MY_PACKAGE_REPLACED</code>、<code>BOOT_COMPLETED</code>）</td><td>❌ <strong>擋掉</strong></td></tr>
+        <tr><td>別的 app <code>query()</code> 你的 ContentProvider</td><td>✅ <strong>照樣通</strong>，而且系統會把你的 process 拉起來</td></tr>
+        <tr><td>旗標本身</td><td>被<u>任何</u> explicit start 清掉——<strong>包括別的 app 來 query 你的 provider</strong>，不必使用者親自開 app</td></tr>
+        <tr><td>被擋掉的 <code>BOOT_COMPLETED</code></td><td>系統<strong>延後保留</strong>，在 process 下次啟動時<u>補送</u></td></tr>
+      </tbody>
+    </table>
+    <p>實測（<code>stopped=true</code> ＋ process 死著，呼叫端來讀）：</p>
+    <pre><code>ActivityManager  : Start proc 12376:com.viewsonic.droid for content provider {InstanceInfoProvider}
+InstanceInfoSync : receiver: android.intent.action.BOOT_COMPLETED          ← 延後的廣播被補送
+BroadcastQueue   : BOOT_COMPLETED_BROADCAST_COMPLETION_LATENCY_REPORTED …
+（之後）stopped=false                                                      ← 旗標被清掉了</code></pre>
+    <div class="callout">
+      <strong>所以這個坑只咬開發測試，不咬產品。</strong>
+      測試時你 <code>force-stop</code> 再 <code>install -r</code>，期待 <code>MY_PACKAGE_REPLACED</code> 觸發——收不到，
+      因為中間沒有任何人 explicit start 過。
+      但產品路徑上呼叫端<u>一定會先 <code>query()</code></u>，那次 query 就把旗標清掉、
+      順手把延後的廣播補送回來——<strong>自癒</strong>。
+      <br />→ 一般化的教訓：<strong>「provider 讀取」跟「廣播觸發」是兩條獨立的路</strong>，
+      前者不受 <code>stopped</code> 影響。所以呼叫端<u>不需要</u>、也<u>無法</u>分辨對方是不是被強制停止過
+      ——那個狀態對它是透明的。
+    </div>
+
+
+    <h4>manifest 靜態註冊 vs 程式碼動態註冊</h4>
+    <table>
+      <thead><tr><th></th><th>manifest（靜態）</th><th><code>Context.registerReceiver</code>（動態）</th></tr></thead>
+      <tbody>
+        <tr><td>誰記住它</td><td><strong>PackageManager</strong>，安裝時寫進系統的 package 資料庫</td><td>你的 process 的記憶體</td></tr>
+        <tr><td>app 沒在跑時</td><td>✅ 廣播會<strong>把 process 拉起來</strong>再送</td><td>❌ 隨 process 一起消失</td></tr>
+        <tr><td>重開機</td><td>✅ 存活（不需要使用者開過 app）</td><td>❌ 沒了</td></tr>
+      </tbody>
+    </table>
+    <p>所以 <code>BOOT_COMPLETED</code> 的流程是：AMS 查 PackageManager 找到有註冊的元件 →
+      <strong>fork 一個新 process</strong> → 跑 <code>onReceive()</code>。這是「app 從沒被開過也能做事」的唯一入口。</p>
+
+    <h4>❌ 迷思：<code>exported="false"</code> 會擋掉系統廣播</h4>
+    <p>非常常見的誤解（本票被兩個外部意見同時指出「應該改成 <code>true</code>」）。<strong>不要改。</strong>
+      實測：重開機後查 AMS 的廣播歷史 <code>adb shell dumpsys activity broadcasts</code>——</p>
+    <pre><code>BroadcastRecord{… android.intent.action.BOOT_COMPLETED/u0/0xc1} to user 0
+  caller=null null pid=1251 uid=1000 realCallingUid=1000
+  DELIVERED scheduled +24s351ms terminal +32ms (-1) #219: (manifest)
+      name=com.viewsonic.droid.instanceinfo.InstanceInfoSyncReceiver
+      enabled=true exported=false directBootAware=false      ← false，狀態是 DELIVERED</code></pre>
+    <p>再用 <code>adb install -r</code> 觸發 <code>MY_PACKAGE_REPLACED</code>（同樣由系統發送）做決定性驗證：</p>
+    <pre><code>ActivityManager  : Start proc 9152:com.viewsonic.droid
+                   for broadcast {com.viewsonic.droid/.instanceinfo.InstanceInfoSyncReceiver}
+InstanceInfoSync : receiver: android.intent.action.MY_PACKAGE_REPLACED
+InstanceInfoSync : skip schedule (…): prefs already mirrored</code></pre>
+    <p>process 是<strong>為了這個 <code>exported=false</code> 的 receiver 冷啟動</strong>的。</p>
+    <div class="callout">
+      <strong>原理：<code>exported</code> 管的是「<u>別的 app</u> 能不能戳我」，不是「系統能不能派給我」。</strong>
+      系統派送 protected broadcast 不在這個檢查的管轄內——這是設計語意，不是「系統特權硬闖」，
+      所以它是穩定契約，不會哪天被收掉。
+      <br />而且 Android 12 起官方指南的建議<u>正好相反</u>：「若這個 receiver 只接收系統廣播，
+      <code>exported</code> 應設為 <code>false</code>」。<code>BOOT_COMPLETED</code>／<code>MY_PACKAGE_REPLACED</code>
+      都是 protected broadcast，第三方 app 本來就發不出來，改成 <code>true</code> 只是白白擴大攻擊面。
+      <br />⚠️ 別把 lint 的要求記錯：Android 12+ 要求「有 intent-filter 就<strong>必須明確宣告</strong>
+      <code>android:exported</code>」，<u>不是</u>「必須設 <code>true</code>」。
+    </div>
+
+    <h4>進入 <code>stopped</code> state 的<u>三</u>條路（含 preload）</h4>
+    <table>
+      <thead><tr><th>情況</th><th>旗標</th><th>備註</th></tr></thead>
+      <tbody>
+        <tr><td>裝好但<strong>從沒被啟動過</strong></td><td><code>stopped=true</code><br /><code>notLaunched=true</code></td>
+          <td>Android 3.1 起的機制。<strong>產品上最常見</strong>——預載機器的使用者可能一年沒點開過</td></tr>
+        <tr><td>使用者按「強制停止」</td><td><code>stopped=true</code><br /><code>notLaunched=false</code></td><td>上面那段講的情形</td></tr>
+        <tr><td><strong>Android 14+ preload 被掃成 stopped</strong></td><td><code>scannedAsStoppedSystemApp=true</code></td>
+          <td>平台允許把「非必要的」預載 app 在<u>第一次開機</u>就標成 stopped（框架端有 allowlist 控制）</td></tr>
+      </tbody>
+    </table>
+    <p>第三條是 Android 14（API 34）才有的，很容易被舊資料誤導成「preload 一定豁免」。
+      實測這台 Android 16（<code>dumpsys package packages</code>）：</p>
+    <pre><code>scannedAsStoppedSystemApp=true   → 4 個
+scannedAsStoppedSystemApp=false  → 385 個     ← 預設仍然是「不 stopped」
+
+com.android.virtualization.terminal
+  codePath=/apex/com.android.virt/priv-app/VmTerminalAppGoogle@…
+  flags=[ SYSTEM HAS_CODE … ]        ← 真的是系統分區 priv-app
+  scannedAsStoppedSystemApp=true
+  stopped=true                        ← 開機到現在還是 stopped</code></pre>
+    <p>→ 正確說法是「<strong>preload 預設會收到第一次開機的廣播，但 Android 14+ 的 FW 可以關掉</strong>」，
+      比例上是少數，但不能當保證。</p>
+
+    <h4>真預載 vs 假預載（跟廠商交涉時的自保工具）</h4>
+    <p>廠商說「已預載」有兩種完全不同的意思：</p>
+    <ul>
+      <li>✅ <strong>燒進 system image</strong>（<code>/system/app</code>、<code>/system/priv-app</code>、apex 的 priv-app）
+        → 被視為系統的一部分，預設不 stopped</li>
+      <li>⚠️ <strong>開機流程（OOBE）用腳本 <code>adb install</code> 到 <code>/data/app</code></strong>
+        → 系統當成<u>一般 user app</u>，<code>notLaunched=true</code>，<strong>第一次開機完全收不到廣播</strong></li>
+    </ul>
+    <p>驗證方式（新裝置／新 FW 交付時必跑）：</p>
+    <pre><code>adb shell dumpsys package &lt;pkg&gt; | grep -E "codePath|flags=\[|scannedAsStopped|stopped="
+# 期待：codePath=/system/priv-app/… 且 flags 含 SYSTEM 且 scannedAsStoppedSystemApp=false
+# 若看到 codePath=/data/app/… 且 flags 沒有 SYSTEM → 是假預載</code></pre>
+
+    <h4>收廣播的成本：process 起來 ≠ engine 起來</h4>
+    <p>「manifest receiver 會不會把 plugin／Pigeon 都註冊起來、很吃效能？」——不會。</p>
+    <pre><code>BOOT_COMPLETED → process 起來 → Application.onCreate() → onReceive() → schedule()
+                                                              ↑ 到這裡結束，沒有 engine</code></pre>
+    <ul>
+      <li>plugin 註冊發生在 <code>GeneratedPluginRegistrant.registerWith(<u>flutterEngine</u>)</code>，
+        <strong>只有建立 FlutterEngine 時才跑</strong>。Pigeon 更只是 MethodChannel 的 codegen，
+        沒有「註冊時機」，是 engine 建好後才掛上去的。</li>
+      <li>真正在 process 起來時被跑的是 <strong>ContentProvider</strong>（見 2.0 的順序）。
+        實機查 MVB 合併後有 10 個，其中 4 個是真的做事的 init provider：
+        <code>FirebaseInitProvider</code>、<code>MlKitInitProvider</code>、
+        <code>androidx.startup.InitializationProvider</code>、<code>ClassSwiftFusionInitProvider</code>；
+        其餘是 <code>InstanceInfoProvider</code> ＋ 4 個 <code>FileProvider</code> ＋ speech 的 provider。
+        這筆帳<u>不是 receiver 造成的</u>，是「process 被拉起來」造成的，任何原因拉起都一樣付。</li>
+      <li>而且多數時候立刻早退——上面那段 log 的 <code>skip schedule (…): prefs already mirrored</code>
+        就是連 job 都沒排。</li>
+    </ul>
+    <div class="callout">
+      <strong>一句話：廣播的成本上限是「process 初始化」，不是「Flutter 初始化」。</strong>
+      兩者差一個數量級（幾十 ms vs 數秒）。
+    </div>
+
+    <h4>⚠️ <code>directBootAware=false</code>：<code>BOOT_COMPLETED</code> 要等解鎖</h4>
+    <p>上面 <code>dumpsys</code> 輸出裡有 <code>directBootAware=false</code>，意思是這個 receiver 收的是
+      <code>BOOT_COMPLETED</code> 而不是 <code>LOCKED_BOOT_COMPLETED</code>——
+      <strong>要等使用者解鎖</strong>（credential-encrypted storage 可用之後）才會派送。</p>
+    <p>IFP 一般不設鎖屏、開機即解鎖，實務上沒差。但若客戶設了 PIN，開機後沒人解鎖之前：
+      receiver 不會跑，<u>而且呼叫端就算來 query provider 也讀不到值</u>——因為 instance_id 存在
+      SharedPreferences／Hive，兩者預設都在 CE storage。
+      這是跟 <code>stopped</code> 無關、但落在同一個時間窗的<strong>獨立</strong>限制。</p>
+
+    <h3 id="full-flow">2.7 一次完整的呼叫流程（把上面全部串起來）</h3>
+    <p>情境：<strong>MVB 裝了新版但從來沒被開過</strong>，dm 想要 instance_id。</p>
+    <pre><code>dm (process A)                          MVB (process B，可能還沒起來)
+──────────────────────────────────────────────────────────────────────────
+query(content://…/info)  ──IPC──▶  ① 系統把 MVB process 拉起來
+                                    ② provider.query() 在 binder thread 執行
+                         ◀──────    ③ 同步回答：缺 instance_id 那一列
+                                       → dm 判定 NOT_INITIALIZED
+
+call("ensureInitialized") ─IPC──▶  ④ 排一個 job
+                         ◀──────    ⑤ 立刻回 {scheduled:true}   ← 不等工作做完
+
+                                    ⑥ onStartJob() → return true（立刻！）
+                                       post 到 main looper
+                                    ⑦ new FlutterEngine(...)     ← headless，無 Activity
+                                    ⑧ 補註冊 Pigeon handler
+                                    ⑨ 跑 instanceInfoHeadlessMain（不是 main）
+                                    ⑩ Dart：讀 Hive → 沒值就產生
+                                    ⑪ Pigeon setInfo → prefs.commit()
+                                    ⑫ notifyChange(uri)
+◀── ContentObserver 被喚醒 ─IPC──
+query(...) 再讀一次        ──IPC──▶
+                         ◀──────    instance_id=…  ✅</code></pre>
+    <div class="callout">
+      <strong>為什麼要拆成「同步先回答 ＋ 非同步做事 ＋ 做完通知」三段？</strong>
+      因為 <code>query()</code> <u>不能</u>「等一下再回答」（<a href="#provider">§2.2</a>）。
+      它必須馬上回一個答案，所以「還沒準備好」本身就得是一個<strong>合法答案</strong>
+      ——這就是錯誤回報（error_code / error_message）在 contract 裡是必要欄位、
+      而不是可選的原因。
+    </div>
+    <p>兩個容易誤解的地方：</p>
+    <ul>
+      <li><strong>不是靠 polling</strong>：主要機制是 ⑫ 的 <code>notifyChange</code> → ContentObserver（push）。
+        呼叫端每秒輪詢只是我們驗證用 overlay 額外加的保險，正式整合不需要。</li>
+      <li><strong>⑤ 回 <code>{scheduled:true}</code> 不代表成功</strong>，只代表「已受理」。
+        真正的結果要等 ⑫ 之後重讀才知道——所以呼叫端必須有「受理了但最終還是失敗」的處理路徑
+        （例如 headless 逾時）。</li>
+    </ul>
+
+    <h2 id="flutter">3. Flutter 側</h2>
+
+    <h3 id="engine">3.1 Engine / isolate / entry point</h3>
+    <ul>
+      <li><strong>FlutterEngine</strong>：一顆 Flutter 執行環境（Dart VM isolate ＋ 渲染 ＋ channel 匯流排）。
+        <code>FlutterActivity</code> 會自動幫你建一顆；也可以自己
+        <code>new FlutterEngine(context)</code>——那就是 <strong>headless</strong>（沒有畫面）。</li>
+      <li><strong>isolate</strong>：Dart 的並行單位，<u>記憶體不共享</u>（不像 Java thread）。
+        兩顆 engine = 兩個 isolate = <strong>各一份單例／static</strong>。</li>
+      <li><strong>entry point</strong>：Dart 側的進入函式。預設是 <code>main</code>，但可以有多個：
+        <pre><code>@pragma('vm:entry-point')   // 告訴 AOT tree-shaking「別砍它」
+Future&lt;void&gt; instanceInfoHeadlessMain() =&gt; runInstanceInfoHeadlessSync();</code></pre>
+        原生側用 <code>DartEntrypoint(bundlePath, "instanceInfoHeadlessMain")</code> 指定。
+        <br />⚠️ 兩個限制：函式必須<strong>宣告在 <code>main</code> 所在的 library</strong>（即 <code>lib/main.dart</code>），
+        且<strong>一定要加 <code>@pragma('vm:entry-point')</code></strong>，否則 release build 會被 tree-shake 掉。</li>
+      <li><strong>選了 headless entry point，就<u>不會</u>跑 <code>main</code></strong>——這是「headless 很省」的來源：
+        <code>main</code> 裡那條又長又重的 app 初始化鏈完全跳過。</li>
+      <li><strong>headless 沒有任何 Activity</strong>：所以 <code>MainActivity.configureFlutterEngine()</code> 不會執行（見下一節）。</li>
+    </ul>
+
+    <h3 id="plugin-vs-channel">3.2 plugin vs 手寫 MethodChannel（headless 的關鍵差異）</h3>
+    <table>
+      <thead><tr><th></th><th>正式 plugin</th><th>Activity 手寫 MethodChannel</th></tr></thead>
+      <tbody>
+        <tr><td>註冊時機</td><td><code>new FlutterEngine()</code> 建構時<strong>自動</strong>註冊全部</td><td>在 <code>configureFlutterEngine()</code> 裡手動 <code>new MethodChannel(...)</code></td></tr>
+        <tr><td>headless 拿得到嗎</td><td>✅ 拿得到</td><td>❌ <strong>拿不到</strong>（沒有 Activity）</td></tr>
+        <tr><td>例子</td><td><code>path_provider</code>、<code>device_info_plus</code></td><td><code>detectChromeos</code>、<code>vsCommand</code>…（MVB 有二十幾條）</td></tr>
+      </tbody>
+    </table>
+    <p>實測表現就是一條非致命錯誤：</p>
+    <pre><code>⛔ Error on detecting chromeos: MissingPluginException(No implementation found for
+   method detectChromeos on channel com.viewsonic.droid/detectChromeos)</code></pre>
+    <div class="callout">
+      <strong>教訓：headless 可以依賴 <em>plugin</em>，不能依賴 <em>Activity 手寫 channel</em>。</strong>
+      需要的話就在建立 headless engine 之後<u>自己補註冊</u>（本票就是這樣補 Pigeon handler 的）。
+    </div>
+    <p>順帶：自動註冊全部 plugin 聽起來很貴，實測只 <strong>10–26ms</strong>。
+    關掉（<code>automaticallyRegisterPlugins=false</code>）省不到什麼，還會弄丟真正需要的 plugin。</p>
+
+    <h3 id="pigeon">3.3 MethodChannel 與 Pigeon</h3>
+    <ul>
+      <li><strong>MethodChannel</strong>：Java ↔ Dart 的原始通訊方式。用<u>字串</u>當方法名、
+        <code>Map</code> 當參數 → 打錯字要到執行期才炸。</li>
+      <li><strong>Pigeon</strong>：程式碼產生器。你在 <code>pigeons/*.dart</code> 用 Dart 寫介面
+        （<code>@HostApi</code> = Dart 呼叫原生，<code>@FlutterApi</code> = 原生呼叫 Dart），
+        它產出兩側<strong>型別安全</strong>的樣板。改介面時兩邊一起壞在編譯期，比執行期才發現好。</li>
+      <li>⚠️ <strong>handler 是綁在「某一顆 engine」上的</strong>：
+        <code>InstanceInfoPlugin.setUp(engine.getDartExecutor().getBinaryMessenger(), impl)</code>
+        只對<u>那顆</u> engine 有效。本票踩過——只在 MainActivity 註冊，headless engine 就
+        <code>MissingPluginException</code>，而它被 catch 後<strong>靜默</strong>什麼都沒做。</li>
+    </ul>
+
+    <h3 id="completion-signal">3.4 「對面做完了嗎」——用 inbound 呼叫當完成訊號</h3>
+    <p>Java 啟動 Dart 是 <strong>fire-and-forget</strong>：</p>
+    <pre><code>engine.getDartExecutor().executeDartEntrypoint(entrypoint);
+// ← 這行立刻回來。沒有 Future、沒有 callback、沒有回傳值。
+//    Dart 那邊做完了沒有，Java 這邊<b>無法直接觀察</b>。</code></pre>
+    <p>所以唯一可靠的完成訊號是<strong>讓 Dart 主動打回來</strong>。剛好 Dart 做完事情本來就要
+      呼叫 Pigeon 的 <code>setInfo()</code> 把結果交給原生——那次呼叫本身就是「我做完了」。</p>
+    <p>本票的 <code>CompletionSignallingPlugin</code> 就是這個角色，它是 <strong>decorator</strong>：</p>
+    <pre><code>class CompletionSignallingPlugin implements InstanceInfo.InstanceInfoPlugin {
+    private final InstanceInfoPluginImpl delegate;   // 正式的寫入邏輯，原封不動
+    private final JobParameters params;
+
+    public void setInfo(InstanceInfoData info) {
+        delegate.setInfo(info);                       // ① 該做的事照做
+        if (hasId) { finishJob(params, false); }      // ② 額外：把它當完成訊號
+    }
+}</code></pre>
+    <p>三個設計點：</p>
+    <ul>
+      <li><strong>用 decorator 而不是改 impl</strong>：正式路徑（MainActivity 的 engine）註冊
+        <code>InstanceInfoPluginImpl</code>、headless 註冊包一層的版本，
+        <u>寫入邏輯只有一份</u>。Pigeon 產生的是 <b>interface</b>，所以隨便你塞什麼實作。</li>
+      <li><strong>它是 inner class（非 static）</strong>：因為要呼叫外層的 <code>finishJob()</code>、
+        也要捕捉「這一次」的 <code>JobParameters</code>。</li>
+      <li>⚠️ <strong>完成訊號可能來好幾次</strong>——本票踩過：一次 headless 執行會鏡射<u>兩次</u>
+        （載入時先鏡射一次，此時 id 可能還是空的；產生後再鏡射一次）。
+        把「第一次呼叫」當完成，會在產生途中就 destroy engine，實測結果是 prefs 只留下一個<u>空的</u> id。</li>
+    </ul>
+    <div class="callout">
+      <strong>通則：當你無法 await 對面時，讓對面主動回報；而完成條件要看「<u>內容</u>」而不是「第幾次」。</strong>
+      <br />並且<strong>一定要有 timeout 兜底</strong>——對面可能永遠不回報（崩了、卡住、根本沒跑到那行），
+      沒有 timeout 的話 job 就永遠不結束，系統資源也不會釋放。
+      本票是「拿到非空 id 才收工，產不出來交給 <code>TIMEOUT_MS</code>」。
+    </div>
+    <p>這個形狀在別處也會遇到：任何「啟動一個你無法 await 的東西」都適用
+      —— 起 process、丟 broadcast、交給另一個 app 處理。差別只在回報的管道是
+      Pigeon、binder 還是寫檔。</p>
+
+    <h2 id="storage">4. 儲存</h2>
+
+    <h3 id="prefs">4.1 SharedPreferences</h3>
+    <ul>
+      <li>key-value 的 XML 檔，放在 <code>/data/data/&lt;pkg&gt;/shared_prefs/</code>，權限 <code>-rw-------</code>
+        （只有 app 自己的 uid 讀得到；<u>未 root 的 adb 讀不到</u>）。</li>
+      <li><strong><code>apply()</code> vs <code>commit()</code></strong>：
+        <code>apply()</code> 立刻更新記憶體、非同步寫檔（不回傳結果）；
+        <code>commit()</code> 同步寫完才回傳 <code>boolean</code>。
+        <br />→ 如果寫完馬上要 <code>notifyChange</code> 通知別的 process 來讀，用 <code>commit()</code>
+        才能消掉「對方讀到舊檔」的時序縫隙。</li>
+      <li>Flutter 的 <code>shared_preferences</code> 套件底下就是它，但 key 會加前綴、值有自己的編碼
+        → <strong>不要</strong>從原生去直讀那個檔（依賴 undocumented 格式）。要共享就明確寫一份自己的 prefs。</li>
+    </ul>
+
+    <h3 id="hive">4.2 Hive</h3>
+    <ul>
+      <li>純 <strong>Dart</strong> 的本地 key-value 資料庫（本專案用 <code>hive_ce</code>）。檔案如
+        <code>app_flutter/activate_db/activate.hive</code>。</li>
+      <li><strong>append-only frame log</strong>：每次寫入是追加一個 frame（含 CRC32），刪除是寫 tombstone，
+        開檔時重播成記憶體 map，過期資料靠 compaction 清。
+        <br />→ 副作用（很好用的偵錯技巧）：<code>strings -a activate.hive | grep -oE '[0-9A-F]{32}' | sort -u</code>
+        可以看出「歷史上總共產生過幾個 id」，本票就是這樣抓到重複產生的。</li>
+      <li><strong>原生沒有 parser</strong>：不是「看不到檔案」，是「沒有官方格式規格可以在 Java 端解」
+        → 這正是需要跑 Dart（headless）才能判斷「Hive 裡到底有沒有值」的原因。</li>
+      <li>⚠️ <strong>不適合多 isolate 併發</strong>：有 <code>activate.lock</code> 鎖檔，兩個 isolate 同時開同一個 box
+        會丟 <code>PathNotFoundException: Cannot delete file … activate.lock</code>。
+        單例是<u>每個 isolate 一份</u>，所以「同一個 app 內」也會撞。
+        <br />→ 別人怎麼解這類問題、以及為什麼「加個鎖就好」是錯的方向，見 <a href="#concurrency">§4.3</a>。</li>
+    </ul>
+
+    <h3 id="concurrency">4.3 多開 ≠ 多寫：併發存取怎麼解</h3>
+    <p>上面說「Hive 不適合多 isolate 併發」，但更值得學的是<strong>別人是怎麼解的</strong>——
+    因為「同一個 app 開了好幾份、都要寫同一個檔」是通用問題，不是 Hive 專屬。</p>
+
+    <h4>三種儲存層、三種併發策略</h4>
+    <table>
+      <thead><tr><th>儲存層</th><th>併發策略</th><th>撞到時的行為</th></tr></thead>
+      <tbody>
+        <tr><td><strong>SQLite / LevelDB</strong><br />（Chrome、Room 用）</td>
+            <td>✅ <strong>設計上就支援併發</strong>：讀寫鎖分等級、WAL 讓讀者不擋寫者、拿不到鎖會 busy-retry</td>
+            <td>等一下再試，通常成功</td></tr>
+        <tr><td><strong>SharedPreferences</strong></td>
+            <td>⚠️ <strong>per-process 單例 ＋ 內部同步</strong>：同 process 內安全，<u>跨 process 不安全</u>（官方明講不支援，<code>MODE_MULTI_PROCESS</code> 已 deprecated）</td>
+            <td>跨 process 會靜默不一致</td></tr>
+        <tr><td><strong>Hive</strong></td>
+            <td>❌ <strong>假設單一 isolate 獨佔</strong>：<code>.lock</code> 檔更像「防呆」而不是併發控制</td>
+            <td>直接<strong>丟例外</strong>（<code>PathNotFoundException: Cannot delete file … activate.lock</code>）</td></tr>
+      </tbody>
+    </table>
+    <p>所以「加個鎖就好」是錯的方向——SQLite 那種鎖是<u>整套機制</u>（等級、升級、退讓、重試），不是一個布林旗標。</p>
+
+    <h4>更根本的答案：單一寫入權威（single-writer authority）</h4>
+    <p>Chrome 是多 process 架構（每個 tab 一個 renderer process），但 <strong>renderer 完全不碰資料庫</strong>
+    ——一律 IPC 給 browser process，由它單獨讀寫。也就是說<strong>「多開」跟「多寫」是兩件事</strong>：
+    可以開很多份，但寫入口只有一個。</p>
+    <table>
+      <thead><tr><th>情境</th><th>誰是唯一寫入者</th></tr></thead>
+      <tbody>
+        <tr><td>Chrome 多 tab</td><td>browser process（renderer 只能 IPC）</td></tr>
+        <tr><td>Android 跨 app 共享資料</td><td><strong>ContentProvider</strong>（＝本票在做的事）</td></tr>
+        <tr><td>Room / SQLite</td><td>一個 process 一個 instance</td></tr>
+      </tbody>
+    </table>
+    <p>補充一個常見誤解：Android 上 Chrome 的<u>多視窗</u>，那些 Activity 其實<strong>都在同一個 process</strong>、
+    共享同一份 Java 單例 → 天然就只有一個寫入者。真正多 process 的是 renderer，而它們<u>沒有</u> DB 存取權。</p>
+
+    <h4>回到 MVB：為什麼結構上撞不到（以及什麼情況會撞到）</h4>
+    <ul>
+      <li>MVB 有 2 個 activity，但<strong>只有 <code>MainActivity</code> 是 <code>FlutterActivity</code></strong>
+        （<code>FileOpenActivity</code> 是純 <code>AppCompatActivity</code>，沒有 engine）。</li>
+      <li><code>MainActivity</code> 宣告 <code>android:launchMode="singleInstance"</code>
+        → <strong>系統保證最多一個實例</strong>。所以 Activity 側只可能有一顆 engine。</li>
+      <li>⚠️ <strong>但這是 manifest 給的保證，不是 Flutter 給的</strong>：
+        Flutter 預設<u>每個 <code>FlutterActivity</code> 各自建一顆 engine</u>
+        （除非用 engine cache 或 <code>FlutterEngineGroup</code>）。
+        若哪天拿掉 <code>singleInstance</code>、或多加一個 <code>FlutterActivity</code>，
+        就會變成兩顆 engine → 兩個 isolate → <strong>兩份單例</strong>，跟 headless 撞的是同一類問題。</li>
+    </ul>
+    <div class="callout">
+      <strong>本票的守衛屬於「壓縮窗口」，不是「消滅窗口」。</strong>
+      <code>sMainEngineAlive</code> ／ <code>hasMirroredInstanceId</code> ／ <code>sSyncInFlight</code>
+      是三個「大家別同時進來」的約定；正解是讓「檢查 + 產生 + 寫入」由<u>唯一</u>持有者原子化執行
+      ——這就是待辦裡「instance_id 單一寫入權威」的意思，不是隨口寫的未來式，而是上面那個標準 pattern。
+      <br />⚠️ 也要記住守衛 A 的<strong>主要</strong>理由是<u>記憶體快取造成的重複產生</u>（語意錯誤），
+      Hive lock 只是它順帶封掉的第二個問題。把理由記成「為了避開 lock」，
+      將來有人拿掉守衛改成「加個檔案鎖就好」，快取競態會活過來。
+      （案例見 <a href="findings.html#race">findings §15</a>。）
+    </div>
+
+    <h2 id="adb">5. adb 小抄與陷阱</h2>
+    <table>
+      <thead><tr><th>指令</th><th>用途 / 注意</th></tr></thead>
+      <tbody>
+        <tr><td><code>adb connect &lt;ip&gt;:5555</code></td><td>連 Wi-Fi 裝置</td></tr>
+        <tr><td><code>adb -s &lt;serial&gt; …</code></td><td>多台時指定裝置（<strong>養成習慣</strong>，否則會打到錯的機器）</td></tr>
+        <tr><td><code>adb shell pm clear &lt;pkg&gt;</code></td><td>清掉 app 全部資料（模擬「首次安裝」）</td></tr>
+        <tr><td><code>adb shell am kill &lt;pkg&gt;</code></td><td>殺 process，<strong>不</strong>設 <code>stopped</code> 旗標 → 之後<u>還收得到</u>廣播 ✅</td></tr>
+        <tr><td><code>adb shell am force-stop &lt;pkg&gt;</code></td><td>⚠️ 會設 <code>stopped=true</code>，之後<strong>收不到廣播</strong>，且 <code>am kill</code> 清不掉。被<u>任何</u> explicit start 清掉（含別的 app 來 query provider）——不是「非得使用者手動點開」，詳見 <a href="#receiver">2.6</a></td></tr>
+        <tr><td><code>adb shell monkey -p &lt;pkg&gt; -c android.intent.category.LAUNCHER 1</code></td><td>用 launcher 方式啟動 app（不用知道 Activity 名字）</td></tr>
+        <tr><td><code>adb logcat -c</code> / <code>-d</code> / <code>-G 32M</code></td><td>清 / dump / 調大 buffer。⚠️ 長時間測試若 buffer 太小，前段 log 會被轉掉</td></tr>
+        <tr><td><code>adb shell dumpsys activity activities | grep topResumedActivity</code></td><td>看現在前景是哪個 Activity</td></tr>
+        <tr><td><code>adb shell uiautomator dump /sdcard/w.xml</code></td><td>把畫面上的文字抓下來（驗證 overlay 很好用）</td></tr>
+        <tr><td><code>adb shell dumpsys activity broadcasts</code></td><td>查廣播<strong>到底有沒有派送</strong>（<code>DELIVERED</code> / 各 receiver 的 <code>exported</code> 值）。比 grep log 可靠——log 會被洗掉，這個不會</td></tr>
+        <tr><td><code>adb shell dumpsys package &lt;pkg&gt; | grep -E "stopped=|notLaunched|scannedAsStopped|codePath"</code></td><td>一次看完 stopped 語意相關的全部旗標</td></tr>
+        <tr><td><code>adb install -r</code> 失敗 <code>INSTALL_FAILED_VERSION_DOWNGRADE</code></td><td>裝置上的 versionCode 較新。解法：<code>--build-number=</code> 蓋過去，或先 uninstall</td></tr>
+      </tbody>
+    </table>
+    <div class="warn">
+      ⚠️ <strong>本專案特有</strong>：build number 的<u>奇偶</u>編碼 stage／production。
+      為了裝上去而亂改 build number，選錯奇偶會觸發 <code>shouldResetActivationStorage</code> 而
+      <strong>清掉現有 instance_id</strong>——測試資料就沒了。改 build number 時要<strong>保持奇偶一致</strong>。
+    </div>
+
+    <h2 id="glossary">6. 名詞速查</h2>
+    <table>
+      <thead><tr><th>名詞</th><th>一句話</th></tr></thead>
+      <tbody>
+        <tr><td><strong>IPC</strong></td><td>跨 process 通訊；Android 底層是 Binder</td></tr>
+        <tr><td><strong>Binder</strong></td><td>Android 的 IPC kernel driver，單筆傳輸上限約 1MB</td></tr>
+        <tr><td><strong>uid</strong></td><td>系統給 app 的身分編號；同簽章＋<code>sharedUserId</code> 可共用</td></tr>
+        <tr><td><strong>authority</strong></td><td>ContentProvider 的 URI 網域，<u>全裝置唯一</u></td></tr>
+        <tr><td><strong>ContentProvider</strong></td><td><u>伺服端</u>：把資料以 URI 曝光給別的 app</td></tr>
+        <tr><td><strong>ContentResolver</strong></td><td><u>客戶端</u>：通往全裝置所有 provider 的單一入口，只認 URI</td></tr>
+        <tr><td><strong>JobScheduler</strong></td><td>系統排程器（在 <code>system_server</code>）；你 <code>schedule</code>，它決定何時叫你的 <code>JobService</code></td></tr>
+        <tr><td><strong>system_server</strong></td><td>Android 的核心系統 process，絕大多數系統服務都住在裡面（見 <a href="#system-server">§1.4</a>）</td></tr>
+        <tr><td><strong>zygote</strong></td><td>預載 framework 的模板 process；<code>system_server</code> 與所有 app 都是從它 fork 出來</td></tr>
+        <tr><td><strong>AMS</strong></td><td>ActivityManagerService：管 process／Activity／廣播，住在 <code>system_server</code></td></tr>
+        <tr><td><strong>dumpsys</strong></td><td>叫 <code>system_server</code> 裡某個服務印出內部狀態的 adb 指令</td></tr>
+        <tr><td><strong>PackageManager</strong></td><td>「裝置上有哪些 app、誰註冊了什麼、簽章是什麼」的查詢入口（背後是 <code>system_server</code> 的 PMS）</td></tr>
+        <tr><td><strong>Cursor</strong></td><td>query 的回傳型別：一張表 ＋ 一個游標</td></tr>
+        <tr><td><strong>MatrixCursor</strong></td><td>記憶體裡手工造的 Cursor（沒有真的資料庫時用）</td></tr>
+        <tr><td><strong>Bundle</strong></td><td>可跨 process 傳的 key-value 容器</td></tr>
+        <tr><td><strong>isolate</strong></td><td>Dart 的並行單位，<u>記憶體不共享</u></td></tr>
+        <tr><td><strong>entry point</strong></td><td>Dart 的進入函式；可以有多個，headless 用另一個</td></tr>
+        <tr><td><strong>AOT / JIT</strong></td><td>release 是 AOT（預編譯 <code>libapp.so</code>）；debug 是 JIT（要解壓 <code>kernel_blob.bin</code>，較慢）</td></tr>
+        <tr><td><strong>tree-shaking</strong></td><td>release 砍掉沒被引用的程式碼——所以 entry point 要 <code>@pragma('vm:entry-point')</code></td></tr>
+        <tr><td><strong>flavor</strong></td><td>同一份程式碼的多種出貨組態（ifp／edla／open／store），可各自簽不同 key</td></tr>
+        <tr><td><strong>signature 簽章</strong></td><td>APK 的身分證明；只有握私鑰的人簽得出來，驗簽章比驗 package name 強</td></tr>
+      </tbody>
+    </table>
+
+  </main>
+</div>
+</body>
+</html>

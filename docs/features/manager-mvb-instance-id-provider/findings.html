@@ -28,6 +28,52 @@
         <ul><li><a href="#poc-v2">8.1 v2：即時更新 + Pigeon 解耦</a></li></ul>
       </li>
       <li><a href="#conclusion">9. 實作方向結論</a></li>
+      <li><a href="#headless-research">10. Headless 初始化：研究與實機驗證</a>
+        <ul><li><a href="#headless-verify">10.7 驗證紀錄與教訓</a></li></ul>
+      </li>
+      <li><a href="#access-verify">11. 存取控制實機驗證</a></li>
+      <li><a href="#dm-client-verify">12. dm 端 client 與四狀態驗證</a></li>
+      <li><a href="#five-requirements">13. 五項需求的完整驗證</a>
+        <ul><li><a href="#five-req-bugs">13.1 抓到的四個真問題</a></li></ul>
+      </li>
+      <li><a href="#latency">14. 端到端延遲與觸發點教訓</a>
+        <ul>
+          <li><a href="#trigger-lesson">14.2 觸發點不能只執行一次</a></li>
+          <li><a href="#cooldown-lesson">14.3 節流要狀態感知</a></li>
+        </ul>
+      </li>
+      <li><a href="#race">15. ⚠️ 競態：重複產生 instance id（已修正）</a>
+        <ul><li><a href="#race-hive-lock">15.4.1 Hive lock 檔與 B 的新風險</a></li></ul>
+      </li>
+      <li><a href="#ifp-verify">16. 真實 IFP34 實機驗證</a>
+        <ul><li><a href="#ifp-pitfalls">16.3 在 IFP 上測試的三個坑</a></li></ul>
+      </li>
+      <li><a href="#headless-profile">17. Headless 啟動成本拆解（分段實測）</a>
+        <ul>
+          <li><a href="#second-entrypoint">17.2 「再切一個精簡入口」為何沒有收益</a></li>
+          <li><a href="#inflight-bug">17.4 ⚠️ 抓到的 bug：同一次流程起兩顆 engine</a></li>
+          <li><a href="#force-stop-transparent">17.6 force-stop 對 dm 是透明的（實測）</a></li>
+        </ul>
+      </li>
+      <li><a href="#preload">18. preload 部署的前提條件</a>
+        <ul>
+          <li><a href="#exported-decision">18.1 決策：exported 不要改 true</a></li>
+          <li><a href="#preload-stopped">18.2 preload 的 stopped 語意（Android 14+）</a></li>
+          <li><a href="#ce-storage-window">18.3 ⚠️ 未解鎖前讀不到 instance_id</a></li>
+          <li><a href="#preload-todo">18.4 為什麼不列成待辦</a></li>
+        </ul>
+      </li>
+      <li><a href="#mvba-migration">19. ⚠️ 與 MVBA 遷移的衝突</a>
+        <ul>
+          <li><a href="#mvba-conflict">19.1 headless 產生的 id 註定被覆蓋</a></li>
+          <li><a href="#mvba-options">19.2 三個方案與取捨（A 為何撤掉）</a></li>
+          <li><a href="#mvba-impl">19.3 採用 C 的實作</a></li>
+          <li><a href="#pending-reason">19.4 新增 pending_reason</a></li>
+          <li><a href="#mvba-open">19.5 待確認</a></li>
+          <li><a href="#mvba-verify-gap">19.6 驗證範圍與「決定不驗」</a></li>
+          <li><a href="#pending-guard-bug">19.7 ⚠️ 交叉 review 抓到的兩件事</a></li>
+        </ul>
+      </li>
     </ul>
   </nav>
 
@@ -42,6 +88,8 @@
       <a href="findings.html" class="active">🛠️ 調查 findings</a>
       <a href="open-questions.html">❓ open questions</a>
       <a href="contract-proposal.html">📐 contract 草案</a>
+      <a href="basics.html">🎓 基礎知識</a>
+      <a href="dm-handoff.html">🤝 dm handoff</a>
     </div>
 
     <h2 id="current">0. 現況：instance ID 是怎麼給 Manager 的（= 缺口本身）</h2>
@@ -124,7 +172,7 @@ app_activated  ×1   StartupCount ×9   native_analytics    ×9</code></pre>
     </ul>
     <div class="callout warn">
       <strong>📌 真正新增的暴露面不是「換一個檔案存」，而是「多開了一個 exported component」。</strong>
-      鏡射只是把同等保護的資料換個容器；provider 才是新的對外介面——這就是存取控制（<a href="contract-proposal.html#access">contract §2</a>）要守的東西，也是 POC 的裸 export 只能留在測試機的原因。
+      鏡射只是把同等保護的資料換個容器；provider 才是新的對外介面——這就是存取控制（<a href="contract-proposal.html#access">contract §2</a>）要守的東西，也是原 POC 的裸 export 只能留在測試機的原因（<a href="#access-verify">§11</a> 已補上並驗證）。
     </div>
 
     <h3 id="no-encryption">1.3 「搬到 SharedPreferences 會不會失去加密？」——沒有加密可失去（2026-08-17）</h3>
@@ -322,6 +370,17 @@ String entity = cursor.getString(0);  // 單欄 cursor，column 0 = entity name<
           <td>systemapi AAR 的 <code>SelfRegisterReceiver</code> 註冊自訂 broadcast 未帶 <code>RECEIVER_EXPORTED/NOT_EXPORTED</code> flag，targetSDK 36 在 Android 14+ 直接 <code>SecurityException</code>（真 systemapi IFP 是舊 Android 無此檢查；此路徑是 hack #1 引入的）</td>
           <td><code>DMService.kt</code> <code>selfReceivers = emptyList()</code> 跳過註冊</td>
         </tr>
+        <tr>
+          <td>4</td>
+          <td><strong>2026-08-19 新發現</strong>：<code>android:singleUser="true"</code> 需 signature/privileged 級 <code>INTERACT_ACROSS_USERS</code>。宣告於 <code>SystemPreferencesProvider</code> 與 <code>DMService</code> 兩處——manifest 自己的註解就寫明「<em>held only because this is a privileged APK</em>」。
+            <br />⚠️ 這個在 <strong>process attach 階段</strong>就丟 <code>SecurityException: requests FLAG_SINGLE_USER, but app does not hold INTERACT_ACROSS_USERS</code>，<strong>整個 app 起不來</strong>（比其他障礙更早、更致命）</td>
+          <td>移除兩處 <code>android:singleUser="true"</code></td>
+        </tr>
+        <tr>
+          <td>2′</td>
+          <td><strong>2026-08-19 改進</strong>：障礙 #2 原用 <code>appops set … PROJECT_MEDIA allow</code> 解，但<strong>該授權隨 dm 每次卸載重置</strong>——做憑證反向測試卸載 dm 後就再度 crash，容易誤判成程式問題</td>
+          <td>改為<strong>直接從 <code>WorkerService</code> 的 <code>foregroundServiceType</code> 移除 <code>mediaProjection</code></strong>（<code>"systemExempted|mediaProjection"</code> → <code>"systemExempted"</code>）。重裝不失效，且已驗證刻意不設 appop 亦 0 crash</td>
+        </tr>
       </tbody>
     </table>
     <p>結果：<code>EnrollmentActivity</code> 正常起來，可操作 enroll UI（dev 環境）。</p>
@@ -329,7 +388,7 @@ String entity = cursor.getString(0);  // 單欄 cursor，column 0 = entity name<
     <ul>
       <li><strong>agent 端持有 entityName</strong>：<code>DMService.kt:373-378</code> 從 DataStore 收 <code>enrollEntityFlow</code>，內含 <code>entityName</code> + <code>deviceName</code>（來源是 Manager enroll 流程）——與 §4「MVB 讀 agent provider 拿 entity name」互相印證。<strong>強化 Q1 疑點：agent 自己就有 entity name，Stephen comment 要 MVB provider 回 entity name 的目的需釐清</strong></li>
       <li>同一台 Pixel Tablet 上現有 <code>com.viewsonic.droid</code>（MVB）+ <code>com.viewsonic.dmagent</code> 可跑，之後做 MVB ContentProvider 時可直接在這台驗證 agent → MVB 的讀取路徑</li>
-      <li>⚠️ 本機 repo（<code>Orgs/Viewsonic-EDU/edu-dm-agent-monorepo</code>）目前帶著 hack #1、#3 兩個未 commit 改動，做正事前先 <code>git stash</code></li>
+      <li>⚠️ <strong>2026-08-19 更新</strong>：這些 hack 曾被還原（工作區一度乾淨，但七月的 APK 仍在裝置上，因此 dm 還能跑）。現已重新加回為<strong>未 staged</strong> 的本機改動，共 4 處：<code>ModelFactory</code>（#1）、<code>DMService selfReceivers</code>（#3）、<code>AndroidManifest</code>（#2′ FGS type ＋ #4 singleUser）、<code>EnrollmentActivity</code> overlay。<strong>關鍵改動（<code>MvbInstanceInfoReader</code> ＋ DMService 掛載）則放在 staged</strong>，兩者分開以便 review</li>
     </ul>
 
     <h2 id="poc">8. POC 實作與結果（2026-07-30，Pixel Tablet 全通）</h2>
@@ -426,9 +485,9 @@ MvbInstanceInfoPoc: activated = true</code></pre>
 
     <h3>待收尾</h3>
     <ul>
-      <li><strong>【新增】<code>error_code</code> / <code>error_message</code> 回報</strong>（2026-08-17 會議需求）——POC 目前錯誤路徑是<strong>回 <code>null</code></strong>（<code>InstanceInfoProvider.query()</code> 的 path 不符與 <code>context == null</code> 兩處），需改為回傳帶 <code>error_code</code> 列的 cursor。
+      <li><s><strong>【新增】<code>error_code</code> / <code>error_message</code> 回報</strong></s> <span class="badge badge-ok">2026-08-19 已完成</span>（2026-08-17 會議需求）——原 POC 錯誤路徑是<strong>回 <code>null</code></strong>（<code>InstanceInfoProvider.query()</code> 的 path 不符與 <code>context == null</code> 兩處），需改為回傳帶 <code>error_code</code> 列的 cursor。
         <br />⚠️ <strong>「未初始化」不可回 error_code</strong>——那是合法狀態，維持「缺值列不出現」。合約見 <a href="contract-proposal.html#error-contract">contract §3.2</a></li>
-      <li><strong>【最高優先】存取控制完全未做</strong>——commit <code>02a4c99e6</code> 的 provider 是<strong>裸 export</strong>（無 permission、無 runtime 簽章檢查，只有 TODO 註解），任何 app 都讀得到，只可留在測試機。
+      <li><s><strong>【最高優先】存取控制完全未做</strong></s> <span class="badge badge-ok">2026-08-19 已完成</span>——原 commit <code>02a4c99e6</code> 的 provider 是<strong>裸 export</strong>（無 permission、無 runtime 簽章檢查，只有 TODO 註解），任何 app 都讀得到。<strong>現已於 <code>7a874d3b8</code> 實作 runtime package ＋ 憑證 allowlist 並實機驗證</strong>（<a href="#access-verify">§11</a>）。
         <br /><strong>正式版做法（2026-08-14 定案）＝ runtime SHA-256 allowlist</strong>：<code>query()</code> 內 <code>getCallingPackage()</code> + <code>PackageManager.hasSigningCertificate(pkg, sha256, CERT_INPUT_SHA256)</code> 比對 <code>MVBA_PlatForm.jks</code> 憑證；<strong>provider 維持註冊在 main manifest（全 flavor）</strong>。
         <br />⚠️ 原計畫「signature permission + 搬到 ifp/edla flavor manifest」<strong>已作廢</strong>——A31（store flavor）上 dm 與 mvbf 跨 key，signature 方案在該裝置必然失效。詳見 <a href="contract-proposal.html#access">contract §2</a></li>
       <li><code>entity_id</code> 目前為空值缺列——open flavor 在 dev 環境 auto-enroll 未掛 entity。需以<strong>有 entity 的帳號手動 enroll</strong> 才能完整驗證這個欄位<br /><small>（原條目也提到 <code>entity_name</code>——已隨「只給 entity_id」的決議移除）</small></li>
@@ -445,6 +504,969 @@ MvbInstanceInfoPoc: activated = true</code></pre>
       <li><strong>ContentProvider</strong>：以 <code>MainActivity.java:1855-1906</code>（讀 dmagent provider）為對稱範本設計 contract（POC 已實作 <code>InstanceInfoProvider.java</code>）。</li>
       <li><strong>存取控制</strong>：<strong>runtime SHA-256 allowlist</strong>（<code>getCallingPackage()</code> + <code>hasSigningCertificate()</code>），單一機制、全 flavor 一致，provider 留在 main manifest。<code>signature</code> permission 僅作 ifp/edla 的 defense-in-depth——A31（store）跨 key 使其無法作為唯一機制。</li>
     </ol>
+    <h2 id="headless-research">10. Headless 初始化：可行性研究與<u>實機驗證</u>（2026-08-19）</h2>
+    <div class="callout ok">
+      <strong>✅ 已在實機驗證成功（Pixel Tablet <code>3629105H804NHC</code>，2026-08-19）——不只是評估。</strong>
+      關鍵原因是 POC 已經把鏡射掛在 <code>SecureDataStorage._load()</code> 裡，
+      所以 headless 進入點<strong>只要呼叫 <code>initialize(false)</code>，鏡射就會自動發生</strong>——不需要重寫任何邏輯。
+      <br />實作與驗證紀錄見 <a href="#headless-verify">§10.7</a>；程式碼在 mvbf 分支
+      <code>Jay/tmp/vsft-9654-headless-experiment</code>（<code>fc203a9f1</code> ＋ <code>7a874d3b8</code>）。
+    </div>
+
+    <h3>10.1 為什麼一定要跑 Dart（原生捷徑走不通）</h3>
+    <p>先排除「純原生產生 instance_id」的想法。原生自己算 <code>md5(ts+androidId+uuid)</code> 是容易的，但<strong>它無法知道 Hive 裡是否已經有值</strong>（無 parser），於是：</p>
+    <ul>
+      <li>可用的免 parser 判斷只有「<code>activate.hive</code> 檔案存不存在」</li>
+      <li>但<strong>主要情境正是「檔案存在且有值、只是 Dart 沒跑過」</strong>（舊安裝升級後未開啟）——此時原生若自行產生就會造出<strong>第二個身分</strong>，而舊 ID 已在後端註冊並掛著 entity</li>
+      <li>→ 原生捷徑只能解「全新安裝從未開啟」，而那個情境本來就會被首次開機的 <code>BOOT_COMPLETED</code> 覆蓋</li>
+    </ul>
+    <p><strong>因此 headless Dart 是必要條件</strong>，與 <a href="contract-proposal.html#headless-answer">contract §8.1</a> 的三層次分析一致。</p>
+
+    <h3>10.2 需要的最小 Dart 路徑（比預期小很多）</h3>
+    <p>本情境<strong>不需要「產生」，只需要「讀出來 + 鏡射」</strong>——產生只發生在全新安裝，那條路走正常啟動即可。
+    <br />⚠️ <strong>2026-08-19 更正</strong>：需求 3 要求「全新安裝未開啟時 dm 也能拿到」，所以 headless <strong>最終也要能產生</strong>。
+    實際做法是照樣呼叫 <code>MvbActivator.ensureInitialized()</code>——它的 <code>isEmpty</code> 判斷讓「已有值」時是 no-op，
+    <strong>兩種情境用同一段程式碼</strong>（見 <a href="#five-requirements">§13</a>）。</p>
+    <pre><code>@pragma('vm:entry-point')
+Future&lt;void&gt; instanceInfoHeadlessMain() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // _load() 內部已呼叫 _mirrorToProviderInfo()（POC 既有行為）
+  await SecureDataStorage.getInstance().initialize(false);
+}</code></pre>
+    <ul>
+      <li><strong>完全不必碰 <code>main()</code></strong>——它很重（PDF factory、WindowManager、DeviceModelFactory、Koin…）且會開 UI。headless 用<strong>獨立進入點</strong>，不共用那條初始化鏈</li>
+      <li><s><strong>不需要 androidID</strong>（那是產生時才要的），因此避開了 <code>getDeviceModelFactory()</code> 那條重依賴</s>
+        <br />⚠️ <strong>2026-08-19 更正</strong>：需求 3（全新安裝未開）要求 headless <strong>也能產生</strong>，所以 androidID 還是要。
+        好消息是它來自 <code>AndroidUtilityHelperPlatformService.ensureInitialized()</code>，<strong>確實不依賴 <code>getDeviceModelFactory()</code></strong>——那條重鏈仍可略過。
+        但<strong>必須先 <code>VSPlatformHelperImpl().ensureInitialized()</code></strong>，否則 <code>_isChromeOS()</code> 的 <code>late</code> 欄位會丟 <code>LateInitializationError</code>（見 <a href="#five-req-bugs">§13.1 ③</a>）</li>
+      <li>依賴只有 <code>path_provider</code>（<code>Hive.initFlutter</code> 用）＋ 本專案的 Pigeon channel；<code>path_provider ^2.1.5</code> 已在 pubspec</li>
+      <li><code>initialize(false)</code> 的 <code>false</code> ＝ 不 reset（正確：headless 絕不該清資料）</li>
+    </ul>
+
+    <h3>10.3 ⚠️ 必須修的一個坑：Pigeon handler 只註冊在 MainActivity</h3>
+    <div class="callout new">
+      POC 把 handler 綁在 <strong>MainActivity 的 engine</strong> 上：
+      <pre><code>// MainActivity.configureFlutterEngine
+InstanceInfo.InstanceInfoPlugin.setUp(
+        flutterEngine.getDartExecutor().getBinaryMessenger(),
+        new InstanceInfoPluginImpl(this));</code></pre>
+      headless engine <strong>不會有這個 handler</strong> → <code>ProviderInfoMirror</code> 會收到 <code>MissingPluginException</code>，
+      而它<strong>被 catch 後靜默忽略</strong> → <strong>什麼都沒鏡射，也沒有任何錯誤</strong>。這是最容易白花時間的地方。
+      <br />→ 修法：把註冊搬到<strong>對任何 engine 都會執行</strong>的地方（實作成標準 <code>FlutterPlugin</code>，或在 headless service 內也呼叫一次 <code>setUp()</code>）。
+      <br />✅ 有利條件：<code>InstanceInfoPluginImpl</code> 建構時就取 <code>getApplicationContext()</code>，<strong>沒有 Activity 依賴</strong>，可直接在 Service 內使用。
+    </div>
+
+    <h3>10.4 觸發與排程</h3>
+    <table>
+      <thead><tr><th>項目</th><th>現況／作法</th></tr></thead>
+      <tbody>
+        <tr><td>v2 embedding</td><td>✅ 已啟用（<code>flutterEmbedding=2</code> meta-data）——<code>FlutterEngine</code> 建構時會自動註冊插件</td></tr>
+        <tr><td><code>BOOT_COMPLETED</code></td><td>✅ receiver 已存在，但目前<strong>直接開 MainActivity</strong> 且受預設關閉的 <code>app_startAppAtBootUp</code> 擋著 → 需新增一條「不開 UI、不受該 flag 影響」的 headless 分支</td></tr>
+        <tr><td><code>ACTION_MY_PACKAGE_REPLACED</code></td><td>❌ <strong>尚未註冊</strong>，需新增。這是解決「升級後未開啟」的<strong>關鍵</strong>觸發（不必等重開機）</td></tr>
+        <tr><td>背景執行限制</td><td>receiver 內只有數秒，engine 啟動可能更久 → 由 receiver 轉交 <strong>WorkManager（androidx.work）</strong> 或前景服務。<br />⚠️ <code>androidx.work</code> <strong>目前未在 <code>android/app/build.gradle</code> 宣告</strong>，需新增依賴（或改用自訂 Service）</td></tr>
+      </tbody>
+    </table>
+
+    <h3>10.5 唯一的實質風險：Hive 跨 isolate 併發</h3>
+    <div class="callout warn">
+      Dart 的 singleton <strong>是 per-isolate 的</strong>，所以 headless isolate 會有<u>自己一份</u> <code>SecureDataStorage</code>，可能與主 isolate <strong>同時開同一個 Hive 檔</strong>。Hive 並非設計來跨 isolate 併發存取。
+      <br /><strong>低成本的化解方式</strong>：headless 進入點先檢查<strong>原生 prefs 是否已有 <code>instance_id</code>，有就立即結束、不開 Hive</strong>。
+      因為鏡射在每次 app 啟動都會跑，prefs 有值即代表「app 已於本版執行過」→ 無事可做；
+      反之 prefs 為空幾乎必然代表 app 沒在跑，於是併發窗口實務上不存在。
+    </div>
+
+    <h3>10.6 Effort 評估</h3>
+    <table>
+      <thead><tr><th>工作</th><th>規模</th></tr></thead>
+      <tbody>
+        <tr><td>Dart headless 進入點</td><td>約 10 行（<code>initialize(false)</code> 即觸發既有鏡射）</td></tr>
+        <tr><td>原生 Service：建 engine → <code>setUp()</code> → 執行進入點 → destroy</td><td>約 40–60 行</td></tr>
+        <tr><td>Pigeon handler 註冊點重構（10.3）</td><td>小，但<strong>必做</strong></td></tr>
+        <tr><td>Manifest：<code>MY_PACKAGE_REPLACED</code> receiver ＋ BootReceiver headless 分支</td><td>小</td></tr>
+        <tr><td>早退檢查（10.5）</td><td>數行</td></tr>
+        <tr><td>可能新增 <code>androidx.work</code> 依賴</td><td>一行 gradle（或改用自訂 Service 免依賴）</td></tr>
+      </tbody>
+    </table>
+    <p><strong>判定：符合「effort 不高就實作」的門檻，且已實作完成並驗證</strong>（見 <a href="#headless-verify">§10.7</a>）。剩餘不確定性是「headless engine 在<strong>各 IFP 機型</strong>上是否同樣穩定」——Pixel Tablet 已通過，IFP 實機仍待抽驗。</p>
+    <div class="callout">
+      <strong>📌 附帶發現（與本題無關的小問題）</strong>：<code>AndroidManifest.xml:306</code> 宣告了
+      <code>com.pravera.flutter_foreground_task.service.ForegroundService</code>，但 <strong><code>flutter_foreground_task</code> 已不在 pubspec.yaml / pubspec.lock 中</strong>。
+      該 <code>&lt;service&gt;</code> 指向不存在的類別（2025-10-15 <code>bd30d65f3</code> 為 SSO 問題加入，套件後來移除但 manifest 殘留）。
+      未被啟動就不會出錯，但屬<strong>死設定</strong>，可順手清掉。
+    </div>
+
+    <h3 id="headless-verify">10.7 實機驗證紀錄與過程中學到的事（2026-08-19）</h3>
+    <p>環境：Pixel Tablet <code>3629105H804NHC</code>（Android 16、<code>ro.build.type=user</code>）、mvbf <strong>edla</strong> flavor debug（本地 CS：<code>-PclassswiftRepoPath=…/ragdoll-cat</code>）。</p>
+
+    <h4>測法：造出真實的「更新後未開啟」狀態</h4>
+    <ol>
+      <li>啟動一次 MVB → Hive 與 provider prefs 都有值（<code>instance_id = AED0900612695E021F644A45232648F7</code>）</li>
+      <li><strong>刪掉 <code>shared_prefs/instance_info_provider.xml</code></strong>（模擬鏡射從未發生），Hive 保留 → 精準複製「舊安裝升級後未開啟」</li>
+      <li><code>adb install -r</code> → 觸發<strong>真正的</strong> <code>MY_PACKAGE_REPLACED</code>（不是手動 broadcast）</li>
+    </ol>
+    <div class="callout ok">
+      <strong>✅ 結果：prefs 被補回<u>完全相同</u>的 instance_id，全程沒有任何 UI。</strong>
+      <pre><code>InstanceInfoSync: receiver: android.intent.action.MY_PACKAGE_REPLACED
+InstanceInfoSync: scheduled (…): result=1
+InstanceInfoSync: starting headless Flutter engine
+InstanceInfoSync: headless mirror done: instance_id=present
+flutter : 👻 [InstanceInfoHeadless] sync done, instanceID present</code></pre>
+      前景仍是 launcher（<code>topResumedActivity=…NexusLauncherActivity</code>），無 <code>Displayed com.viewsonic.droid</code> 記錄。
+      <strong>沒有產生第二個身分</strong>——證實「決策交給 Dart（讀得到 Hive）」的設計正確。
+    </div>
+
+    <h4>⚠️ 教訓 1：<code>onStartJob</code> 不能阻塞——會被 watchdog 拆掉服務</h4>
+    <div class="callout new">
+      第一次跑失敗，log 是 <code>W JobServiceContext: No response to onStartJob … #96540001</code>，prefs 沒被寫入。
+      但同一份 log 顯示 <strong>engine 其實起來了</strong>：
+      <pre><code>14:57:02.171 FlutterJNI: Beginning load of flutter...
+14:57:05.738 ResourceExtractor: Extracted baseline resource assets/flutter_assets/kernel_blob.bin
+14:57:06.398 flutter : Using the Impeller rendering backend (Vulkan).
+14:57:06.794 flutter : The Dart VM service is listening on …</code></pre>
+      → 原因是我在 <code>onStartJob</code>（<strong>main thread</strong>）內同步做 <code>ensureInitializationComplete()</code> ＋ <code>new FlutterEngine()</code>，
+      總耗時 &gt;8s 超過 watchdog，服務被拆、Dart 來不及完成。
+      <br /><strong>修法</strong>：<code>onStartJob</code> 立刻 <code>return true</code>，把 engine 啟動 <code>post</code> 到 main looper。
+    </div>
+    <div class="callout">
+      <strong>📌 附帶量測（對正式版有利）</strong>：那 3.5 秒是<strong>解壓 <code>kernel_blob.bin</code> 的 debug build 專屬成本</strong>——release 走 AOT 的 <code>libapp.so</code>，不需解壓，會快得多。
+      修好後實測整段（receiver → 鏡射完成）約 <strong>11 秒</strong>，仍在 debug build 條件下。
+      <br />另觀察到：即使不需畫面，<code>FlutterEngine</code> 仍會建立 Impeller/Vulkan 繪圖 context——無法以旗標關閉，屬既有開銷。
+    </div>
+
+    <h4>⚠️ 教訓 2：<code>am force-stop</code> 會讓 receiver 收不到廣播（測試方法的坑）</h4>
+    <div class="callout warn">
+      中間一次測試 receiver <strong>完全沒觸發</strong>，log 一片空白。原因是我先 <code>am force-stop</code>——
+      package 被打進 <strong>stopped 狀態</strong>後就收不到廣播。
+      <br />這<strong>不是實作問題</strong>（真實升級情境不會先 force-stop），但足以讓人誤判「headless 行不通」。
+      <br />→ 驗證此類廣播觸發時，<strong>不要先 force-stop</strong>；若已 stop，先啟動一次 app 清除該狀態。
+    </div>
+
+    <h4>其他小發現</h4>
+    <ul>
+      <li><code>setOverrideDeadline(0)</code> 會產生 <code>W JobInfo: … has a deadline with no functional constraints</code> 警告——無害（本工作純本地、無約束條件），但可考慮改用 <code>setMinimumLatency(0)</code> 或接受此警告</li>
+      <li>Dart 進入點必須與 <code>main()</code> <strong>同一個 library</strong>（<code>DartEntrypoint</code> 兩參數版在 main 的 library 內查函式名），故宣告於 <code>lib/main.dart</code>、實作放 <code>instance_info_headless.dart</code>。函式名是原生側的字串常數，<strong>不可改名</strong></li>
+      <li><a href="#poc-v2">§10.3 預測的 Pigeon handler 缺失</a>在實作時確認為真：不在 headless engine 上 <code>setUp()</code> 就會靜默失敗。已由 <code>CompletionSignallingPlugin</code> 包一層，順便用「Dart 呼叫 setInfo」當作收工訊號</li>
+    </ul>
+
+    <h2 id="access-verify">11. 存取控制實機驗證（2026-08-19）</h2>
+    <div class="callout ok">
+      <strong>✅ 三個情境全數符合預期。</strong>實作見 mvbf <code>7a874d3b8</code>；比對憑證
+      SHA-256 <code>8e767158bd858c0ea340d58a8bfec1dc4ea4511d5b4ec0ba1cd9bd53dd04f595</code>
+      （取得方式：<code>apksigner verify --print-certs</code>，<strong>未觸碰 keystore</strong>）。
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>情境</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>正向</td>
+          <td>dm 原版（package ✓ 憑證 ✓）</td>
+          <td>✅ 讀到 <code>contract_version=1</code>、<code>instance_id=AED09006…48F7</code>、<code>activated=true</code>；provider 端無拒絕 log</td>
+        </tr>
+        <tr>
+          <td>反向 A</td>
+          <td><code>adb shell content query</code></td>
+          <td>⛔ <code>error_code=UNAUTHORIZED</code>、<code>error_message=package not allowed: com.android.shell</code></td>
+        </tr>
+        <tr>
+          <td>反向 B</td>
+          <td>dm <strong>重簽章</strong>：package name <u>完全不變</u>、只換憑證（Android debug keystore）</td>
+          <td>⛔ <code>error_code=UNAUTHORIZED</code>、<code>error_message=signing certificate mismatch for com.viewsonic.dmagent</code></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>💡 反向 B 的設計重點</strong>：保持 package name 不變、<strong>只換簽章</strong>，可以把「package 檢查」與「憑證檢查」完全隔離——
+      package 那關是<u>通過</u>的，擋下來的純粹是憑證比對。這才真正證明 <code>hasSigningCertificate()</code> 在做事，
+      否則只驗 <code>adb shell</code> 那條會被 package 檢查先攔住，看不出憑證檢查有沒有生效。
+      <br />作法：<code>apksigner sign --ks ~/.android/debug.keystore …</code> 重簽已 pull 下來的 dm APK，卸載原版後安裝重簽版；測完還原原版並確認恢復正常讀取。
+      <strong>全程不需修改 dm repo 的任何設定。</strong>
+    </div>
+    <div class="callout ok">
+      <strong>📌 附帶實證：dm 的憑證與 mvbf edla <u>完全相同</u></strong>——皆為
+      <code>8e767158bd85…f595</code>（DN 都是 <code>CN=VSD224, OU=SmartDisplay, O=ViewSonic</code>）。
+      這以實機證據確認了 Evis Cheng 的「Manager 都要簽 system key」，也再次印證
+      <code>MVBA_PlatForm.jks</code> 即 ViewSonic IFP 韌體的平台 key。
+    </div>
+    <p>裝置上的 dm 版本：<code>2.5.4-d2e892e1-d</code>（即 <a href="#experiment">§7</a> 那次實驗留下的 POC build，仍含 <code>MvbInstanceInfoPoc</code> 查詢 hook，因此可直接當正向測試的呼叫端）。</p>
+
+
+    <h2 id="dm-client-verify">12. dm 端 client 實作與四狀態驗證（2026-08-19）</h2>
+    <div class="callout ok">
+      <strong>✅ dm 端寫了真正的讀取 client（非 log dump），四種狀態全數在實機驗證通過。</strong>
+      程式碼在 dm repo <code>develop</code> 的<strong>未 commit 工作區</strong>：關鍵改動放 <strong>staged</strong>、本機 hack 放 <strong>unstaged</strong>，刻意分開以便 review。
+    </div>
+
+    <h3>12.1 <code>MvbInstanceInfoReader</code>（staged，關鍵）</h3>
+    <p><code>app_edla/src/main/java/com/viewsonic/dmagent/mvb/MvbInstanceInfoReader.kt</code>——以 sealed interface 表達五種結果，直接對應 <a href="contract-proposal.html#empty-handling">contract §8</a> 的狀態機：</p>
+    <table>
+      <thead><tr><th>Result</th><th>判定條件</th></tr></thead>
+      <tbody>
+        <tr><td><code>NoMvb</code></td><td>cursor 為 <code>null</code> ＋ <code>PackageManager</code> 查無 package</td></tr>
+        <tr><td><code>MvbTooOld(versionName)</code></td><td>cursor 為 <code>null</code> ＋ package 存在</td></tr>
+        <tr><td><code>NotInitialized</code></td><td>有回應但無 <code>instance_id</code>——<strong>KDoc 明確標註「這不是錯誤」</strong></td></tr>
+        <tr><td><code>Failed(code, message)</code></td><td>出現 <code>error_code</code> 列</td></tr>
+        <tr><td><code>Info(...)</code></td><td>讀到 <code>instance_id</code>；<code>entityId</code> 可為 null（未 enroll 時仍應回報 instance_id）</td></tr>
+      </tbody>
+    </table>
+    <p>合約紀律寫進 KDoc：presence 偵測、<strong>不可用 <code>contract_version</code> 做行為分支</strong>、缺值列不出現、<code>null</code> 保留給「provider 不存在」。另外 <code>queryRows()</code> 有 try/catch——部分 ROM 在 provider 不存在時會丟例外而非回 null。</p>
+    <p><code>DMService.onCreate</code> 掛一次讀取，並以 <code>TODO(VB-1399)</code> 標明正式版應改到<strong>組 <code>static_info</code> payload 時讀取</strong>（正確性來源），並建議用 <code>JobScheduler.addTriggerContentUri()</code> 而非單純 <code>ContentObserver</code>。</p>
+
+    <h3>12.2 四狀態實機驗證</h3>
+    <table>
+      <thead><tr><th>操作</th><th>畫面／log 顯示</th></tr></thead>
+      <tbody>
+        <tr><td>MVB 正常</td><td><code>✅ instance_id=F1A42C3B…  entity_id=(none)  activated=true  contract=v1</code></td></tr>
+        <tr><td><code>pm clear com.viewsonic.droid</code></td><td><code>⏳ NOT_INITIALIZED</code>（MVB 尚未產生 instance id）</td></tr>
+        <tr><td><code>uninstall com.viewsonic.droid</code></td><td><code>🚫 NO_MVB</code></td></tr>
+        <tr><td>裝舊版 MVB（<code>3.11.1</code>，無 provider）</td><td><code>⚠️ MVB_TOO_OLD  versionName=3.11.1</code></td></tr>
+      </tbody>
+    </table>
+    <div class="callout ok">
+      <strong>即時更新（<code>ContentObserver</code>）亦驗證通過</strong>：清除 MVB 資料 → dm overlay 顯示 <code>[#0 initial] NOT_INITIALIZED</code> → 啟動 MVB（產生新 id 並鏡射）→ dm overlay 自動變為 <code>[#5 onChange] ✅ instance_id=9922…</code>。
+      <strong>dm 的 activity 全程在背景</strong>，仍收到通知。
+    </div>
+
+    <h3>12.3 畫面顯示 overlay（unstaged，debug）</h3>
+    <p><code>EnrollmentActivity</code> 左上疊一個 <code>TextView</code> 顯示讀取結果 ＋ 更新次數 ＋ 觸發源，並註冊 <code>ContentObserver</code> 即時刷新（<code>onDestroy</code> 解除訂閱）。方便手動測狀態而不必盯 logcat。</p>
+    <ul>
+      <li>小瑕疵：設了 <code>gravity = BOTTOM|START</code> 但顯示在左上——dm 的 root layout 不是 <code>FrameLayout</code>，該 LayoutParams 被忽略。功能不受影響</li>
+      <li>測試時會撞到系統的「<strong>Android App Compatibility</strong>」對話框（mvbf native libs 未 16 KB 對齊的警告）——<strong>與本功能無關</strong>，但會遮住 overlay，按 OK 關掉即可</li>
+    </ul>
+
+    <h2 id="five-requirements">13. 五項需求的完整驗證（2026-08-19）</h2>
+    <div class="callout ok">
+      <strong>✅ 目標達成：dm 在所有<u>新版</u> MVB 情境下都拿得到資料，<u>不需要有人開過 MVB</u>。</strong>
+      環境：Pixel Tablet <code>3629105H804NHC</code>、mvbf <strong>edla</strong> debug（本地 CS）、dm <code>app_edla</code> devDebug。
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>需求</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>舊版曾開過（Hive 有 id）→ dm 取失敗且知道是舊版</td><td>✅ <code>MVB_TOO_OLD (無 provider), versionName=3.11.1</code></td></tr>
+        <tr><td>2</td><td>舊版沒開過 → 同上</td><td>✅ 同樣 <code>MVB_TOO_OLD</code>。<strong>對 dm 而言 1／2 不可區分，這是正確的</strong>——Hive 狀態在沒有 provider 時本就不可見，兩者都只是「該升級」</td></tr>
+        <tr><td>3</td><td>新版首裝未開 → dm 知道沒資料、<strong>主動初始化</strong>、且 MVB 開啟後<strong>不重複產生</strong></td><td>✅ 全通（需要新增 <a href="contract-proposal.html#call-trigger">§3.3 的 call() 觸發</a> ＋ 修一個既有 bug，見 13.1）</td></tr>
+        <tr><td>4</td><td>舊版→新版未開 → 把 Hive 既有 id 傳給 dm</td><td>✅ <code>MY_PACKAGE_REPLACED</code> → headless → id <strong>完全相同</strong>（<code>D508C7F9…DD7A</code>）</td></tr>
+        <tr><td>5</td><td>新版一律走 shared pref</td><td>✅ provider 只讀自持 prefs；3、4 補齊後 prefs <strong>永遠有值</strong></td></tr>
+      </tbody>
+    </table>
+    <p>需求 3 的完整流程（實機 log）：</p>
+    <pre><code>MvbInstanceInfo: NOT_INITIALIZED (MVB 尚未產生 instance id) → 主動請求初始化
+MvbInstanceInfo: requestInitialize accepted; awaiting notifyChange
+InstanceInfoSync : scheduled (provider.call): result=1
+InstanceInfoSync : starting headless Flutter engine
+flutter          : [InstanceInfoHeadless] done: generated (instanceID present)
+→ prefs: instance_id=D508C7F98438D2CEBF5B9311AD5CDD7A
+→ 之後開啟 MVB：id 不變 ✅</code></pre>
+
+    <h3 id="five-req-bugs">13.1 過程中抓到的四個真問題</h3>
+
+    <h4>① ⚠️ 既有潛在 bug：首次啟動會清掉 headless 剛產生的 instance_id</h4>
+    <div class="callout new">
+      需求 3 一開始<strong>失敗</strong>：headless 產生 <code>0E23F872…</code>，但開啟 MVB 後變成 <code>CA1CFF14…</code>。根因在 <code>application_info.dart</code>：
+      <pre><code>_savedBuildNumber = prefs.getInt('ApplicationInfo_savedBuildNumber') ?? 0;
+shouldResetActivationStorage = _buildNumber % 2 != _savedBuildNumber % 2;</code></pre>
+      build number 的<strong>奇偶</strong>用來編碼 stage／production。<code>pm clear</code>／全新安裝後 saved ＝ <code>0</code>（偶數），
+      而本版 build number <code>30110031</code> 是<strong>奇數</strong> → 誤判為「target 切換」→ <strong>reset 整個 activation storage 並重新產生 id</strong>。
+      <br /><strong>這個 bug 一直存在但無害</strong>（全新安裝本來就沒資料可清）——<strong>是 headless 讓它顯形</strong>：headless 在使用者首次開啟<u>之前</u>就產生了 id。
+      <br /><strong>修法</strong>：加守衛「<code>saved == 0</code> 代表沒有前一次紀錄，不該推論成切換」。<code>isNewVersion</code> 不受影響（它比的是相等而非奇偶），故不會吃掉版本升級的訊號。
+      <br />修好後 log：<code>[ApplicationInfo] build=30110031 saved=0 hasPrev=false reset=false reactivate=false</code>
+      <br />⚠️ <strong>此修正動到共用邏輯</strong>（非 provider 專屬），正式 PR 時可考慮拆成獨立 commit。
+    </div>
+
+    <h4>② headless 的完成訊號抓錯，engine 在產生途中被 destroy</h4>
+    <div class="callout warn">
+      原本把「第一次 <code>setInfo</code>」當完成訊號，但<strong>一次 headless 執行可能鏡射兩次</strong>：
+      <code>_load()</code> 先鏡射（此時可能是空的）→ 若 Hive 也空，<code>MvbActivator.ensureInitialized()</code> 產生後由 <code>_save()</code> 再鏡射一次。
+      結果 engine 在產生途中就被 <code>destroy</code>，prefs 只留下<strong>空的</strong> <code>instance_id</code>。
+      <br /><strong>修法</strong>：改為「拿到<u>非空</u> instance_id 才收工」，真的產不出來則由 <code>TIMEOUT_MS</code> 兜底。
+    </div>
+
+    <h4>③ <code>LateInitializationError: _isChromeOSCache</code>——platformType 必須先初始化</h4>
+    <div class="callout warn">
+      §10.2 曾判斷「headless 不需要 platformType」——<strong>錯的</strong>。<code>_isChromeOS()</code> 讀的是 <code>late</code> 欄位，未初始化直接丟 <code>LateInitializationError</code>；
+      而 <code>MvbActivator._generateInstanceID()</code> 內部也會讀 platformType，所以這步<strong>跳不掉</strong>。
+      <br />好消息是成本很低：Android 上 <code>_initM1Detection()</code> 早退、<code>_initIsChromeOS()</code> 只是一次 platform channel、
+      <code>WindowManagerWrapper</code> 是 <code>NoWindowImp</code>（<code>init()</code> 空實作）——故直接呼叫 <code>VSPlatformHelperImpl().ensureInitialized()</code> 即可。
+    </div>
+
+    <h4>④ ⚠️ <code>registerContentObserver</code> 在 authority 不存在時會<u>丟例外</u>（對 dm 正式實作重要）</h4>
+    <div class="callout new">
+      <code>SecurityException: Failed to find provider … expected to find a valid ContentProvider for this authority</code>——
+      與 <code>query()</code> 回 <code>null</code> 的行為<strong>不同</strong>。舊版 MVB／MVB 未安裝時註冊 observer 就會 <strong>crash</strong>（實測炸掉 dm 的 <code>EnrollmentActivity</code>）。
+      <br />→ <strong>dm 端用 <code>registerContentObserver</code> 或 <code>JobScheduler.addTriggerContentUri</code> 訂閱 <code>infoUri</code> 時務必包 try/catch</strong>。
+      已在 <code>MvbInstanceInfoReader.infoUri</code> 的 KDoc 標注警告。
+    </div>
+
+    <h3>13.2 entity name 已完全移除</h3>
+    <p>依 <a href="contract-proposal.html#entity-id-only">§3.1</a> 的決議清乾淨：<code>entityOrganization</code>（Dart 欄位／介面／Hive key <code>app_entityOrganization</code>）、Pigeon 的 <code>entityName</code> 欄位（已重新產生）、<code>_getEntityID()</code> 的 record 回傳（回復為 <code>Future&lt;String&gt;</code>）、Java 側 <code>KEY_ENTITY_NAME</code>。全 repo grep 無殘留，<code>dart analyze</code> 無 error。</p>
+
+    <h2 id="latency">14. 端到端延遲實測與 dm 觸發點的教訓（2026-08-20）</h2>
+
+    <h3 id="latency-timeline">14.1 實測時間軸：dm 停在前景不動，pm clear 後約 4 秒完成</h3>
+    <table>
+      <thead><tr><th>時間</th><th>事件</th><th>相對 T0</th></tr></thead>
+      <tbody>
+        <tr><td><code>08:59:21.542</code></td><td><code>pm clear com.viewsonic.droid</code> 完成（T0）</td><td>—</td></tr>
+        <tr><td><code>08:59:23.277</code></td><td>dm 輪詢偵測到 <code>NOT_INITIALIZED</code> → <code>requestInitialize</code></td><td><strong>+1.7s</strong></td></tr>
+        <tr><td><code>08:59:25.528</code></td><td>MVB headless <strong>產生完成</strong></td><td>+4.0s</td></tr>
+        <tr><td><code>08:59:25.532</code></td><td>dm overlay 更新為 ✅（trigger ＝ <code>onChange</code>）</td><td><strong>+4.0s</strong></td></tr>
+      </tbody>
+    </table>
+    <div class="callout ok">
+      <strong>兩個值得記的觀察</strong>
+      <ul>
+        <li>最後一步的 trigger 是 <strong><code>onChange</code> 而非 <code>poll</code></strong>（差 4ms）——<strong>實際更新速度由 <code>notifyChange</code> 決定，不是輪詢</strong>。輪詢只負責「發現需要觸發」那一步</li>
+        <li>那 1.7s 是<strong>測試用輪詢週期</strong>造成的，非機制本身的延遲；正式版 dm 由自己的回報排程觸發，不會有這段</li>
+        <li>2.2s 的產生時間是 <strong>debug build</strong> 成本（要解壓 <code>kernel_blob.bin</code>），release 走 AOT 會更快</li>
+      </ul>
+    </div>
+
+    <h3 id="trigger-lesson">14.2 ⚠️ 觸發點不能放在「只執行一次」的生命週期</h3>
+    <div class="callout new">
+      <strong>同一類錯誤犯了兩次，是本次最容易重演的坑。</strong>
+      <ol>
+        <li>第一版把「讀 provider ＋ <code>NOT_INITIALIZED</code> 時要求初始化」放在 <code>DMService.onCreate</code>
+          → <strong>永遠卡在 <code>NOT_INITIALIZED</code></strong>，因為 dm 的 process 常常一直活著，<code>onCreate</code> 不會再跑</li>
+        <li>修完第一個後，畫面的讀取仍掛在 Activity 的 <code>onCreate</code>
+          → Activity 已存在時只是被帶到前景、<code>onCreate</code> 不重跑，畫面停在舊狀態</li>
+      </ol>
+      <strong>原則：觸發要放在「每次觀察到該狀態」的地方，而不是「元件建立時」。</strong>
+      完整位置比較見 <a href="contract-proposal.html#trigger-placement">contract §8.2</a>。
+    </div>
+    <p>💡 這也解釋了一個測試現象：<strong>如果 dm 一直停在前景不動、又沒有輪詢，什麼都不會發生</strong>——
+    使用者回報「一直卡在 NOT_INITIALIZED」時，先確認觸發點會不會重複執行，再懷疑 provider。</p>
+
+    <h3 id="cooldown-lesson">14.3 ⚠️ 節流要「狀態感知」，不能只看時間</h3>
+    <div class="callout warn">
+      第一版用固定 30 秒冷卻防止「<code>requestInitialize</code> → <code>notifyChange</code> → 重讀 → 又 <code>requestInitialize</code>」的緊迴圈。
+      但這讓「<strong>MVB 資料被清掉 → 再次 <code>NOT_INITIALIZED</code></strong>」被上一次的冷卻<strong>誤擋</strong>——情況明明變了卻不重試，看起來就像功能壞掉。
+      <br />→ 正解：<strong>讀到有效值（<code>Result.Info</code>）就重置冷卻</strong>，只有<u>連續失敗</u>才節流。
+      情況真的變了能立刻重試，真的失敗也不會緊迴圈。冷卻縮為 15s。
+    </div>
+
+    <h3>14.4 驗證用 overlay 的即時性</h3>
+    <p>為了讓「實際更新速度」可觀測，dm 端的 debug overlay（unstaged）加了：</p>
+    <ul>
+      <li><strong>每秒輪詢</strong>（<code>onResume</code> 起、<code>onPause</code> 停，不在背景白跑）</li>
+      <li><strong>「上次變化 HH:mm:ss（Ns 前）」</strong>——直接看出目前狀態是幾秒前變成這樣的，不必回頭翻 log</li>
+      <li><strong>只有內容真的變化才 +1 計數並記 log</strong>——穩態零雜訊（實測 4 秒內 0 筆）</li>
+      <li>冷卻中的 skip log 已移除，否則每秒輪詢會刷爆</li>
+    </ul>
+    <pre><code>MVB provider  [#8 onChange]  上次變化 08:59:25（3s 前）
+✅ instance_id=D9CF16A23078A1E92A8DDBF01F797EA8
+entity_id=(none)  activated=false  contract=v1</code></pre>
+
+    <h2 id="race">15. ⚠️ 競態：headless 與正常啟動同時產生 instance id（2026-08-20 <u>已實測重現並修正</u>）</h2>
+    <div class="callout new">
+      <strong>這不是理論風險，是實測可重現的缺陷。</strong>
+      問題由 Jay 提出（「dm 開始初始化，同時打開 mvbf，會不會同時寫入？」），實測在特定時序下<strong>確實會產生兩個 instance id</strong>。
+    </div>
+
+    <h3>15.1 機制：問題出在<u>記憶體快取</u>，不是檔案鎖</h3>
+    <p>兩條路徑在<strong>同一個 process</strong>（全 manifest 無 <code>android:process</code>），但是<strong>兩個 FlutterEngine ／兩個 Dart isolate</strong>；
+    而 Dart 的 singleton 是 per-isolate，所以各有一份 <code>SecureDataStorage</code>。</p>
+    <p><strong>關鍵</strong>：<code>getInstanceID()</code> 讀的是 <code>_load()</code> 當時載入的<strong>記憶體快取</strong>，不是即時讀 Hive。而 MVB 正常啟動從
+    <code>_load()</code> 到 <code>MvbActivator.ensureInitialized()</code> 中間隔了<strong>十幾秒</strong>（PDF factory、WindowManager、DeviceModelFactory… 一長串 await）：</p>
+    <pre><code>MVB 正常啟動                          headless
+─────────────────────────────────────────────────────
+T+0   _load() → 讀到空 → 快取 ''
+                                      T+5  _load() → 也是空
+                                      T+7  產生 E0799707 → 寫 Hive + prefs
+T+12  ensureInitialized()
+      檢查快取（仍是 ''）→ 產生 191C4CA0
+      → 寫 Hive + prefs（覆蓋）</code></pre>
+    <p>因此這是典型的 <strong>check-then-act</strong> 競態，而那十幾秒就是窗口。</p>
+
+    <h3>15.2 偵測方法：利用 Hive 是 append-only</h3>
+    <p>改值不是原地覆寫而是 append 新 frame（見 <a href="#hive-format">§1.1</a>），所以<strong>若真的產生兩次，檔案裡會同時留著兩個 id</strong>——證據不會消失：</p>
+    <pre><code>adb shell run-as com.viewsonic.droid cat app_flutter/activate_db/activate.hive &gt; race.hive
+strings -a race.hive | grep -oE '[0-9A-F]{32}' | sort -u</code></pre>
+    <p>實測結果（先開 MVB、+5s 由 dm 觸發 headless）：</p>
+    <pre><code>191C4CA084BB479224AA09811FDBBF36   ← 最後勝出（prefs 也是這個）
+E0799707DE8B4776244926380A1C17BB   ← 被覆蓋掉的那個</code></pre>
+    <p><small>⚠️ 時序敏感：<code>+0s</code> 與 <code>+2s</code> 都沒重現（headless 較精簡、通常比 MVB 先到達產生那一步），<code>+5s</code> 才命中。這也說明<strong>為什麼不能靠「測不出來」判定安全</strong>。</small></p>
+
+    <h3>15.3 損害邊界</h3>
+    <table>
+      <thead><tr><th>面向</th><th>結論</th></tr></thead>
+      <tbody>
+        <tr><td>資料損壞</td><td>✅ <strong>不會</strong>。Hive 與 prefs 最終都收斂到最後寫入的那個，兩者一致</td></tr>
+        <tr><td><strong>真正的風險</strong></td><td>❗ 中間窗口若被 dm 讀到，它會把<strong>之後不存在的 id</strong> 回報雲端 → Manager 有一筆<strong>指向不存在 instance 的對應</strong>，且<strong>靜默無錯</strong></td></tr>
+        <tr><td>實測那次</td><td>dm 讀到的是勝出的那個（<code>#1 initial</code> 就是它）——純粹時序運氣，不能當保證</td></tr>
+      </tbody>
+    </table>
+
+    <h3>15.4 修法：雙層防護（A ＋ B）</h3>
+    <h4>A. app 已在執行時 headless 直接跳過</h4>
+    <div class="callout ok">
+      <strong>理由不是妥協而是本來就該如此：app 正在跑，它自己就會初始化，headless 根本沒必要跑。</strong>
+      而這剛好封掉 15.1 那個十幾秒的大窗口。
+      <br />兩條路徑同 process，故一個 <code>static volatile boolean</code> 即足夠：
+      <code>MainActivity.configureFlutterEngine</code> 設 true、<code>onDestroy</code> 設 false，
+      <code>InstanceInfoSyncJobService</code> 在 <strong><code>schedule()</code> 與 <code>onStartJob()</code> 都檢查</strong>
+      （排程與執行之間使用者可能才開啟 app）。
+    </div>
+    <h4>B. 產生前<u>即時重讀</u> Hive，不信任記憶體快取</h4>
+    <p>新增 <code>DataStorage.reloadInstanceIDAsync()</code>，<code>MvbActivator.ensureInitialized()</code> 改用它的回傳值判斷，
+    讓「不會重複產生」這個性質<strong>不依賴於哪條路徑先跑</strong>，而非只在守衛生效時才成立。</p>
+    <div class="callout warn">
+      <strong>⚠️ A 與 B 不是替代關係</strong>：A 省掉浪費的第二個 engine、B 縮小窗口（十幾秒 → 微秒級）。
+      B 仍是 check-then-act，<strong>沒有消除</strong>競態——徹底消除要靠 15.5 的單一寫入權威。
+    </div>
+
+    <h3 id="race-hive-lock">15.4.1 ⚠️ 驗證 B 時發現：Hive 有 lock 檔，併發會<u>丟例外</u></h3>
+    <div class="callout new">
+      為了證明 B 有效，<strong>暫時停用守衛 A</strong> 讓兩條路徑真的並行。結果 headless 的 Dart 失敗於一個具體錯誤：
+      <pre><code>[InstanceInfoHeadless] failed: PathNotFoundException: Cannot delete file,
+path = '…/activate_db/activate.lock' (OS Error: No such file or directory, errno = 2)</code></pre>
+      <strong>Hive 有 lock 檔（<code>activate.lock</code>）</strong>，兩個 isolate 併發開關同一個 box 會撞上。三個結論：
+      <ol>
+        <li><strong>併發存取 Hive 確實不安全</strong>——這是實證，不是推測</li>
+        <li>但失敗模式是<strong>丟例外而非靜默損壞</strong>，比預期的好</li>
+        <li><strong>守衛 A 因此不只是優化，而是必要的</strong>——併發跑 headless 根本不可靠</li>
+      </ol>
+    </div>
+    <div class="callout new">
+      <strong>❗ 這也暴露 B 本身引入的新風險，必須一起修</strong>
+      <br />B 多了一次 open/close 循環，而 <code>MvbActivator.ensureInitialized()</code> 在 <code>main()</code> 的
+      <code>_initApp()</code> 內<strong>沒有 try-catch</strong> —— 例外會被 <code>runZonedGuarded</code> 當致命錯誤接走，
+      <strong>導致 app 初始化中斷</strong>。
+      <br />→ 因此 <code>reloadInstanceIDAsync()</code> 內部<strong>自行 catch 並退回記憶體快取</strong>：
+      失敗時退化成「可能重複產生」（原本的行為），但<strong>絕不弄壞啟動流程</strong>。
+      <br /><small>這是「修 bug 引入新 bug」的典型案例，靠實測抓到——值得記住：<strong>在啟動關鍵路徑上新增 I/O，必須先確認呼叫端有沒有接例外</strong>。</small>
+    </div>
+
+    <h4>回歸驗證（四項全通）</h4>
+    <table>
+      <thead><tr><th>情境</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr><td>1. 會重現的競態時序（先 MVB、+5s 觸發）</td><td>✅ Hive 只有 1 個 id；守衛觸發 1 次；<strong>0 次 fallback</strong>（表示沒有撞 lock）</td></tr>
+        <tr><td>2. 需求 3：app 沒跑、dm 觸發</td><td>✅ headless 正常 <code>generated</code></td></tr>
+        <tr><td>3. 需求 3(c)：之後開啟 MVB</td><td>✅ id 未被重新產生</td></tr>
+        <tr><td>4. 需求 4：<code>MY_PACKAGE_REPLACED</code></td><td>✅ 仍正確鏡射既有 id</td></tr>
+      </tbody>
+    </table>
+
+    <h3>15.5 殘留窗口與未來的正解</h3>
+    <div class="callout warn">
+      <strong>A ＋ B 之後，殘留窗口已從十幾秒縮到微秒級</strong>，且情境限縮為
+      「headless 已啟動、使用者才在那 2–4 秒內開啟 MVB」。
+      <br />而且由 15.4.1 得知，真的並行時<strong>更可能的結果是其中一方丟 Hive lock 例外</strong>（已被 catch，退回快取），
+      而不是安靜地產生兩個 id。
+      <br /><strong>→ 現況風險已大幅降低，足以出貨。</strong>
+    </div>
+    <div class="callout">
+      <strong>📌 未來的完美解法（非本票 scope）：instance_id 的單一寫入權威</strong>
+      <br />把「檢查 + 產生 + 寫入」變成<strong>原子操作</strong>——產生前先向原生層取一個跨 isolate 的鎖
+      （<code>FileLock</code>，或因兩者同 process 而可用的 process 內 monitor），拿到才做。
+      <br />這會動到 <code>MvbActivator</code> 的既有流程與 <code>DataStorage</code> 介面，改動範圍不小；
+      而 A ＋ B 已把風險壓到可接受，故列為<strong>未來項</strong>。
+      <br /><small>順帶一提：這也是 <a href="contract-proposal.html#shared-secure-storage">contract §5.1</a> 那個「共用儲存」議題的鄰居——
+      若哪天真的改用 SQLCipher，資料庫本身的交易機制就順便解決了單一寫入權威的問題。</small>
+    </div>
+
+    <h2 id="ifp-verify">16. 真實 IFP34 實機驗證（2026-08-20）—— 結掉「IFP 抽驗」待辦</h2>
+    <div class="callout ok">
+      <strong>✅ 在真實 ViewSonic IFP34 上全數通過。</strong>這台是刻意挑的<strong>低效能機</strong>，正好壓測 headless 的時序假設——
+      也是原本文件裡列為「唯一剩餘技術不確定性」的那一項。
+    </div>
+    <table>
+      <tbody>
+        <tr><td style="width:9em"><strong>裝置</strong></td><td>IFP34（<code>172.21.31.70:5555</code>）、Android 14、<strong>4 核</strong>、7.9 GB RAM、<code>ro.build.type=user</code></td></tr>
+        <tr><td><strong>MVB 現況</strong></td><td>原裝 <code>3.11.99</code>（<code>versionCode=30110991</code>），<strong>SYSTEM ＋ UPDATED_SYSTEM_APP</strong>、簽章為 MVBA（<code>8e767158…f595</code>）</td></tr>
+        <tr><td><strong>flavor</strong></td><td><strong>edla</strong>——實測 <code>appId=10058</code> 是普通 uid、manifest <u>無</u> <code>sharedUserId</code>（不是 ifp flavor）</td></tr>
+        <tr><td><strong>dm 現況</strong></td><td><code>2.4.11</code>（正式版，<u>不含</u>我們的 <code>MvbInstanceInfoReader</code>）→ 故本輪<strong>只驗 MVB 側</strong></td></tr>
+      </tbody>
+    </table>
+
+    <h3>16.1 時序：比 Pixel Tablet 慢約 5 倍，但仍在 timeout 內</h3>
+    <table>
+      <thead><tr><th>情境</th><th>IFP34</th><th>Pixel Tablet（對照）</th></tr></thead>
+      <tbody>
+        <tr><td>需求 4：<strong>鏡射</strong>既有 Hive 值（receiver → 鏡射完成）</td><td><strong>10.6s</strong></td><td>~2.2s</td></tr>
+        <tr><td>需求 3：<strong>產生</strong>新 id（receiver → 產生完成）</td><td><strong>12.4s</strong></td><td>~4s</td></tr>
+        <tr><td>JobService 的 <code>TIMEOUT_MS</code></td><td colspan="2">20s——<strong>IFP34 尚有約 7.6s 餘裕</strong></td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>⚠️ 這個數字對 timeout 設定是重要輸入。</strong>IFP34 已經是刻意挑的慢機，最慢情境（產生）用掉 12.4s／20s。
+      餘裕不算充裕——若日後遇到更慢的機型或系統負載更重時，可能需要調高 <code>TIMEOUT_MS</code>。
+      <br />另註：這是 <strong>debug build</strong>（含解壓 <code>kernel_blob.bin</code> 的成本），release 走 AOT 會明顯更快，故實際出貨的餘裕比這裡更大。
+    </div>
+
+    <h3>16.2 驗證項目</h3>
+    <table>
+      <thead><tr><th>項目</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr><td>provider 註冊（edla flavor、system app 之上）</td><td>✅ 6 處 <code>instanceinfo</code> 宣告（provider ＋ service ＋ receiver）</td></tr>
+        <tr><td>存取控制</td><td>✅ <code>content query</code> → <code>UNAUTHORIZED / package not allowed: com.android.shell</code></td></tr>
+        <tr><td>正常啟動的鏡射</td><td>✅ 真實機器既有的 <code>88F736D6…6775</code> 正確鏡射、<code>activated=true</code>，<strong>未被重新產生</strong></td></tr>
+        <tr><td>需求 4（<code>MY_PACKAGE_REPLACED</code> 鏡射）</td><td>✅ id 相同、全程未開啟 app</td></tr>
+        <tr><td>需求 3（headless 產生）</td><td>✅ 產生 <code>E4208FFA…57E6</code></td></tr>
+        <tr><td>需求 3(c)（之後開啟 MVB 不重複產生）</td><td>✅ id 不變；<code>[ApplicationInfo] saved=0 hasPrev=false reset=false</code>；<strong>Hive 內只有 1 個 id</strong></td></tr>
+      </tbody>
+    </table>
+    <p>💡 需求 3(c) 在<strong>慢機上是最嚴苛的測試</strong>——<code>_load()</code> 到 <code>ensureInitialized()</code> 的窗口更大，
+    競態更容易發生。這裡通過，代表 <a href="#race">§15</a> 的 A＋B 防護在真實慢機上也站得住。</p>
+
+    <h3 id="ifp-pitfalls">16.3 在真實 IFP 上測試的三個坑</h3>
+    <ol>
+      <li><strong>降級被擋</strong>：原裝 <code>versionCode=30110991</code>，我的 build 是 <code>30110031</code> → <code>INSTALL_FAILED_VERSION_DOWNGRADE</code>（<code>-d</code> 也無效）。
+        解法：<code>flutter build --build-number=30119999</code> 蓋過去。
+        <br />⚠️ <strong>必須選奇數</strong>——build number 的<u>奇偶</u>編碼 stage／production，選錯奇偶會觸發
+        <code>shouldResetActivationStorage</code> 而<strong>清掉現有 instance_id</strong>（見 <a href="#five-req-bugs">§13.1 ①</a>）</li>
+      <li><strong><code>am force-stop</code> 之後廣播永久收不到</strong>：它會設 <code>stopped=true</code>，而 <code>am kill</code> <u>清不掉</u>——
+        必須<strong>啟動一次 app</strong> 才會變回 <code>stopped=false</code>。我自己在這台上又踩了一次（先前已在 <a href="#headless-verify">§10.7</a> 記錄過）。
+        <br />→ 要在不觸發守衛 A 的前提下讓 app 不執行，用 <strong><code>am kill</code></strong>（殺 process 但不設旗標）</li>
+      <li><strong>安裝很慢</strong>：這台一次 <code>install -r</code> 約 <strong>70–80 秒</strong>（APK 數百 MB）。安排測試步驟時要把它算進去，否則會誤判成「沒反應」</li>
+    </ol>
+
+    <h3>16.4 裝置最終狀態</h3>
+    <p>IFP34 目前裝的是<strong>本次測試的 edla debug build</strong>（<code>3.11.3 / versionCode 30119999</code>），provider 與存取控制皆正常，供後續人工驗證使用。</p>
+    <p>⚠️ 原裝的 <code>3.11.99</code> 已被移除（過程中 <code>adb uninstall</code> 一度退回原廠 <code>3.2.13</code>，隨後裝上本次 build）。
+    原 APK 已備份，若需還原可自備份安裝。</p>
+
+    <h2 id="headless-profile">17. Headless 啟動成本拆解（分段實測，2026-08-20）</h2>
+    <p>問題起點：<strong>headless 是否會把整段 <code>main()</code> 跑過？能不能再切一個更精簡的 Dart 入口，讓 IFP34 這種慢機也快？</strong>
+    做法是在 Java 與 Dart 兩側插臨時計時 log（量完已移除），在 Pixel Tablet <code>3629105H804NHC</code>（edla debug）
+    以 <code>pm clear</code> 冷啟動重複量 3 次，數據一致。</p>
+
+    <h3 id="headless-breakdown">17.1 分段數據</h3>
+    <p>「熱」欄位是同一 process 內起第二顆 engine 的情形（<a href="#inflight-bug">§17.4</a> 那個 bug 意外提供的對照組），
+    它把「process／VM 一次性成本」與「每顆 engine 成本」清楚分開了。</p>
+    <table>
+      <thead><tr><th>階段</th><th>冷（新 process）</th><th>熱（同 process 第二顆 engine）</th></tr></thead>
+      <tbody>
+        <tr><td><code>loader.ensureInitializationComplete</code>（debug 版含解壓 <code>kernel_blob.bin</code>）</td><td>~0.70 s</td><td>0–1 ms</td></tr>
+        <tr><td><code>new FlutterEngine()</code>　<strong>含所有 plugin 自動註冊</strong></td><td>~26 ms</td><td>10–26 ms</td></tr>
+        <tr><td><code>executeDartEntrypoint</code> → Dart 第一行（isolate 啟動）</td><td>~1.0 s</td><td>~0.97 s</td></tr>
+        <tr><td>Dart：<code>WidgetsFlutterBinding.ensureInitialized()</code></td><td>~130 ms</td><td>~125 ms</td></tr>
+        <tr><td>Dart：<code>VSPlatformHelperImpl().ensureInitialized()</code></td><td>415–677 ms</td><td>~116 ms</td></tr>
+        <tr><td>Dart：<code>UtilityHelper…ensureInitialized()</code>（androidID）</td><td>81–151 ms</td><td>~21 ms</td></tr>
+        <tr><td>Dart：<code>SecureDataStorage.initialize()</code>（開 Hive ＋首次鏡射）</td><td>290–680 ms</td><td>~180 ms</td></tr>
+        <tr><td>Dart：<code>MvbActivator.ensureInitialized()</code>（產生 ＋二次鏡射）</td><td>46–245 ms</td><td>~46 ms</td></tr>
+        <tr><td><strong>總計</strong></td><td><strong>~3.5 s</strong></td><td><strong>~1.5 s</strong></td></tr>
+      </tbody>
+    </table>
+    <p>粗分：<strong>native／engine 段 ~1.7 s ＋ Dart 段 ~1.8 s</strong>。</p>
+
+    <h3 id="second-entrypoint">17.2 答案：<u>已經</u>是兩個入口，而且沒有東西可以再切</h3>
+    <ul>
+      <li><strong>headless 不會跑 <code>main()</code></strong>。Dart 端有兩個入口：<code>main</code>（正常啟動）與
+        <code>@pragma('vm:entry-point') instanceInfoHeadlessMain</code>（headless）。
+        <code>_initApp()</code> 那條重鏈（PDF factory、WindowManager、DeviceModelFactory…）headless <u>完全沒跑</u>。</li>
+      <li>Dart 段那 1.8 s 的四項<strong>都拿不掉</strong>：<code>platformHelper</code> 是為了避免
+        <code>LateInitializationError: _isChromeOSCache</code>（見 <a href="#headless-verify">§10.7</a>）、
+        storage 初始化是主體、產生是目的、binding 是前提。</li>
+      <li><strong><code>automaticallyRegisterPlugins=false</code> 不是解方</strong>：plugin 自動註冊實測只 <strong>10–26 ms</strong>，
+        而關掉它會拔掉 headless 真正需要的 <code>path_provider</code>（<code>Hive.initFlutter</code>）與
+        <code>device_info_plus</code>（androidID）。省 20 ms、換來手動註冊耦合 plugin 內部類別，不值得。</li>
+    </ul>
+
+    <h3 id="process-init-noise">17.3 log 裡那些「不該出現」的東西不是我們的</h3>
+    <p>headless process 的 log 會看到 <code>TextToSpeech</code>、<code>GoogleTagManager</code>、
+    <code>AdvertisingIdClient</code>、<code>ProfileInstaller</code>。這些是 <strong>process 級</strong>初始化
+    （androidx startup／ContentProvider 自動啟動），process 因為任何原因被拉起就會有，與我們的 engine 無關，也關不掉。</p>
+    <p>另外會看到一條非致命錯誤：</p>
+    <pre><code>⛔ Error on detecting chromeos: MissingPluginException(No implementation found for
+   method detectChromeos on channel com.viewsonic.droid/detectChromeos)</code></pre>
+    <p>原因：<strong>MainActivity 手寫註冊的 MethodChannel 在 headless engine 不存在</strong>（已被 catch，走預設值）。
+    對照之下 <code>device_info_plus</code> 這類<u>正式 plugin</u> 會被自動註冊，所以 androidID <strong>拿得到</strong>
+    —— 實測產生的 instance_id 正常（<code>A83A0049BFDB108245F6F66B48CEB797</code>）。
+    <br />→ 教訓：headless 可以依賴 <strong>plugin</strong>，不能依賴 <strong>Activity 手寫 channel</strong>。</p>
+
+    <h3 id="inflight-bug">17.4 ⚠️ 量測順帶抓到的 bug：同一次流程起了<u>兩顆</u> engine</h3>
+    <p>三次量測都出現兩組完整時間軸、同一個 PID。原因：</p>
+    <ol>
+      <li>dm 在輪詢期間會重複呼叫 provider 的 <code>call("ensureInitialized")</code>；</li>
+      <li>守衛 <code>hasMirroredInstanceId()</code> 只看 prefs 的<strong>結果</strong>，鏡射完成前恆為 <code>false</code>；</li>
+      <li>同 <code>JOB_ID</code> 再排一次會取代舊 job，但<u>前一顆 engine 已經在跑</u>
+        → 同一 process <strong>兩顆 engine、兩個 isolate 同開同一個 Hive 檔</strong>，
+        正是 <a href="#race-hive-lock">§15.4.1</a> 的 <code>activate.lock</code> 併發情境。</li>
+    </ol>
+    <p>修法：第三層守衛 <code>sSyncInFlight</code>（<code>volatile</code> static），
+    在 <code>onStartJob()</code> 設起、<code>cleanupEngine()</code> 清掉，<code>schedule()</code> 與 <code>onStartJob()</code> 都檢查。
+    驗證後只剩一顆 engine：</p>
+    <pre><code>InstanceInfoSync: skip schedule (provider.call): a headless sync is already in flight
+InstanceInfoSync: headless mirror: instance_id=(empty)
+InstanceInfoSync: headless mirror: instance_id=present
+MvbInstanceInfo: ✅ instance_id=A83A0049BFDB108245F6F66B48CEB797  (dm overlay，同一秒)</code></pre>
+    <p>至此 headless 有三層守衛：<code>sMainEngineAlive</code>（app 在跑就不做）、
+    <code>hasMirroredInstanceId</code>（做過就不做）、<code>sSyncInFlight</code>（正在做就不重做）。</p>
+
+    <h3 id="headless-speed-conclusion">17.5 對 IFP34 的結論</h3>
+    <ul>
+      <li><strong>release 版會比實測快</strong>：不需解壓 <code>kernel_blob.bin</code>（省掉冷啟那 ~0.7 s），直接用 APK 內的 <code>libapp.so</code>。</li>
+      <li>IFP34 的 12.4 s（<a href="#ifp-verify">§16</a>）是<strong>同一組分佈被慢硬體放大</strong>，主要壓在 Flutter VM／isolate 啟動——
+        那不是我們控制得了的部分，寫再精簡的 Dart 入口也不會變快。</li>
+      <li>真正有效的加速<strong>已經在做</strong>：<code>MY_PACKAGE_REPLACED</code>／<code>BOOT_COMPLETED</code> 提前觸發，
+        dm 來問的時候通常早就鏡射完（同步回答，0 等待）。只有「更新後從未開機、dm 立刻問」才會撞到冷啟成本。</li>
+      <li>因此 <code>TIMEOUT_MS = 20 s</code> 維持不變即可（IFP34 實測 12.4 s，餘裕 ~7.6 s）；
+        <strong>不需要</strong>第二個 Dart 入口，README 的「評估調高 timeout」待辦可視為已評估。</li>
+    </ul>
+
+    <h3 id="force-stop-transparent">17.6 <code>am force-stop</code> 對 dm 是透明的（2026-08-20 實測釐清）</h3>
+    <p>起因是一個好問題：<strong>使用者若在「設定」裡強制停止 MVB，dm 分辨得出來嗎？需要分辨嗎？</strong>
+    先前文件只記了「force-stop 之後廣播收不到」（測試陷阱），沒釐清它對<u>產品行為</u>的影響。實測結論：<strong>不影響，而且自癒。</strong></p>
+
+    <h4>① <code>stopped=true</code> 時 provider 照樣通</h4>
+    <p>前置：<code>am force-stop com.viewsonic.droid</code>（確認 <code>stopped=true</code>、process 死著），dm 來讀：</p>
+    <pre><code>stopped=true notLaunched=false                    ← 前置狀態（把 dm 移開後乾淨量測）
+14:24:34 ActivityManager: Start proc 12376:com.viewsonic.droid for content provider {InstanceInfoProvider}
+         dm overlay:      ✅ instance_id=A83A0049BFDB108245F6F66B48CEB797</code></pre>
+    <p><code>stopped</code> 旗標<strong>只擋廣播，不擋 provider 存取</strong>——<code>query()</code> 是 explicit start，
+    系統會把 MVB 的 process 拉起來。</p>
+    <p>⚠️ 量測時踩到的方法論細節：第一次測 <code>stopped</code> 一直讀到 <code>false</code>，
+    因為 <strong>dm 的驗證 overlay 每秒輪詢，在 57ms 內就把 MVB 拉回來、順手清掉旗標</strong>。
+    必須先把 dm 移到背景才量得到乾淨的前置狀態。</p>
+
+    <h4>② query 順手清掉旗標，延後的 <code>BOOT_COMPLETED</code> 被補送</h4>
+    <pre><code>InstanceInfoSync : receiver: android.intent.action.BOOT_COMPLETED
+BroadcastQueue   : BOOT_COMPLETED_BROADCAST_COMPLETION_LATENCY_REPORTED … dispatchLatency:1
+（之後）stopped=false</code></pre>
+    <p>→ 修正先前文件的說法：不是「必須<u>啟動一次 app</u> 才恢復」，而是
+    <strong>任何 explicit start 都會清掉，包括別的 app 來 query 你的 provider</strong>，不需要使用者親自開 MVB。</p>
+
+    <h4>③ 最糟組合（<code>force-stop</code> ＋ <code>pm clear</code>，需要 headless）也全通</h4>
+    <pre><code>stopped=true                                      ← 前置：旗標 true、完全沒資料
+14:25:15 Start proc 12606 … for content provider  ← query 拉起 process
+14:25:16 scheduled (provider.call): result=1      ← dm 要求初始化
+14:25:16 starting headless Flutter engine
+14:25:18 headless mirror: instance_id=present
+         dm overlay: ✅ instance_id=C554CCEF4C29901C3922CA8E0D3CEF9E     （約 3 秒）</code></pre>
+
+    <h4>④ dm 的三分法都不受影響</h4>
+    <table>
+      <thead><tr><th>dm 的判斷</th><th>依據</th><th>受 force-stop 影響</th></tr></thead>
+      <tbody>
+        <tr><td><code>NoMvb</code> / <code>MvbTooOld</code></td><td><code>query()</code> 回 <code>null</code> → 再問 <strong>PackageManager</strong>（<code>isMvbInstalled</code>）</td><td>❌</td></tr>
+        <tr><td><code>NotInitialized</code></td><td>provider 回答了但缺 <code>instance_id</code> 那列</td><td>❌（query 會拉起 process）</td></tr>
+        <tr><td><code>Info</code></td><td>拿到值</td><td>❌</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>結論：dm 不需要、也無法分辨「MVB 是否被強制停止」——那個狀態對它是透明的，這是好事。</strong>
+      「force-stop 之後廣播收不到」只咬<u>開發測試</u>（force-stop 後 <code>install -r</code> 期待
+      <code>MY_PACKAGE_REPLACED</code>，中間沒有任何 explicit start），
+      產品路徑上呼叫端一定會先 <code>query()</code>，那次 query 就把旗標清掉並補送延後的廣播。
+      <br />→ 一般化：<strong>「provider 讀取」與「廣播觸發」是兩條獨立的路</strong>。
+      （基礎機制整理見 <a href="basics.html#receiver">basics §2.6</a>。）
+    </div>
+    <p>⚠️ 順帶觀察到一個<u>無害</u>的細節：<code>provider.call</code> 與補送的 <code>BOOT_COMPLETED</code>
+    在 4ms 內各排了一次 job（<code>sSyncInFlight</code> 在 <code>onStartJob()</code> 才設起，攔不到這種
+    「都還沒開始執行」的重複排程）。但同 <code>JOB_ID</code> 後者會<strong>取代</strong>前者，實測只啟動了一顆 engine
+    ——結果正確，故不另外處理。</p>
+
+    <h2 id="preload">18. preload 部署的前提條件（2026-08-20 實測釐清）</h2>
+    <p>起點是一個部署面的問題：<strong>MVB 若 preload 在廠商 FW 裡，第一次開機收得到 <code>BOOT_COMPLETED</code> 嗎？</strong>
+      過程中把兩份外部意見（另兩個 AI 的建議）拿實機一條條驗過，結論如下。
+      基礎機制整理在 <a href="basics.html#receiver">basics §2.6</a>，這裡只留<u>決策</u>與<u>待辦</u>。</p>
+
+    <h3 id="exported-decision">18.1 決策：<code>exported="false"</code> <u>不要</u>改成 <code>true</code></h3>
+    <p>兩份外部意見都指出「接收系統廣播必須 <code>exported="true"</code>，否則收不到」。<strong>這是錯的，已否證。</strong>
+      留下紀錄是因為這個誤解很常見，未來 code review 很可能再被提出來。</p>
+    <ul>
+      <li><code>dumpsys activity broadcasts</code>：重開機的 <code>BOOT_COMPLETED</code> 對
+        <code>InstanceInfoSyncReceiver</code> 的紀錄是 <code>exported=false</code> ＋ <strong><code>DELIVERED</code></strong>
+        ＋ <code>terminal +32ms</code>。</li>
+      <li><code>adb install -r</code> 觸發 <code>MY_PACKAGE_REPLACED</code>：process 為了這個 receiver <strong>冷啟動</strong>，
+        一路跑到 <code>InstanceInfoSync: receiver: android.intent.action.MY_PACKAGE_REPLACED</code>。</li>
+      <li>原理：<code>exported</code> 管的是「別的 app 能不能戳我」；系統派送 protected broadcast 不在其管轄內。
+        Android 12 起官方指南的建議值對「只收系統廣播」的 receiver 就是 <code>false</code>。</li>
+    </ul>
+    <div class="warn">
+      ⚠️ 改成 <code>true</code> 不會換到任何功能，只會把 receiver 暴露給第三方 app ——<strong>是安全性退步</strong>。
+    </div>
+    <p>過程中也踩到一個量測陷阱：第一次重開機後 grep log 找不到 receiver，誤判成「沒觸發」。
+      實際是 <code>main</code> buffer 被 Play Store 洗版擠掉（buffer 最早只到 receiver 執行後 33 秒）。
+      <strong>→ 驗證廣播有沒有派送，要看 <code>dumpsys activity broadcasts</code>，不要只 grep log。</strong></p>
+
+    <h3 id="preload-stopped">18.2 preload 收不收得到廣播：預設會，但 Android 14+ 起不是保證</h3>
+    <p>傳統行為（Android ≤ 13）：preload 在 system 分區的 app 開機掃描時就被標成「非 stopped、已 launched」，
+      所以第一次開機收得到——這正是 preload 相對 sideload 的好處，剛好補掉
+      <a href="basics.html#receiver"><code>notLaunched=true</code></a> 那個洞。</p>
+    <p><strong>Android 14（API 34）加了變數</strong>：平台允許把非必要的 preload 在第一次開機就掃成 stopped。
+      實測 Pixel Tablet（Android 16）：<code>scannedAsStoppedSystemApp=true</code> 有 4 個、<code>=false</code> 有 385 個，
+      其中 <code>com.android.virtualization.terminal</code>（<code>codePath=/apex/…/priv-app/…</code>、<code>flags=[ SYSTEM … ]</code>）
+      到現在還是 <code>stopped=true</code>。→ <strong>預設會，少數會被關掉，不能當保證。</strong></p>
+    <h4>⚠️ 更該擔心的是「假預載」</h4>
+    <p>廠商說「已預載」有兩種意思，行為天差地遠：</p>
+    <table>
+      <thead><tr><th>預載方式</th><th>系統怎麼看</th><th>第一次開機</th></tr></thead>
+      <tbody>
+        <tr><td>燒進 system image（<code>/system/priv-app</code> 等）</td><td>系統 app，<code>flags</code> 含 <code>SYSTEM</code></td><td>✅ 收得到（除非被掃成 stopped）</td></tr>
+        <tr><td>OOBE 腳本 <code>adb install</code> 到 <code>/data/app</code></td><td>一般 user app，<code>notLaunched=true</code></td><td>❌ <strong>完全收不到</strong></td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>但架構上不需要賭這件事。</strong> 最壞情況（假預載或被掃成 stopped）只是 receiver 這條<u>預熱</u>路徑啞掉；
+      dm 的 provider query 照樣把 MVB 拉起來、順手清掉旗標（§17.6），代價是「晚幾秒」而不是「拿不到」。
+      這也是 receiver 從一開始就設計成 nice-to-have 的理由。
+    </div>
+
+    <h3 id="ce-storage-window">18.3 ⚠️ 獨立限制：鎖屏未解鎖前，instance_id <u>讀不到</u></h3>
+    <p><code>dumpsys</code> 顯示我們的 receiver 是 <code>directBootAware=false</code>，收的是 <code>BOOT_COMPLETED</code>
+      而非 <code>LOCKED_BOOT_COMPLETED</code>——要等使用者解鎖才派送。</p>
+    <p>比 receiver 更關鍵的是<strong>資料本身</strong>：instance_id 存在 SharedPreferences／Hive，
+      兩者預設都落在 <strong>credential-encrypted (CE) storage</strong>，未解鎖前根本掛不上來。
+      所以這個時間窗內<u>不只 receiver 不跑</u>，<strong>dm 來 query provider 也讀不到值</strong>。</p>
+    <p>IFP 一般不設鎖屏、開機即解鎖，實務上碰不到。但若客戶設了 PIN 且開機後沒人解鎖，
+      dm 會看到「provider 通、但沒有值」——落在<a href="#dm-client-verify">§12</a> 的哪一類需要確認（目前會被歸成
+      <code>Failed</code> 或「沒有值」，而非「尚未可用」）。這是<u>與 <code>stopped</code> 無關</u>的獨立限制。</p>
+
+    <h3 id="preload-todo">18.4 為什麼這些<u>不</u>列成待辦</h3>
+    <p>直覺上會想開一串「跟 FW 廠商確認預載方式／確認 allowlist」的待辦。
+      想清楚之後<strong>不需要</strong>——因為兩種結果我們都已經測過，而且行為都正確。</p>
+    <table>
+      <thead><tr><th></th><th>被當成 stopped</th><th>非 stopped</th></tr></thead>
+      <tbody>
+        <tr><td>開機時</td><td>receiver 啞掉，什麼都沒發生</td><td>receiver 觸發，開機就把值備好</td></tr>
+        <tr><td>dm 第一次 query</td><td>通，但<strong>還沒有值</strong>（headless 這時才開始跑）</td><td>通，<strong>立刻有值</strong></td></tr>
+        <tr><td>dm 第二次以後</td><td>有值（約 3.5s 後）</td><td>有值</td></tr>
+      </tbody>
+    </table>
+    <p>stopped 那一欄不是推論，是實測過的路徑（收掉 dm 之後全新安裝 → <code>stopped=true notLaunched=true</code>
+      ＋ 沒有 process → dm 一來 query，<strong>4 秒</strong>內產生完成，全程沒人碰螢幕）。</p>
+    <div class="callout">
+      <strong>差別只在「值什麼時候備好」，不在「拿不拿得到」。</strong>
+      dm 是輪詢的，兩條路最後收斂到同一個狀態。
+      <br />→ 唯一會讓它變成 bug 的前提是「<u>dm 只 query 一次就定案</u>」，
+      而那個問題在 <a href="#trigger-lesson">§14.2</a> 已經處理掉了，且與 preload 無關。
+      <br />→ 所以 preload 方式是「知道了比較好，但不影響正確性」的資訊，<strong>不是阻塞項</strong>。
+    </div>
+    <p>真的要查的時候一行就夠，留在這裡當除錯用（不是待辦）：</p>
+    <pre><code>adb shell dumpsys package com.viewsonic.droid \
+  | grep -E "codePath|flags=\[|scannedAsStopped|stopped=|notLaunched"</code></pre>
+    <p>同理，18.3 的鎖屏時間窗也不列待辦：dm 看到的是「provider 通但沒有值」，
+      跟「還沒產生完」<u>無法也不需要</u>區分，兩者的正確行為都是「稍後再問」。</p>
+
+    <h2 id="mvba-migration">19. ⚠️ 與 MVBA（前一代原生 app）遷移的衝突（2026-08-21）</h2>
+    <p>從 review <code>lib/application_info.dart</code> 的 <code>hasPreviousRecord</code> 修正一路追出來的，
+      是目前<strong>最可能讓 instance_id 不穩定</strong>的路徑，而且完全不在原需求描述裡。</p>
+
+    <h3 id="mvba-conflict">19.1 問題：headless 產生的 id 註定會被覆蓋</h3>
+    <p><code>main()</code> 在 <code>isNewVersion</code> 時會跑 MVBA 遷移，而遷移會<strong>覆寫 instance_id</strong>：</p>
+    <pre><code>// AppUpdateHelper._transferNativeDatabaseData()
+var db = await openDatabase(database.path, password: password);   // MVBA 的 sqlcipher DB
+List&lt;Map&gt; list = await db.rawQuery("SELECT * FROM vBoardInstanceInfo");
+var instanceId = list.first["UniqueID"];
+await dataStorage.setAsync(instanceID: instanceId, …);            // ← 覆蓋本地值</code></pre>
+    <p>意圖是合理的——同一台機器從 MVBA 升到 MVBF，身分該延續。但 headless <strong>不跑 <code>main()</code></strong>，
+      所以它完全跳過這段遷移：</p>
+    <pre><code>1. dm query → headless 產生 instance_id = X → 鏡射 → dm 上報 X
+2. 使用者第一次開啟 MVBF → transferNativeData() → instance_id 變成 MVBA 的 Y
+3. 雲端上 X 這筆對應作廢，而 dm 已經報過了</code></pre>
+    <div class="warn">
+      ⚠️ 這條路<strong>與 <code>hasPreviousRecord</code> 那個修正無關，是既有的</strong>：production（偶數 build）
+      的 <code>shouldResetActivationStorage</code> 本來就是 false，現在就走 <code>transferNativeData()</code>。
+      <br />根本張力：headless 的職責是「使用者開啟前就備好 id」，但「這台機器的真實 id 是什麼」
+      在 MVBA 遷移跑完之前<u>還沒有答案</u>。
+    </div>
+
+    <h3 id="mvba-options">19.2 三個方案與取捨</h3>
+    <table>
+      <thead><tr><th>方案</th><th>做法</th><th>最壞情況</th></tr></thead>
+      <tbody>
+        <tr><td>A</td><td>headless 也搬 MVBA 的 DB（只搬決定身分那半段）</td><td>踩到沒預期的相依或搬錯欄位 → <strong>id 是錯的</strong></td></tr>
+        <tr><td><strong>C（採用）</strong></td><td>偵測到有未遷移的 MVBA 資料就<strong>不產生</strong>，等使用者開 app</td><td>id <strong>晚一點</strong>才有（極端情況：沒人開就一直沒有）</td></tr>
+        <tr><td>B</td><td>把 <code>getPreference</code> 從 MainActivity 改成真 plugin，整段共用</td><td>乾淨，但動到既有 OTA 路徑，風險外溢出本票</td></tr>
+      </tbody>
+    </table>
+    <p>A 曾實作過又撤掉。撤的理由不是「比較複雜」，是<strong>失效模式的性質</strong>：
+      「錯的 id」比「晚來的 id」嚴重得多，而 A 是為了越來越小的族群去承擔前者。
+      而且 A 走的是 sqlcipher 開檔 / 解密 / schema 對映——<u>手邊機器驗不了</u>（沒有 <code>myViewBoard.db</code>）。</p>
+    <h4>⚠️ A 還有一個會造成不可逆資料遺失的陷阱</h4>
+    <p>不能直接在 headless 呼叫 <code>transferNativeData()</code>：</p>
+    <pre><code>transferNativeData() {
+  await _transferNativePreferences();   // ← headless 會整段失敗（見下）
+  await _transferNativeDatabaseData();  // ← 照樣跑（instance_id 搬到了）
+  await _removeMvbaData();              // ← 照樣跑（MVBA 資料被刪）
+}</code></pre>
+    <p><code>_transferNativePreferences()</code> 靠 <code>OtaPlugin.getPreference()</code>，而那個 channel
+      (<code>com.viewsonic.droid.whiteboard/app_update</code>) 是 <strong>MainActivity 手寫註冊</strong>的
+      （<code>MainActivity.java:906</code>）——headless engine 上不存在，丟 <code>MissingPluginException</code>
+      被那邊自己的 try/catch 吞掉，只留一行 log。於是<strong>設定沒搬、MVBA 資料卻被刪了</strong>：
+      語言／主題／字級／工具列位置永久遺失。
+      <br />→ <a href="#process-init-noise">§17.3</a> 那條教訓（headless 可依賴 plugin、不可依賴 Activity 手寫 channel）
+      的第二次現身，這次代價是<strong>不可逆</strong>的。</p>
+    <h4>另一個陷阱：<code>isNewVersion</code> 的來源有副作用</h4>
+    <p>那段的守衛是 <code>ApplicationInfo.isNewVersion</code>，但 <code>ApplicationInfo.ensureInitialized()</code>
+      結尾會寫入 <code>savedBuildNumber</code> ＋ <code>isFirstInstall</code>。headless 一旦為了讀它而呼叫，
+      就把「第一次啟動」這個<strong>一次性事件消耗掉</strong>，導致正常啟動時整段遷移不再執行。
+      現行 headless 刻意完全不碰 <code>ApplicationInfo</code>，這不是巧合。</p>
+
+    <h3 id="mvba-impl">19.3 採用 C 的實作</h3>
+    <ul>
+      <li><code>AppUpdateHelper.hasPendingMvbaMigration()</code>——只做 <code>File.existsSync()</code>，
+        不開 DB、不需要密碼，因此不依賴任何 Activity 手寫 channel。</li>
+      <li>headless 的守衛是 <code>before.isEmpty &amp;&amp; await …</code>：<strong>已經有 id 的機器完全不受影響</strong>
+        （情境 1 的舊版升級照常鏡射），短路求值讓常見路徑連 <code>existsSync()</code> 都不會呼叫。</li>
+      <li>guard 有明確退場條件：遷移完成後 <code>_removeMvbaData()</code> 已刪檔 → 回 false，
+        現場已無 MVBA 機器時整段可移除。</li>
+    </ul>
+
+    <h3 id="pending-reason">19.4 新增 <code>pending_reason</code>：狀態要曝光，錯誤不要</h3>
+    <p>C 帶來一個新問題：dm 分不出「還在產生中」與「不會自行產生」。
+      後者<strong>繼續輪詢不會有結果</strong>，需要的是人——這是本票<u>第一個</u>「知道原因會導致不同動作」的狀態，
+      所以值得曝光。</p>
+    <p>這也修正了本文件早先（<a href="#force-stop-transparent">§17.6</a> 一帶）的立場
+      「失敗不必回報給呼叫端，因為動作都是稍後重查」——那個論點對<u>會自癒的失敗</u>成立，
+      對<u>需要外部介入的狀態</u>不成立。</p>
+    <table>
+      <thead><tr><th></th><th><code>error_code</code> / <code>error_message</code></th><th><code>pending_reason</code></th></tr></thead>
+      <tbody>
+        <tr><td>語意</td><td><strong>這次 query 失敗了</strong></td><td>provider 正常，但值尚未存在<strong>且不會自行產生</strong></td></tr>
+        <tr><td>值的集合</td><td>開放（可夾帶任意例外訊息）</td><td>封閉、可枚舉</td></tr>
+        <tr><td>要不要配 message</td><td>要——「我們不知道發生了什麼」的逃生口</td><td><strong>不要</strong>——每個值都是自己寫死的，沒有未知</td></tr>
+      </tbody>
+    </table>
+    <p>刻意<u>不</u>做成 <code>pending_code</code> ＋ <code>pending_msg</code> 的對稱形狀：那是假一致。
+      message 只會落得兩種下場——常數字串複述 code（日後漂移），或動態文字誘使 dm 拿去顯示給使用者
+      （一個不列入合約、未翻譯的英文字串變成 UI）。<strong>形狀不對稱本身在傳達「這是封閉 enum」。</strong>
+      未來若真需要更多資訊，正解是加具名結構化欄位（如 <code>pending_since=&lt;epoch ms&gt;</code>），不是自由文字。</p>
+    <h4>收錄規則（寫進兩邊註解）</h4>
+    <div class="callout">
+      <strong>只有「需要外部介入才會改變的狀態」才進 <code>pending_reason</code>。</strong>
+      會自癒的失敗（engine 起不來、Dart timeout）一律不收，靠 log 診斷——一旦欄位存在，
+      早晚有人寫成 <code>if (pending != null) 放棄</code>，而那是錯的。
+      <br />今天符合的只有一個值：<code>REQUIRES_APP_LAUNCH</code>。
+    </div>
+    <h4>為什麼成本很低</h4>
+    <ul>
+      <li><strong>加一列是向後相容的</strong>：dm 的 reader 是 <code>Map&lt;String, String&gt;</code>，
+        不認識的 key 直接忽略，<code>contract_version</code> 不用動（只有移除或改名才要）。
+        dm 不改也不會壞；要<u>用</u>它才需要在 dm 端加分支。</li>
+      <li><strong>「空值省略該列」的既有規則直接給了「缺列 = 沒被擋住」</strong>，不需要定義 sentinel。</li>
+      <li><strong>自動清除</strong>：正常流程每次鏡射都不傳 <code>pendingReason</code>（null → 空字串 → 省略），
+        所以使用者開過 app 之後這一列自己消失。<u>不會有 stale 值</u>——這正是 <code>init_last_error</code>
+        那種事件式欄位做不到的事。</li>
+    </ul>
+    <h4>兩個實作上的坑</h4>
+    <ul>
+      <li>⚠️ <code>pendingReason</code> <strong>必須併進 <code>ProviderInfoMirror</code> 的 dirty check snapshot</strong>，
+        否則「只有它改變」的那次鏡射（剛被擋住／剛解除）會被擋掉，變成靜默不更新。</li>
+      <li>⚠️ 常數 <code>REQUIRES_APP_LAUNCH</code> 在 Dart 與 Java <strong>各寫一份，沒有編譯期保護</strong>
+        （兩邊註解都標了「必須一致」）。</li>
+      <li>下一次 headless 執行時，<code>_load()</code> 的鏡射會先清掉這一列、隨後再寫回，中間有極短空窗。
+        dm 若剛好讀到，看到的是「沒有值也沒有 pending_reason」→ 動作是重查 → 無害，不需要同步。</li>
+    </ul>
+
+    <h3 id="mvba-open">19.5 待確認（不阻塞實作，但會決定方向）</h3>
+    <ul>
+      <li>[ ] <strong>MVBA 的 <code>UniqueID</code> 是否真的應該勝出？</strong> 現行實作押在「是」。
+        若答案是「先產生的勝出」，正解反而是讓 <code>transferNativeData()</code> 在已有 instance_id 時
+        <u>不要覆蓋</u>，而 §19.3 這段就要移除。</li>
+      <li><strong>C 讓「永遠沒有 id」變成可能</strong>（v1 機器從此沒人開 MVB）
+        ——這<u>不是待辦</u>，是<strong>本設計的行為限制</strong>，對外只需<b>告知</b>。
+        <br />⚠️ 兩個容易寫錯的方向：
+        <br />① 不要寫成「錯的 id vs 沒有 id，哪個比較糟」的二選一——那是<u>假的權衡</u>：
+        會被覆蓋掉的 id <b>就是錯誤資料</b>（雲端持有一個不存在的 id，以它為 key 的操作
+        全部落空且無聲），用「欄位比較早有值」去換它沒有任何正向價值。
+        <br />② 不要替呼叫端設計處理方式，也不要把它列成「需要對方確認」。
+        MVB 為了「只給穩定值」已經付出多層檢查與 headless engine 的代價，這個限制是那個
+        取捨的自然結果；<strong>對方拿資料做什麼、UI 怎麼呈現，是他們的範圍</strong>。
+        我們只負責讓那個狀態<u>可被判斷</u>（`pending_reason`）並說明清楚。</li>
+      <li>[ ] 現場還有多少機器留著 MVBA 資料？若已趨近於零，這整段是理論問題（可問 FW／OTA）。</li>
+      <li>[ ] dm 端要不要真的消費 <code>pending_reason</code>（停止無效輪詢／上報「需要有人開一次 app」）。</li>
+    </ul>
+
+    <h3 id="mvba-verify-gap">19.6 驗證範圍與「決定不驗」（2026-08-21 定案）</h3>
+    <p>已確認：Dart analyzer 乾淨、<code>:app:compileEdlaDebugJavaWithJavac</code> 成功、
+      測試 16 支全綠。</p>
+    <h4>① MVBA 正向路徑：<strong>決定不驗</strong></h4>
+    <p>Pixel 與 IFP34 都沒有 <code>databases/myViewBoard.db</code>，新分支永遠早退；
+      人工偽造不現實（要複製 MVBA 的 sqlcipher schema，密碼還得從 androidID 推導）。</p>
+    <div class="callout">
+      <strong>不驗是可接受的，因為採用方案 C 之後這條路只是「一個 <code>File.existsSync()</code> 判斷」。</strong>
+      它不開 DB、不解密、不做 schema 對映——沒有那些會出錯的東西。
+      判斷錯的後果也只是「該早退卻沒早退」（＝退回原行為，id 會被覆蓋一次）或
+      「不該早退卻早退」（＝晚一點才有 id），<u>兩者都不是錯誤的 id</u>。
+      這正是 <a href="#mvba-options">§19.2</a> 選 C 而不是 A 的理由在驗證成本上的回報。
+    </div>
+    <h4>② IFP34 慢機重跑：<strong>決定不做，沿用 §16 的數據</strong></h4>
+    <p>§16 那輪之後的改動不影響它的結論：</p>
+    <ul>
+      <li><b><code>sSyncInFlight</code>（§17.4）在那台機器上本來就測不到。</b>
+        §16 記載該機的 dm 是 <code>2.4.11</code> 正式版、<u>不含</u> <code>MvbInstanceInfoReader</code>，
+        故該輪「只驗 MVB 側」。而這個守衛防的是<b>呼叫端重複呼叫 <code>ensureInitialized</code></b>——
+        沒有 reader 就不會有重複觸發，守衛不會被啟動。
+        且它的邏輯<b>與機器速度無關</b>（main thread 上讀寫一個 boolean），
+        慢機只會讓窗口變寬、<u>讓守衛更常生效</u>，失效方向不是時序造成的。</li>
+      <li><b>時序數據仍然有效。</b><code>pending_reason</code> 只多寫一個 prefs 字串
+        ＋ dirty check 多比一段字串；<code>decideActivationTransition</code> 是純重構；
+        MVBA guard 在無 <code>.db</code> 時是一次 <code>existsSync()</code>；其餘全是註解。
+        都在噪音級以下，<b>12.4s／20s（餘裕 7.6s）</b>那組數字不需要重測。</li>
+    </ul>
+    <p>→ 兩項都<strong>不列為待辦，也不視為缺口</strong>。
+      時序／<code>TIMEOUT_MS</code> 的評估本身早已結案（維持 20s，見
+      <a href="#headless-profile">§17</a>）；剩下的「慢機上守衛是否只起一顆 engine」
+      需要「dm 在 IFP 上輪詢」與「兩個觸發落在 engine 啟動窗口內」同時成立才觀察得到，
+      而守衛的失效方向不依賴機器速度——是 edge case，實務上安全。</p>
+
+
+    <h3 id="pending-guard-bug">19.7 ⚠️ 交叉 review 抓到的兩件事（2026-08-21）</h3>
+
+    <h4>① <code>pending_reason</code> 讓一個既有守衛的隱含假設破功 → 無限迴圈</h4>
+    <p><code>schedule()</code> 與 <code>onStartJob()</code> 的早退條件裡，
+      <code>hasMirroredInstanceId()</code> 有一個沒寫出來的假設：
+      <strong>「instance_id 是空的」代表「還沒好」，也就是<u>暫時</u>的</strong>。
+      <a href="#mvba-impl">§19.3</a> 的情境 3 直接打破它——那條路的定義就是
+      <b>永遠不會寫出 instance_id</b>，直到有人親自開 app。</p>
+    <p>後果（review 指出、追code 確認成立）：</p>
+    <pre><code>dm 每一輪輪詢 ensureInitialized
+  → 三個守衛全部通過（instance_id 確實是空的）
+  → 排 job → 起一顆完整 FlutterEngine（IFP34 實測 ~12s）
+  → Dart 走情境 3 → mirror(pendingReason) → setInfo 拿到空 id
+  → hasId == false → **不呼叫 finishJob**
+  → engine 閒置到 TIMEOUT_MS(20s) 才被收掉
+  → 下一輪輪詢，重來</code></pre>
+    <p>一台待遷移的機器會這樣<strong>無限期反覆啟動 engine</strong>，直到使用者開 app。</p>
+    <h5>修法（兩處都補）</h5>
+    <ul>
+      <li><code>isBlockedPending()</code> 守衛加進 <code>schedule()</code> 與 <code>onStartJob()</code>：
+        prefs 的 <code>pending_reason</code> 非空就不排、不跑。
+        <b>自我解除</b>：正常啟動的鏡射一律不帶 <code>pendingReason</code>，原生側寫成空字串
+        → 守衛失效。造成阻塞的解法（開一次 app）與解鎖條件是<u>同一件事</u>，不會卡死。</li>
+      <li><code>CompletionSignallingPlugin</code> 收到帶 <code>pendingReason</code> 的
+        <code>setInfo</code> 時<b>立即收工</b>——「被擋住」是這一輪的終端狀態，
+        等下去只是空轉。這對「第一次」那輪有效（那時 prefs 還沒有 pending，守衛擋不住）。</li>
+    </ul>
+    <div class="callout">
+      <strong>教訓：新增一個「永久性狀態」時，要回頭檢查所有以「結果為空」為條件的守衛。</strong>
+      這類守衛通常隱含「空是暫時的、再試一次就會有」，而永久狀態讓「再試一次」變成
+      <u>純粹的浪費</u>。加欄位的人不會自然想到要去看守衛——兩者在不同檔案、不同語言。
+    </div>
+
+    <h4>② <code>sMainEngineAlive</code> 的殘留窗口，後果被我低估了</h4>
+    <p>該旗標只擋「之後的 <code>schedule()</code>」，攔不住<b>已在執行</b>的 job。
+      我原本把撞鎖後的行為描述成「已知且有處理的降級」——<strong>那是錯的</strong>。
+      實際的因果鏈是：</p>
+    <pre><code>headless 產生 id X → commit 進 provider prefs → notifyChange → dm 可能已讀走並回報雲端
+使用者此時開 app → 主 isolate 撞 activate.lock
+  → reloadInstanceIDAsync() catch → 退回記憶體快取（空）
+  → 判定「還沒有 id」→ **再產生 Y 並覆蓋**
+→ 雲端持有的 X 從此不存在</code></pre>
+    <p>這正是<a href="#race">§15</a> 那個競態、也正是<strong>本功能存在要防止的那個失敗</strong>，
+      而且靜默。守衛 A 只把它壓縮成「in-flight 窗口」，沒有消除。</p>
+    <h5>決定：延後，但把它寫進程式碼</h5>
+    <p>正解是在 <code>setMainEngineAlive(true)</code> 時 <code>JobScheduler.cancel(JOB_ID)</code>
+      （執行中的 job 會收到 <code>onStopJob</code> → <code>cleanupEngine()</code>，現有結構接得上）。
+      <b>刻意未做</b>：那會在 Dart 可能正在寫 Hive 時 destroy engine，把問題換成「寫入被中途打斷」。
+      Hive 是 append-only ＋ CRC、尾端不完整的 frame 下次開檔會被跳過，理論上安全，
+      但<u>必須實機驗過才能換</u>，而目前沒有可用機器。</p>
+    <p>三件事（前提／破掉的後果／屆時正解）已寫進 <code>setMainEngineAlive</code> 的 javadoc
+      ——這條不能只留在文件裡，因為下一個動那個旗標的人是看程式碼的。</p>
+
+    <h4>順帶：兩個被撤回的 review 意見</h4>
+    <ul>
+      <li><code>errorCursor(ERROR_UNAUTHORIZED, denyReason)</code> 不構成資訊洩漏：
+        <code>denyReason</code> 的內容全是呼叫端<u>自己的</u> package name。</li>
+      <li><code>ERROR_STORAGE</code> 夾帶 <code>e.getMessage()</code> 也不必收：
+        <code>checkCaller()</code> 排在它<b>之前</b>（provider 的 184 行 vs 208 行），
+        所以那個訊息只到得了已通過 package ＋ 憑證驗證的呼叫端。
+        對已授權者曝光例外訊息是<u>診斷資訊</u>，收掉只會讓現場少一條線索。</li>
+    </ul>
+
+
   </main>
 </div>
 </body>

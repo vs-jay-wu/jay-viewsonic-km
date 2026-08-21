@@ -16,7 +16,9 @@
         <ul><li><a href="#entity-id-only">3.1 只給 entity_id、不給 entity_name</a></li></ul>
       </li>
       <li><a href="#reserved">4. 保留候選 keys</a></li>
-      <li><a href="#excluded">5. 明確排除（機敏）</a></li>
+      <li><a href="#excluded">5. 明確排除（機敏）</a>
+        <ul><li><a href="#shared-secure-storage">5.1 未來需求：共用加密儲存</a></li></ul>
+      </li>
       <li><a href="#mirror">6. 鏡射機制</a>
         <ul>
           <li><a href="#mirror-cost">6.1 成本與時機（dirty check / 移出啟動路徑）</a></li>
@@ -41,6 +43,8 @@
       <a href="findings.html">🛠️ 調查 findings</a>
       <a href="open-questions.html">❓ open questions</a>
       <a href="contract-proposal.html" class="active">📐 contract 草案</a>
+      <a href="basics.html">🎓 基礎知識</a>
+      <a href="dm-handoff.html">🤝 dm handoff</a>
     </div>
     <div class="callout">
       設計原則：<strong>v1 資料給最小集，但合約形狀按「一定會擴充」設計</strong>——之後加欄位是一行 code + 一行文件，不重談合約。
@@ -95,6 +99,12 @@
         <tr><td><strong>store（A31）</strong></td><td>Google Play key</td><td><code>MVBA_PlatForm.jks</code></td><td>❌ <strong>失效（跨 key）</strong></td></tr>
       </tbody>
     </table>
+    <div class="callout ok">
+      <strong>✅ 2026-08-19 已實作並在實機驗證（Pixel Tablet）：正向 ＋ 兩個反向情境全數符合預期。</strong>
+      其中反向測試刻意<strong>保持 dm 的 package name 不變、只換簽章</strong>，以隔離出「憑證檢查確實在做事」。
+      比對用憑證 SHA-256 <code>8e767158bd85…f595</code>；<strong>實證 dm 與 mvbf edla 憑證相同</strong>。
+      詳見 <a href="findings.html#access-verify">findings §11</a>，程式碼 mvbf <code>7a874d3b8</code>。
+    </div>
     <ul>
       <li><strong>採用方案</strong>：provider <code>query()</code> 內做 runtime 檢查——<code>getCallingPackage()</code> 取呼叫端，以 <strong><code>PackageManager.hasSigningCertificate(pkg, sha256, CERT_INPUT_SHA256)</code></strong> 比對 <code>MVBA_PlatForm.jks</code> 憑證的 SHA-256 allowlist。<strong>單一機制、全 flavor 行為一致</strong></li>
       <li><strong>為何不做混合方案</strong>（ifp/edla signature + store runtime）：兩套機制＝兩條測試路徑卻換不到安全性。而且 <strong>runtime 檢查比 signature permission 更嚴</strong>——signature permission 授予<strong>所有</strong>同簽章 app（IFP 上平台簽章的 ViewSonic app 不只 dm），runtime 則<strong>釘住 package + 憑證</strong>。改用 runtime 是收緊不是降級</li>
@@ -112,16 +122,33 @@
     </ul>
 
     <h2 id="v1-keys">3. v1 keys（本票 scope）</h2>
+    <div class="callout ok"><strong>2026-08-19 定稿：v1 只給最小集。</strong>下表即<u>實作現況</u>，非草案。</div>
+    <h3>資料 keys</h3>
     <table>
-      <thead><tr><th>key</th><th>來源</th><th>敏感度</th><th>備註</th></tr></thead>
+      <thead><tr><th>key</th><th>來源</th><th>何時出現</th><th>備註</th></tr></thead>
       <tbody>
-        <tr><td><code>contract_version</code></td><td>hardcode</td><td>無</td><td><code>"1"</code></td></tr>
-        <tr><td><code>instance_id</code></td><td>Hive <code>app_instanceID</code>（鏡射）</td><td>低</td><td>票面要求</td></tr>
-        <tr><td><code>error_code</code></td><td>provider 自行判定</td><td>無</td><td><strong>2026-08-17 會議新增需求</strong>：發生錯誤時回報給 Manager。<strong>字串</strong>（自我描述、免對照表），詳見 <a href="#error-contract">§3.2</a></td></tr>
-        <tr><td><code>error_message</code></td><td>provider 自行判定</td><td>無</td><td>人可讀的補充說明，<strong>僅供 log／除錯</strong>——dm <strong>不得</strong>用它做行為分支（同 <code>contract_version</code> 紀律）</td></tr>
-        <tr><td><code>entity_id</code></td><td>Hive <code>app_entityID</code>（<strong>既有安裝早已存著</strong>，鏡射即可）</td><td>低</td><td><strong>2026-08-17 會議定案：只給 <code>entity_id</code>，不給 <code>entity_name</code>。</strong>供<strong>雲端</strong>做 tenancy 比對；穩定主鍵（組織改名不變）、<strong>零網路、既有安裝升級後立即可用</strong>。POC 的 <code>EXPOSED_KEYS</code> 本就在送，成本為零。詳見 <a href="#entity-id-only">§3.1</a></td></tr>
+        <tr><td><code>contract_version</code></td><td>hardcode</td><td><strong>一律出現</strong>（連錯誤回應也有）</td><td><code>"1"</code>。<strong>僅供 log</strong>，dm 不得用它做行為分支</td></tr>
+        <tr><td><code>instance_id</code></td><td>Hive <code>app_instanceID</code>（鏡射）</td><td>已初始化後</td><td>票面要求。join key</td></tr>
+        <tr><td><code>entity_id</code></td><td>Hive <code>app_entityID</code>（鏡射）</td><td>enroll 後</td><td>供<strong>雲端</strong>做 tenancy 比對；穩定主鍵、零網路、既有安裝早已存著（見 <a href="#entity-id-only">§3.1</a>）</td></tr>
+        <tr><td><code>activated</code></td><td>Hive <code>app_activated</code></td><td>有值時</td><td>讓 dm 能區分「有 instance_id 但尚未 enroll」——對雲端回報有意義，故保留在 v1</td></tr>
       </tbody>
     </table>
+    <h3>錯誤 keys（詳見 <a href="#error-contract">§3.2</a>）</h3>
+    <table>
+      <thead><tr><th>key</th><th>說明</th></tr></thead>
+      <tbody>
+        <tr><td><code>error_code</code></td><td>字串。<code>UNAUTHORIZED</code> / <code>UNSUPPORTED_URI</code> / <code>STORAGE_ERROR</code> / <code>UNSUPPORTED_METHOD</code></td></tr>
+        <tr><td><code>error_message</code></td><td>人可讀補充，<strong>僅供 log</strong>，措辭不列入合約穩定性保證（dm 不得解析）</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>❌ 刻意排除於 v1 的欄位</strong>
+      <ul>
+        <li><code>entity_name</code>——2026-08-17 會議定案只給 <code>entity_id</code>（票面原寫 entity name 係誤會）</li>
+        <li><code>whiteboard_name</code>——<strong>2026-08-19 移除</strong>。auto-enroll 時它是自動編的「機型:timestamp」（例 <code>IFP6552:1755584112345</code>），<strong>對人無意義</strong>；而手動命名的有意義值 <strong>Manager 雲端在 enroll 時就已取得</strong>，不需再經 provider 拿一次。
+          <br />→ 若日後有「雲端期望值 vs 裝置實際值」的 <strong>drift 偵測</strong>需求再加回（候選清單見 <a href="#reserved">§4</a>）</li>
+      </ul>
+    </div>
 
     <h3 id="entity-id-only">3.1 只給 <code>entity_id</code>、不給 <code>entity_name</code>（2026-08-17 會議定案）</h3>
     <div class="callout ok">
@@ -189,6 +216,11 @@
           <td>檢查是否用了未來版本的 path（見 <a href="#three-versions">§7</a> 逃生門）</td>
         </tr>
         <tr>
+          <td><code>UNSUPPORTED_METHOD</code></td>
+          <td><code>call()</code> 收到不認得的 method 名（見 <a href="#call-trigger">§3.3</a>）</td>
+          <td>檢查是否用了未來版本的 method</td>
+        </tr>
+        <tr>
           <td><code>STORAGE_ERROR</code></td>
           <td>provider 讀自持 prefs 失敗（檔案損壞等）</td>
           <td>回報異常並重試；非「未初始化」</td>
@@ -212,13 +244,31 @@ error_code       | UNAUTHORIZED
 error_message    | caller signature mismatch</code></pre>
     <p>⚠️ <code>error_message</code> 內容<strong>不列入合約穩定性保證</strong>（措辭可隨時調整），因此 dm 只能寫 log、不可解析。</p>
 
+    <h3 id="call-trigger">3.3 dm 可呼叫的初始化觸發 <code>call("ensureInitialized")</code>（2026-08-19 新增）</h3>
+    <div class="callout new">
+      <strong>為什麼需要它</strong>：headless 初始化原本只由 MVB 自己的廣播觸發，但
+      <strong>全新安裝且未開啟</strong>的機器<u>兩個廣播都不會發</u>——
+      <code>MY_PACKAGE_REPLACED</code> 只在<strong>更新</strong>時發、<code>BOOT_COMPLETED</code> 要<strong>重開機</strong>。
+      → 這個缺口只能由 dm 主動要求填補。
+    </div>
+    <table>
+      <tbody>
+        <tr><td style="width:8em"><strong>介面</strong></td><td><code>ContentResolver.call(infoUri, "ensureInitialized", null, null)</code></td></tr>
+        <tr><td><strong>存取控制</strong></td><td><strong>複用 <code>query()</code> 的同一個 package ＋ 憑證檢查</strong>——不必另開 exported component，<strong>攻擊面不變</strong></td></tr>
+        <tr><td><strong>回傳</strong></td><td>成功：Bundle <code>{ scheduled: true }</code>；被拒：Bundle <code>{ error_code, error_message }</code></td></tr>
+        <tr><td><strong>語意</strong></td><td><strong>非阻塞</strong>——MVB 排好背景工作即回，<u>此時還讀不到值</u>。值就緒時 MVB 會 <code>notifyChange</code>；dm 應以 observer／<code>addTriggerContentUri</code> 接收或稍後重查。<br />若在此同步等 Dart 產生 id，呼叫端會被阻塞數秒（違反 <a href="#no-ondemand-read">§6.2</a> 的原則）</td></tr>
+        <tr><td><strong>幂等</strong></td><td>已有值時內部早退，不會白跑一次 engine</td></tr>
+      </tbody>
+    </table>
+    <p>dm 端建議流程：<code>read()</code> → 若為 <code>NOT_INITIALIZED</code> → <code>requestInitialize()</code> → 等 <code>notifyChange</code>。已實機驗證（<a href="findings.html#five-requirements">findings §13</a>）。</p>
+
     <h2 id="reserved">4. 保留候選 keys（已調查、不敏感、暫不實作）</h2>
     <p>原則：<strong>只放裝置/軟體狀態，不放使用者身分</strong>。</p>
     <table>
       <thead><tr><th>key</th><th>來源</th><th>何時可能要</th></tr></thead>
       <tbody>
         <tr><td><code>activated</code></td><td>Hive <code>app_activated</code></td><td>agent 判斷「未 enroll」情境（Q3）；比空 cursor 語意清楚</td></tr>
-        <tr><td><code>whiteboard_name</code></td><td>Hive <code>app_whiteboardName</code></td><td>Manager 顯示 instance 別名</td></tr>
+        <tr><td><code>whiteboard_name</code></td><td>Hive <code>app_whiteboardName</code></td><td><strong>2026-08-19 自 v1 退回此處。</strong>僅在需要「雲端期望值 vs 裝置實際值」drift 偵測時才有價值——雲端 enroll 時本來就取得此值，且 auto-enroll 產生的是無意義的「機型:timestamp」</td></tr>
         <tr><td><code>setting_local_save</code></td><td><code>ITAdminSettings.saveFileToLocalStorageEnabled</code></td><td>Manager 比對「雲端設定 vs 裝置實際生效值」（設定 drift 偵測）</td></tr>
         <tr><td><code>setting_embedded_browser</code></td><td><code>ITAdminSettings.embeddedWebBrowserEnabled</code></td><td>同上</td></tr>
         <tr><td><code>setting_check_for_update</code></td><td><code>ITAdminSettings.newerVersionCheckingEnabled</code></td><td>同上</td></tr>
@@ -266,6 +316,56 @@ error_message    | caller signature mismatch</code></pre>
       </tbody>
     </table>
 
+    <h2 id="shared-secure-storage">5.1 未來需求：原生 ＋ Flutter 共用的加密儲存（2026-08-19 調查，<strong>不實作</strong>）</h2>
+    <div class="callout">
+      <strong>本節只是把選項記下來備用，v1 <u>不實作</u>。</strong>
+      觸發條件：<strong>只有在 provider 需要曝光真正機敏的欄位時才需要</strong>（即 <a href="#excluded">§5</a> 目前明確排除的 email／token 那類）。
+      現行 v1 的四個欄位不需要加密——理由見 <a href="findings.html#no-encryption">findings §1.3</a>（<code>instance_id</code> 本來就顯示在 Settings &gt; About、出現在 SSO URL query）。
+    </div>
+    <h3>問題要拆成兩半</h3>
+    <table>
+      <thead><tr><th>需求</th><th>Android 上意味著</th></tr></thead>
+      <tbody>
+        <tr><td><strong>共用</strong>（原生與 Dart 都讀得到）</td><td>需要<strong>語言中立、有文件的磁碟格式</strong></td></tr>
+        <tr><td><strong>安全</strong>（靜態加密）</td><td>需要 <strong>Keystore 撐著的金鑰</strong></td></tr>
+      </tbody>
+    </table>
+    <p><strong>Hive 兩項都不及格</strong>：格式是 Dart 專屬且 undocumented（原生無 parser），且本 box 未開 cipher。
+    ⚠️ 關鍵：<strong>即使開了 <code>HiveCipher</code> 也仍然不能共用</strong>——那個加密方案本身也是 Hive 專屬的。</p>
+    <h3>選項比較</h3>
+    <table>
+      <thead><tr><th>選項</th><th>共用</th><th>加密</th><th>評估</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>SQLCipher</strong><br /><small>mvbf <u>已有</u> <code>sqflite_sqlcipher: ^3.1.0+1</code>，目前僅用於 <code>app_update_helper.dart:256</code></small></td>
+          <td>✅</td><td>✅</td>
+          <td><strong>唯一真正兩全的選項，也是最短路徑</strong>——SQLite 是有文件的跨語言格式、SQLCipher 加密規格公開，原生用 <code>android-database-sqlcipher</code> 開同一檔給同一把金鑰即可，金鑰可放 Keystore。<br />代價：為了幾個字串開一個加密 DB偏重，且兩邊都要管同一把金鑰的取得</td>
+        </tr>
+        <tr>
+          <td><code>flutter_secure_storage</code><br /><small>（目前未安裝）</small></td>
+          <td>⚠️</td><td>✅</td>
+          <td>Android 底層是 <code>EncryptedSharedPreferences</code>（Keystore 撐的 master key），原生<u>理論上</u>讀得到——但檔名與金鑰派生是<strong>它的實作細節而非公開合約</strong>（與否決直讀 <code>FlutterSharedPreferences</code> 同一類耦合）；且 <strong>androidx.security.crypto 已被 Google 標為 deprecated</strong>，不宜長期押注</td>
+        </tr>
+        <tr>
+          <td>SharedPreferences / Jetpack DataStore</td>
+          <td>✅</td><td>❌</td>
+          <td>共用沒問題（原生原生格式）但<strong>完全沒有加密</strong>。備忘：<code>shared_preferences</code> 新的 <code>SharedPreferencesAsync</code> 在 Android 已改用 DataStore——正是 <a href="#no-ondemand-read">§6.2</a> 擔心的「自家遷移造成 silent desync」</td>
+        </tr>
+        <tr>
+          <td><strong>現行做法</strong>：原生擁有儲存 ＋ Pigeon 通道</td>
+          <td>✅</td><td>❌</td>
+          <td>嚴格說<strong>耦合風險最低</strong>——沒有任何一方在猜對方的格式，介面由我們自己定。缺點是要維護那個 channel。<strong>v1 維持此做法</strong></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>若哪天真要做，兩個先決條件</strong>：
+      <ol>
+        <li><strong>金鑰不能與資料放在同一個 app-private 目錄</strong>——那等於沒加密（能讀檔就能讀金鑰）。必須走 <strong>Android Keystore</strong>（硬體支撐）</li>
+        <li>先確認<strong>威脅模型真的成立</strong>：要讀到 app-private 檔案已需 root／平台簽章，到那一步攻擊者可直接掛勾 process 或讀記憶體。加密只在「曝光的欄位本身是機密」時才有意義</li>
+      </ol>
+    </div>
+
     <h2 id="mirror">6. 鏡射機制（MVB 內部實作）</h2>
     <div class="callout ok"><strong>2026-07-31 定案：Pigeon + 原生自持儲存</strong>（POC v2 已實作驗證，見 <a href="findings.html#poc-v2">findings §8.1</a>）。</div>
     <ul>
@@ -282,7 +382,7 @@ error_message    | caller signature mismatch</code></pre>
     </div>
     <h4>(a) set 路徑：mirror 是既有成本的零頭</h4>
     <p><code>_save()</code> 現況已是「開 box → 7 次 <code>put()</code> → 關 box」（<code>secure_data_storage.dart</code>）。多一個 mirror＝1 次 platform channel + 1 個小 XML 寫，相對既有成本是零頭，且為 <strong>O(1) 固定成本</strong>——不隨資料量或啟動次數增長，<strong>不存在「越來越慢」的機制</strong>。（結構比較，未實測數字。）</p>
-    <h4>(b) ⚠️ <code>_load()</code> 的無條件鏡射應改為 dirty check</h4>
+    <h4>(b) <code>_load()</code> 的無條件鏡射應改為 dirty check <span class="badge badge-ok">2026-08-20 已實作並驗證</span></h4>
     <p>POC 在 <code>_load()</code> 無條件寫一次，而<strong>其中約 99.9% 是寫入完全相同的值</strong>——一個永遠在跑、幾乎永遠沒用的動作。改成「先讀回 prefs 比對，值有變才寫 + 才 <code>notifyChange</code>」：</p>
     <table>
       <thead><tr><th>情境</th><th>成本</th></tr></thead>
@@ -292,6 +392,9 @@ error_message    | caller signature mismatch</code></pre>
         <tr><td>enroll / entity 更新</td><td>正常寫 + 通知（真事件，本來就該做）</td></tr>
       </tbody>
     </table>
+    <p>✅ <strong>已實作</strong>：<code>ProviderInfoMirror</code> 記住上次成功鏡射的值，相同即跳過（連 <code>notifyChange</code> 一併跳）。
+    實測以 prefs 檔 mtime 驗證——連續啟動 MVB 兩次，<strong>mtime 完全沒變</strong>。
+    <code>_lastMirrored</code> 初始為 null，故<strong>新 isolate 一律先鏡射一次</strong>（headless 不能假設原生 prefs 是最新的，也保證 JobService 的完成訊號不被擋掉）。</p>
     <p>附帶解掉 <a href="findings.html#poc">findings 待收尾</a>的「連續多次 <code>onChange</code>」——原本列為 nice-to-have 的 debounce，<strong>其實是讓 <code>_load()</code> 鏡射站得住腳的前提條件</strong>。</p>
     <h4>(c) mirror 移出初始化關鍵路徑</h4>
     <ul>
@@ -584,23 +687,39 @@ static Future ensureInitialized() async {
         <li><strong>若真的發生</strong>：傾向以<strong>客服回報</strong>＋<strong>錯誤顯示／提示使用者</strong>處理，而非為它增加工程機制</li>
       </ul>
     </div>
-    <div class="callout warn">
-      <strong>🔬 待實驗（Jay，MVB 側）：不開啟 MVB 也能把 Hive 值寫進 prefs 的可行性。</strong>
-      即 <a href="#init-trigger">(3‴)/(3″)</a> 的 headless 路徑——<strong>若 effort 不高就實作</strong>。
-      <br />→ <strong>實驗成功的話，「必須有人開過 MVB」這個前提整個消失</strong>，上面的 edge case 不再存在，下方 TODO 亦可取消。
-      <br />→ 實驗失敗或成本過高，才需要走下方 TODO 的溝通路線。
+    <div class="callout ok">
+      <strong>✅ 2026-08-19 實驗完成並實機驗證成功：不開啟 MVB 也能把 Hive 值寫進 prefs。</strong>
+      實測「刪掉 prefs → <code>install -r</code> 觸發真正的 <code>MY_PACKAGE_REPLACED</code>」後，
+      prefs 被補回<strong>完全相同</strong>的 instance_id、<strong>全程無任何 UI</strong>。
+      詳見 <a href="findings.html#headless-verify">findings §10.7</a>（含兩個過程中撞到的坑）。
+      <br />→ <strong>「必須有人開過 MVB」的前提已消除</strong>，下方 TODO 的溝通路線<strong>預計不需要</strong>。
     </div>
     <div class="callout new">
-      <strong>📋 TODO（條件性，取決於上述實驗結果）：向 Manager team 提供<u>完整的 edge case 敘述</u>，供他們擬定對策。</strong>
+      <strong>📋 TODO（<span class="badge badge-na">預計不需要</span>）：向 Manager team 提供<u>完整的 edge case 敘述</u>。</strong>
+      <br />headless 初始化已驗證可行（見上），「更新後未開啟」的情境將由它自動補值 → <strong>本項預計取消</strong>；僅在正式 PR 階段發現 headless 無法涵蓋某些機型時才需要。以下草稿保留備用：
       應涵蓋：
       <ol>
         <li><strong>觸發條件</strong>：MVB 更新到有 provider 的新版本後 <u>從未被開啟</u>（Dart 未執行 → 鏡射未發生 → provider 只回 <code>contract_version</code>）</li>
         <li><strong>dm 觀察到什麼</strong>：<code>NOT_INITIALIZED</code>（<a href="#empty-handling">§8</a>）——<strong>不是錯誤</strong>，不會有 <code>error_code</code></li>
         <li><strong>影響範圍</strong>：該台裝置的 serial ↔ instance_id 對應無法建立 → Manager 雲端看不到這台的 MVB instance 關聯</li>
         <li><strong>自我修復條件</strong>：使用者（或任何人）開啟 MVB 一次即永久解決；之後 <code>notifyChange</code> 會通知 dm</li>
-        <li><strong>為何不做工程補救</strong>：dm 啟動 MVB UI 已排除（行為太怪）；MVB headless 初始化<u>待實驗</u></li>
+        <li><s><strong>為何不做工程補救</strong>：dm 啟動 MVB UI 已排除（行為太怪）；MVB headless 初始化<u>待實驗</u></s> → <strong>2026-08-19：headless 初始化已實作並驗證通過，此 TODO 整體不再需要</strong></li>
         <li><strong>建議對策方向</strong>：雲端對停留在 <code>NOT_INITIALIZED</code> 的裝置顯示提示（例如「請於該裝置開啟一次 myViewBoard」），並作為客服可查詢的狀態</li>
       </ol>
+    </div>
+
+    <div class="callout new">
+      <strong>⚠️ 實作必知：headless 與正常啟動的競態（2026-08-20 實測重現並修正）</strong>
+      <br />兩者是<strong>同 process 的兩個 Dart isolate</strong>，各有一份 <code>SecureDataStorage</code>；而 <code>getInstanceID()</code> 讀的是
+      <code>_load()</code> 當時的<strong>記憶體快取</strong>。MVB 正常啟動從 <code>_load()</code> 到
+      <code>MvbActivator.ensureInitialized()</code> 隔了<strong>十幾秒</strong>，headless 若在此期間寫入，MVB 仍會依過期快取<strong>再產生一個 id</strong>。
+      <br />後果：Hive／prefs 最終收斂（不損壞），但中間窗口若被 dm 讀到，會把<strong>之後不存在的 id</strong> 回報雲端——靜默的錯誤對應。
+      <br /><strong>修法（雙層）</strong>：(A) <code>InstanceInfoSyncJobService</code> 在 <code>schedule()</code> 與 <code>onStartJob()</code> 都檢查
+      「MVB app 是否正在執行」，是則跳過——<strong>app 正在跑本來就不需要 headless</strong>；
+      (B) 產生前<strong>即時重讀 Hive</strong>，不信任記憶體快取。
+      <br />⚠️ 併發時 <strong>Hive 的 lock 檔會丟例外</strong>（實證），故 B 的重讀必須自行 catch——
+      否則例外會讓 <code>main()</code> 的初始化中斷。
+      <br />完整分析、重現方式與殘留窗口見 <a href="findings.html#race">findings §15</a>。
     </div>
 
     <h3 id="headless-answer">先回答核心問題：「能不能不啟動就完成初始化？」（2026-08-17 定論）</h3>
@@ -633,10 +752,11 @@ static Future ensureInitialized() async {
       而 <strong>(3′) dm 啟動 MVB UI 已被排除</strong>（產品決定：行為太怪）→ <strong>舊版 MVB 只能等使用者自然開啟</strong>，或由 dm 回報 <code>MVB_TOO_OLD</code> 交由雲端提示升級。
     </div>
 
-    <h3>(3‴) 最便宜也最完整的變體：MVB 自行 headless 初始化（<strong>建議主線</strong>）</h3>
+    <h3>(3‴) MVB 自行 headless 初始化 <span class="badge badge-ok">已實作並驗證</span>（<strong>定案主線</strong>）</h3>
     <div class="callout ok">
       <strong>🔑 關鍵：instance_id 的產生<u>完全不需要網路</u></strong>——<code>md5(timestampMillis + androidId + uuidV4)</code> 是純本地計算。
-      <br />→ headless 初始化可以<strong>只做「產生 instance_id ＋ 鏡射」，不碰網路、不做 enroll</strong>。這消除了「開機時偷偷連網」的產品疑慮，也讓它極輕量。
+      <br />→ headless 初始化<strong>只做「產生 instance_id ＋ 鏡射」，不碰網路、不做 enroll</strong>。這消除了「開機時偷偷連網」的產品疑慮，也讓它極輕量。
+      <br />⚠️ 實作補充（2026-08-19）：headless <strong>兩種情境都要處理</strong>——Hive 已有值時只需鏡射（由 <code>_load()</code> 自動觸發），Hive 也空時需<strong>真的產生</strong>（呼叫 <code>MvbActivator.ensureInitialized()</code>，其 <code>isEmpty</code> 判斷保證不會重複產生）。
       <br />→ entity 相關值等使用者真正開啟 MVB 或下次 refresh 再補；而 <strong>join（本票核心價值）當下就成立</strong>。
     </div>
     <h4>觸發時機：兩個 MVB 自己就收得到的廣播，<strong>零 dm 依賴</strong></h4>
@@ -645,6 +765,7 @@ static Future ensureInitialized() async {
       <tbody>
         <tr><td><code>ACTION_MY_PACKAGE_REPLACED</code><br /><small>（MVB 目前<strong>未註冊</strong>）</small></td><td><strong>升級到新版的瞬間</strong>，不必等重開機。<small>（原本也用於解「既有安裝 entity_name 為空」的 backfill——該問題已因「只給 entity_id」消失，此觸發現在單純用於<strong>讓 instance_id 及早就緒</strong>。）</small>屬 Android 8+ 隱式廣播限制的<strong>豁免項目</strong>，送給 app 自己，可靠</td></tr>
         <tr><td><code>BOOT_COMPLETED</code><br /><small>（已註冊，但目前只用來開 UI）</small></td><td>重開機。IFP 出廠 MVB 預裝於韌體，<strong>第一次開機即觸發</strong></td></tr>
+        <tr><td><strong><code>provider.call("ensureInitialized")</code></strong><br /><small>（2026-08-19 新增，見 <a href="#call-trigger">§3.3</a>）</small></td><td><strong>補上唯一的缺口：全新安裝且未開啟、也未重開機</strong>——上面兩個廣播都不會發。由 dm 主動要求</td></tr>
       </tbody>
     </table>
     <h4>完整情境矩陣</h4>
@@ -655,7 +776,7 @@ static Future ensureInitialized() async {
         <tr><td>新版・韌體預裝</td><td>✅ 首次開機 <code>BOOT_COMPLETED</code></td></tr>
         <tr><td>新版・自舊版升級</td><td>✅ <code>MY_PACKAGE_REPLACED</code> 立即觸發</td></tr>
         <tr><td>新版・已重開機</td><td>✅ <code>BOOT_COMPLETED</code></td></tr>
-        <tr><td>新版・剛裝好且未重開機</td><td>⚠️ 需 dm 觸發 (3″)，或等下次開機</td></tr>
+        <tr><td>新版・剛裝好且未重開機</td><td>✅ <strong>已解決</strong>——dm 呼叫 <code>call("ensureInitialized")</code>（<a href="#call-trigger">§3.3</a>），已實機驗證</td></tr>
         <tr><td>dm 為舊版、不會送觸發</td><td>✅ <strong>不受影響</strong>——(3‴) 不依賴 dm</td></tr>
       </tbody>
     </table>
@@ -723,6 +844,34 @@ static Future ensureInitialized() async {
     </table>
     <p>→ <strong>「值很少變」不構成反對理由</strong>：閒置成本為零的機制不會因閒置而浪費。真正的成本來自<strong>通知過於頻繁</strong>（POC init 期間連續多次 <code>onChange</code>），已由 <a href="#mirror-cost">§6.1 dirty check</a> 解決；加上之後穩態幾乎不會觸發。</p>
     <p><strong>定位：延遲優化，不是正確性機制。</strong>它唯一真正派上用場的時刻，剛好是整個功能最關鍵的一次轉換——<code>NOT_INITIALIZED</code> → 取得 instance_id。每台機器一生只發生一次，但那一次決定對應建不建得起來。</p>
+
+    <h3 id="trigger-placement">⚠️ 觸發點不能放在「只執行一次」的生命週期（2026-08-20 實測教訓）</h3>
+    <div class="callout new">
+      <strong>這是本次實作踩到最容易重演的坑，VB-1399 實作時請特別注意。</strong>
+      第一版把「讀取 provider ＋ 在 <code>NOT_INITIALIZED</code> 時要求初始化」放在
+      <code>DMService.onCreate</code>，結果<strong>永遠卡在 <code>NOT_INITIALIZED</code></strong>——
+      因為 <strong>dm 的 process 常常一直活著</strong>，<code>onCreate</code> 不會再跑。
+      <br />同一類錯誤又犯了第二次：畫面的讀取掛在 Activity 的 <code>onCreate</code>，
+      而 Activity 已存在時只是被帶到前景、<code>onCreate</code> 不重跑 → 畫面停在舊狀態。
+    </div>
+    <p><strong>原則：觸發要放在「每次觀察到該狀態」的地方，而不是「元件建立時」。</strong></p>
+    <table>
+      <thead><tr><th>位置</th><th>會不會重複執行</th><th>適合當觸發點？</th></tr></thead>
+      <tbody>
+        <tr><td><code>Service.onCreate</code></td><td>❌ process 活著就只跑一次</td><td>❌ 不可只依賴</td></tr>
+        <tr><td><code>Activity.onCreate</code></td><td>❌ 實例存在就不重跑</td><td>❌ 不可只依賴</td></tr>
+        <tr><td><code>Activity.onResume</code></td><td>✅ 每次回到前景</td><td>⚠️ 可，但綁 UI——沒人看畫面就不會發生</td></tr>
+        <tr><td><strong>組 <code>static_info</code> payload 時</strong></td><td>✅ 每次雲端詢問</td><td>✅ <strong>建議主線</strong>（與 UI 無關）</td></tr>
+        <tr><td><strong><code>JobScheduler.addTriggerContentUri</code></strong></td><td>✅ 系統代為監看</td><td>✅ <strong>建議</strong>（dm 沒在跑也收得到）</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>連帶的第二個教訓：觸發的節流要「狀態感知」，不能只看時間。</strong>
+      第一版用固定 30 秒冷卻防止 <code>notifyChange</code> ↔ 重讀互相激發成緊迴圈，
+      結果「MVB 資料被清掉 → 再次 <code>NOT_INITIALIZED</code>」時被上一次的冷卻<strong>誤擋</strong>，
+      看起來就像功能壞了。
+      <br />→ 正確做法：<strong>讀到有效值就重置冷卻</strong>，只有<u>連續失敗</u>才節流。這樣情況真的變了能立刻重試，真失敗也不會緊迴圈。
+    </div>
 
     <h3>建議做法（dm 端分層）</h3>
     <ol>

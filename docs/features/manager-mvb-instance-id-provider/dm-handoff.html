@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>dm 側開工 prompt（handoff）</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#how-to-use">怎麼用這份文件</a></li>
+      <li><a href="#prompt">可直接複製的 prompt</a></li>
+      <li><a href="#why-selfcontained">為什麼寫成自足版</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>dm 側開工 prompt（handoff）</h1>
+
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="findings.html">🛠️ 調查 findings</a>
+      <a href="open-questions.html">❓ open questions</a>
+      <a href="contract-proposal.html">📐 contract 草案</a>
+      <a href="basics.html">🎓 基礎知識</a>
+      <a href="dm-handoff.html" class="active">🤝 dm handoff</a>
+    </div>
+
+    <h2 id="how-to-use">怎麼用這份文件</h2>
+    <p>下面那段 prompt 是給 <strong>dm（<code>edu-dm-agent-monorepo</code>）的 RD 或其 AI agent</strong> 直接貼上開工用的。
+      整段<strong>自足</strong>——不引用本知識庫的任何路徑、不假設本機有任何未提交的 WIP，
+      指標只有 Jira 與 GitHub PR。</p>
+    <div class="warn">
+      ⚠️ <strong>本機 dm repo 的 WIP 會被 discard</strong>（含當時寫的 <code>MvbInstanceInfoReader.kt</code>），
+      所以 prompt 刻意<u>不</u>引用那個檔，而是把當時驗證過的設計決策與踩過的坑<b>寫進規格</b>。
+      對方從零開始也做得出同樣的東西。
+    </div>
+
+    <h2 id="prompt">可直接複製的 prompt</h2>
+<pre><code># 任務：dm agent 讀取 myViewBoard 的 instance ID（VB-1399 / VSFT-9654）
+
+## 背景
+
+Manager 要能管理裝置上 myViewBoard（以下稱 MVB）的設定。Manager 雲端可以存取
+software instance 的頁面，但**不知道 instance ID 與實體裝置的對應關係**，需要
+dm agent 在裝置端把這個對應撈出來回報。
+
+MVB（Android，Flutter app）側已完成並發出 PR，提供一個唯讀 ContentProvider：
+
+- MVB PR: https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/242
+- Jira: https://viewsonic-vsi.atlassian.net/browse/VSFT-9654 （MVB 側）
+- Jira: https://viewsonic-vsi.atlassian.net/browse/VB-1399 （Manager 側 Story 7）
+
+你要做的是 **dm 側的 client**：讀取、狀態分類、回報雲端。
+
+---
+
+## 契約規格（以 MVB PR 為準，以下是 v1）
+
+### URI
+
+    content://com.viewsonic.droid.instanceinfo.provider/v1/info
+
+authority = MVB 的 applicationId + ".instanceinfo.provider"，可以**直接寫死**。
+
+MVB 有四個 flavor（ifp / edla / store / open），但它們**共用同一個 applicationId**
+`com.viewsonic.droid`——flavor 之間的差別是簽章設定，不是 package name。
+所以不需要為多 flavor 做任何 authority 解析。
+
+### query() 回傳格式
+
+單一 cursor，兩個欄位 `key` / `value`，**多列**的 key-value 表。全部是字串。
+
+| key | 說明 |
+|---|---|
+| `contract_version` | 目前固定 `"1"`。一定會有 |
+| `instance_id` | 32 字元 hex（例 `A83A0049BFDB108245F6F66B48CEB797`） |
+| `entity_id` | 未 enroll 時**不會出現這一列** |
+| `activated` | `"true"` / `"false"`。鏡射過就一定會有這一列 |
+| `pending_reason` | 只在「值不存在且不會自行出現」時出現，見下 |
+| `error_code` | 只在這次 query 失敗時出現 |
+| `error_message` | 伴隨 error_code，**措辭不列入合約**，只可用於 log |
+
+`error_code` 的可能值：`UNAUTHORIZED`、`UNSUPPORTED_URI`、`STORAGE_ERROR`、
+`UNSUPPORTED_METHOD`。
+
+⚠️ **「沒有值」不是錯誤。** 缺列就是缺列（尚未初始化／尚未 enroll），
+provider 不會為此回 error_code。所以判斷要用 **presence 偵測**：
+要用什麼欄位就問那個欄位在不在，不要拿 error_code 當「未初始化」的訊號。
+
+⚠️ **不認識的 key 要忽略**（forward compatibility）。v2 加欄位時不該讓 v1 client 壞掉。
+
+### 主動要求初始化
+
+    ContentResolver.call(uri, "ensureInitialized", null, null)
+
+回傳 `Bundle{ scheduled: true }`，或帶 `error_code`。
+
+⚠️ **非阻塞**：它只代表「背景工作已排程」，**不代表值已經產生**。
+MVB 會起一個 headless Flutter engine，需要數秒到十幾秒。所以呼叫後的第一次
+query **一定拿不到值**，要靠 notifyChange 或稍後重查。
+
+### 變更通知
+
+MVB 寫入後會對上面那個 URI 呼叫 `notifyChange`，所以可以
+`registerContentObserver(uri, false, observer)`。
+
+---
+
+## 要做的事
+
+1. **讀取 client**：query → 解析成 key-value map → 分類成明確的狀態（建議 sealed interface）：
+   - `NoMvb`：MVB 未安裝（用 PackageManager 判斷）
+   - `MvbTooOld`：MVB 有裝，但 provider 不存在／無回應（query 回 null）→ 版本太舊
+   - `NotInitialized`：provider 有回應但沒有 `instance_id` 這一列
+   - `Blocked`：有 `pending_reason` → 需要**人**去開一次 MVB（見下方坑 6）
+   - `Failed(code, message)`：cursor 裡有 `error_code`
+   - `Info(instanceId, entityId?, activated, contractVersion)`：讀到了
+2. **在 `NotInitialized` 時主動呼叫 `ensureInitialized`**，並訂閱 URI 等 notifyChange。
+3. **回報雲端**：instance_id ＋ 裝置序號。`entity_id` 可能為 null（尚未 enroll），
+   此時**仍應回報 instance_id**——對應關係已成立，只是無法做 entity 驗證。
+
+---
+
+## ⚠️ 六個實測踩過的坑（照這些做可以省很多時間）
+
+### 1. 觸發點不能放在「只執行一次」的生命週期
+
+放在 `DMService.onCreate` / `Activity.onCreate` 會出事：dm 的 process 常常一直活著，
+`onCreate` 不會再跑，於是永遠卡在 `NotInitialized`。
+
+**要放在「每一次觀察到 NotInitialized 的地方」。** 建議把「讀取」與「必要時觸發」
+合成一個入口（例如 `readAndEnsureInitialized()`），這樣不可能忘記觸發。
+
+### 2. 節流必須「狀態感知」，不能只看時間
+
+`ensureInitialized` 會導致 notifyChange，而 notifyChange 又會讓觀察者重讀——
+初始化若真的失敗，沒有節流會變成緊迴圈。但**純時間節流會製造新 bug**：
+
+實測踩過：`pm clear` MVB 之後開 dm，卡在 NotInitialized 不動，因為上一輪的冷卻還沒過。
+
+**正解：讀到有效的 instance_id 就把冷卻計時器重置。** 這樣「MVB 資料被清掉 →
+再次 NotInitialized」能立刻重試。冷卻 15 秒左右即可。
+
+### 3. `registerContentObserver` 在 authority 不存在時會**丟例外**
+
+這點跟 `query()` 不一樣——query 對不存在的 authority 是回 `null`，
+但 `registerContentObserver` 會**throw**。MVB 未安裝或版本太舊的機器上就會炸。
+
+**訂閱一定要包 try/catch**，並在失敗時退回輪詢。
+
+### 4. 延遲：第一次一定拿不到值
+
+| 機器 | 觸發到值出現 |
+|---|---|
+| 較快的機器 | 約 4 秒 |
+| IFP34（4 核，實測最慢的機型） | 約 12 秒（MVB 側 timeout 是 20 秒） |
+
+dm 的日常開發機是 IFP，所以請以**十幾秒**為預期，不要用快機的體感訂 timeout。
+
+所以**不要**用「呼叫 ensureInitialized 後立刻 query，沒有就當失敗」。
+實測 notifyChange 比輪詢早約 4ms 到，兩條路都留著最穩。
+
+### 5. 存取控制：package name ＋ **簽章憑證**都要對
+
+MVB 在 `query()` 內做 runtime 檢查：呼叫端 package 必須在白名單
+（目前是 `com.viewsonic.dmagent`），**且**簽章憑證 SHA-256 必須符合。
+兩者都對才給資料，否則回 `UNAUTHORIZED`。
+
+⚠️ **dm 若更換簽章 key，或新增別的 package name（例如新 flavor、改 applicationId），
+必須通知 MVB 側把新值加進白名單**，否則會靜靜地拿到 UNAUTHORIZED。
+（MVB 那邊刻意不用 manifest 的 `protectionLevel="signature"`——某些機型上 MVB 是
+store 包而 dm 簽 system key，跨 key 會讓那個機制失效。）
+
+### 6. `pending_reason` = 「繼續輪詢也不會有結果」
+
+若 cursor 出現 `pending_reason`（v1 目前唯一的值是 `REQUIRES_APP_LAUNCH`），
+代表：**provider 正常、值尚未存在、而且不會自行產生**——必須有人親自開一次 MVB。
+
+成因是那台機器還留著前一代原生 app 的未遷移資料，那份資料的 ID 才是最終值，
+而遷移只跑得動於 MVB 正常啟動時。
+
+技術上要注意的只有一件事：**這個狀態下重試不會有結果**，所以不要繼續觸發
+`ensureInitialized`（每次觸發都會讓 MVB 起一顆 Flutter engine，純浪費）。
+它也不是 `Failed`（provider 沒壞），也不同於 `NotInitialized`（那個重試有意義）。
+
+⚠️ 不要拿這個欄位的字串直接顯示給使用者——它未翻譯，且措辭不列入合約。
+
+⚠️ 更重要的是：**這台機器可能長期、甚至永久沒有 id**（沒人去開的話）。
+所以不要把「值最終一定會出現」寫進假設裡——例如無限等待、或把「還沒拿到」
+當成暫時狀態一直重試。
+
+---
+
+## 不要做的事
+
+- **不要**用 MVB 的 app 版本判斷契約相容性，要看 `contract_version`。
+  app 版本號與「provider 支援哪些欄位」沒有穩定關係（同版本可能有 hotfix、
+  不同版本可能契約相同）。需要 app 版本本身（例如提示使用者升級）時用
+  `PackageManager.getPackageInfo()`——provider 不提供這個欄位。
+- **不要**去讀 MVB 的 SharedPreferences 檔或 Hive 檔。那是私有實作，
+  provider 是唯一的公開介面。
+- **不要**為「MVB 被強制停止」或「MVB 從未被開啟過」寫特別處理。
+  你的 query 本身就會把 MVB 的 process 拉起來、並清掉系統的 stopped 旗標，
+  這件事對你是透明的。
+
+---
+
+## 驗收方式
+
+用 adb 直接驗（下面這個一定會被拒，因為 shell 不在白名單——這正好是**存取控制的
+負向測試**）：
+
+    adb shell content query --uri content://com.viewsonic.droid.instanceinfo.provider/v1/info
+    # 期待：error_code=UNAUTHORIZED
+
+正向要用 dm 自己跑。建議的驗收情境：
+
+1. MVB 未安裝 → `NoMvb`
+2. MVB 舊版（沒有 provider）→ `MvbTooOld`
+3. MVB 新版首裝、從未開啟 → 觸發後數秒內拿到 `instance_id`
+4. MVB 舊版升級到新版、從未開啟 → 拿到的 id 與升級前**完全相同**
+5. `pm clear com.viewsonic.droid` 後 → 能重新拿到（驗證第 2 個坑：狀態感知節流）
+6. MVB 開啟後再讀 → id **不變**（不可以重複產生）
+
+---
+</code></pre>
+
+    <h2 id="why-selfcontained">為什麼寫成自足版</h2>
+    <ul>
+      <li><strong>本機 dm 的 WIP 會被 discard。</strong> 當時那支 client 的設計（sealed 結果型別、
+        presence 偵測、合併的 read＋ensure 入口、狀態感知節流）是實機驗證過才收斂出來的，
+        但檔案不會留下——所以把<u>結論</u>寫進 prompt 的規格與「六個坑」，而不是叫人去看一個不存在的檔。</li>
+      <li><strong>不引用本知識庫路徑。</strong> 對方 clone 專案 repo 後開不了這些路徑；
+        指標只留 Jira 與 GitHub PR。</li>
+      <li><strong>刻意寫出「不要做的事」。</strong> 這一段防的是最貴的那類錯誤——
+        去讀 MVB 的私有儲存、用 app 版本判斷契約能力、為 stopped 狀態寫特別處理。
+        這些都是看得懂契約但不知道背景時會很自然做出來的決定。</li>
+    </ul>
+  </main>
+</div>
+</body>
+</html>
