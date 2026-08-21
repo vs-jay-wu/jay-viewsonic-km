@@ -31,7 +31,30 @@ git diff --cached | grep "^+" | grep -nE "TEMP|TIMING|System\.out|print\(|debugP
 
 # TODO/FIXME
 git diff --cached | grep "^+" | grep -nE "TODO|FIXME"
+
+# 團隊開不了的指標（km 路徑之外，還有本機／裝置專屬的東西）
+git diff --cached | grep "^+" | grep -nE "/sdcard/|scratchpad|/private/tmp|~/\.Trash|[0-9A-Z]{10,}H[0-9A-Z]{3,}"
 ```
+
+`docs/features/…` 那條大家都記得，**本機產物的檔名更容易漏**：實際犯過在 dartdoc 裡
+寫「見 `mvbf-save-probe.olf`（寫 open_sans 的那份）」—— 那兩個檔在我自己裝置的
+`/sdcard/Documents/`，別人 clone 下來沒有，等於死指標。連裝置序號也一起寫進 fixture
+metadata 了（個人裝置識別，沒必要進版控）。
+
+→ **量測數據要留，指標要指向 Jira／PR**：「來自一次實機量測，結果記在 VSFT-xxxx」。
+
+### `原本 / 之前` 這條 grep 需要人判斷，誤報率不低
+
+實測 4 個命中裡 2 個是誤報，兩種型態：
+
+| 命中 | 判定 |
+|---|---|
+| 「非該尺寸**原本的**設計」 | ✅ 誤報 —— 指字體設計的原意，不是 diff |
+| 「OLF **原本就標** bold 的 run 不受影響」 | ✅ 誤報 —— 描述輸入資料的性質 |
+| 「**修正前**的行為：226 個 run 有 198 個…」 | ❌ 真的要改 —— 改寫成失效模式：「解析層失效時它們會全部掉到…」 |
+| 「probe.olf（**修正前**）與 probe2.olf（**修正後**）」 | ❌ 真的要改 —— 改成描述內容：「寫 open_sans 的那份 / 寫 Open Sans 的那份」 |
+
+判準：那個「原本」是在講**程式碼的過去**（要改），還是在講**資料／設計的性質**（保留）。
 
 ### ⚠️ 兩個會讓稽核靜默失效的坑
 
@@ -89,6 +112,27 @@ grep -n "pattern" $F      # ← ugrep: No such file or directory，然後你看�
 
 ---
 
+## 3.5 「把 N 個呼叫點統一到一個 helper」時，逐點比對語意
+
+這是交叉 review 抓到、我自己漏掉的**最貴的一類**：diff 看起來只是「改走新的 helper」，
+形狀整齊、每個呼叫點長得一樣，所以很容易一眼掃過。但**只要有一個呼叫點原本的語意跟
+新 helper 的預設不同，它就會靜默地被改掉**。
+
+實際案例（VSFT-9208）：4 個讀取點改走同一個 resolver，`?? 使用者偏好字體`。其中 3 個
+本來就是這行為，但 iwb 那個本來是**原名原封不動帶過**：
+
+```
+解析失敗 → 蓋成偏好字體 → 存檔寫出偏好字體 → 作者的字體名從檔案裡永久消失
+```
+
+而那正是同一張 PR 的描述裡在批評對方產品的失效模式（`Replace(font, newFont)`）。
+
+→ **檢查清單**
+- 對每個被改的呼叫點，寫出「改動前這裡拿到什麼／改動後拿到什麼」，不要只看 helper 對不對。
+- 特別看 **fallback 分支**：統一之後大家共用同一個 fallback，而那往往是差異所在。
+- 資料保存語意（原值 vs 覆蓋）**不算實作細節**，改了要寫進 PR 的風險段。
+- **如果 PR 描述裡在批評某個失效模式，回頭 grep 自己的 diff 有沒有犯同一條。**
+
 ## 4. 描述失效模式時，寫完整因果鏈
 
 **不要**用「已知且有處理的降級」「應該還算安全」這種軟話帶過——那會低估後果，
@@ -101,6 +145,68 @@ grep -n "pattern" $F      # ← ugrep: No such file or directory，然後你看�
 → 差別不在措辭，在於**看完鏈之後你會不會改變處理優先序**。
 
 ---
+
+## 4.5 驗證「宣稱」，不只驗證程式碼
+
+好的 review 會把 PR 描述當成待驗證的宣稱。Jacky 對 VSFT-9208 做的三件事值得照抄：
+
+1. **把整個 key space 列舉過** —— 不是讀 `_normalize` 的實作，而是把 61 個
+   `FONT_FAMILIES` 全推過去對撞看有沒有碰鍵，再拿約 40 個真實家族名手推後綴剝除。
+   **而且列了反向案例**：`Merriweather Sans`、`Playfair Display SC`、`Arial Narrow`、
+   `Segoe UI Semibold` 應該回 `null` —— 正向全過但誤吞近似名，是這類比對層最典型的 bug。
+2. **數 PR 描述裡的數字**：「37 條測試」核成 25+6+6；並確認 fixture **真的有被載入並斷言**，
+   不是擺著好看。宣稱與現實脫鉤比程式碼有 bug 更難發現。
+3. **算覆蓋率的分母是呼叫點，不是測試數**：那張 PR 動了 8 個呼叫點（4 讀 4 寫），
+   只有 1 個有端到端測試。「37 條測試」聽起來很多，但它們幾乎全在 resolver 這個
+   pure function 上。
+
+→ 自己送 PR 前先自問：**動了幾個呼叫點、其中幾個有測試守著？** 差距要嘛補、要嘛在
+PR 裡講明白（「這條路徑需要 BuildContext + MediaQuery bootstrap，沒有便宜的接縫」
+是可接受的答案；不提是不可接受的）。
+
+### 驗別人的 review 前，先確認你的反駁基礎在哪個 repo
+
+我犯過的：斷言「mvbw 沒裝 Arimo」與「Windows 裝的是 static 版 Merriweather」，兩者都錯。
+正解是去讀**對方 repo 的 manifest**（`Sparrow.Package/Package.appxmanifest` 的
+`uap4:SharedFonts`）＋ 比 sha256，而不是從自己這邊的行為推論。
+**跨產品的環境主張，一律要在對方的版控裡找到證據再說。**
+
+## 4.6 做「改動前後對照」時不要用 git stash
+
+review 常需要「把我的改動拿掉，看看診斷／測試會不會變」。**不要用
+`git stash push -- <files>` 然後 `git stash pop`**：
+
+- zsh 不做 word splitting，`git stash push -- $FILES` 會整串當成一個 pathspec 而**失敗**；
+- 若後面接了無條件的 `git stash pop`，它會**彈出使用者既有的 `stash@{0}`**。
+  我踩過，把別人的 `build.gradle` WIP 倒進工作區。
+
+安全做法（不碰 stash）：
+
+```bash
+F=(lib/a.dart lib/b.dart)
+mkdir -p /tmp/mine && for f in "${F[@]}"; do mkdir -p /tmp/mine/$(dirname $f); cp "$f" /tmp/mine/$f; done
+fvm dart analyze "${F[@]}" > /tmp/after.txt
+git checkout -- "${F[@]}"                       # 暫時回 HEAD
+fvm dart analyze "${F[@]}" > /tmp/before.txt
+for f in "${F[@]}"; do cp /tmp/mine/$f "$f"; done   # 放回
+```
+
+比對時**去掉行號**再 `comm`（行號會因為新增行而位移，不去掉會全是假差異）。
+
+若真的誤 pop 了：`git fsck --dangling` 找回 stash commit，用 blob hash 比對確認是哪一筆，
+`git stash store -m "<原訊息>" <sha>` 放回，再 `git checkout --` 清工作區。
+
+## 4.7 一次寫多份 artifact 的 metadata：loop 本身就是 bug 來源
+
+用一個 for-loop 把同一份 `capture` metadata 寫進兩份 fixture，結果第二份的「擷取方式」
+描述的是第一份的流程 —— 而 metadata 存在的唯一目的就是讓別人能重跑並複核，照著它做
+重跑不出那份檔。
+
+→ **每份 artifact 的來源描述要分開寫，寫完 assert 它們不相同**：
+
+```bash
+python3 -c "...; print('method 相同?', a['method']==b['method'])"
+```
 
 ## 5. 收到別人的 review 意見：不要照單全收
 
