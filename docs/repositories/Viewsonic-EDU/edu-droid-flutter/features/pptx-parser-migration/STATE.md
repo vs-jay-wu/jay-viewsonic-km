@@ -77,18 +77,26 @@ Dart 綁定寫死 `DynamicLibrary.open('lib_olfparser.so')`，對應 olfparser �
 `crate-type = ["cdylib", ...]`，所以 cdylib 產出就叫 `lib_olfparser.so`。
 （`olf-jni` 是另一個 crate，產出 `libolfparser_jni.so`，**不是**這個 POC 用的。）
 
-olfparser repo 內建的 `scripts/stage_android.sh` 是給 `olf-jni` 用的，
-但建置方式可以照抄（它需要 rustup 的 android target、`cargo-ndk`、NDK 27+）：
+**那顆 `.so` 不是用 `cargo ndk` 建的** —— 本機沒有安裝 `cargo-ndk`
+（`cargo ndk --version` 查無），所以它走的是手動 NDK 工具鏈路線
+（設 `CC_aarch64-linux-android` / `AR_*` / `CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER`
+再 `cargo build --target aarch64-linux-android --release -p olf-ffi`）。
+本機可用的 NDK：23.1 / 23.2 / 25.2 / 27.0 / 28.2，rustup 的
+`aarch64-linux-android` target 已安裝。
 
-```bash
-cd <olfparser>/rust
-cargo ndk -t arm64-v8a -o /tmp/out build --release -p olf-ffi
-# 產出 /tmp/out/arm64-v8a/lib_olfparser.so
+⚠️ **必須帶 16 KB page size 的連結旗標**：
+
+```
+-C link-arg=-Wl,-z,max-page-size=16384
 ```
 
-⚠️ 那個腳本的 `ANDROID_MODULE` 預設值寫的是**別人的**本機路徑
-（`/Users/arey.cj.liu/...`），照跑會 stage 到不存在的地方 —— 要自己給 `ANDROID_MODULE`
-或改用上面的 `-o`。
+Android 15 起要求 16 KB 對齊，漏掉會在裝置上載入失敗。手上那顆已實測確認
+（`llvm-readelf -l` 的 `LOAD align = 0x4000`）—— 重建後要用同一個指令複驗，
+不要假設預設值就對。
+
+olfparser repo 的 `scripts/stage_android.sh` **不能直接拿來用**：它是給 `olf-jni`
+的（產出 `libolfparser_jni.so`），而且 `ANDROID_MODULE` 預設值寫的是**別人的**本機路徑
+（`/Users/arey.cj.liu/...`），照跑會 stage 到不存在的地方。
 
 **手上那顆 `.so` 是哪個 commit 建的，無從得知**：它是 stripped release，
 內部沒有版本字串（只有 rustc hash `59807616`）。唯一可推的是 mtime `2026-08-25 14:31`,
