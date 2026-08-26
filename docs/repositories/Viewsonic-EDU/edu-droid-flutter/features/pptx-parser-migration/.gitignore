@@ -1,0 +1,4 @@
+# 比對截圖不進版控：約 13 MB 的 jpg，git 壓不動，而且只要語料庫與兩個 parser 還在
+# 就能重跑產生。index.html 需要它們才顯示得出圖（見 STATE.md）。
+images/
+pages/

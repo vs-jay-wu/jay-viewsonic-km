@@ -1,0 +1,62 @@
+# olfparser 效能實驗三旋鈕（VSFT-9993 調查衍生）
+#
+# 基底 commit: 43fdb4c54cc72368eb82fc36b9cc5214bd3cbc0b
+# 產生日期: 2026-08-25
+#
+# 這三項是「量測用」的粗暴改法（寫死 true ||、改編譯期常數），不是可送 PR 的形態。
+# IFP34 上 57539 的累積效果：439.3s -> 38.2s -> 8.9s -> 6.3s
+#   1. layout_bake.rs  LAYOUT_BAKE_SUPERSAMPLE 2 -> 1      （439.3 -> 38.2s）
+#   2. orchestrator/mod.rs  強制走非點陣 inject_layout_shapes（38.2 -> 8.9s）
+#   3. olf-core/packager.rs images/ fonts/ 改 STORED        （8.9 -> 6.3s）
+#
+# 套用： git apply <此檔>
+
+diff --git a/rust/crates/olf-core/src/packager.rs b/rust/crates/olf-core/src/packager.rs
+index 4c4316c..97f7073 100644
+--- a/rust/crates/olf-core/src/packager.rs
++++ b/rust/crates/olf-core/src/packager.rs
+@@ -57,9 +57,17 @@ fn build_archive(
+ 
+     let mut zip = zip::ZipWriter::new(File::create(tmp)?);
+     let options = SimpleFileOptions::default().compression_method(compression);
++    // ⚠️ 實驗（非上游行為）：images/ 與 fonts/ 內容本身已是壓縮格式（PNG/JPEG/GIF/WOFF2），
++    // 再 deflate 一次幾乎壓不動卻要付整份 CPU。改成 STORED；content.json 之類仍照原設定壓。
++    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+     for file in &files {
+         let entry_name = relative_entry_name(staging_dir, file);
+-        zip.start_file(entry_name, options)?;
++        let opts = if entry_name.starts_with("images/") || entry_name.starts_with("fonts/") {
++            stored
++        } else {
++            options
++        };
++        zip.start_file(entry_name, opts)?;
+         let mut reader = File::open(file)?;
+         io::copy(&mut reader, &mut zip)?;
+     }
+diff --git a/rust/crates/pptx-convert/src/orchestrator/layout_bake.rs b/rust/crates/pptx-convert/src/orchestrator/layout_bake.rs
+index 62b3d6b..4c402cb 100644
+--- a/rust/crates/pptx-convert/src/orchestrator/layout_bake.rs
++++ b/rust/crates/pptx-convert/src/orchestrator/layout_bake.rs
+@@ -25,7 +25,7 @@ use super::PptxToOlfConverter;
+ use common::PyTrig;
+ 
+ /// Python: `_LAYOUT_BAKE_SUPERSAMPLE`.
+-const LAYOUT_BAKE_SUPERSAMPLE: i64 = 2;
++const LAYOUT_BAKE_SUPERSAMPLE: i64 = 1;  // 實驗：原為 2
+ 
+ /// Count `<p:cxnSp>` descendants (Python `findall(f".//{{{NS_P}}}cxnSp")`).
+ fn cxn_count(el: &XmlElement) -> usize {
+diff --git a/rust/crates/pptx-convert/src/orchestrator/mod.rs b/rust/crates/pptx-convert/src/orchestrator/mod.rs
+index 3f91f21..322277a 100644
+--- a/rust/crates/pptx-convert/src/orchestrator/mod.rs
++++ b/rust/crates/pptx-convert/src/orchestrator/mod.rs
+@@ -491,7 +491,7 @@ impl PptxToOlfConverter {
+         // injected by the full bake and therefore contribute serialized run
+         // faces. Discovery must traverse those same layout/master shapes, but
+         // uses the non-raster injection path to avoid paying the bake cost.
+-        if self.discovery {
++        if true || self.discovery {  // 實驗：關閉版面烘圖
+             self.inject_layout_shapes(prs, slide, &mut elements, &page_id);
+         } else {
+             self.render_layout_shapes_as_background(

@@ -1,0 +1,318 @@
+diff --git a/ios/Flutter/Debug.xcconfig b/ios/Flutter/Debug.xcconfig
+index b4250ec50..43db51096 100644
+--- a/ios/Flutter/Debug.xcconfig
++++ b/ios/Flutter/Debug.xcconfig
+@@ -3,3 +3,20 @@
+ 
+ // Disable Xcode 16 explicit modules to fix 'Flutter/Flutter.h' file not found error
+ SWIFT_ENABLE_EXPLICIT_MODULES=NO
++
++
++// POC（olfparser）：以 xcframework 消費 olf-ffi 的 static library。
++//
++// 為什麼是 xcframework 而不是單一 .a：device 的 arm64 與 simulator 的 arm64 是
++// 同名架構， 拒絕併入同一個 fat 檔（實測會報 "have the same architectures
++// (arm64) and can't be in the same fat output file"）。xcframework 用「每個平台
++// 一個目錄」來解，slice 由下面的 [sdk=...] 條件選。
++//
++// -force_load 是必要的：符號只被 Dart 端用 DynamicLibrary.process() 查表，
++// linker 看不到任何 C 呼叫者，沒有它會被 dead-strip，失敗點會延到執行期
++// lookup 丟 ArgumentError，而不是連結錯誤。
++//
++// ⚠️ 絕對路徑＝本機 POC 專用。正式版應由 olfparser 發布版本化 artifact，
++//    改用 podspec 的 vendored_frameworks 引用。
++OTHER_LDFLAGS[sdk=iphoneos*] = $(inherited) -force_load /private/tmp/claude-502/-Users-jay-wj-wu-ProjectsWork-GitHub-jay-viewsonic-km/b72228dd-11ee-458a-a21b-13dcdee668f1/scratchpad/xcf/olfparser.xcframework/ios-arm64/lib_olfparser.a
++OTHER_LDFLAGS[sdk=iphonesimulator*] = $(inherited) -force_load /private/tmp/claude-502/-Users-jay-wj-wu-ProjectsWork-GitHub-jay-viewsonic-km/b72228dd-11ee-458a-a21b-13dcdee668f1/scratchpad/xcf/olfparser.xcframework/ios-arm64_x86_64-simulator/lib_olfparser_simulator_universal.a
+diff --git a/ios/Podfile.lock b/ios/Podfile.lock
+index 824653521..95121c1c4 100644
+--- a/ios/Podfile.lock
++++ b/ios/Podfile.lock
+@@ -1,4 +1,6 @@
+ PODS:
++  - a_bridge (0.0.1):
++    - Flutter
+   - amplitude_flutter (4.4.0):
+     - AmplitudeSwift (~> 1.17.5)
+     - Flutter
+@@ -354,6 +356,7 @@ PODS:
+     - FlutterMacOS
+ 
+ DEPENDENCIES:
++  - a_bridge (from `.symlinks/plugins/a_bridge/ios`)
+   - amplitude_flutter (from `.symlinks/plugins/amplitude_flutter/darwin`)
+   - app_links (from `.symlinks/plugins/app_links/ios`)
+   - app_ota_flutter (from `.symlinks/plugins/app_ota_flutter/ios`)
+@@ -448,6 +451,8 @@ SPEC REPOS:
+     - SwiftyGif
+ 
+ EXTERNAL SOURCES:
++  a_bridge:
++    :path: ".symlinks/plugins/a_bridge/ios"
+   amplitude_flutter:
+     :path: ".symlinks/plugins/amplitude_flutter/darwin"
+   app_links:
+@@ -546,6 +551,7 @@ EXTERNAL SOURCES:
+     :path: ".symlinks/plugins/webview_flutter_wkwebview/darwin"
+ 
+ SPEC CHECKSUMS:
++  a_bridge: f7ad97079e92a71f40963361c683c33101194b96
+   amplitude_flutter: a430a891abbd9e486f53d2ab499af9ead0bb8047
+   AmplitudeCore: 2da469fb74c71c8f46ae29a4586c4bf63ad02f58
+   AmplitudeSwift: 89f675b8b81a2710ef244324d2083641ffb702b6
+diff --git a/lib/helper/file_utility_helper.dart b/lib/helper/file_utility_helper.dart
+index 9c45a58f9..b01ac90d7 100644
+--- a/lib/helper/file_utility_helper.dart
++++ b/lib/helper/file_utility_helper.dart
+@@ -1,4 +1,5 @@
+ import 'dart:async';
++import 'dart:isolate';
+ import 'dart:convert';
+ import 'dart:io';
+ import 'dart:ui' as ui;
+@@ -68,8 +69,13 @@ import 'analytics_helper.dart';
+ import 'filesave_helper.dart';
+ import 'web_browser_launcher.dart';
+ import 'package:path/path.dart' as p;
++import 'package:droid/helper/olf_file/olfparser_ffi.dart';
+ 
+ class FileUtilityHelper {
++  /// POC 開關：true = PPTX 匯入改走 olfparser（olf-ffi），false = 原本的
++  /// mvbx_pptx_olf_api 1.8.0。兩者輸出都是 legacy OLF。
++  static bool useOlfParserPoc = true;
++
+   static String get _tag => '[$FileUtilityHelper]';
+   static PageSetModel get _pageSetModel => PageSetModel.getInstance();
+ 
+@@ -1059,8 +1065,40 @@ class FileUtilityHelper {
+       // 3) 準備輸出檔
+       olf = File(p.join(root.path, 'out.olf'));
+ 
++      // 3.5) POC：改走 olfparser（olf-ffi 的 pptx2olf），輸出一樣是 legacy OLF，
++      //      所以 OlfReader 不用改。olfparser 自己讀 .pptx 這個 zip，不需要
++      //      上面 (2) 預先解壓的目錄。轉檔是阻塞式的（大檔在 IFP 上約 4.5 秒），
++      //      一定要丟到 isolate，否則會 ANR。
++      if (FileUtilityHelper.useOlfParserPoc) {
++        final String inPath = input.path;
++        final String outPath = olf.path;
++        logger.d('$_tag [olfparser POC] start in=$inPath (${await input.length()} bytes)');
++        try {
++          logger.d('$_tag [olfparser POC] available=${OlfParserFfi.isAvailable} '
++              'version=${OlfParserFfi.version()}');
++        } catch (e) {
++          logger.d('$_tag [olfparser POC] 載入 native library 失敗: $e');
++          rethrow;
++        }
++        final int objectCount;
++        try {
++          objectCount =
++              await convertPptxToOlfInIsolate(inPath, outPath);
++        } catch (e, st) {
++          logger.d('$_tag [olfparser POC] 轉檔失敗: $e\n$st');
++          rethrow;
++        }
++        logger.d('$_tag [olfparser POC] objects=$objectCount out=${await olf.length()} bytes');
++        final olfRecord = await OlfReader.readFromOLF(olf, isImport: true);
++        final listData = olfRecord.$1;
++        if (listData == null || listData.isEmpty) {
++          throw StateError('Empty or null OLF list data');
++        }
++        return (listData: listData, inputPath: input.path);
++      }
++
+       // 4) 啟動 watchdog，避免永遠不到 100%（例如 native 卡住）
+-      watchdog = Timer(const Duration(seconds: 60), () {
++      watchdog = Timer(const Duration(seconds: 900), () {  // 量測用：原為 60
+         if (!completer.isCompleted) {
+           completer
+               .completeError(TimeoutException('convertOLF timeout after 60s'));
+@@ -1068,6 +1106,7 @@ class FileUtilityHelper {
+       });
+ 
+       // 5) 呼叫原生轉檔，透過 callback 完成 Completer
++      logger.d('$_tag [oldparser] start in=${input.path} (${await input.length()} bytes)');
+       final api = MvbxPPTXOLFAPI();
+       api.convertOLF(
+         input.path,
+@@ -1075,6 +1114,7 @@ class FileUtilityHelper {
+         (int progress) async {
+           try {
+             if (progress == 100 && !completer.isCompleted) {
++              logger.d('$_tag [oldparser] done out=${await olf!.length()} bytes');
+               final olfRecord =
+                   await OlfReader.readFromOLF(olf!, isImport: true);
+               final listData = olfRecord.$1;
+diff --git a/lib/helper/olf_file/olf_reader.dart b/lib/helper/olf_file/olf_reader.dart
+index 10ddce30e..f3d8a0bed 100644
+--- a/lib/helper/olf_file/olf_reader.dart
++++ b/lib/helper/olf_file/olf_reader.dart
+@@ -875,6 +875,8 @@ class OlfReader {
+     final String rawMetaId = metaData.id;
+     currentDocument.olfId = rawMetaId.isEmpty ? null : rawMetaId;
+ 
++    // POC 擷取用：讓自動化知道 OLF 已經真的讀完（避免截到匯入中的畫面）。
++    logger.d('[CAPTURE] olf-loaded pages=${list.length}');
+     return (list, metaData.id);
+   }
+ 
+diff --git a/macos/Podfile.lock b/macos/Podfile.lock
+index b405a9a9a..fba4d49ef 100644
+--- a/macos/Podfile.lock
++++ b/macos/Podfile.lock
+@@ -1,4 +1,6 @@
+ PODS:
++  - a_bridge (0.0.1):
++    - FlutterMacOS
+   - amplitude_flutter (4.4.0):
+     - AmplitudeSwift (~> 1.17.5)
+     - Flutter
+@@ -233,6 +235,7 @@ PODS:
+     - FlutterMacOS
+ 
+ DEPENDENCIES:
++  - a_bridge (from `Flutter/ephemeral/.symlinks/plugins/a_bridge/macos`)
+   - amplitude_flutter (from `Flutter/ephemeral/.symlinks/plugins/amplitude_flutter/darwin`)
+   - app_links (from `Flutter/ephemeral/.symlinks/plugins/app_links/macos`)
+   - audioplayers_darwin (from `Flutter/ephemeral/.symlinks/plugins/audioplayers_darwin/darwin`)
+@@ -300,6 +303,8 @@ SPEC REPOS:
+     - SQLCipher
+ 
+ EXTERNAL SOURCES:
++  a_bridge:
++    :path: Flutter/ephemeral/.symlinks/plugins/a_bridge/macos
+   amplitude_flutter:
+     :path: Flutter/ephemeral/.symlinks/plugins/amplitude_flutter/darwin
+   app_links:
+@@ -380,6 +385,7 @@ EXTERNAL SOURCES:
+     :path: Flutter/ephemeral/.symlinks/plugins/window_to_front/macos
+ 
+ SPEC CHECKSUMS:
++  a_bridge: daba7052d0276a1723b1a12d54e3165184d84883
+   amplitude_flutter: a430a891abbd9e486f53d2ab499af9ead0bb8047
+   AmplitudeCore: 2da469fb74c71c8f46ae29a4586c4bf63ad02f58
+   AmplitudeSwift: 89f675b8b81a2710ef244324d2083641ffb702b6
+diff --git a/pubspec.yaml b/pubspec.yaml
+index 4146dda27..2724dda51 100644
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -489,4 +489,4 @@ flutter:
+     - images_bg/
+     - images_magic_line_pen/
+     - images_thumb/
+-    - images/dist/
+\ No newline at end of file
++    - images/dist/
+diff --git a/lib/helper/olf_file/olfparser_ffi.dart b/lib/helper/olf_file/olfparser_ffi.dart
+new file mode 100644
+index 000000000..3dbe4b1c1
+--- /dev/null
++++ b/lib/helper/olf_file/olfparser_ffi.dart
+@@ -0,0 +1,109 @@
++import 'dart:ffi';
++import 'dart:isolate';
++import 'dart:io';
++
++import 'package:ffi/ffi.dart';
++
++/// POC：olfparser（`olf-ffi` crate）的 Dart FFI 綁定，用來取代 mvbx_pptx_olf_api
++/// 的 PPTX → OLF 轉檔。輸出是 legacy OLF（不是 v-next），所以 OlfReader 不需要改。
++///
++/// ⚠️ 隱性依賴，型別上看不出來：
++///   - Android 依賴 `android/app/src/main/jniLibs/<abi>/lib_olfparser.so` 存在；
++///     缺檔會在 `DynamicLibrary.open` 丟 ArgumentError，而不是編譯期錯誤。
++///   - iOS 依賴 `lib_olfparser.a` 被靜態連進 Runner（見 ios/Flutter/*.xcconfig 的
++///     OTHER_LDFLAGS），所以查表走 `DynamicLibrary.process()`。連結旗標掉了的話，
++///     失敗點會是 `lookup` 丟 ArgumentError。
++///
++/// 與舊 parser 的差異：olfparser 自己讀 .pptx 這個 zip，呼叫端**不需要**先解壓縮。
++class OlfParserFfi {
++  static DynamicLibrary? _lib;
++
++  static DynamicLibrary _open() {
++    if (_lib != null) return _lib!;
++    if (Platform.isAndroid) {
++      _lib = DynamicLibrary.open('lib_olfparser.so');
++    } else if (Platform.isIOS) {
++      _lib = DynamicLibrary.process();
++    } else if (Platform.isMacOS) {
++      _lib = DynamicLibrary.open('lib_olfparser.dylib');
++    } else {
++      throw UnsupportedError('olfparser POC 只接了 Android / iOS / macOS');
++    }
++    return _lib!;
++  }
++
++  static bool get isAvailable {
++    try {
++      _open().lookup<NativeFunction<_Pptx2OlfNative>>('pptx2olf');
++      return true;
++    } catch (_) {
++      return false;
++    }
++  }
++
++  static String version() {
++    final fn = _open()
++        .lookup<NativeFunction<Pointer<Utf8> Function()>>('olfparser_version')
++        .asFunction<Pointer<Utf8> Function()>();
++    return fn().toDartString();
++  }
++
++  /// 轉檔並回傳 native 回報的物件數。失敗時丟 [OlfParserFfiException]。
++  static int convertPptxToOlf(String pptxPath, String olfPath) {
++    final fn = _open()
++        .lookup<NativeFunction<_Pptx2OlfNative>>('pptx2olf')
++        .asFunction<_Pptx2OlfDart>();
++
++    final inPtr = pptxPath.toNativeUtf8();
++    final outPtr = olfPath.toNativeUtf8();
++    final countPtr = calloc<Int32>();
++    try {
++      final code = fn(inPtr, outPtr, countPtr);
++      if (code != 0) {
++        throw OlfParserFfiException(code, _lastError());
++      }
++      return countPtr.value;
++    } finally {
++      calloc.free(inPtr);
++      calloc.free(outPtr);
++      calloc.free(countPtr);
++    }
++  }
++
++  static String _lastError() {
++    try {
++      final fn = _open()
++          .lookup<NativeFunction<Pointer<Utf8> Function()>>(
++              'olfparser_last_error')
++          .asFunction<Pointer<Utf8> Function()>();
++      final p = fn();
++      return p == nullptr ? '' : p.toDartString();
++    } catch (_) {
++      return '';
++    }
++  }
++}
++
++class OlfParserFfiException implements Exception {
++  OlfParserFfiException(this.code, this.message);
++
++  final int code;
++  final String message;
++
++  @override
++  String toString() => 'OlfParserFfiException(code: $code, message: $message)';
++}
++
++typedef _Pptx2OlfNative = Int32 Function(
++    Pointer<Utf8> pptxPath, Pointer<Utf8> olfPath, Pointer<Int32> objectCount);
++typedef _Pptx2OlfDart = int Function(
++    Pointer<Utf8> pptxPath, Pointer<Utf8> olfPath, Pointer<Int32> objectCount);
++
++/// 在背景 isolate 執行轉檔。
++///
++/// ⚠️ 必須是**頂層函式**：`Isolate.run` 的 closure 會捕捉整個語彙環境，寫在
++/// `_convertPptxToOlf` 內部時會把同一個 scope 的 `Completer` 一起帶進去，執行期
++/// 丟 `Illegal argument in isolate message: object is unsendable`（實測於 IFP34）。
++/// 這裡的 closure 只看得到兩個 String 參數，都是可傳送的。
++Future<int> convertPptxToOlfInIsolate(String pptxPath, String olfPath) =>
++    Isolate.run(() => OlfParserFfi.convertPptxToOlf(pptxPath, olfPath));

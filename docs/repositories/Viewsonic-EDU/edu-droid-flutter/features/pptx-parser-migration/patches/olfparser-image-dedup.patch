@@ -1,0 +1,229 @@
+diff --git a/rust/crates/pptx-convert/src/media.rs b/rust/crates/pptx-convert/src/media.rs
+index d192f82..bf897a7 100644
+--- a/rust/crates/pptx-convert/src/media.rs
++++ b/rust/crates/pptx-convert/src/media.rs
+@@ -670,6 +670,37 @@ pub struct MediaHandler {
+     /// OLF source path → blob (insertion-ordered like the Python dict).
+     blob_cache: Vec<(String, Vec<u8>)>,
+     blob_index: BTreeMap<String, usize>,
++    /// `(prefix, ext, blob.len())` → indices into `blob_cache` already emitted
++    /// under that name shape, newest last.
++    ///
++    /// PPTX de-duplicates images at the package level: N shapes referencing one
++    /// picture all resolve to a single `/ppt/media/imageK.ext` part. Emitting a
++    /// separate `images/imageNNNN.ext` per shape re-writes, re-compresses and
++    /// re-ships the same bytes — one deck in the corpus emits 869 files holding
++    /// 167 distinct images, four of them 78 times each. `source` is just a path
++    /// string, so several elements may name one file; the old parser already
++    /// does exactly that.
++    ///
++    /// Matched on the emitted bytes rather than on the shape's XML because the
++    /// pixel pipelines are many (`p:pic`, `spPr` blipFill, AlternateContent
++    /// overlays, SmartArt, gradients, layout-bake tiles) and each reads a
++    /// different set of attributes. Comparing the result cannot share the wrong
++    /// pixels no matter which pipeline produced them, and it needs no update
++    /// when a pipeline learns to read one more attribute. Same contract as
++    /// `blob_hash_to_filename` in the orchestrator, which Python keys by md5.
++    ///
++    /// Bucketing by length keeps this free when there is nothing to share: a
++    /// deck whose images all differ in size never compares a single byte.
++    /// Digesting every blob instead costs real time on image-heavy decks that
++    /// have no duplicates at all (a 21 MB deck in the corpus measured +50 ms
++    /// for SHA-256 and zero sharing).
++    ///
++    /// `prefix` and `ext` are part of the key on purpose:
++    /// - the asset's filename prefix classifies it (`bg`/`layoutbg`/`grad`/…),
++    ///   so sharing across prefixes would move an asset between classes;
++    /// - callers derive `mime-type` from the `ext` they passed in, so returning
++    ///   a path with a different extension would ship a mismatched mime.
++    share_index: BTreeMap<(String, String, usize), Vec<usize>>,
+ }
+ 
+ impl MediaHandler {
+@@ -683,20 +714,39 @@ impl MediaHandler {
+         self.blob_cache.push((source, blob));
+     }
+ 
+-    /// Python: `add_image`.
+-    pub fn add_image(&mut self, blob: Vec<u8>, prefix: &str, ext: &str) -> String {
++    /// Reuse the path already emitted for these exact bytes, or emit a new one.
++    ///
++    /// The counter only advances on a miss, so the `NNNN` sequence stays gap-free
++    /// and stays aligned with Python as long as both walk shapes in the same
++    /// order — which the port already guarantees.
++    fn add_shared(&mut self, blob: Vec<u8>, prefix: &str, ext: &str) -> String {
++        let key = (prefix.to_owned(), ext.to_owned(), blob.len());
++        if let Some(candidates) = self.share_index.get(&key) {
++            for &i in candidates {
++                let (source, existing) = &self.blob_cache[i];
++                if *existing == blob {
++                    return source.clone();
++                }
++            }
++        }
+         self.image_counter += 1;
+         let source = format!("images/{prefix}{:04}{ext}", self.image_counter);
++        self.share_index
++            .entry(key)
++            .or_default()
++            .push(self.blob_cache.len());
+         self.cache(source.clone(), blob);
+         source
+     }
+ 
++    /// Python: `add_image`.
++    pub fn add_image(&mut self, blob: Vec<u8>, prefix: &str, ext: &str) -> String {
++        self.add_shared(blob, prefix, ext)
++    }
++
+     /// Python: `add_background_image` (prefix defaults to `bg`).
+     pub fn add_background_image(&mut self, blob: Vec<u8>, prefix: &str) -> String {
+-        self.image_counter += 1;
+-        let source = format!("images/{prefix}{:04}.png", self.image_counter);
+-        self.cache(source.clone(), blob);
+-        source
++        self.add_shared(blob, prefix, ".png")
+     }
+ 
+     /// Python: `get_blob`.
+@@ -722,6 +772,7 @@ impl MediaHandler {
+         }
+         self.blob_cache.clear();
+         self.blob_index.clear();
++        self.share_index.clear();
+         Ok(())
+     }
+ 
+@@ -849,10 +900,8 @@ impl MediaHandler {
+             ext = sniffed.to_owned();
+         }
+ 
+-        self.image_counter += 1;
+-        let source = format!("images/image{:04}{ext}", self.image_counter);
+         let mime = mime_for_ext(&ext).to_owned();
+-        self.cache(source.clone(), blob);
++        let source = self.add_shared(blob, "image", &ext);
+ 
+         Some(
+             OlfImage {
+@@ -1041,9 +1090,7 @@ impl MediaHandler {
+             let w = shape.width().map_or(0.0, |v| emu_to_olf(v, sx));
+             let h = shape.height().map_or(0.0, |v| emu_to_olf(v, sy));
+ 
+-            self.image_counter += 1;
+-            let source = format!("images/image{:04}{ext}", self.image_counter);
+-            self.cache(source.clone(), blob);
++            let source = self.add_shared(blob, "image", &ext);
+ 
+             let matrix = format!(
+                 "1.0,0.0,{},0.0,1.0,{},0.0,0.0,1.0",
+diff --git a/src/olfparser/_internal/pptx_media_handler.py b/src/olfparser/_internal/pptx_media_handler.py
+index 97331ce..20eeb03 100644
+--- a/src/olfparser/_internal/pptx_media_handler.py
++++ b/src/olfparser/_internal/pptx_media_handler.py
+@@ -70,13 +70,13 @@ class PPTXMediaHandler:
+         # Single store: OLF source path → blob bytes (e.g. "images/image0001.png" → bytes)
+         # Covers images, audio, and video — no secondary list to avoid duplicate storage.
+         self._blob_cache: dict[str, bytes] = {}
++        # (prefix, ext, len(blob)) → source paths already emitted under that name
++        # shape. See _add_shared.
++        self._share_index: dict[tuple[str, str, int], list[str]] = {}
+ 
+     def add_image(self, blob: bytes, prefix: str = "image", ext: str = ".png") -> str:
+         """Register an image blob and return its ``images/filename`` path."""
+-        self._image_counter += 1
+-        source = f"images/{prefix}{self._image_counter:04d}{ext}"
+-        self._blob_cache[source] = blob
+-        return source
++        return self._add_shared(blob, prefix, ext)
+ 
+     def add_background_image(
+         self, blob: bytes, prefix: str = "bg", ext: str = ".png"
+@@ -85,9 +85,44 @@ class PPTXMediaHandler:
+ 
+         Uses a distinct prefix to differentiate background images from content images.
+         """
++        return self._add_shared(blob, prefix, ext)
++
++    def _add_shared(self, blob: bytes, prefix: str, ext: str) -> str:
++        """Return the path already emitted for these exact bytes, else emit a new one.
++
++        PPTX de-duplicates images at the package level: N shapes referencing one
++        picture all resolve to a single ``/ppt/media/imageK.ext`` part. Emitting a
++        separate ``images/imageNNNN.ext`` per shape re-writes, re-compresses and
++        re-ships the same bytes — one deck in the corpus emits 869 files holding
++        167 distinct images, four of them 78 times each. ``source`` is only a path
++        string, so several elements may name one file.
++
++        Matched on the emitted bytes rather than on the shape's XML because the
++        pixel pipelines are many (``p:pic``, ``spPr`` blipFill, AlternateContent
++        overlays, SmartArt, gradients, layout-bake tiles) and each reads a
++        different set of attributes. Comparing the result cannot share the wrong
++        pixels no matter which pipeline produced them, and it needs no update when
++        a pipeline learns to read one more attribute.
++
++        ``prefix`` and ``ext`` are part of the key on purpose: the filename prefix
++        classifies the asset (``bg``/``layoutbg``/``grad``/…), and callers derive
++        ``mime-type`` from the ``ext`` they passed in.
++
++        Bucketing by length keeps this free when there is nothing to share — a
++        deck whose images all differ in size never compares a single byte.
++
++        The counter only advances on a miss, so the ``NNNN`` sequence stays
++        gap-free and stays aligned with the Rust port as long as both walk shapes
++        in the same order.
++        """
++        key = (prefix, ext, len(blob))
++        for source in self._share_index.get(key, ()):
++            if self._blob_cache[source] == blob:
++                return source
+         self._image_counter += 1
+         source = f"images/{prefix}{self._image_counter:04d}{ext}"
+         self._blob_cache[source] = blob
++        self._share_index.setdefault(key, []).append(source)
+         return source
+ 
+     def get_blob(self, source: str) -> bytes | None:
+@@ -241,11 +276,8 @@ class PPTXMediaHandler:
+         if sniffed is not None:
+             ext = sniffed
+ 
+-        self._image_counter += 1
+-        source = f"images/image{self._image_counter:04d}{ext}"
+         mime = MIME_MAP.get(ext, "image/png")
+-
+-        self._blob_cache[source] = blob
++        source = self._add_shared(blob, "image", ext)
+ 
+         return OlfImage(
+             id=generate_id(),
+@@ -445,9 +477,7 @@ class PPTXMediaHandler:
+                 sniffed = _sniff_raster_ext(blob)
+                 if sniffed is not None:
+                     ext = sniffed
+-                self._image_counter += 1
+-                source = f"images/image{self._image_counter:04d}{ext}"
+-                self._blob_cache[source] = blob
++                source = self._add_shared(blob, "image", ext)
+ 
+                 matrix = f"1.0,0.0,{x},0.0,1.0,{y},0.0,0.0,1.0"
+                 return OlfImage(
+@@ -506,9 +536,7 @@ class PPTXMediaHandler:
+                 sniffed = _sniff_raster_ext(blob)
+                 if sniffed is not None:
+                     ext = sniffed
+-                self._image_counter += 1
+-                source = f"images/image{self._image_counter:04d}{ext}"
+-                self._blob_cache[source] = blob
++                source = self._add_shared(blob, "image", ext)
+ 
+                 matrix = f"1.0,0.0,{x},0.0,1.0,{y},0.0,0.0,1.0"
+ 
+@@ -536,6 +564,7 @@ class PPTXMediaHandler:
+             dest.parent.mkdir(parents=True, exist_ok=True)
+             dest.write_bytes(blob)
+         self._blob_cache.clear()
++        self._share_index.clear()
+ 
+ 
+ def _convert_video_to_mp4(blob: bytes, src_ext: str) -> bytes | None:

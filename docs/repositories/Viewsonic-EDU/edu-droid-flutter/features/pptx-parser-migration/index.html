@@ -1,0 +1,406 @@
+<title>PPTX Parser 換軌驗證</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Serif:wght@600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--ink:#14181c;--dim:#5a656e;--line:#dde3e7;--paper:#f7f8f9;--card:#fff;--accent:#156082;
+--accent-soft:#e3edf2;--warn:#9a5b12;--bad:#a32b1c;}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--ink:#e6ebee;--dim:#9aa7b0;--line:#28323a;
+--paper:#0e1216;--card:#161c22;--accent:#63b3d4;--accent-soft:#152932;--warn:#d9a05b;--bad:#e2705f;}}
+:root[data-theme=dark]{--ink:#e6ebee;--dim:#9aa7b0;--line:#28323a;--paper:#0e1216;--card:#161c22;
+--accent:#63b3d4;--accent-soft:#152932;--warn:#d9a05b;--bad:#e2705f;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",-apple-system,"Noto Sans TC",sans-serif;line-height:1.7}
+.wrap{max-width:1180px;margin:0 auto;padding:56px 28px 96px}
+h1{font-family:"IBM Plex Serif",Georgia,serif;font-size:2.1rem;margin:0 0 8px;text-wrap:balance}
+h2{font-family:"IBM Plex Serif",Georgia,serif;font-size:1.35rem;margin:52px 0 14px;padding-bottom:8px;border-bottom:2px solid var(--accent)}
+h3{font-size:1.02rem;margin:0 0 4px;font-weight:600}
+.sub{color:var(--dim);margin:0 0 4px} .prose{max-width:68ch}
+code{font-family:"IBM Plex Mono",monospace;font-size:.88em;background:var(--accent-soft);padding:1px 5px;border-radius:3px}
+table{border-collapse:collapse;width:100%;font-size:.9rem;margin:10px 0}
+th,td{border-bottom:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
+.num,.tid{font-variant-numeric:tabular-nums;font-family:"IBM Plex Mono",monospace}
+.tid{color:var(--accent);font-weight:500} .slow{color:var(--warn);font-weight:600} .bad{color:var(--bad);font-weight:600}
+.scroll{overflow-x:auto}
+.note{border-left:3px solid var(--accent);background:var(--accent-soft);padding:14px 18px;border-radius:0 6px 6px 0;margin:18px 0}
+.note.warn{border-color:var(--warn)} .note p{margin:.4em 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:18px;margin:20px 0}
+.card .tid{margin-right:6px} .meta{color:var(--dim);font-size:.84rem;margin:0 0 14px}
+.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:820px){.trio{grid-template-columns:1fr}}
+figure{margin:0} figure img{width:100%;border:1px solid var(--line);border-radius:4px;display:block;background:#fff}
+figcaption{font-size:.74rem;color:var(--dim);margin-top:6px}
+figure.missing div{aspect-ratio:16/10;border:1px dashed var(--line);border-radius:4px;display:flex;
+align-items:center;justify-content:center;text-align:center;color:var(--bad);font-size:.82rem;padding:12px}
+.pagebtn{font:inherit;font-size:.76rem;margin-left:8px;padding:3px 11px;border:1px solid var(--accent);
+background:transparent;color:var(--accent);border-radius:99px;cursor:pointer}
+.pagebtn:hover,.pagebtn:focus-visible{background:var(--accent);color:var(--paper)}
+dialog{border:none;border-radius:10px;padding:0;background:var(--card);color:var(--ink);
+max-width:96vw;width:1180px;box-shadow:0 24px 60px rgba(0,0,0,.35)}
+dialog::backdrop{background:rgba(0,0,0,.66)}
+.vh{display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.vh h4{margin:0;font-size:.98rem;flex:1}
+.nav{display:flex;align-items:center;gap:8px}
+.nav button{font:inherit;padding:4px 13px;border:1px solid var(--line);background:transparent;
+color:var(--ink);border-radius:5px;cursor:pointer}
+.nav button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.nav button:disabled{opacity:.35;cursor:default}
+#pi{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;min-width:74px;text-align:center;font-size:.86rem}
+.vb{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px}
+@media(max-width:900px){.vb{grid-template-columns:1fr}}
+.vb img{width:100%;border:1px solid var(--line);border-radius:4px;background:#fff}
+.hint{color:var(--dim);font-size:.76rem}
+</style>
+<div class=wrap>
+<h1>PPTX Parser 換軌驗證</h1>
+<p class=sub>用 Azure DevOps 備份裡所有帶 PPTX 附件的歷史 bug 單，比較 olfparser 與 mvbf 現行的
+mvbx_pptx_olf_api 1.8.0。轉檔與 mac 截圖於 2026-08-24／25，IFP34 逐頁截圖於 2026-08-25。</p>
+
+<div class="note warn prose"><p><strong>這批單不是「新 parser 修掉的 bug」。</strong>
+它們是當年對<em>更舊的</em> parser 版本開的、且全部已 Closed；現行 1.8.0 對它們已經是修過的版本。
+所以「現行也正常」是預期結果。這批檔案的用途是 <strong>no-regression 樣本集</strong>。</p></div>
+
+<h2>轉檔結果</h2>
+<div class=scroll><table>
+<tr><th>Ticket</th><th>檔案</th><th>olfparser</th><th>現行 1.8.0</th><th>倍率</th><th>物件數</th></tr><tr><td class=tid>55943</td><td><code>Test_ppt.pptx</code></td><td class='num'>1320 ms</td><td class=num>975 ms<br><span class=hint>≈775 ms</span></td><td class='num'>1.7×</td><td class=num>185</td></tr><tr><td class=tid>55962</td><td><code>hyperlink.pptx</code></td><td class='num'>535 ms</td><td class=num>418 ms<br><span class=hint>≈218 ms</span></td><td class='num'>2.5×</td><td class=num>5</td></tr><tr><td class=tid>56063</td><td><code>screenshot.pptx</code></td><td class='num'>329 ms</td><td class=num>461 ms<br><span class=hint>≈261 ms</span></td><td class='num'>1.3×</td><td class=num>10</td></tr><tr><td class=tid>56191</td><td><code>Shape.pptx</code></td><td class='num'>78 ms</td><td class=num>438 ms<br><span class=hint>≈238 ms</span></td><td class='num'>0.3×</td><td class=num>50</td></tr><tr><td class=tid>56394</td><td><code>PPTX物件測試檔.pptx</code></td><td class='num'>2509 ms</td><td class=num>621 ms<br><span class=hint>≈421 ms</span></td><td class='num slow'>6.0×</td><td class=num>286</td></tr><tr><td class=tid>56396</td><td><code>QEM__PG_Q322_WIP_version-003.pptx</code></td><td class='num'>1204 ms</td><td class=num>646 ms<br><span class=hint>≈446 ms</span></td><td class='num'>2.7×</td><td class=num>809</td></tr><tr><td class=tid>56422</td><td><code>pptx_測試2.pptx</code></td><td class='num slow'>3449 ms</td><td class=num>538 ms<br><span class=hint>≈338 ms</span></td><td class='num bad'>10.2×</td><td class=num>82</td></tr><tr><td class=tid>56423</td><td><code>PPTX物件測試檔.pptx</code></td><td class='num'>2284 ms</td><td class=num>645 ms<br><span class=hint>≈445 ms</span></td><td class='num slow'>5.1×</td><td class=num>286</td></tr><tr><td class=tid>57539</td><td><code>1下課本CH2-1_直角坐標平面_111f679359_.pptx</code></td><td class='num slow'>12000 ms</td><td class=num>899 ms<br><span class=hint>≈699 ms</span></td><td class='num bad'>17.2×</td><td class=num>933</td></tr><tr><td class=tid>59377</td><td><code>Glslide2pptx-TEST-Sports-Injuries-Breakthrough-by-Slidesgo.pptx</code></td><td class='num slow'>7341 ms</td><td class=num>8695 ms<br><span class=hint>≈8495 ms</span></td><td class='num'>0.9×</td><td class=num>19684</td></tr><tr><td class=tid>60333</td><td><code>car.pptx</code></td><td class='num'>148 ms</td><td class=num>544 ms<br><span class=hint>≈344 ms</span></td><td class='num'>0.4×</td><td class=num>63</td></tr><tr><td class=tid>62294</td><td><code>car.pptx</code></td><td class='num'>28 ms</td><td class=num>413 ms<br><span class=hint>≈213 ms</span></td><td class='num'>0.1×</td><td class=num>39</td></tr><tr><td class=tid>64538</td><td><code>Test_ppt.pptx</code></td><td class='num'>624 ms</td><td class=num>480 ms<br><span class=hint>≈280 ms</span></td><td class='num'>2.2×</td><td class=num>185</td></tr><tr><td class=tid>66938</td><td><code>G-Slides_AI探險之旅-第四站-弗蘭克農場.pptx</code></td><td class='num'>856 ms</td><td class=num>625 ms<br><span class=hint>≈425 ms</span></td><td class='num'>2.0×</td><td class=num>926</td></tr><tr><td class=tid>71894</td><td><code>4下課本ch4-周長與面積_110f647793_.pptx</code></td><td class='num'>2149 ms</td><td class=num>554 ms<br><span class=hint>≈354 ms</span></td><td class='num slow'>6.1×</td><td class=num>852</td></tr><tr><td class=tid>93443</td><td><code>114國語5上L01教學PPT_114f411549_.pptx</code></td><td class='num'>529 ms</td><td class=num>513 ms<br><span class=hint>≈313 ms</span></td><td class='num'>1.7×</td><td class=num>349</td></tr><tr><td class=tid>95800</td><td><code>Introduction_to_Photography.pptx</code></td><td class='num'>1594 ms</td><td class=num><span class=bad>轉檔失敗</span></td><td class='num'>—</td><td class=num>75</td></tr><tr><td class=tid>95800</td><td><code>bug_95800_另存新檔可以開.pptx</code></td><td class='num'>599 ms</td><td class=num>474 ms<br><span class=hint>≈274 ms</span></td><td class='num'>2.2×</td><td class=num>75</td></tr></table></div>
+<div class=prose><p><strong>倍率怎麼算的：</strong>現行 parser 是透過 Dart harness 量的，含 Dart VM 啟動＋載入 dylib
+的固定開銷，實測 <strong>200 ms</strong>（重複三次 324 / 200 / 200 ms）。表中「現行 1.8.0」欄的第二行
+<span class=hint>≈xxx ms</span> 是扣掉這 200 ms 之後的值，倍率＝<code>olfparser ÷ 扣除後的現行</code>。</p>
+<p>olfparser 那欄<strong>不扣</strong>：它是 Rust CLI 端到端的數字，本身的啟動成本已含在內——
+<code>62294</code> 整個轉檔加啟動只有 28 ms，正好說明那個成本可以忽略。現行 parser 的數字也<strong>沒有</strong>扣掉
+Dart 端解壓 pptx 的時間，因為舊 plugin API 要求呼叫端先自行解壓，那本來就是它的成本。</p>
+<p><code>57539</code> 重複量測三次為 11.8 / 12.0 / 13.1 秒。倍率 ≥3× 標橘、≥10× 標紅。</p></div>
+
+<h2>兩個客觀結果</h2>
+<div class=prose>
+<p><strong>1. 現行 parser 有一個檔案轉不出來。</strong><code>95800</code> 的原始附件
+<code>Introduction_to_Photography.pptx</code>：現行 1.8.0 回 <code>ERR_DEFAULT</code>，olfparser 正常轉出。
+備份裡第二個附件叫 <code>bug_95800_另存新檔可以開.pptx</code> —— 現行 parser 對另存版可以、對原始檔不行，
+當年是繞過而非修好。</p>
+<p><strong>2. 新 parser 在部分真實教學檔明顯較慢</strong>，最極端的 <code>57539</code> 在 Mac 上就要 12 秒。</p>
+</div>
+
+<h2>慢在哪</h2>
+<div class=prose><p>用 macOS <code>sample</code> 取樣 6509 次：</p></div>
+<div class=scroll><table>
+<tr><th>函式</th><th>樣本</th><th>佔比</th></tr>
+<tr><td><code>image::imageops::filter_1d::filter_symmetric_column</code></td><td class=num>2416</td><td class=num>37%</td></tr>
+<tr><td><code>image::imageops::filter_1d::filter_symmetric_row</code></td><td class=num>2244</td><td class=num>34%</td></tr>
+<tr><td><code>pptx_convert::raster::alpha_composite_at</code></td><td class=num>487</td><td class=num>7.5%</td></tr>
+<tr><td><code>blur</code> / <code>paste_masked</code> / <code>resize</code></td><td class=num>469</td><td class=num>7%</td></tr>
+</table></div>
+<div class=prose><p>約 78% 在影像重採樣與 alpha 合成，來源是
+<code>orchestrator::layout_bake::render_layout_bake_impl</code> 與 <code>bake_paint::render_shape_onto_canvas</code>：
+olfparser 會把版面裝飾與圖形<strong>超取樣後烘成點陣圖</strong>。所以耗時跟頁數、圖片數都對不上——
+關鍵是有幾頁需要烘版面（<code>66938</code> 67 頁 558 張圖只要 856 ms，<code>57539</code> 93 頁要 12 秒）。
+這是刻意加的畫質功能，不是 bug——但在 IFP34 上它讓同一份檔案從 3.6 秒變成 439 秒（見下一節）。</p></div>
+
+
+<h2>IFP34 實機耗時</h2>
+<div class="note warn prose">
+<p><strong>這一節是整份評估中對遷移最不利的資料。</strong>Mac 上的差距是 13×，到了 IFP34 變成 <strong>123×</strong>。</p>
+</div>
+<div class=scroll><table>
+<tr><th>57539（93 頁教材）</th><th>現行 1.8.0</th><th>olfparser</th><th>倍率</th></tr>
+<tr><td>Mac（Apple Silicon）</td><td class=num>0.9 秒</td><td class="num slow">12.0 秒</td><td class=num>13×</td></tr>
+<tr><td><strong>IFP34</strong></td><td class=num>3.6 秒</td><td class="num bad">439.3 秒（7 分 19 秒）</td><td class="num bad">123×</td></tr>
+</table></div>
+<div class=prose>
+<p>兩者都確實跑完：olfparser 產出 933 物件 / 10,869,323 bytes，與 Mac 上的結果一致；現行 parser 產出 13,927,039 bytes。
+量測方式是在 app 內加 log 夾住轉檔區間（<code>[olfparser POC] start/objects=</code> 與 <code>[oldparser] start/done</code>），
+不含檔案選擇與畫面渲染。</p>
+<p><strong>為什麼這個數字有標誌意義：</strong><code>71894</code> 那張單的標題就是「PPT 匯入時間過長」，內文寫「達兩分二十秒左右」——
+當年 <strong>140 秒</strong>就被開單抗議。現在是 <strong>439 秒</strong>，是那條線的 3.1 倍。</p>
+<p><strong>但不是每個檔都這樣。</strong>另一輪在 IFP34 上跑 olfparser 官方樣本集（54 檔，透過 olf-jni 測試 APK，不經 mvbf UI）：
+54/54 成功、零 crash、中位數 30 ms、峰值 RSS 175 MB；VSFT-9993 那份 12.9 MB 繪本是 4.5 秒。
+差別在<strong>有幾頁需要烘版面</strong>——不烘的檔案很快，烘的檔案成本爆炸。</p>
+<p><strong>另外一個要修的：</strong>mvbf 原本那條路有 <code>convertOLF timeout after 60s</code> 看門狗，
+但 POC 分支在建立看門狗之前就回傳，所以新路徑目前是<strong>無限等</strong>。</p>
+</div>
+
+<h2>效能可以調到哪裡：四個旋鈕</h2>
+<div class="note prose"><p>前一節的 439 秒是 olfparser 的<strong>預設設定</strong>。接著逐項改上游程式碼、
+每改一項就在 IFP34 上重量一次 57539，結果是<strong>累積 99×</strong>——而且每一步都是既有程式碼的參數或路徑，
+沒有新演算法。</p></div>
+<div class=scroll><table>
+<tr><th>設定</th><th>IFP34 耗時</th><th>vs 現行 3.6 秒</th><th>代價</th></tr>
+<tr><td>現行 1.8.0</td><td class=num>3.6 秒</td><td class=num>1×</td><td>—</td></tr>
+<tr><td>olfparser 預設（烘烤 ss=2）</td><td class="num bad">439.3 秒</td><td class="num bad">123×</td><td>—</td></tr>
+<tr><td>＋ 超取樣 2 → 1</td><td class="num slow">38.2 秒</td><td class=num>10.6×</td><td>烘圖解析度降低；<strong>物件數不變、輸出小 8%</strong></td></tr>
+<tr><td>＋ 關閉版面烘烤</td><td class=num>8.9 秒</td><td class=num>2.5×</td><td>物件 +64%、檔案 +108%</td></tr>
+<tr><td>＋ images/fonts 改 STORED</td><td class=num>6.3 秒</td><td class=num>1.77×</td><td>檔案再 +13%</td></tr>
+<tr><td>＋ 影像去重</td><td class="num good">4.4 秒</td><td class="num good">1.23×</td><td>檔案 −63%；輸出逐位元組相同</td></tr>
+</table></div>
+<div class=prose>
+<p class=meta>⚠️ 前四列是在 app 內夾 log 量的；最後一列（去重）改用交叉編譯的 CLI 直接在 IFP34 上跑，因為裝置在期間被更新成 versionCode 40000000 的 system app，原本的 POC APK 已不在、UI 座標也失準。兩種方法在同一組態下的落差是 6.3 秒（app）vs 6.18 秒（CLI），約 2%，所以併在同一張表裡。</p>
+<h3>1 · 超取樣（<code>LAYOUT_BAKE_SUPERSAMPLE</code>，預設 2 → 改 1）</h3>
+<p>放大兩倍＝4 倍像素量，但實測是 <strong>11.5 倍</strong>的差距，遠超理論值——放大後的畫布很可能超出快取，
+記憶體頻寬在弱裝置上成為瓶頸。<strong>物件數與預設完全相同（933），輸出還小 8%</strong>，只有烘圖解析度不同。</p>
+<h3>2 · 關閉版面烘烤</h3>
+<p>olfparser 自己就有非點陣的 <code>inject_layout_shapes</code> 路徑，
+<code>orchestrator/mod.rs</code> 的註解直接寫它存在的理由是
+「uses the non-raster injection path to <strong>avoid paying the bake cost</strong>」（discovery 模式在用）。
+實驗只是讓正式轉檔也走那條既有路徑。</p>
+<h3>3 · <code>images/</code>、<code>fonts/</code> 改用 STORED</h3>
+<p>兩邊寫 OLF 的方式本來就不同：<strong>舊 parser 整包 <code>store</code>，olfparser 整包 <code>deflate</code></strong>。
+而 OLF 內容多是已壓縮的影像格式，再 deflate 一次幾乎壓不動卻要付整份 CPU。</p>
+<p>⚠️ <strong>不能全部改 store</strong>：images 佔比在 18 個檔案間是 0%～99%，
+<code>59377</code> 反而是 <code>content.json</code> 38 MB / 總 46.9 MB（圖片只佔 20%），那種檔案很吃壓縮。
+所以實作是混合——<code>images/</code>、<code>fonts/</code> 用 STORED，其餘照舊。</p>
+<h3>4 · 影像去重（<em>已實作並實測</em>）</h3>
+<p>實測發現輸出裡大量重複：</p></div>
+<div class=scroll><table>
+<tr><th>57539</th><th>影像數</th><th>獨特</th><th>重複率</th></tr>
+<tr><td>原始 pptx</td><td class=num>186</td><td class=num>186</td><td class=num>0%</td></tr>
+<tr><td>舊 1.8.0</td><td class=num>244</td><td class=num>191</td><td class=num>22%</td></tr>
+<tr><td>新（烘烤）</td><td class=num>388</td><td class=num>164</td><td class="num slow">58%</td></tr>
+<tr><td>新（無烘烤）</td><td class=num>869</td><td class=num>167</td><td class="num bad">81%</td></tr>
+</table></div>
+<div class=prose>
+<p>無烘烤版寫了 869 張圖但<strong>只有 167 張不一樣</strong>，其中有 4 張<strong>各被寫了 78 次</strong>——
+那是 93 頁共用的同一套版面裝飾，每頁重新寫一次。
+注意<strong>獨特影像數反而比原檔少</strong>（186→167），所以這不是「做得比較多」，是<strong>重複勞動</strong>。</p>
+
+<h4>原因：PPTX 已經去重了，olfparser 把那個身分丟掉</h4>
+<p>OOXML 在封裝層本來就只存一份圖：<code>&lt;a:blip r:embed="rId3"&gt;</code> 經過該 part 的
+<code>.rels</code> 解析後指向 <code>/ppt/media/image2.emf</code>，被幾個地方用就掛幾條 relationship。
+<code>pptx-parser</code> 的 <code>Shape::image()</code> <strong>已經做了這個解析</strong>，
+但只拿它來切副檔名，<code>Image</code> struct 連 <code>name</code> 欄位都沒有：</p>
+<pre>let rid = blip.get(&amp;ns::r("embed"))?;        // "rId3"
+let image_part = self.part.related(rid)?;    // 解析成真正的 part
+let name = image_part.name();                // "/ppt/media/image2.emf"
+Some(Image {
+    blob: image_part.blob(),
+    ext: name.rsplit('.').next()...          // ← 只留副檔名，name 就丟了
+})</pre>
+<p><code>MediaHandler::add_image</code> 於是每次都無條件 <code>image_counter += 1</code> 產生新路徑。
+它裡面那個 <code>blob_cache</code> <strong>不是</strong>去重機制，key 是剛生成的唯一路徑，永遠不會命中。
+同一個 crate 裡其實有 md5 去重（<code>background.rs</code> 的 <code>_store_bg_image</code>、
+<code>layout_bake.rs</code> 的 layoutbg），只是沒套到一般 picture 上。</p>
+
+<h4>做法：不是「去重」，是產生前先查表</h4>
+<p>正確的 key 不是輸出 bytes 的 hash，而是
+<code>(解析後的 part 名稱, srcRect 裁切, flipH/V, 是否 90/270 預旋轉, prstGeom@prst,
+effectLst 子樹, custGeom 子樹)</code> —— <strong>全部來自 XML 屬性，一個 bytes 都不用碰</strong>。
+命中就回傳既有的 <code>source</code> 路徑；OLF 本來就允許多個元素指同一個檔。</p>
+<p>兩個實作上會咬人的地方：</p>
+<ul>
+<li><code>rId</code> 本身<strong>不是</strong>全域唯一的，作用域是擁有它的那個 part 的 <code>.rels</code>
+——<code>slideLayout40</code> 的 rId3 和 <code>slideLayout38</code> 的 rId3 是兩條不同的關係。
+必須用解析後的 target part 名稱。</li>
+<li>空的 <code>&lt;a:effectLst/&gt;</code> 在 OOXML 極常見且是 no-op。第一版用「有沒有這個元素」
+當排除條件，869 只降到 527；改成比對 <code>read_effect_list()</code> 的內容才降到 174。</li>
+</ul>
+
+<h4>量測結果</h4>
+<p>在既有三個旋鈕（ss=1、關烘烤、混合 STORED）之上再加去重：</p></div>
+<div class=scroll><table>
+<tr><th>57539</th><th>耗時</th><th>OLF 大小</th><th>images entry</th></tr>
+<tr><td>Mac 未去重</td><td class=num>0.69 秒</td><td class=num>24.4 MB</td><td class=num>869</td></tr>
+<tr><td>Mac 加去重</td><td class="num good">0.50 秒</td><td class="num good">9.0 MB</td><td class="num good">174</td></tr>
+<tr><td>IFP34 未去重</td><td class=num>6.18 秒</td><td class=num>24.4 MB</td><td class=num>869</td></tr>
+<tr><td>IFP34 加去重</td><td class="num good">4.42 秒</td><td class="num good">9.0 MB</td><td class="num good">174</td></tr>
+</table></div>
+<div class=prose>
+<p>18 檔全跑（IFP34）：合計 102.7 → 98.3 秒。<strong>沒有任何一檔變慢或變大</strong>，
+但收益集中在有重複的檔案上——57539 是 1.40×、66938 是 1.77×、93443 是 1.26×，
+其餘多數是 1.00×。體積縮減比時間更明顯（57539 −63%、71894 −54%、66938 −38%）。</p>
+<p>⚠️ <strong>單獨上這一項的時間效益接近零。</strong>在上游預設（烘烤開啟）下量 57539，
+11.57 → 11.44 秒，因為烘烤本身就佔掉幾乎全部時間；體積仍降 23%。
+<strong>去重要跟旋鈕 1、2 一起才看得到時間收益</strong>——四個旋鈕不是可以任意單獨評估的。</p>
+
+<h4>正確性驗證</h4>
+<p>對 18 檔的輸出做逐一比對：把 <code>content.json</code> 裡每個資源引用解析成實際的
+<code>source</code> 檔案，比對 <strong>md5 + mime-type + width/height + matrix</strong>。
+<strong>18 檔全部、共 2,395 個資源引用完全一致</strong>（57539 自己就有 869 個）。
+content.json 其餘欄位的差異只有 <code>generate_id()</code> 產生的隨機 UUID
+——同一支未改動的 binary 跑兩次也會有同樣的差異（對照組實測 9,721 個欄位）。
+olfparser 既有測試 993 個全過。</p>
+
+<h4>成本：hash 的顧慮不成立</h4>
+<p>先前擔心「多一道去重檢查會不會更慢」。實測 IFP34 上 md5 掃過 57539 全部 23 MB 影像是 172 ms
+（其中 92 ms 是讀檔，純計算約 80 ms），對照 6.18 秒是 1.3%。
+而實際做法連這 80 ms 都不用付——key 只用 XML 屬性，重複的那 702 份
+<strong>從頭到尾不存在</strong>：不會被複製到記憶體、不會被寫檔、不會被壓縮。</p>
+
+<h3>剩下的 1.77 倍</h3>
+<p>Mac 取樣顯示扣掉壓縮後，主要是 PNG 解碼／編碼、檔案 I/O，以及 Google Fonts 網路請求
+（<code>__recvfrom</code>；這條只在 Mac 發生，IFP 實測不會抓）。這部分才是「olfparser 做得比較多」——
+向量化 AutoShape、圖片效果、內嵌字型。要再往下壓就是功能取捨，不是效能 bug。</p>
+<h3>風險排序</h3>
+<p>旋鈕 1 與 3 <strong>不改變 OLF 的結構</strong>（ss=1 物件數與預設完全相同；STORED 只改封裝方式），
+風險最低，值得優先跟上游提。旋鈕 2 會改變 OLF 組成，風險較高。</p>
+<p><strong>具體可以要求上游的：</strong>把 <code>LAYOUT_BAKE_SUPERSAMPLE</code> 從編譯期常數改成可設定
+（或依裝置／頁數自動降階），並對已壓縮的 entry 改用 STORED。對他們是小改動，對 IFP 是數十倍。</p>
+</div>
+<h2>逐檔對照</h2>
+<div class="note prose">
+<p>· 卡片上的三張圖是 <strong>macOS</strong> 的第 1 頁三方對照（PowerPoint／olfparser／現行 1.8.0）。</p>
+<p>· 有「逐頁檢視」按鈕的 7 張單，可以逐頁瀏覽 <strong>IFP34</strong> 上的畫面與 PowerPoint 對照。</p>
+<p>· ⚠️ <strong>IFP 的舊 parser 截圖沒有跑到</strong>，所以逐頁檢視只有兩方。</p>
+<p>· ⚠️ <code>55943</code> 的 IFP 逐頁擷取過程中被手動點擊干擾過，頁序可能對不上。</p>
+<p>· ⚠️ mac 截圖的縮放不是 fit-to-page，不同畫布尺寸取景比例不一致，不適合像素級比對。</p>
+<p>· 除 <code>56423</code>、<code>95800</code> 外，其餘單我沒有逐一下判斷。</p>
+</div>
+<section class=card>
+<h3><span class=tid>55943</span> [MVBF][M1][iPad] Opening file bar CANNOT stop when importing pptx file <button class=pagebtn data-t="55943">逐頁檢視（13 頁·IFP）</button></h3>
+<p class=meta><code>Test_ppt.pptx</code> · 建立 2023-10-05 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/55943_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/55943_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/55943_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>55962</span> [MVBF][M1][iPad]PPTX parser-Cannot Import pptx file. <button class=pagebtn data-t="55962">逐頁檢視（1 頁·IFP）</button></h3>
+<p class=meta><code>hyperlink.pptx</code> · 建立 2023-10-05 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/55962_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/55962_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/55962_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>56063</span> [MVBF]PPTX parser-The cropped image is displayed completely. <button class=pagebtn data-t="56063">逐頁檢視（2 頁·IFP）</button></h3>
+<p class=meta><code>screenshot.pptx</code> · 建立 2023-10-06 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/56063_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/56063_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/56063_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>56191</span> [MVBF]PPTX parser-The shape is not displayed completely. <button class=pagebtn data-t="56191">逐頁檢視（8 頁·IFP）</button></h3>
+<p class=meta><code>Shape.pptx</code> · 建立 2023-10-12 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/56191_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/56191_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/56191_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>56394</span> [MVBF]PPTX parser-Some shapes display abnormally <button class=pagebtn data-t="56394">逐頁檢視（17 頁·IFP）</button></h3>
+<p class=meta><code>PPTX物件測試檔.pptx</code> · 建立 2023-10-17 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/56394_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/56394_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/56394_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>56396</span> [MVBF]PPTX parser-The unsupported object is displayed. <button class=pagebtn data-t="56396">逐頁檢視（23 頁·IFP）</button></h3>
+<p class=meta><code>QEM__PG_Q322_WIP_version-003.pptx</code> · 建立 2023-10-17 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/56396_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/56396_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/56396_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>56422</span> [MVBF]PPTX parser-Display two backgrounds. <button class=pagebtn data-t="56422">逐頁檢視（11 頁·IFP）</button></h3>
+<p class=meta><code>pptx_測試2.pptx</code> · 建立 2023-10-18 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/56422_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/56422_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/56422_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>56423</span> [MVBF]PPTX parser-The merged table displays inconsistently. </h3>
+<p class=meta><code>PPTX物件測試檔.pptx</code> · 建立 2023-10-18 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/56423_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/56423_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/56423_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>57539</span> [MVBF]PPTX parser- Some texts will be turned to &quot;？&quot; </h3>
+<p class=meta><code>1下課本CH2-1_直角坐標平面_111f679359_.pptx</code> · 建立 2023-11-10 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/57539_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/57539_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/57539_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>59377</span> [MVBF]PPTX parser- Show 1030 error code after importing certain file </h3>
+<p class=meta><code>Glslide2pptx-TEST-Sports-Injuries-Breakthrough-by-Slidesgo.pptx</code> · 建立 2023-12-12 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/59377_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/59377_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/59377_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>60333</span> [MVBF]PPTX parser- The group objects in MVBF are different from pptx </h3>
+<p class=meta><code>car.pptx</code> · 建立 2024-01-02 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/60333_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/60333_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/60333_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>62294</span> [MVBF]PPTX parser- Grouped objects will be out of shape after saving as OLF file </h3>
+<p class=meta><code>car.pptx</code> · 建立 2024-02-15 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/62294_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/62294_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/62294_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>64538</span> [MVBF] Error code 2001 shows when importing certain pptx file </h3>
+<p class=meta><code>Test_ppt.pptx</code> · 建立 2024-03-29 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/64538_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/64538_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/64538_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>66938</span> [MVBF]PPTX-  Images disappear </h3>
+<p class=meta><code>G-Slides_AI探險之旅-第四站-弗蘭克農場.pptx</code> · 建立 2024-05-27 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/66938_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/66938_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/66938_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>71894</span> 【MVBF】PPT匯入時間過長 </h3>
+<p class=meta><code>4下課本ch4-周長與面積_110f647793_.pptx</code> · 建立 2024-09-18 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/71894_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/71894_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/71894_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>93443</span> [MVBFv3] Import pptx file - After importing a .pptx file to the canvas, certain images disappear on page 3. </h3>
+<p class=meta><code>114國語5上L01教學PPT_114f411549_.pptx</code> · 建立 2025-09-02 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/93443_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/93443_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/93443_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>95800</span> [MVBFv3] Import PPTx file - When importing a specific PPTX file, the system gets stuck in the file opening state and cannot complete the import operation. </h3>
+<p class=meta><code>Introduction_to_Photography.pptx</code> · 建立 2025-10-09 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/95800_1_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/95800_1_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure class=missing><div>現行 parser 轉檔失敗<br>沒有 OLF 可開</div><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section><section class=card>
+<h3><span class=tid>95800</span> [MVBFv3] Import PPTx file - When importing a specific PPTX file, the system gets stuck in the file opening state and cannot complete the import operation. </h3>
+<p class=meta><code>bug_95800_另存新檔可以開.pptx</code> · 建立 2025-10-09 · Closed</p>
+<div class=trio>
+<figure><img loading=lazy src="images/95800_2_ref.jpg"><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img loading=lazy src="images/95800_2_new.jpg"><figcaption>mvbf(mac) ＋ olfparser</figcaption></figure>
+<figure><img loading=lazy src="images/95800_2_old.jpg"><figcaption>mvbf(mac) ＋ 現行 1.8.0</figcaption></figure></div></section>
+<h2>附錄：待調查（本次不處理）</h2>
+<div class=prose>
+<h3>EMF 轉檔失敗後仍以 <code>.png</code> 送出</h3>
+<p>查效能時順帶發現，尚未驗證使用者可見影響，先記著避免發散。</p>
+<p>57539 裡 <code>ppt/media/image2.emf</code>（母片上的裝飾元素，被 3 個 slideLayout ＋ 7 個
+slideMaster 引用）在 OLF 輸出中的檔名是 <code>image0002.png</code>，但檔頭是
+<code>01000000 6c000000</code> —— 那是 EMR_HEADER，也就是 <strong>bytes 還是 EMF</strong>。</p>
+<p>這是刻意對齊 Python 版的行為，<code>pptx-convert/src/media.rs</code> 的
+<code>convert_picture</code> 有註解寫明：</p>
+<pre>// WMF/EMF/TIFF &rarr; PNG. Python forces ext=".png" UNCONDITIONALLY after
+// `_convert_to_png` &mdash; even when the decode fails and the ORIGINAL
+// bytes pass through (the source/mime-type still say .png/image/png).</pre>
+<p>Rust 沒有 WMF/EMF 解碼器（crate 開頭的模組註解也寫了），所以這條路一定失敗。
+推測後果是 mvbf 解不開該檔、那個母片裝飾在每一頁都不顯示，但<strong>我沒有實際 render 驗證</strong>。</p>
+<p>要查的話從這裡開始：把 57539 匯入後看母片裝飾有沒有出現；若確認缺圖，這是
+olfparser 的獨立議題（與去重、烘烤無關），Jira MT 專案目前沒有對應的票。</p>
+</div>
+<h2>沒有涵蓋到的</h2>
+<div class=prose><ul>
+<li>IFP 的舊 parser 逐頁截圖（完全沒跑）</li>
+<li>IFP 逐頁只完成 7 / 18 張單</li>
+<li>只有 PPTX、沒有驗證各單「當年的症狀」是否消失</li>
+</ul></div>
+</div>
+<dialog id=v>
+<div class=vh><h4 id=vt></h4>
+<div class=nav><button id=pv>‹ 上一頁</button><span id=pi></span><button id=nx>下一頁 ›</button>
+<button id=cl>關閉</button></div></div>
+<div class=vb>
+<figure><img id=ia><figcaption>PowerPoint（基準）</figcaption></figure>
+<figure><img id=ib><figcaption>IFP34 ＋ mvbf ＋ olfparser</figcaption></figure>
+</div></dialog>
+<script>
+const M={"55943": {"pages": ["p001", "p002", "p003", "p004", "p005", "p006", "p007", "p008", "p009", "p010", "p011", "p012", "p013"], "title": "[MVBF][M1][iPad] Opening file bar CANNOT stop when importing pptx file"}, "55962": {"pages": ["p001"], "title": "[MVBF][M1][iPad]PPTX parser-Cannot Import pptx file."}, "56063": {"pages": ["p001", "p002"], "title": "[MVBF]PPTX parser-The cropped image is displayed completely."}, "56191": {"pages": ["p001", "p002", "p003", "p004", "p005", "p006", "p007", "p008"], "title": "[MVBF]PPTX parser-The shape is not displayed completely."}, "56394": {"pages": ["p001", "p002", "p003", "p004", "p005", "p006", "p007", "p008", "p009", "p010", "p011", "p012", "p013", "p014", "p015", "p016", "p017"], "title": "[MVBF]PPTX parser-Some shapes display abnormally"}, "56396": {"pages": ["p001", "p002", "p003", "p004", "p005", "p006", "p007", "p008", "p009", "p010", "p011", "p012", "p013", "p014", "p015", "p016", "p017", "p018", "p019", "p020", "p021", "p022", "p023"], "title": "[MVBF]PPTX parser-The unsupported object is displayed."}, "56422": {"pages": ["p001", "p002", "p003", "p004", "p005", "p006", "p007", "p008", "p009", "p010", "p011"], "title": "[MVBF]PPTX parser-Display two backgrounds."}};
+const dlg=document.getElementById('v'),ia=document.getElementById('ia'),ib=document.getElementById('ib'),
+pi=document.getElementById('pi'),vt=document.getElementById('vt'),
+pv=document.getElementById('pv'),nx=document.getElementById('nx');
+let cur=null,idx=0;
+function draw(){
+  const p=M[cur].pages[idx];
+  ia.src=`pages/${cur}/${p}_ref.jpg`; ib.src=`pages/${cur}/${p}_ifpnew.jpg`;
+  pi.textContent=`${idx+1} / ${M[cur].pages.length}`;
+  pv.disabled=idx===0; nx.disabled=idx===M[cur].pages.length-1;
+}
+document.querySelectorAll('.pagebtn').forEach(b=>b.addEventListener('click',()=>{
+  cur=b.dataset.t; idx=0; vt.textContent=`${cur} · ${M[cur].title}`; draw(); dlg.showModal();
+}));
+pv.onclick=()=>{if(idx>0){idx--;draw();}};
+nx.onclick=()=>{if(idx<M[cur].pages.length-1){idx++;draw();}};
+document.getElementById('cl').onclick=()=>dlg.close();
+dlg.addEventListener('keydown',ev=>{
+  if(ev.key==='ArrowLeft')pv.click(); if(ev.key==='ArrowRight')nx.click();
+});
+</script>
