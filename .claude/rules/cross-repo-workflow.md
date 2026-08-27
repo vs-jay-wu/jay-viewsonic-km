@@ -12,8 +12,10 @@
 
 所以要對任何專案 repo 做事（**改檔、review、commit 都算**）之前：
 
-1. **先呼叫對應的 repo skill**，例如 `mvbf`（= `edu-droid-flutter`）、`mvbf-commit`。
-   skill 裡有該 repo 的個人層慣例，以及「該讀哪些團隊 rules」的清單。
+1. **先呼叫對應的 repo skill**，例如 `mvbf`（= `edu-droid-flutter`）、`mvbf-commit`；
+   `olfparser`（＋ `-review` / `-commit` / `-verify`）。skill 裡有該 repo 的個人層慣例，
+   以及「該讀哪些團隊 rules」的清單。
+   > 動到 **OLF 檔案格式語意**時（不限 repo，mvbf 也算）另外叫 `olf-vnext`。
 2. **沒有該 repo 的 skill 時**，自己做最小版本：
    ```bash
    ls <repo>/.claude/rules/ && cat <repo>/CLAUDE.md 2>/dev/null
