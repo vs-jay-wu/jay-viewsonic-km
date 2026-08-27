@@ -9,6 +9,7 @@ Android / Flutter app 開發的建置效能與磁碟空間筆記。
 |---|---|
 | 本頁 | 一次性 global 設定（Gradle build cache、快取自動清理） |
 | [parallel-development.md](parallel-development.md) | mvbf 平行開發：worktree vs APFS clonefile 的實測比較 |
+| [dart-analysis-server-memory.md](dart-analysis-server-memory.md) | mvbf 的 Dart analysis server 吃到 14G：排除 `plugin/` 的設定與原因 |
 
 ---
 
