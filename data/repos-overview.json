@@ -2,7 +2,7 @@
   "_meta": {
     "description": "ViewSonic EDU GitHub 組織的 repo 概覽，供 AI 快速理解各專案用途",
     "organization": "Viewsonic-EDU",
-    "updated": "2026-06-03",
+    "updated": "2026-08-24",
     "totalRepos": 325
   },
   "products": {
@@ -20,14 +20,14 @@
       ]
     },
     "sparrow": {
-      "fullName": "myViewBoard for Windows",
-      "aliases": ["sparrow", "mvbw", "mvb windows", "myViewBoard Windows"],
-      "description": "Windows UWP 白板與簡報應用程式，代號 Sparrow"
+      "fullName": "myViewBoard for Windows v3",
+      "aliases": ["sparrow", "mvbw", "mvbw v3", "mvb windows", "myViewBoard Windows"],
+      "description": "Windows UWP 白板與簡報應用程式，代號 Sparrow。myViewBoard for Windows 的現行世代（v3）；前一代是 vboard（v2）。單純講 mvbw 通常指這個"
     },
     "vboard": {
-      "fullName": "ViewBoard / myViewBoard Desktop",
-      "aliases": ["vboard", "ViewBoard"],
-      "description": "跨平台白板引擎與 .mvb/.olf 檔案格式函式庫"
+      "fullName": "myViewBoard for Windows v2",
+      "aliases": ["vboard", "mvbw v2", "ViewBoard"],
+      "description": "myViewBoard for Windows 的前一代（v2），連同其跨平台白板引擎與 .mvb/.olf 檔案格式函式庫。現行世代是 sparrow（v3）"
     },
     "vbos": {
       "fullName": "ViewBoard OS",
@@ -166,7 +166,7 @@
     {
       "name": "edu-sparrow-app",
       "product": "sparrow",
-      "description": "myViewBoard for Windows，基於 UWP 的互動式白板與簡報應用（代號 Sparrow）",
+      "description": "myViewBoard for Windows v3，基於 UWP 的互動式白板與簡報應用（代號 Sparrow）。PPTX 匯入是透過 Sparrow.Bridge 起 olfparser 的 pptx2olf 子行程，不走 Rust 的 mvbx_pptx_olf_api",
       "tech": ["C++", "C#", ".NET", "UWP"]
     },
     {
@@ -187,7 +187,7 @@
     {
       "name": "edu-vboard-main",
       "product": "vboard",
-      "description": "myViewBoard 主程式（桌面端白板應用）",
+      "description": "myViewBoard for Windows v2 主程式（桌面端白板應用）。PPTX 匯入走 DllImport(\"mvbx_pptx_olf_api.dll\")，即 Rust parser；repo 內附的那顆 DLL 是 1.7.9",
       "tech": ["C++", "Qt"]
     },
     {
@@ -210,18 +210,18 @@
     {
       "name": "edu-pptx-olf-parser-rust",
       "product": "vboard",
-      "description": "PPTX 轉 OLF 格式解析器（Rust 實作）",
+      "description": "PPTX 轉 OLF 格式解析器（Rust 實作），舊世代。libs/parser_v3 為核心；以 Azure DevOps submodule 的形式被 edu-pptx-olf-rust-ffi 引用，本 repo 是 GitHub 上的對應鏡像。目前的消費端是 mvbf 與 mvbw v2，mvbw v3 已改用 olfparser",
       "tech": ["Rust"]
     },
     {
       "name": "edu-pptx-olf-rust-ffi",
       "product": "vboard",
-      "description": "Rust OLF 解析器的 FFI 綁定介面"
+      "description": "Rust PPTX→OLF 解析器的 FFI 封裝與發布端：Flutter plugin（mvbx_pptx_olf_api，mvbf 以 git ref 引用）、Windows NuGet ViewSonic.MVBX.Core、WASM。各平台共用同一份 Rust 幾何運算，無平台分支；版本字串定義在 rs-pptx-ffi/src/lib.rs"
     },
     {
       "name": "olfparser",
       "product": "vboard",
-      "description": "互動式白板 OLF 檔案格式解析與轉換工具"
+      "description": "現行世代的互動式白板檔案格式轉換工具（Python，含進行中的 Rust port）。支援 PPTX / Flipchart / SMART Notebook / ENB / PDF / IWB 轉 OLF；發布 Windows NuGet ViewSonic.OlfParser 與各平台 binary。mvbw v3（sparrow）用它做 PPTX 匯入"
     },
     {
       "name": "edu-vbos-vlauncher3",
