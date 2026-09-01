@@ -1,7 +1,16 @@
-# 換軌 POC 的目前狀態（2026-08-26）
+# 換軌 POC 的目前狀態（2026-08-26；狀態更新 2026-09-01）
 
-換軌（用 olfparser 取代舊 `mvbx_pptx_olf_api`）**還沒開單、沒有 commit**。
-所有改動只存在於 mvbf 的工作區，這份檔案負責讓它可以被還原。
+這是一份**個人 POC** 的保存紀錄：用 olfparser 取代 mvbf 舊的 `mvbx_pptx_olf_api`。
+改動沒有 commit，只存在於 mvbf 的工作區，這份檔案負責讓它可以被還原。
+
+⚠️ **正式的換軌工作由別人在做，不是這份 POC。** 2026-09-01 查到：
+
+> **VSFT-9520** — [mVB Flutter] Flutter 轉接 Rust 版 olfparser 並支援 v-next 格式
+> 進行中，assignee Ben Wu，parent = VSFT-9749「Olfparser Optimization」
+
+要接手或參考之前先讀那張票，它的範圍比這份 POC 大（含 v-next 開新降級成 legacy、
+存檔一律 legacy、幾何修正不得套用於降級內容），而且**假設走** `olf-jni`，
+本 POC 走的是 `olf-ffi` + Dart FFI。
 
 ---
 
