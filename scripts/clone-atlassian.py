@@ -123,6 +123,24 @@ def adf_to_md(node, depth=0):
     return inner
 
 
+def render_comments(comment_field):
+    """留言常是決策的唯一落點（缺陷分析、PM 裁決、驗證紀錄），所以一起 clone。
+
+    只保留作者 / 時間 / 內容 —— 留言 id 與 self link 對閱讀沒有幫助，
+    而且會在每次 re-clone 的 diff 裡製造噪音。
+    """
+    comments = comment_field.get("comments") or []
+    if not comments:
+        return "\n## Comments\n\n*（無留言）*\n"
+    out = [f"\n## Comments（{len(comments)} 則）\n"]
+    for c in comments:
+        who = (c.get("author") or {}).get("displayName", "—")
+        when = c.get("created", "")[:19].replace("T", " ")
+        body = adf_to_md(c.get("body")).strip()
+        out.append(f"### {when} · {who}\n\n{body}\n")
+    return "\n".join(out)
+
+
 def stamp(kind, ident, url, extra, version, today):
     rows = "\n".join(f"{k:<16}{v}" for k, v in extra.items())
     return f"""<!--
@@ -149,7 +167,7 @@ def clone_jira(outdir, keys):
     for key in keys:
         d = api(f"/rest/api/3/issue/{key}",
                 {"fields": "summary,description,status,issuetype,priority,assignee,"
-                           "reporter,created,updated,labels,resolution,parent"})
+                           "reporter,created,updated,labels,resolution,parent,comment"})
         f = d["fields"]
         url = f"{SITE}/browse/{key}"
         body = adf_to_md(f.get("description"))
@@ -158,6 +176,7 @@ def clone_jira(outdir, keys):
         md = stamp("issue_key:", key, url, {
             "issue_type:": f["issuetype"]["name"],
             "status:": f"{st['name']}（{st['statusCategory']['name']}）",
+            "comments:": str(len((f.get("comment") or {}).get("comments") or [])),
         }, 1, today)
         md += f"""
 > | 來源 issue | issue_key | clone 版本 | clone 日期 |
@@ -187,6 +206,7 @@ def clone_jira(outdir, keys):
 
 {body.strip()}
 """
+        md += render_comments(f.get("comment") or {})
         out = Path(outdir) / f"{key}.md"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(md, encoding="utf-8")

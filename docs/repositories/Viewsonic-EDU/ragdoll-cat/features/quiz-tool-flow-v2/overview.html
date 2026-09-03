@@ -117,25 +117,31 @@ git rev-list --count 004c7300..origin/feature/quiz-tool-flow-v2</code></pre>
         <tr><td><span class="badge badge-cs">Jira</span></td>
             <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10065">VSFT-10065</a></td>
             <td><a href="jira/VSFT-10065.md"><code>VSFT-10065.md</code></a></td>
-            <td>v1</td><td>截圖遮罩改版（88 commits，最大宗）</td></tr>
+            <td>v1 · 3 則留言</td><td>截圖遮罩改版（88 commits，最大宗）</td></tr>
         <tr><td><span class="badge badge-cs">Jira</span></td>
             <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10067">VSFT-10067</a></td>
             <td><a href="jira/VSFT-10067.md"><code>VSFT-10067.md</code></a></td>
-            <td>v1</td><td>pre-start 狀態、Setting 頁移除</td></tr>
+            <td>v1 · 4 則留言</td><td>pre-start 狀態、Setting 頁移除</td></tr>
         <tr><td><span class="badge badge-cs">Jira</span></td>
             <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10069">VSFT-10069</a></td>
             <td><a href="jira/VSFT-10069.md"><code>VSFT-10069.md</code></a></td>
-            <td>v1</td><td>選班空狀態三態</td></tr>
+            <td>v1 · 1 則留言</td><td>選班空狀態三態</td></tr>
         <tr><td><span class="badge badge-cs">Jira</span></td>
             <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10047">VSFT-10047</a></td>
             <td><a href="jira/VSFT-10047.md"><code>VSFT-10047.md</code></a></td>
-            <td>v1</td><td>啟動狀態機、背景預啟動</td></tr>
+            <td>v1 · 1 則留言</td><td>啟動狀態機、背景預啟動</td></tr>
         <tr><td><span class="badge badge-cs">Jira</span></td>
             <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10049">VSFT-10049</a></td>
             <td><a href="jira/VSFT-10049.md"><code>VSFT-10049.md</code></a></td>
-            <td>v1</td><td>無班級出題（Flutter 側）</td></tr>
+            <td>v1 · 1 則留言</td><td>無班級出題（Flutter 側）</td></tr>
       </tbody>
     </table>
+    <p>
+      <strong>票的 clone 含留言。</strong> 這條線上不少決策的唯一落點是留言而不是票面 ——
+      例如 <code>13</code> 的缺陷分析（<code>showCloseConfirmDialog()</code> 的 <code>if/else</code>
+      把 <code>PRE_START</code> 當成進行中，去關一個從未建立的題目）、實機驗證紀錄、
+      以及 PM 的裁決。只抓 description 會把這些留在遠端。
+    </p>
     <p class="note">
       ⚠️ <strong>clone 是鏡像，不要直接改內容</strong>；本機的調查結論寫在
       <a href="defects.html">defects.html</a> 或本頁。重新 clone 前先 <code>git diff</code>

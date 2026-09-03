@@ -9,13 +9,14 @@ Lydia、Jacky、Jay 三人共同開發與 review，**尚未合併回 develop**�
 |---|---|
 | [`overview.html`](overview.html) | 流程改版前後、六張票的分工、架構增刪、PR 一覽、待決事項、**在這條分支上工作的注意事項** |
 | [`defects.html`](defects.html) | review 期間抓到的缺陷（含「為什麼沒被擋下來」）、測試自身的五種假綠、可帶走的判準 |
-| [`jira/`](jira/) | 五張票的本機 clone（VSFT-10065 / 10067 / 10069 / 10047 / 10049） |
+| [`jira/`](jira/) | 五張票的本機 clone，**含留言**（VSFT-10065 / 10067 / 10069 / 10047 / 10049） |
 | [`confluence/myViewboar/`](confluence/myViewboar/) | spec 總覽 ＋ 子頁 2／3／4 的本機 clone |
 
 用瀏覽器開 `overview.html`。
 
 **票與 spec 都在本機** —— 查證 AC、決策編號、未決問題不必連 Jira / Confluence，
-也不需要動用 MCP。重新抓取：
+也不需要動用 MCP。票的 clone **含留言**：這條線上不少決策的唯一落點是留言而不是票面
+（`13` 的缺陷分析、實機驗證紀錄、PM 裁決）。重新抓取：
 
 ```bash
 python3 scripts/clone-atlassian.py jira docs/.../quiz-tool-flow-v2/jira VSFT-10065 VSFT-10067 …
