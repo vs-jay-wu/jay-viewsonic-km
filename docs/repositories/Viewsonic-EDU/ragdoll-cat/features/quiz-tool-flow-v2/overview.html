@@ -31,8 +31,9 @@
       <li><a href="#prs">5. PR 一覽</a></li>
       <li><a href="#defects">6. Review 抓到的缺陷</a></li>
       <li><a href="#pattern">7. 一再重演的形狀</a></li>
-      <li><a href="#open">8. 待決與已知缺口</a></li>
-      <li><a href="#ops">9. 在這條分支上工作</a></li>
+      <li><a href="#drift">8. 已決但 spec 未同步</a></li>
+      <li><a href="#open">9. 待決與已知缺口</a></li>
+      <li><a href="#ops">10. 在這條分支上工作</a></li>
     </ul>
   </nav>
 
@@ -446,7 +447,49 @@ flowchart LR
       並在測試裡走一次真實的狀態轉換（而不是斷言靜止值 —— 那常常剛好等於初始值而假綠）。
     </p>
 
-    <h2 id="open">8. 待決與已知缺口</h2>
+    <h2 id="drift">8. 已決但線上 spec 未同步</h2>
+    <div class="callout warn">
+      <strong>這一節與 §9「待決」不同：這些是<u>已經有結論</u>的，只是 Confluence 還沒改。</strong>
+      實作照結論走，所以<strong>照線上 spec 驗會誤報成 bug</strong>。
+      <br /><br />
+      <strong>本機 clone 刻意不改</strong>（<code>confluence/*.md</code> 是鏡像，改了就失去
+      「重抓時 diff 看得出 PM 改了什麼」的作用）。線上頁面留給 PM 或 spec owner 動。
+    </div>
+    <table>
+      <thead><tr><th>AC</th><th>線上 spec 寫的</th><th>實際結論與實作</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>
+            <strong><code>AC 4</code></strong>（子頁 2）<br />
+            <span class="badge badge-mvb">＋決策 #4</span>
+          </td>
+          <td>
+            <code>AC 4</code> 的 When 欄：「<strong>移動或縮放</strong>框」→ 提示消失、Panel 出現在框右側。<br />
+            決策 #4：「題型選單 <strong>動框後才出現</strong>」。
+          </td>
+          <td>
+            <strong>改為「碰到框或碰到暗區就出現」</strong> —— 會議上決定，AC 未更新。
+            <br /><br />
+            實作：<code>6e98ff8c</code>（2026-09-03）。<code>PanelPlacer</code> 的首次可見閘門從
+            「rect 真的變了」移到 <code>onHolding(true)</code>；新增
+            <code>onDimAreaTouched()</code>，暗區觸控立即 resolve（不是手勢，沒有 release edge 可等）。
+            框外仍 <code>return false</code>、不移動框、不回報 holding。
+            <br /><br />
+            <strong>這是第三輪</strong>：<code>D-26</code> 裁定「框外無反應」（08-28）→ 08-31 再次確認 →
+            09-03 依會議結論推翻。Windows 早已是這個行為
+            （<code>CaptureScreenViewModel.BeginGesture</code> 三條分支都解鎖，框外那條另呼叫
+            <code>RevealPanel()</code>，並自帶「不在 AC 內、被明確要求」的註記）。
+            <br /><br />
+            ⚠️ 受影響的其他陳述：<code>AC 3</code>「<strong>Panel 尚未出現</strong>」仍成立
+            （進遮罩當下沒有任何觸控），但 <code>SC-6a</code>「提示消失後改走 Cancel」的<strong>觸發時機提早了</strong> ——
+            現在誤觸暗區也會讓提示連同它的 ✕ 一起收掉。退出入口仍恰好有一個（Panel 的 Cancel 接手），
+            所以 <code>SC-6a</code> 的保證沒破，但那句話描述的情境變寬了。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="open">9. 待決與已知缺口</h2>
     <table>
       <thead><tr><th></th><th>項目</th><th>現況</th></tr></thead>
       <tbody>
@@ -605,7 +648,7 @@ flowchart LR
       </tbody>
     </table>
 
-    <h2 id="ops">9. 在這條分支上工作</h2>
+    <h2 id="ops">10. 在這條分支上工作</h2>
 
     <h3>9.1 切過來之後一定要做</h3>
     <pre><code>./gradlew :app:mergeStagDebugResources --rerun-tasks</code></pre>

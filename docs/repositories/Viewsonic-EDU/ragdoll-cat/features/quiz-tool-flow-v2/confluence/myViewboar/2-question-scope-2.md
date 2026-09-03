@@ -10,6 +10,10 @@ space_id:       286228785
 cloned_version: 23
 cloned_at:      2026-09-03
 
+⚠️ 本頁有「已決但線上未同步」的 AC，內文刻意保持原樣（鏡像）：
+                  AC 4 / 決策 #4 的「動框後才出現」已於會議改為「碰框或碰暗區就出現」。
+                  差異記在 ../../overview.html#drift，不寫進本檔。
+
 Maintenance rule: 重新 clone 前先看 git diff，若本機有補充註解要先 commit；
                   版號與 cloned_at 一起更新，commit 訊息附來源 URL。
                   取得方式：python3 scripts/clone-atlassian.py …（見該檔 docstring）

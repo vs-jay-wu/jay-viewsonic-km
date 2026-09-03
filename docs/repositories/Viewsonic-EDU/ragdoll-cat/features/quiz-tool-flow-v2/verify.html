@@ -165,10 +165,34 @@ adb install -r ../build/app/outputs/apk/edla/debug/app-edla-debug.apk</code></pr
     <div class="sec-head" id="s2"><h2>2. 動框之後</h2><span class="sc">子頁 2 · Story 2</span></div>
 
     <details class="case" data-id="c-4">
-      <summary><input type="checkbox" /><span class="ttl">動框 → 提示消失、Panel 出現在框右側、預設是非題</span><span class="ac">4</span></summary>
+      <summary><input type="checkbox" /><span class="ttl">碰框或碰暗區 → 提示消失、Panel 出現在框右側</span><span class="ac">4 · 已改</span></summary>
       <div class="body"><dl>
-        <dt>操作</dt><dd>移動或縮放框一次。</dd>
-        <dt>期望</dt><dd class="expect">提示列連同它的 ✕ 一起消失；Panel 出現在框<strong>右側</strong>（短版）：6 顆題型膠囊、<strong>預設選中 True or false</strong>、<strong>不顯示設定段</strong>、Capture 可按。</dd>
+        <dt>⚠️ 線上 spec 是舊的</dt>
+        <dd class="trap">
+          <code>AC 4</code> 的 When 欄仍寫「<strong>移動或縮放</strong>框」、決策 #4 寫「動框後才出現」——
+          <strong>會議已改為「碰到就出現」，AC 尚未更新。照線上 spec 驗會誤報。</strong>
+          見 <a href="overview.html#drift">總覽 §8</a>。
+        </dd>
+        <dt>操作（四種都要試）</dt>
+        <dd><ol>
+          <li>移動框</li>
+          <li>縮放框（拖把手）</li>
+          <li><strong>只在框內點一下、不移動</strong></li>
+          <li><strong>點框外的暗區</strong></li>
+        </ol></dd>
+        <dt>期望</dt>
+        <dd class="expect">
+          <strong>四種都要讓 Panel 出現</strong>，且提示列連同它的 ✕ 一起消失。
+          Panel 在框<strong>右側</strong>（短版）：6 顆題型膠囊、<strong>預設選中 True or false</strong>、
+          <strong>不顯示設定段</strong>、Capture 可按。
+        </dd>
+        <dt>暗區那條要額外確認</dt>
+        <dd class="expect">
+          點暗區<strong>不可以移動框</strong>，也不可以關閉遮罩 —— 它只讓 Panel 現身。
+          （框外仍 <code>return false</code>、不吃下觸控。）
+        </dd>
+        <dt>反向</dt>
+        <dd class="trap">剛進遮罩、<strong>什麼都還沒碰</strong>時，Panel 必須還沒出現（<code>AC 3</code>，這條沒變）。</dd>
       </dl></div>
     </details>
 
