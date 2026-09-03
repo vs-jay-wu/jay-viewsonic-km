@@ -46,18 +46,18 @@ python3 scripts/clone-atlassian.py conf docs/.../quiz-tool-flow-v2/confluence/my
 
 | | |
 |---|---|
-| 分支 tip | `004c7300` — `fix[VSFT-10067]: release the capture session at the window a capture now opens`（2026-09-03 09:12） |
+| 分支 tip | `7ddcf69f` — `fix[VSFT-10065]: let the pre-start roster area appear on presence, like the other five windows`（2026-09-03 09:01） |
 | 基準點 | `a9438387`（撰寫當下的 `origin/develop` tip） |
-| 當時規模 | 194 commits · 417 檔 · +29,320 −10,618 |
+| 當時規模 | 197 commits · 421 檔 · +29,627 −10,642 |
 
 檢查落後多少：
 
 ```bash
 git fetch origin
-git log --oneline 004c7300..origin/feature/quiz-tool-flow-v2
+git log --oneline 7ddcf69f..origin/feature/quiz-tool-flow-v2
 ```
 
-> ⚠️ 這條分支**被 force-push 過**。若上面噴 `unknown revision`，代表 `004c7300`
+> ⚠️ 這條分支**被 force-push 過**。若上面噴 `unknown revision`，代表 `7ddcf69f`
 > 已被 rebase 掉、歷史整條重寫，改用 `--since=2026-09-03` 並重新核對 overview §1 的規模數字。
 
 **維護規則：任何一次在更新的 base 上修改這些文件，就一併換掉上表的戳記**

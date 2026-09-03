@@ -40,7 +40,7 @@
     <h1>Quiz Tool 啟動流程改版 <span class="badge badge-warn">feature/quiz-tool-flow-v2 · 未合併</span></h1>
     <div class="meta">
       ragdoll-cat（ClassSwift Android）&middot; 2026-08-20 → 2026-09-03（持續中）&middot;
-      194 commits / 417 檔 / +29,320 −10,618 &middot;
+      197 commits / 421 檔 / +29,627 −10,642 &middot;
       對應資料夾 <code>docs/repositories/Viewsonic-EDU/ragdoll-cat/features/quiz-tool-flow-v2/</code>
     </div>
     <div class="doc-nav">
@@ -55,9 +55,9 @@
       <table style="margin:8px 0 0">
         <tbody>
           <tr><th style="width:150px">分支 tip</th>
-              <td><code>004c7300</code> — <code>fix[VSFT-10067]: release the capture session at the window a capture now opens</code>（2026-09-03 09:12）</td></tr>
+              <td><code>7ddcf69f</code> — <code>fix[VSFT-10065]: let the pre-start roster area appear on presence, like the other five windows</code>（2026-09-03 09:01）</td></tr>
           <tr><th>基準點</th><td><code>a9438387</code>（＝ 撰寫當下的 <code>origin/develop</code> tip）</td></tr>
-          <tr><th>當時規模</th><td>194 commits · 417 檔 · +29,320 −10,618</td></tr>
+          <tr><th>當時規模</th><td>197 commits · 421 檔 · +29,627 −10,642</td></tr>
           <tr><th>撰寫日</th><td>2026-09-03</td></tr>
         </tbody>
       </table>
@@ -65,8 +65,8 @@
         <strong>檢查這份文件落後多少：</strong>
       </p>
       <pre style="margin:6px 0"><code>git fetch origin
-git log --oneline 004c7300..origin/feature/quiz-tool-flow-v2   # 之後新增的 commit
-git rev-list --count 004c7300..origin/feature/quiz-tool-flow-v2</code></pre>
+git log --oneline 7ddcf69f..origin/feature/quiz-tool-flow-v2   # 之後新增的 commit
+git rev-list --count 7ddcf69f..origin/feature/quiz-tool-flow-v2</code></pre>
       <p style="margin:10px 0 0">
         <strong>維護規則：</strong>任何一次在更新的 base 上修改本文，就把上表四格一起換掉
         （<code>git rev-parse --short</code>、<code>git rev-list --count</code>、
@@ -76,7 +76,7 @@ git rev-list --count 004c7300..origin/feature/quiz-tool-flow-v2</code></pre>
       </p>
       <p style="margin:10px 0 0">
         ⚠️ <strong>這條分支被 force-push 過。</strong>若上面的指令噴
-        <code>unknown revision</code>，代表 <code>004c7300</code> 已被 rebase 掉，
+        <code>unknown revision</code>，代表 <code>7ddcf69f</code> 已被 rebase 掉，
         歷史整條重寫 —— 那時無法用 commit 範圍比對，改看
         <code>git log --oneline --since=2026-09-03 origin/feature/quiz-tool-flow-v2</code>
         並重新核對本文的 §1 規模數字。
@@ -192,8 +192,8 @@ git rev-list --count 004c7300..origin/feature/quiz-tool-flow-v2</code></pre>
       <thead><tr><th>項目</th><th>值</th></tr></thead>
       <tbody>
         <tr><td>基準</td><td><code>origin/develop</code>（已上線的版本）</td></tr>
-        <tr><td>commits</td><td>194</td></tr>
-        <tr><td>檔案 / 行數</td><td>417 檔，+29,320 −10,618</td></tr>
+        <tr><td>commits</td><td>197</td></tr>
+        <tr><td>檔案 / 行數</td><td>421 檔，+29,627 −10,642</td></tr>
         <tr><td>期間</td><td>2026-08-20 → 2026-09-03（持續中）</td></tr>
         <tr><td>作者</td><td>Lydia 119 · Jacky 55 · Jay 20</td></tr>
         <tr><td>PR</td><td>18 支（17 merged、1 open）</td></tr>
@@ -450,6 +450,59 @@ flowchart LR
     <table>
       <thead><tr><th></th><th>項目</th><th>現況</th></tr></thead>
       <tbody>
+        <tr>
+          <td><span class="badge badge-new">落差</span></td>
+          <td><strong>拖曳中面板該「不動」還是「消失」</strong>（<code>SC-8</code>）</td>
+          <td>
+            <strong>實作與 spec 不一致，而且測試釘住的是實作那一邊。</strong>
+            <ul>
+              <li>spec <code>SC-8</code>：「Panel <strong>位置不動</strong>；放手後才以一段短過場動畫重新定位」</li>
+              <li>實作：<code>PanelPlacer.onSelectionChanged</code> 在 <code>isHolding &amp;&amp; rectMoved</code> 時
+                  <code>visible = false</code> —— <strong>整個隱藏</strong>，放手才回來</li>
+              <li>測試：<code>PanelPlacerTest &gt; the panel hides as soon as a gesture actually moves the selection</code></li>
+            </ul>
+            引入它的 commit（<code>8036a294</code>，2026-08-28）明寫「It hides while a gesture is in flight」，
+            引用的是<strong>當天版本的 <code>S2-8</code>「recompute on gesture end」</strong> —— 那句只講何時重算、
+            沒講重算前面板在不在，兩種讀法都通。現行措辭把它講死了，而 09-01 改號只換前綴不動內容。
+            另：<strong>「面板消失／隱藏」在整份 spec 從未出現過</strong>（唯一提「消失」的是提示列，決策 #6）。
+            <br /><br />
+            <strong>Jay 的看法：消失比較好</strong> —— <code>SC-26</code> 讓面板 overlay 在框內，
+            這時「位置不動」等於<strong>面板一直蓋著你正在框的內容</strong>，和遮罩存在的目的相抵觸；
+            而且「停在舊位置 → 放手跳回」是兩次視覺變化，未必比「消失 → 出現」平順。
+            <strong>傾向改 spec 而不是改實作</strong>，但需要 PM 裁決。
+          </td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-new">落差</span></td>
+          <td><strong>登出後應該就地換成 guest 並自動進班</strong>（<code>S1-14</code>）</td>
+          <td>
+            <strong>登入與登出的處理不對稱，登出那半停在 VSFT-10047 之前的行為。</strong>
+            spec 兩條並列、要求相同：
+            <ul>
+              <li><code>S1-13</code>（登入）：不重啟、toggle 維持 ON — 實作 ✅
+                  <code>runIdentitySwitch(teardown)</code> 就地換身分，分支註解明寫
+                  <em>「We do NOT quitApp here」</em></li>
+              <li><code>S1-14</code>（<strong>登出</strong>）：不重啟、toggle 維持 ON、
+                  <strong>end lesson ＋ 取得新身分對應的 token</strong> — 實作 ❌
+                  <code>emitTeardownResultThenQuit</code> → <code>accountManager.quitApp(false)</code> → 停 service</li>
+            </ul>
+            所以「登出後打開 CS 會 loading」是 <strong>process 被殺掉之後的完整重啟</strong>，不是慢。
+            <br /><br />
+            <strong>Jay 的期望</strong>：登出後背景自動以 guest 身分重新進班，
+            toggle 打開時應該<strong>直接就緒、沒有 loading 態</strong>。
+            這與 <code>S1-16a</code>（登入失敗 → 以訪客身分啟動）和
+            <code>S1-4</code>（訪客教室仍在線 → 再開 toggle 允許無 loading）一致。
+            <br /><br />
+            <strong>沒被發現的原因</strong>：<code>MyViewBoardMessageHandlerTeardownTest &gt;
+            MvbUserSignOut emits SUCCESS reply BEFORE quitApp</code> 把舊行為釘住了 ——
+            那條在 VSFT-9012 當時是對的，VSFT-10047 改了契約卻沒回來改它，所以它綠著、
+            保護的卻是已作廢的行為。修的時候<strong>必須連它一起改寫</strong>，否則會擋住修正。
+            <br /><br />
+            ⚠️ <strong>動手前要先確認一件 CS 這側看不到的事</strong>：登出後 mVB 有沒有送新的
+            guest <code>MessageMvbToken</code>？有送就是 CS 先 quitApp 把它丟了（我們自己修）；
+            沒送就是兩邊都要改（要拉 mvbf 側一起）。用 logcat 看登出後有無 <code>MvbToken</code> 進來即可分辨。
+          </td>
+        </tr>
         <tr>
           <td><span class="badge badge-warn">決策</span></td>
           <td><strong>繪圖題編輯窗要不要刪</strong></td>

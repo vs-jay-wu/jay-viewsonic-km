@@ -261,10 +261,26 @@ adb install -r ../build/app/outputs/apk/edla/debug/app-edla-debug.apk</code></pr
     </details>
 
     <details class="case" data-id="c-sc8">
-      <summary><input type="checkbox" /><span class="ttl">拖曳過程中 Panel 不動，放手後才過場</span><span class="ac">SC-8</span></summary>
+      <summary><input type="checkbox" /><span class="ttl">拖曳過程中 Panel 不跟著跳（⚠️ spec 與實作不一致）</span><span class="ac">SC-8</span></summary>
       <div class="body"><dl>
-        <dt>期望</dt><dd class="expect">拖／縮的<strong>過程中</strong>面板位置固定；<strong>放手後</strong>才以短過場動畫重新定位。</dd>
-        <dt>與 SC-25 的差別</dt><dd>SC-8 防「拖曳中面板跟著跳」，40px 遲滯防「停在臨界點來回換邊」。兩者是不同問題，要分開看。</dd>
+        <dt>⚠️ 先讀這段</dt>
+        <dd class="trap">
+          <strong>spec 與實作對這條的說法不同，兩邊都不算 bug，別直接判失敗。</strong>
+          <ul>
+            <li><strong>spec <code>SC-8</code></strong>：面板<strong>位置不動</strong>，放手後才以短過場重新定位</li>
+            <li><strong>目前實作</strong>：拖曳中面板<strong>整個隱藏</strong>，放手才回來
+                （<code>PanelPlacer</code> 在 <code>isHolding &amp;&amp; rectMoved</code> 時
+                <code>visible = false</code>，且有測試釘住）</li>
+          </ul>
+          待 PM 裁決，見 <a href="overview.html#open">總覽 §8 待決</a>。
+        </dd>
+        <dt>這一項實際要驗的</dt>
+        <dd class="expect">
+          不論走哪一種，<strong>面板都不可以在拖曳過程中跟著框逐格移動</strong>，
+          放手後要停在正確位置（右側 / 左側 / overlay 依 SC-7、SC-25、SC-26 判定）。
+        </dd>
+        <dt>與 SC-25 的差別</dt>
+        <dd>SC-8 防「拖曳中面板跟著跳」，40px 遲滯防「停在臨界點來回換邊」。兩者是不同問題，要分開看。</dd>
       </dl></div>
     </details>
 
@@ -538,6 +554,28 @@ adb install -r ../build/app/outputs/apk/edla/debug/app-edla-debug.apk</code></pr
       <div class="body"><dl>
         <dt>操作</dt><dd>出一題 → <strong>pre-start 直接 Discard</strong>（不派題）。</dd>
         <dt>期望</dt><dd class="expect">投影指示器同樣熄滅。兩個出口（丟棄、作答結束）都綁在同一條規則上。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-signout">
+      <summary><input type="checkbox" /><span class="ttl">登出後再開 CS（⚠️ 現況與期望不一致）</span><span class="ac">S1-14</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd><ol><li>登入</li><li>登出</li><li>打開 CS toggle</li></ol></dd>
+        <dt>⚠️ 目前會看到</dt>
+        <dd class="trap">
+          <strong>loading 態</strong> —— 因為登出走 <code>quitApp</code> 停掉 service，
+          再開是 <strong>process 被殺之後的完整重啟</strong>，不是慢。
+        </dd>
+        <dt>spec 說的</dt>
+        <dd class="expect">
+          <code>S1-14</code>：登出「<strong>不重啟</strong>、toggle 維持 ON、三顆按鈕維持可點；
+          end lesson ＋ <strong>取得新身分對應的 token</strong>」。
+          登入那條（<code>S1-13</code>）已經照做，登出這條沒有 —— 兩邊不對稱。
+        </dd>
+        <dt>順帶檢查（分辨是哪一側的問題）</dt>
+        <dd><pre><code>adb logcat | grep -iE "MvbToken|SignOut"</code></pre>
+          登出後<strong>有</strong> guest token 進來 → CS 先 quitApp 把它丟了；<strong>沒有</strong> → mvbf 側也要改。</dd>
+        <dt>狀態</dt><dd>未修，見 <a href="overview.html#open">總覽 §8 待決</a>。</dd>
       </dl></div>
     </details>
 
