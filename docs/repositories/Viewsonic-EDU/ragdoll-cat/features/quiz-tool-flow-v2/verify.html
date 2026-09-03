@@ -69,6 +69,7 @@
       <li><a href="#s9">9. 丟棄草稿</a></li>
       <li><a href="#s10">10. 缺陷迴歸</a></li>
       <li><a href="#s11">11. 六題型掃描</a></li>
+      <li><a href="#s12">12. mVB 邊界互動</a></li>
     </ul>
     <p style="margin-top:18px"><a href="overview.html">📘 總覽</a><br /><a href="defects.html">🐛 缺陷紀錄</a></p>
   </nav>
@@ -591,27 +592,6 @@ adb install -r ../build/app/outputs/apk/edla/debug/app-edla-debug.apk</code></pr
       </dl></div>
     </details>
 
-    <details class="case" data-id="c-signout">
-      <summary><input type="checkbox" /><span class="ttl">登出後再開 CS（⚠️ 現況與期望不一致）</span><span class="ac">S1-14</span></summary>
-      <div class="body"><dl>
-        <dt>操作</dt><dd><ol><li>登入</li><li>登出</li><li>打開 CS toggle</li></ol></dd>
-        <dt>⚠️ 目前會看到</dt>
-        <dd class="trap">
-          <strong>loading 態</strong> —— 因為登出走 <code>quitApp</code> 停掉 service，
-          再開是 <strong>process 被殺之後的完整重啟</strong>，不是慢。
-        </dd>
-        <dt>spec 說的</dt>
-        <dd class="expect">
-          <code>S1-14</code>：登出「<strong>不重啟</strong>、toggle 維持 ON、三顆按鈕維持可點；
-          end lesson ＋ <strong>取得新身分對應的 token</strong>」。
-          登入那條（<code>S1-13</code>）已經照做，登出這條沒有 —— 兩邊不對稱。
-        </dd>
-        <dt>順帶檢查（分辨是哪一側的問題）</dt>
-        <dd><pre><code>adb logcat | grep -iE "MvbToken|SignOut"</code></pre>
-          登出後<strong>有</strong> guest token 進來 → CS 先 quitApp 把它丟了；<strong>沒有</strong> → mvbf 側也要改。</dd>
-        <dt>狀態</dt><dd>未修，見 <a href="overview.html#open">總覽 §8 待決</a>。</dd>
-      </dl></div>
-    </details>
 
     <div class="sec-head" id="s11"><h2>11. 六題型掃描</h2><span class="sc">每一型都要走一次 —— 六個作答窗是六份獨立實作</span></div>
 
@@ -653,6 +633,129 @@ adb install -r ../build/app/outputs/apk/edla/debug/app-edla-debug.apk</code></pr
         <dd class="expect">同樣<strong>直接進 pre-start</strong>（不再經過它的編輯窗）；出來的是<strong>單頁</strong>題目。</dd>
         <dt>不該有的</dt>
         <dd class="trap"><strong>沒有 add more question 入口</strong>（決策 #11：暫時不做，遮罩是唯一入口）。這是目前的產品決策，不是缺陷。</dd>
+      </dl></div>
+    </details>
+
+    <div class="sec-head" id="s12"><h2>12. mVB 邊界互動</h2><span class="sc">mVB 的動作會不會誤傷 CS 狀態 —— 這些在 mvbf 側</span></div>
+
+    <div class="callout warn" style="margin:0 0 12px">
+      <strong>這一區與前 11 區不同：驗的是 mVB 那一側的行為對 CS 的影響。</strong>
+      2026-09-03 實機驗證時，一條完整的登出流程同時暴露了三種不同的「CS 消失」，
+      而它們的嚴重度差很多。分辨它們是這一區的主要目的。
+    </div>
+
+    <table>
+      <thead><tr><th>現象</th><th>機制</th><th>草稿</th><th>怎麼救</th></tr></thead>
+      <tbody>
+        <tr><td>視窗不見了</td><td><code>MessageMinimizeAllWindows</code></td>
+            <td class="expect">完好</td><td>點 Questions 鈕就回來</td></tr>
+        <tr><td>視窗不見了</td><td><code>all_hide</code>（mVB dialog 期間）</td>
+            <td class="expect">完好</td><td>dialog 關掉時的 <code>all_show</code></td></tr>
+        <tr><td>視窗不見了</td><td><strong><code>MvbUserSignOut</code> → <code>quitApp</code></strong></td>
+            <td class="trap"><strong>沒了</strong></td><td>救不回來，只能重新出題</td></tr>
+      </tbody>
+    </table>
+
+    <details class="case" data-id="c-b-minimize">
+      <summary><input type="checkbox" /><span class="ttl">開任何 mVB dialog → CS 視窗最小化，草稿保留</span><span class="ac">邊界</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>pre-start 作答窗開著時，開 Wireless presentation 或帳號選單。</dd>
+        <dt>期望</dt><dd class="expect">CS 視窗消失（<code>MessageMinimizeAllWindows</code>）；
+          <strong>點 Questions 鈕要能完整叫回來，題目縮圖與選項都在。</strong></dd>
+        <dt>不要誤判</dt><dd class="trap">關掉 dialog <strong>不會</strong>自動還原 —— 最小化要靠 Questions 鈕。
+          這是設計，不是 bug。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-b-signout-multi">
+      <summary><input type="checkbox" /><span class="ttl">多檔登出：存完第一份之後 CS 不可以被 quit</span><span class="ac">C · 已修</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt>
+        <dd><ol>
+          <li>開兩份檔案，<strong>兩份都畫一筆</strong>（都 modified）</li>
+          <li>進 pre-start（出一題，作答窗開著）</li>
+          <li>帳號選單 → Sign out</li>
+          <li>第一份跳存檔框 → <strong>Save and exit</strong> → Local Drive → 選資料夾存好</li>
+          <li>第二份跳存檔框 → <strong>Cancel</strong></li>
+        </ol></dd>
+        <dt>期望</dt>
+        <dd class="expect">帳號**沒有**登出（因為 Cancel）；<strong>CS toggle 維持 ON、pre-start 草稿還在、
+          浮窗叫得回來</strong>。</dd>
+        <dt>壞掉時的樣子（修正前）</dt>
+        <dd class="trap">
+          第 4 步存檔成功的當下 CS 就被 <code>quitApp</code> 了 —— toggle 變灰、草稿消失。
+          logcat 會看到：
+          <pre><code>MessageMvbUserSignOut
+→ EventWindowStateChanged: MVB_*_START_QUIZ, state=CLOSED
+→ CSFusionInit: ClassSwift quitApp redirected to embedded exit
+→ [ServiceDisconnected] service 斷線</code></pre>
+          根因：<code>file_manage_menu_overlay</code> 三處在存檔成功時直接送
+          <code>ClassSwiftMvbUserSignOutEvent</code>，把「存檔成功」當成「登出完成」。
+        </dd>
+        <dt>抓證據</dt><dd><pre><code>adb logcat -c &amp;&amp; adb logcat -v time | grep -iE "MvbUserSignOut|quitApp|all_hide|all_show|Minimize"</code></pre></dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-b-signout-cancel">
+      <summary><input type="checkbox" /><span class="ttl">登出中途取消 → CS 浮窗要回來</span><span class="ac">C · 已修</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>單一已修改檔案 → Sign out → 存檔框按 <strong>Cancel</strong>。</dd>
+        <dt>期望</dt><dd class="expect">CS 浮窗回到畫面（<code>all_show</code>）。帳號沒登出。</dd>
+        <dt>背景</dt><dd><code>_signOut</code> 開頭無條件送 <code>all_hide</code>，而 bloc 的
+          <code>_onHideForMvbDialog</code> <strong>不留任何狀態旗標</strong> —— 沒有人會替它自動恢復，
+          每一條離開路徑都得自己送。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-b-signout-ok">
+      <summary><input type="checkbox" /><span class="ttl">多檔登出真的走完 → CS session 要被收掉</span><span class="ac">C · 行為變更</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>兩份都已修改 → Sign out → <strong>兩份都存檔</strong>（走完流程）。</dd>
+        <dt>期望</dt><dd class="expect">帳號登出；CS 收到 <code>MvbUserSignOut</code>、session 收掉。</dd>
+        <dt>為什麼要驗</dt>
+        <dd class="trap">這是<strong>行為變更</strong>：修正前 <code>identical(doc, lastDoc)</code>
+          成功登出那條路徑什麼事件都沒送。不送的話<strong>下一位老師會接手上一位的 CS session</strong>。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-b-signout-nolo">
+      <summary><input type="checkbox" /><span class="ttl">⚠️ 已知缺陷：最後一份未修改時可能根本沒登出</span><span class="ac">既有</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>開兩份，<strong>只有第一份修改過、第二份沒動</strong> → Sign out → 第一份存檔。</dd>
+        <dt>目前的行為</dt>
+        <dd class="trap">
+          <code>docsToHandle</code> 是反向處理的，<code>lastDoc</code> 是那份未修改的 →
+          被 <code>removeDocument + continue</code> 掉 → <code>signOutWithType</code> 沒跑到。
+          <strong>帳號沒登出，而使用者以為登出了。</strong>
+          <br /><br />
+          <strong>這是既有缺陷，不在 VSFT-10047 的修正範圍</strong>（兩個 reviewer 都獨立指出過）。
+          修正後至少會走「未登出 → 恢復 CS 浮窗」的分支，不會靜默離開。
+          <strong>驗到這條請當成已知，不要重複回報。</strong>
+        </dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-b-signin-loading">
+      <summary><input type="checkbox" /><span class="ttl">手動開 CS 的 loading 中登入 → toggle 要維持 ON</span><span class="ac">B · 已修</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>登出狀態下手動撥開 CS toggle，<strong>在轉圈期間</strong>從帳號選單登入。</dd>
+        <dt>期望</dt><dd class="expect">收斂後 toggle <strong>停在 ON</strong>。</dd>
+        <dt>壞掉時的樣子</dt><dd class="trap">toggle 自己彈回 OFF，<strong>沒有任何提示</strong> ——
+          而 CS 其實已經連上、也以新身分登入好了，只是畫面上一個視窗都沒有。</dd>
+        <dt>備註</dt><dd>時序窗格很窄（bind 成功後、<code>EventLoginStatus</code> 抵達前），
+          實機不一定重現得出來。bloc 層有測試釘住。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-b-signout-reopen">
+      <summary><input type="checkbox" /><span class="ttl">登出後再開 CS（⚠️ 現況與期望不一致）</span><span class="ac">S1-14 · 未修</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>登入 → 登出 → 打開 CS toggle。</dd>
+        <dt>目前會看到</dt><dd class="trap"><strong>loading 態</strong> —— 登出走
+          <code>quitApp</code> 停掉 service，再開是 process 被殺之後的完整重啟。</dd>
+        <dt>spec 說的</dt><dd class="expect"><code>S1-14</code>：登出「不重啟、toggle 維持 ON、
+          end lesson ＋ 取得新身分對應的 token」。登入那條（<code>S1-13</code>）已照做，登出這條沒有。</dd>
+        <dt>狀態</dt><dd>未修，見 <a href="overview.html#open">總覽 §9</a>。</dd>
       </dl></div>
     </details>
 

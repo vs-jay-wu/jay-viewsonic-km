@@ -9,7 +9,7 @@ Lydia、Jacky、Jay 三人共同開發與 review，**尚未合併回 develop**�
 |---|---|
 | [`overview.html`](overview.html) | 流程改版前後、六張票的分工、架構增刪、PR 一覽、待決事項、**在這條分支上工作的注意事項** |
 | [`defects.html`](defects.html) | review 期間抓到的缺陷（含「為什麼沒被擋下來」）、測試自身的五種假綠、可帶走的判準 |
-| [`verify.html`](verify.html) | **實機驗證清單** —— 52 項，含操作步驟／期望結果／陷阱；勾選存 localStorage，可一鍵清空 |
+| [`verify.html`](verify.html) | **實機驗證清單** —— 59 項 / 12 區（含 §12 mVB 邊界互動），含操作步驟／期望結果／陷阱；勾選存 localStorage，可一鍵清空 |
 | [`jira/`](jira/) | 八張票的本機 clone，**含留言** —— Android 線五張（10065 / 10067 / 10069 / 10047 / 10049）＋ **Windows 線三張**（10064 / 10066 / 10068，皆已 STAGE READY，可作行為對照） |
 | [`confluence/myViewboar/`](confluence/myViewboar/) | spec 總覽 ＋ 子頁 2／3／4 的本機 clone |
 
@@ -46,18 +46,18 @@ python3 scripts/clone-atlassian.py conf docs/.../quiz-tool-flow-v2/confluence/my
 
 | | |
 |---|---|
-| 分支 tip | `7ddcf69f` — `fix[VSFT-10065]: let the pre-start roster area appear on presence, like the other five windows`（2026-09-03 09:01） |
+| 分支 tip | `c53b8668` — `docs[VSFT-10047]: record that the mask view's exit condition fired and did not hold`（2026-09-03 13:51） |
 | 基準點 | `a9438387`（撰寫當下的 `origin/develop` tip） |
-| 當時規模 | 197 commits · 421 檔 · +29,627 −10,642 |
+| 當時規模 | 204 commits · 425 檔 · +30,547 −10,660 |
 
 檢查落後多少：
 
 ```bash
 git fetch origin
-git log --oneline 7ddcf69f..origin/feature/quiz-tool-flow-v2
+git log --oneline c53b8668..origin/feature/quiz-tool-flow-v2
 ```
 
-> ⚠️ 這條分支**被 force-push 過**。若上面噴 `unknown revision`，代表 `7ddcf69f`
+> ⚠️ 這條分支**被 force-push 過**。若上面噴 `unknown revision`，代表 `c53b8668`
 > 已被 rebase 掉、歷史整條重寫，改用 `--since=2026-09-03` 並重新核對 overview §1 的規模數字。
 
 **維護規則：任何一次在更新的 base 上修改這些文件，就一併換掉上表的戳記**
