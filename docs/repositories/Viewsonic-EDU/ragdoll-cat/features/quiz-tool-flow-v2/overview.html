@@ -12,6 +12,7 @@
     <h2>目錄</h2>
     <ul>
       <li><a href="#asof">📌 文件基準</a></li>
+      <li><a href="#sources">📎 原始文件（本機 clone）</a></li>
       <li><a href="#tldr">0. 一句話</a></li>
       <li><a href="#scale">1. 規模與參與者</a></li>
       <li><a href="#flow">2. 流程：改版前後</a>
@@ -86,6 +87,61 @@ git rev-list --count 004c7300..origin/feature/quiz-tool-flow-v2</code></pre>
       多數缺陷是「A 改了流程、B 的模組在它底下失效、C 在 review 抓到」的形式。
       記錄的是<strong>缺陷的形狀與修法</strong>，不是責任歸屬。
     </div>
+
+
+    <h2 id="sources">📎 原始文件（本機 clone）</h2>
+    <p>
+      票與 spec 都 clone 在本資料夾，<strong>不必連 Jira / Confluence 就能查證本文的每一句</strong>。
+      重新抓取：<code>python3 scripts/clone-atlassian.py jira &lt;dir&gt; VSFT-10065 …</code>
+      （用法見該腳本 docstring）。
+    </p>
+    <table>
+      <thead><tr><th>類型</th><th>來源</th><th>本機</th><th>版本</th><th>角色</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge badge-mvb">Confluence</span></td>
+            <td><a href="https://viewsonic-vsi.atlassian.net/wiki/spaces/myViewboar/pages/606797917">Quiz Tool Spec（總覽）</a></td>
+            <td><a href="confluence/myViewboar/quiz-tool-spec.md"><code>quiz-tool-spec.md</code></a></td>
+            <td>v27</td><td>四個 scope 的切分與決策索引</td></tr>
+        <tr><td><span class="badge badge-mvb">Confluence</span></td>
+            <td><a href="https://viewsonic-vsi.atlassian.net/wiki/spaces/myViewboar/pages/606797937">子頁 2 · Question 截圖遮罩</a></td>
+            <td><a href="confluence/myViewboar/2-question-scope-2.md"><code>2-question-scope-2.md</code></a></td>
+            <td>v23</td><td><code>SC-*</code> AC、面板規格、<strong>決策 #11</strong>（sketch 加頁暫不做）</td></tr>
+        <tr><td><span class="badge badge-mvb">Confluence</span></td>
+            <td><a href="https://viewsonic-vsi.atlassian.net/wiki/spaces/myViewboar/pages/606765141">子頁 3 · 出題與派送</a></td>
+            <td><a href="confluence/myViewboar/3-scope-1-scope-2.md"><code>3-scope-1-scope-2.md</code></a></td>
+            <td>v17</td><td><code>7</code>／<code>S2-1</code>／<code>S2-4</code>／<code>13</code>、<strong><code>Q4</code> finish 未決</strong></td></tr>
+        <tr><td><span class="badge badge-mvb">Confluence</span></td>
+            <td><a href="https://viewsonic-vsi.atlassian.net/wiki/spaces/myViewboar/pages/606568769">子頁 4 · 作答頁（含 pre-start）</a></td>
+            <td><a href="confluence/myViewboar/4-pre-start.md"><code>4-pre-start.md</code></a></td>
+            <td>v10</td><td><code>S2-2</code>／<code>S2-19</code>／<code>15</code>／<code>S2-20</code>、決策 #27（版面回歸）</td></tr>
+        <tr><td><span class="badge badge-cs">Jira</span></td>
+            <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10065">VSFT-10065</a></td>
+            <td><a href="jira/VSFT-10065.md"><code>VSFT-10065.md</code></a></td>
+            <td>v1</td><td>截圖遮罩改版（88 commits，最大宗）</td></tr>
+        <tr><td><span class="badge badge-cs">Jira</span></td>
+            <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10067">VSFT-10067</a></td>
+            <td><a href="jira/VSFT-10067.md"><code>VSFT-10067.md</code></a></td>
+            <td>v1</td><td>pre-start 狀態、Setting 頁移除</td></tr>
+        <tr><td><span class="badge badge-cs">Jira</span></td>
+            <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10069">VSFT-10069</a></td>
+            <td><a href="jira/VSFT-10069.md"><code>VSFT-10069.md</code></a></td>
+            <td>v1</td><td>選班空狀態三態</td></tr>
+        <tr><td><span class="badge badge-cs">Jira</span></td>
+            <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10047">VSFT-10047</a></td>
+            <td><a href="jira/VSFT-10047.md"><code>VSFT-10047.md</code></a></td>
+            <td>v1</td><td>啟動狀態機、背景預啟動</td></tr>
+        <tr><td><span class="badge badge-cs">Jira</span></td>
+            <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10049">VSFT-10049</a></td>
+            <td><a href="jira/VSFT-10049.md"><code>VSFT-10049.md</code></a></td>
+            <td>v1</td><td>無班級出題（Flutter 側）</td></tr>
+      </tbody>
+    </table>
+    <p class="note">
+      ⚠️ <strong>clone 是鏡像，不要直接改內容</strong>；本機的調查結論寫在
+      <a href="defects.html">defects.html</a> 或本頁。重新 clone 前先 <code>git diff</code>
+      看有沒有未上游的補充。Confluence 版本號會前進（子頁 2 已改過四輪），
+      重抓時版號與 <code>cloned_at</code> 要一起更新。
+    </p>
 
     <h2 id="tldr">0. 一句話</h2>
     <p>
