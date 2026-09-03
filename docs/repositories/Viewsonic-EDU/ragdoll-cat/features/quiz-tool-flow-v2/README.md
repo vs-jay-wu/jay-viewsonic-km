@@ -9,7 +9,7 @@ Lydia、Jacky、Jay 三人共同開發與 review，**尚未合併回 develop**�
 |---|---|
 | [`overview.html`](overview.html) | 流程改版前後、六張票的分工、架構增刪、PR 一覽、待決事項、**在這條分支上工作的注意事項** |
 | [`defects.html`](defects.html) | review 期間抓到的缺陷（含「為什麼沒被擋下來」）、測試自身的五種假綠、可帶走的判準 |
-| [`jira/`](jira/) | 五張票的本機 clone，**含留言**（VSFT-10065 / 10067 / 10069 / 10047 / 10049） |
+| [`jira/`](jira/) | 八張票的本機 clone，**含留言** —— Android 線五張（10065 / 10067 / 10069 / 10047 / 10049）＋ **Windows 線三張**（10064 / 10066 / 10068，皆已 STAGE READY，可作行為對照） |
 | [`confluence/myViewboar/`](confluence/myViewboar/) | spec 總覽 ＋ 子頁 2／3／4 的本機 clone |
 
 用瀏覽器開 `overview.html`。
@@ -74,7 +74,9 @@ git diff --shortstat $(git merge-base origin/develop origin/feature/quiz-tool-fl
 
 - 18 支 PR，17 merged、1 open（#1144 繪圖題編輯窗刪除）
 - **CI gate 從未在這條分支跑過** —— `ci.yml` 只涵蓋 `develop` 與 `release/**`
-- Windows 線的對應票（VSFT-10064 / 10066 / 10068）已 STAGE READY，可作行為對照
+- Windows 線的對應票（VSFT-10064 / 10066 / 10068）已 STAGE READY，可作行為對照 ——
+  `VSFT-10066` 與 `VSFT-10067` 的驗收條件**逐字相同**，所以那邊是同一份 AC 的已完成實作。
+  但票面相同不代表實作路徑相同（10066 通篇沒提繪圖題），**當 AC 對照可以，當實作解法的依據不行**
 
 ## 相關
 

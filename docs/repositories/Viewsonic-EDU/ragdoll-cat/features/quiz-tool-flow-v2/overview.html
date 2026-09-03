@@ -137,6 +137,36 @@ git rev-list --count 004c7300..origin/feature/quiz-tool-flow-v2</code></pre>
       </tbody>
     </table>
     <p>
+      <strong>Windows 線的三張票也 clone 了，因為它們已經做完。</strong>
+      同一份 spec 的另一個實作，<strong>驗收條件與 Android 版逐字相同</strong>
+      （<code>VSFT-10066</code> 與 <code>VSFT-10067</code> 的 AC 段落 diff 為空），
+      所以行為有疑義時可以直接比對 —— 那邊已經 STAGE READY、上過 stage 版。
+    </p>
+    <table>
+      <thead><tr><th>類型</th><th>來源</th><th>本機</th><th>狀態</th><th>對應 Android 票</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge badge-mvb">Jira</span></td>
+            <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10064">VSFT-10064</a> [Windows] 截圖遮罩</td>
+            <td><a href="jira/VSFT-10064.md"><code>VSFT-10064.md</code></a></td>
+            <td>STAGE READY</td><td>VSFT-10065</td></tr>
+        <tr><td><span class="badge badge-mvb">Jira</span></td>
+            <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10066">VSFT-10066</a> [Windows] Pre-start</td>
+            <td><a href="jira/VSFT-10066.md"><code>VSFT-10066.md</code></a></td>
+            <td>STAGE READY</td><td><strong>VSFT-10067</strong>（AC 逐字相同）</td></tr>
+        <tr><td><span class="badge badge-mvb">Jira</span></td>
+            <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10068">VSFT-10068</a> [Windows] 選班空狀態</td>
+            <td><a href="jira/VSFT-10068.md"><code>VSFT-10068.md</code></a></td>
+            <td>STAGE READY</td><td>VSFT-10069</td></tr>
+      </tbody>
+    </table>
+    <p class="note">
+      ⚠️ <strong>票面相同不代表實作路徑相同。</strong>
+      <code>VSFT-10066</code> 通篇沒有提到繪圖題 —— 繪圖題在 Android 這邊是唯一需要特殊處理的題型
+      （多頁草稿過不了 <code>QuizSharedUiInfo</code>），但那是實作層級的事，票面看不出 Windows 那邊
+      是否也遇到。<strong>拿它當 AC 對照可以，當實作解法的依據不行。</strong>
+    </p>
+
+    <p>
       <strong>票的 clone 含留言。</strong> 這條線上不少決策的唯一落點是留言而不是票面 ——
       例如 <code>13</code> 的缺陷分析（<code>showCloseConfirmDialog()</code> 的 <code>if/else</code>
       把 <code>PRE_START</code> 當成進行中，去關一個從未建立的題目）、實機驗證紀錄、
