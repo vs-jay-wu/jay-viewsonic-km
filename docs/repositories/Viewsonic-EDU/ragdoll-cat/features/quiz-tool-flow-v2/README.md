@@ -45,6 +45,17 @@ git log --oneline 004c7300..origin/feature/quiz-tool-flow-v2
 > ⚠️ 這條分支**被 force-push 過**。若上面噴 `unknown revision`，代表 `004c7300`
 > 已被 rebase 掉、歷史整條重寫，改用 `--since=2026-09-03` 並重新核對 overview §1 的規模數字。
 
+**維護規則：任何一次在更新的 base 上修改這些文件，就一併換掉上表的戳記**
+（三個檔案都有：`README.md`、`overview.html`、`defects.html`）。只改內容不換戳記，
+等於讓下一個人拿舊 SHA 去比對新內容 —— 比沒有戳記更糟。
+若只是換戳記、內容未重新查證，commit message 要講明白。
+
+```bash
+git rev-parse --short origin/feature/quiz-tool-flow-v2
+git rev-list --count $(git merge-base origin/develop origin/feature/quiz-tool-flow-v2)..origin/feature/quiz-tool-flow-v2
+git diff --shortstat $(git merge-base origin/develop origin/feature/quiz-tool-flow-v2)..origin/feature/quiz-tool-flow-v2
+```
+
 ## 現況（截至上述基準）
 
 - 18 支 PR，17 merged、1 open（#1144 繪圖題編輯窗刪除）
