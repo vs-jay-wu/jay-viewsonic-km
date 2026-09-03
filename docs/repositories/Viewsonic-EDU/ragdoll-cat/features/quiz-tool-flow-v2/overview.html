@@ -38,10 +38,10 @@
   </nav>
 
   <main>
-    <h1>Quiz Tool 啟動流程改版 <span class="badge badge-warn">feature/quiz-tool-flow-v2 · 未合併</span></h1>
+    <h1>Quiz Tool 啟動流程改版 <span class="badge badge-info">原 feature/quiz-tool-flow-v2 · 2026-09-03 已合併</span></h1>
     <div class="meta">
-      ragdoll-cat（ClassSwift Android）&middot; 2026-08-20 → 2026-09-03（持續中）&middot;
-      204 commits / 425 檔 / +30,547 −10,660 &middot;
+      ragdoll-cat（ClassSwift Android）&middot; 2026-08-20 → 2026-09-03（已合併）&middot;
+      205 commits / 427 檔 / +30,712 −10,675 &middot;
       對應資料夾 <code>docs/repositories/Viewsonic-EDU/ragdoll-cat/features/quiz-tool-flow-v2/</code>
     </div>
     <div class="doc-nav">
@@ -55,19 +55,21 @@
       <strong>📌 這份文件的基準</strong>
       <table style="margin:8px 0 0">
         <tbody>
-          <tr><th style="width:150px">分支 tip</th>
-              <td><code>c53b8668</code> — <code>docs[VSFT-10047]: record that the mask view's exit condition fired and did not hold</code>（2026-09-03 13:51）</td></tr>
-          <tr><th>基準點</th><td><code>a9438387</code>（＝ 撰寫當下的 <code>origin/develop</code> tip）</td></tr>
-          <tr><th>當時規模</th><td>204 commits · 425 檔 · +30,547 −10,660</td></tr>
-          <tr><th>撰寫日</th><td>2026-09-03</td></tr>
+          <tr><th style="width:190px">CS（<code>ragdoll-cat</code>）tip</th>
+              <td><code>fe4f8770</code> — <code>fix[NO-TICKET]: drop the lesson locally even when End Class is refused</code>（2026-09-03 16:44，<strong>在 <code>develop</code> 上</strong>）</td></tr>
+          <tr><th>mvbf（<code>edu-droid-flutter</code>）tip</th>
+              <td><code>d86ea2d67</code> — <code>[Refactor][VSFT-10047] 移除 file_manage_menu_overlay 已死的 ClassSwiftBloc import</code>（2026-09-03 16:57，<strong>在 <code>master</code> 上</strong>）</td></tr>
+          <tr><th>規模基準點</th><td><code>a9438387</code>（合併前的 <code>origin/develop</code> tip，2026-09-01 10:55）</td></tr>
+          <tr><th>當時規模</th><td>205 commits · 427 檔 · +30,712 −10,675（CS 側，對 <code>a9438387</code>）</td></tr>
+          <tr><th>撰寫日</th><td>2026-09-03（合併後重戳）</td></tr>
         </tbody>
       </table>
       <p style="margin:10px 0 0">
         <strong>檢查這份文件落後多少：</strong>
       </p>
       <pre style="margin:6px 0"><code>git fetch origin
-git log --oneline c53b8668..origin/feature/quiz-tool-flow-v2   # 之後新增的 commit
-git rev-list --count c53b8668..origin/feature/quiz-tool-flow-v2</code></pre>
+git log --oneline fe4f8770..origin/develop   # CS 側之後新增的 commit
+git rev-list --count fe4f8770..origin/develop</code></pre>
       <p style="margin:10px 0 0">
         <strong>維護規則：</strong>任何一次在更新的 base 上修改本文，就把上表四格一起換掉
         （<code>git rev-parse --short</code>、<code>git rev-list --count</code>、
@@ -76,11 +78,24 @@ git rev-list --count c53b8668..origin/feature/quiz-tool-flow-v2</code></pre>
         commit message 要講明白。
       </p>
       <p style="margin:10px 0 0">
-        ⚠️ <strong>這條分支被 force-push 過。</strong>若上面的指令噴
-        <code>unknown revision</code>，代表 <code>c53b8668</code> 已被 rebase 掉，
-        歷史整條重寫 —— 那時無法用 commit 範圍比對，改看
-        <code>git log --oneline --since=2026-09-03 origin/feature/quiz-tool-flow-v2</code>
-        並重新核對本文的 §1 規模數字。
+        ⚠️ <strong><code>feature/quiz-tool-flow-v2</code> 這個分支名已經不能用來查東西了。</strong>
+        <strong>mvbf 側遠端已刪除</strong>（#249 併進 <code>master</code> 後刪掉），追溯改動請用
+        <code>master</code>。<strong>CS 側遠端還留著</strong>，但已完全併入 <code>develop</code>
+        （rebase-merge，SHA 全部換過），<code>git diff origin/develop
+        origin/feature/quiz-tool-flow-v2</code> 零差異 —— 它是個不會再更新的殘骸。
+        <br /><br />
+        <strong>兩邊的 SHA 存活狀況不同，別套用同一個假設：</strong>
+        <ul style="margin:6px 0 0 18px">
+          <li><strong>CS 側的 SHA 都還在</strong> —— <code>develop</code> 直接含這條分支的歷史。
+              本文引用的 8 個 CS SHA 已逐一驗過
+              （<code>git merge-base --is-ancestor &lt;sha&gt; origin/develop</code>）全部可達。</li>
+          <li><strong>mvbf 側的 SHA 已經沒了</strong> —— #249 是 rebase-merge 進
+              <code>master</code>，合併前的 SHA 全部重寫。本文的 mvbf SHA 一律記
+              <code>master</code> 上的那顆。</li>
+        </ul>
+        ⚠️ <code>git cat-file -e &lt;sha&gt;</code> <strong>不能</strong>用來判斷這件事 ——
+        被 rebase 掉的 commit 在 GC 前物件都還在本機，那個指令照樣回成功。要用
+        <code>merge-base --is-ancestor</code>。
       </p>
     </div>
 
@@ -192,10 +207,10 @@ git rev-list --count c53b8668..origin/feature/quiz-tool-flow-v2</code></pre>
     <table>
       <thead><tr><th>項目</th><th>值</th></tr></thead>
       <tbody>
-        <tr><td>基準</td><td><code>origin/develop</code>（已上線的版本）</td></tr>
-        <tr><td>commits</td><td>204</td></tr>
-        <tr><td>檔案 / 行數</td><td>425 檔，+30,547 −10,660</td></tr>
-        <tr><td>期間</td><td>2026-08-20 → 2026-09-03（持續中）</td></tr>
+        <tr><td>基準</td><td><code>a9438387</code>（合併前的 <code>origin/develop</code> tip）</td></tr>
+        <tr><td>commits</td><td>205</td></tr>
+        <tr><td>檔案 / 行數</td><td>427 檔，+30,712 −10,675</td></tr>
+        <tr><td>期間</td><td>2026-08-20 → 2026-09-03（已合併回 <code>develop</code>）</td></tr>
         <tr><td>作者</td><td>Lydia 119 · Jacky 55 · Jay 20</td></tr>
         <tr><td>PR</td><td>18 支（17 merged、1 open）</td></tr>
       </tbody>
@@ -486,6 +501,44 @@ flowchart LR
             所以 <code>SC-6a</code> 的保證沒破，但那句話描述的情境變寬了。
           </td>
         </tr>
+        <tr>
+          <td>
+            <strong>決策 #12</strong>（子頁 3）<br />
+            <span class="badge badge-mvb">＋無 AC 的連帶行為</span>
+          </td>
+          <td>
+            決策 #12：pre-start 的 My classes 叫出的選班卡，「<strong>直接關閉</strong>不選班」→
+            回到作答頁 pre-start 空狀態、草稿與截圖保留、兩顆按鈕仍在。
+            <br /><br />
+            至於 <strong>mVB toolbar 的班級鈕</strong>要不要跟著視窗變狀態 ——
+            <strong>四頁 spec 一個字都沒寫</strong>（<code>S2-11</code>～<code>S2-16</code>、
+            <code>S2-30b</code>、決策 #9／#9a／#10 全都只描述視窗自己）。
+          </td>
+          <td>
+            <strong>[X] 改成縮小，不是關閉</strong> —— 2026-08-26 實測回饋，spec 未更新。
+            <br /><br />
+            實作是同日成對的兩筆，<strong>兩邊都沒有票號</strong>：
+            <ul style="margin:6px 0 0 18px">
+              <li>CS <code>eeb199ec</code> <code>fix[NO-TICKET]: minimize the class picker on [X] instead of closing ClassSwift</code>
+                  —— <code>buttonClose</code> 從關掉整個 ClassSwift 改成
+                  <code>csWindowManager.minimizeWindow(tag)</code>。</li>
+              <li>mvbf <code>74a3d71f9</code> <code>[Fix] 選班窗縮小 → 班級鈕顯示縮小點</code>
+                  —— <code>isSMTag</code> 原本只認 <code>STUDENT_MANAGEMENT</code>／<code>JOIN_CLASS</code>，
+                  補上 <code>CS_SELECT_ORG_AND_CLASS</code>，縮小點才落到班級鈕上、還原後清掉。</li>
+            </ul>
+            <br />
+            ⚠️ <strong>決策 #12 的「關閉」在實作上已經拆成兩件獨立的事</strong>：右欄回空狀態<u>照做</u>，
+            但視窗<u>沒有被關掉</u>。決策 #12 描述的結果仍然成立，所以照它驗不會誤報 ——
+            但<strong>照它的字面去確認「窗有沒有關掉」會誤判</strong>。
+            <br /><br />
+            班級鈕縮小點這一半<strong>沒有任何 spec 依據</strong>，是實作端補的一致性行為。
+            mvbf 側有兩條單元測試守著（<code>classswift_bloc_test.dart</code> 的
+            「CS_SELECT_ORG_AND_CLASS 縮小 → 班級鈕縮小點」group），
+            <strong>程式碼註解與測試目前是這條行為唯一的規格書</strong>。
+            <br /><br />
+            驗證步驟見 <a href="verify.html#s12">驗證清單 §12</a> 最後一項。
+          </td>
+        </tr>
       </tbody>
     </table>
 
@@ -668,6 +721,9 @@ flowchart LR
 
     <h3>9.3 rebase 的陷阱</h3>
     <div class="callout warn">
+      <strong>（已成史料：這條分支已合併，不會再有人 rebase 到它。留著是因為下一條長期
+      feature branch 會再遇到同一件事。）</strong>
+      <br /><br />
       這條 feature branch <strong>被 force-push 過</strong>（rebase 到 develop）。
       upstream 一旦重寫，<code>git rebase origin/feature/quiz-tool-flow-v2</code> 會因為 merge-base
       退回 develop 分岔點而<strong>開始重播上游所有 commit</strong>（實測 21 檔衝突）。正解是明確指定舊基底：

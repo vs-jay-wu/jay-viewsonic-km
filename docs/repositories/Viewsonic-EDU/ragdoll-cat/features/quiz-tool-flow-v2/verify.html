@@ -438,10 +438,14 @@ adb install -r ../build/app/outputs/apk/edla/debug/app-edla-debug.apk</code></pr
     </details>
 
     <details class="case" data-id="c-s214">
-      <summary><input type="checkbox" /><span class="ttl">按 My classes → 選班卡出現；直接關掉會回到空狀態</span><span class="ac">S2-14 / 決策 #12</span></summary>
+      <summary><input type="checkbox" /><span class="ttl">按 My classes → 選班卡出現；按 [X] 是縮小，不是關閉</span><span class="ac">S2-14 / 決策 #12（字面已偏離）</span></summary>
       <div class="body"><dl>
-        <dt>操作</dt><dd>按 My classes 叫出選班卡，<strong>不選班直接關掉</strong>。</dd>
-        <dt>期望</dt><dd class="expect">回到 pre-start 空狀態；<strong>草稿與截圖保留</strong>；<strong>兩顆按鈕仍在</strong>。</dd>
+        <dt>操作</dt><dd>按 My classes 叫出選班卡，<strong>不選班、按卡片右上的 [X]</strong>。</dd>
+        <dt>期望</dt><dd class="expect">右欄回到 pre-start 空狀態；<strong>草稿與截圖保留</strong>；<strong>兩顆按鈕仍在</strong>。<br />
+          但選班窗<strong>只是縮小、沒有被關掉</strong> —— 縮小點會落在 mVB toolbar 的班級鈕上（見 <a href="#s12">§12</a> 最後一項）。</dd>
+        <dt>陷阱</dt><dd class="trap">決策 #12 的字面是「直接<strong>關閉</strong>不選班」，實作是
+          <code>csWindowManager.minimizeWindow(tag)</code>（<code>eeb199ec</code>，2026-08-26）。
+          <strong>驗右欄狀態不等於驗窗有沒有被關掉</strong> —— 這兩件事現在互相獨立，要分開看。</dd>
       </dl></div>
     </details>
 
@@ -756,6 +760,25 @@ adb install -r ../build/app/outputs/apk/edla/debug/app-edla-debug.apk</code></pr
         <dt>spec 說的</dt><dd class="expect"><code>S1-14</code>：登出「不重啟、toggle 維持 ON、
           end lesson ＋ 取得新身分對應的 token」。登入那條（<code>S1-13</code>）已照做，登出這條沒有。</dd>
         <dt>狀態</dt><dd>未修，見 <a href="overview.html#open">總覽 §9</a>。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-b-picker-minimize-dot">
+      <summary><input type="checkbox" /><span class="ttl">選班窗 [X] → mVB 班級鈕出現縮小點；還原後清掉</span><span class="ac">無 AC · 實測補的</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>登入但<strong>先不要進班</strong> → 開 CS → 出題到 pre-start → 按 <strong>My classes</strong>
+          叫出選班窗 → 按 [X] → 看 mVB toolbar 的<strong>班級鈕</strong> → 再按班級鈕把窗叫回來。</dd>
+        <dt>期望</dt><dd class="expect">按 [X] 後班級鈕上<strong>出現縮小點</strong>；按班級鈕還原（窗轉 <code>VISIBLE</code>）後
+          <strong>縮小點跟著清掉</strong>。</dd>
+        <dt>為什麼會是班級鈕</dt><dd>未進班時，班級鈕叫出來的<strong>就是選班窗</strong>
+          （CS 端 <code>openWindow(JOIN_CLASS)</code> → <code>SelectOrgAndSelectClassWindowOpener</code>），
+          所以它的縮小點畫在班級鈕上，跟 <code>STUDENT_MANAGEMENT</code>／<code>JOIN_CLASS</code> 共用同一顆旗標。</dd>
+        <dt>陷阱</dt><dd class="trap"><strong>這條沒有 AC，spec 四頁完全沒提 toolbar 按鈕要跟著視窗變狀態。</strong>
+          來源是 2026-08-26 的實測回饋，兩邊同日成對修：CS <code>eeb199ec</code>（[X] 改成縮小而不是關掉整個 ClassSwift）＋
+          mvbf <code>74a3d71f9</code>（<code>isSMTag</code> 補上 <code>CS_SELECT_ORG_AND_CLASS</code>），<strong>兩筆都沒有票號</strong>。
+          <br />mvbf 側有兩條單元測試守著（<code>classswift_bloc_test.dart</code> 的
+          「CS_SELECT_ORG_AND_CLASS 縮小 → 班級鈕縮小點」group），所以這項實機失敗時<strong>先懷疑 CS 端有沒有發出
+          <code>MINIMIZED</code></strong>，而不是 mvbf 的旗標邏輯。</dd>
       </dl></div>
     </details>
 

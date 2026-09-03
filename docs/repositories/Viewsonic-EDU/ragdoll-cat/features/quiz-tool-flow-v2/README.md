@@ -1,7 +1,7 @@
-# Quiz Tool 啟動流程改版（`feature/quiz-tool-flow-v2`）
+# Quiz Tool 啟動流程改版（原 `feature/quiz-tool-flow-v2`，已合併）
 
 ragdoll-cat（ClassSwift Android）上一條長期 feature branch 的全覽。
-Lydia、Jacky、Jay 三人共同開發與 review，**尚未合併回 develop**。
+Lydia、Jacky、Jay 三人共同開發與 review，**已於 2026-09-03 合併回主線**。
 
 ## 入口
 
@@ -46,19 +46,33 @@ python3 scripts/clone-atlassian.py conf docs/.../quiz-tool-flow-v2/confluence/my
 
 | | |
 |---|---|
-| 分支 tip | `c53b8668` — `docs[VSFT-10047]: record that the mask view's exit condition fired and did not hold`（2026-09-03 13:51） |
-| 基準點 | `a9438387`（撰寫當下的 `origin/develop` tip） |
-| 當時規模 | 204 commits · 425 檔 · +30,547 −10,660 |
+| CS（`ragdoll-cat`）tip | `fe4f8770` — `fix[NO-TICKET]: drop the lesson locally even when End Class is refused`（2026-09-03 16:44，**在 `develop` 上**） |
+| mvbf（`edu-droid-flutter`）tip | `d86ea2d67` — `[Refactor][VSFT-10047] 移除 file_manage_menu_overlay 已死的 ClassSwiftBloc import`（2026-09-03 16:57，**在 `master` 上**） |
+| 規模基準點 | `a9438387`（合併前的 `origin/develop` tip，2026-09-01 10:55） |
+| 當時規模 | 205 commits · 427 檔 · +30,712 −10,675（CS 側，對 `a9438387`） |
 
-檢查落後多少：
+⚠️ **`feature/quiz-tool-flow-v2` 這條分支名已經不能用來查東西了：**
+
+- **mvbf 側遠端已刪除**（#249 併進 `master` 後刪掉）。要追溯改動請用 `master`。
+- **CS 側遠端還留著**，但已完全併入 `develop`（rebase-merge，SHA 全部換過），
+  `git diff origin/develop origin/feature/quiz-tool-flow-v2` 零差異。它是個不會再更新的殘骸。
+
+檢查落後多少（CS 側）：
 
 ```bash
 git fetch origin
-git log --oneline c53b8668..origin/feature/quiz-tool-flow-v2
+git log --oneline fe4f8770..origin/develop
+git rev-list --count fe4f8770..origin/develop
 ```
 
-> ⚠️ 這條分支**被 force-push 過**。若上面噴 `unknown revision`，代表 `c53b8668`
-> 已被 rebase 掉、歷史整條重寫，改用 `--since=2026-09-03` 並重新核對 overview §1 的規模數字。
+> ⚠️ **兩邊的 SHA 存活狀況不同，別套用同一個假設：**
+> - **CS 側的 SHA 都還在** —— `develop` 直接含這條分支的歷史。本系列文件引用的 8 個
+>   CS SHA 已逐一用 `git merge-base --is-ancestor <sha> origin/develop` 驗過，全部可達。
+> - **mvbf 側的 SHA 已經沒了** —— #249 是 rebase-merge 進 `master`，合併前的 SHA 全部重寫。
+>   本系列文件的 mvbf SHA 一律記 `master` 上的那顆。
+>
+> `git cat-file -e <sha>` **不能**用來判斷 —— 被 rebase 掉的 commit 在 GC 前物件都還在本機，
+> 那個指令照樣回成功。要用 `merge-base --is-ancestor`。
 
 **維護規則：任何一次在更新的 base 上修改這些文件，就一併換掉上表的戳記**
 （三個檔案都有：`README.md`、`overview.html`、`defects.html`）。只改內容不換戳記，
@@ -66,9 +80,9 @@ git log --oneline c53b8668..origin/feature/quiz-tool-flow-v2
 若只是換戳記、內容未重新查證，commit message 要講明白。
 
 ```bash
-git rev-parse --short origin/feature/quiz-tool-flow-v2
-git rev-list --count $(git merge-base origin/develop origin/feature/quiz-tool-flow-v2)..origin/feature/quiz-tool-flow-v2
-git diff --shortstat $(git merge-base origin/develop origin/feature/quiz-tool-flow-v2)..origin/feature/quiz-tool-flow-v2
+git rev-parse --short origin/develop
+git rev-list --count a9438387..origin/develop
+git diff --shortstat a9438387..origin/develop
 ```
 
 ## 現況（截至上述基準）
