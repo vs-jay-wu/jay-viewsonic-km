@@ -9,6 +9,7 @@ Lydia、Jacky、Jay 三人共同開發與 review，**尚未合併回 develop**�
 |---|---|
 | [`overview.html`](overview.html) | 流程改版前後、六張票的分工、架構增刪、PR 一覽、待決事項、**在這條分支上工作的注意事項** |
 | [`defects.html`](defects.html) | review 期間抓到的缺陷（含「為什麼沒被擋下來」）、測試自身的五種假綠、可帶走的判準 |
+| [`verify.html`](verify.html) | **實機驗證清單** —— 52 項，含操作步驟／期望結果／陷阱；勾選存 localStorage，可一鍵清空 |
 | [`jira/`](jira/) | 八張票的本機 clone，**含留言** —— Android 線五張（10065 / 10067 / 10069 / 10047 / 10049）＋ **Windows 線三張**（10064 / 10066 / 10068，皆已 STAGE READY，可作行為對照） |
 | [`confluence/myViewboar/`](confluence/myViewboar/) | spec 總覽 ＋ 子頁 2／3／4 的本機 clone |
 

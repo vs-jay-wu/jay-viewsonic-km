@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quiz Tool 流程改版 — 驗證清單</title>
+<link rel="stylesheet" href="assets/style.css" />
+<style>
+  .vbar {
+    position: sticky; top: 0; z-index: 50; background: #fff;
+    border-bottom: 1px solid var(--c-border); padding: 12px 0 10px; margin-bottom: 18px;
+  }
+  .vbar-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .progress { flex: 1; min-width: 200px; height: 10px; background: #eee; border-radius: 5px; overflow: hidden; }
+  .progress > i { display: block; height: 100%; width: 0; background: var(--c-reuse); transition: width .2s; }
+  .counts { font-size: 13px; color: var(--c-muted); white-space: nowrap; }
+  .counts b { color: var(--c-fg); font-size: 15px; }
+  button {
+    font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 6px;
+    border: 1px solid var(--c-border); background: #fff; cursor: pointer;
+  }
+  button:hover { background: #f5f5f5; }
+  button.danger { border-color: #fca5a5; color: var(--c-new); }
+  button.danger:hover { background: #fef2f2; }
+  .filters { display: flex; gap: 6px; }
+  .filters button.on { background: var(--c-accent-bg); border-color: var(--c-accent); color: var(--c-accent); }
+
+  .case { border: 1px solid var(--c-border); border-radius: 8px; margin: 0 0 10px; background: #fff; }
+  .case > summary {
+    padding: 10px 14px; cursor: pointer; display: flex; gap: 10px; align-items: flex-start;
+    list-style: none; font-size: 14px;
+  }
+  .case > summary::-webkit-details-marker { display: none; }
+  .case input[type=checkbox] { margin-top: 3px; width: 17px; height: 17px; flex: none; cursor: pointer; }
+  .case .ttl { flex: 1; }
+  .case .ac { font-size: 11px; color: var(--c-muted); border: 1px solid var(--c-border);
+              border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+  .case[data-done="1"] { background: #f6fdf8; border-color: #bbf7d0; }
+  .case[data-done="1"] .ttl { color: var(--c-muted); text-decoration: line-through; }
+  .case .body { padding: 0 14px 12px 41px; font-size: 13.5px; border-top: 1px solid #f0f0f0; margin-top: 4px; padding-top: 10px; }
+  .case .body dt { font-weight: 600; margin-top: 8px; font-size: 12.5px; color: var(--c-muted); }
+  .case .body dd { margin: 3px 0 0; }
+  .case .body ol, .case .body ul { margin: 4px 0 0; padding-left: 20px; }
+  .case .body li { margin: 2px 0; }
+  .case .expect { border-left: 3px solid var(--c-reuse); padding-left: 10px; background: #f0fdf4; }
+  .case .trap { border-left: 3px solid var(--c-partial); padding-left: 10px; background: #fff7ed; }
+  .sec-head { display: flex; align-items: baseline; gap: 10px; margin: 26px 0 10px; }
+  .sec-head h2 { margin: 0; border: 0; padding: 0; }
+  .sec-head .sc { font-size: 12px; color: var(--c-muted); }
+  code { font-size: 12.5px; }
+  .setup { background: var(--c-code-bg); border-radius: 8px; padding: 12px 16px; font-size: 13.5px; }
+  .setup pre { margin: 6px 0; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>驗證區塊</h2>
+    <ul>
+      <li><a href="#setup">環境準備</a></li>
+      <li><a href="#s1">1. 進入遮罩</a></li>
+      <li><a href="#s2">2. 動框之後</a></li>
+      <li><a href="#s3">3. 設定段</a></li>
+      <li><a href="#s4">4. 面板位置</a></li>
+      <li><a href="#s5">5. 離開遮罩</a></li>
+      <li><a href="#s6">6. pre-start 版面</a></li>
+      <li><a href="#s7">7. 選班三態</a></li>
+      <li><a href="#s8">8. 派題與結束</a></li>
+      <li><a href="#s9">9. 丟棄草稿</a></li>
+      <li><a href="#s10">10. 缺陷迴歸</a></li>
+      <li><a href="#s11">11. 六題型掃描</a></li>
+    </ul>
+    <p style="margin-top:18px"><a href="overview.html">📘 總覽</a><br /><a href="defects.html">🐛 缺陷紀錄</a></p>
+  </nav>
+
+  <main>
+    <h1>驗證清單</h1>
+    <div class="meta">
+      勾選狀態存在瀏覽器 localStorage（僅這台機器、這個瀏覽器）&middot;
+      依 spec 子頁 2／3／4 的 AC 編排 &middot; 對應 clone 於
+      <code>confluence/myViewboar/</code>
+    </div>
+
+    <div class="vbar">
+      <div class="vbar-row">
+        <div class="progress"><i id="bar"></i></div>
+        <span class="counts"><b id="done">0</b> / <span id="total">0</span> 已驗</span>
+        <div class="filters">
+          <button data-f="all" class="on">全部</button>
+          <button data-f="todo">未驗</button>
+          <button data-f="done">已驗</button>
+        </div>
+        <button id="expand">全部展開</button>
+        <button id="collapse">全部收合</button>
+        <button id="reset" class="danger">清空所有勾選</button>
+      </div>
+    </div>
+
+    <div class="setup" id="setup">
+      <strong>環境準備</strong>
+      <ol>
+        <li>建 fusion APK 並安裝：
+          <pre><code>cd edu-droid-flutter/android
+./gradlew :app:assembleEdlaDebug -PclassswiftRepoPath=&lt;ragdoll-cat&gt;
+adb install -r ../build/app/outputs/apk/edla/debug/app-edla-debug.apk</code></pre>
+        </li>
+        <li>確認 overlay 權限（<strong>fusion 不檢查它，掉了是完全靜默的失敗</strong>）：
+          <pre><code>adb shell appops get com.viewsonic.droid SYSTEM_ALERT_WINDOW   # 要 allow</code></pre>
+        </li>
+        <li>用 mvbf 的測試帳號登入，準備一位可從瀏覽器加入的學生。</li>
+        <li>想看截圖走哪條路徑（跟 §10-5 有關）：
+          <pre><code>adb logcat -c &amp;&amp; adb logcat | grep -E "useVSApi|usePersistentSession"</code></pre>
+        </li>
+      </ol>
+    </div>
+
+    <div class="sec-head" id="s1"><h2>1. 進入遮罩</h2><span class="sc">子頁 2 · Story 1</span></div>
+
+    <details class="case" data-id="c-3">
+      <summary><input type="checkbox" /><span class="ttl">toggle ON → 點 Questions，遮罩帶預置框出現</span><span class="ac">3</span></summary>
+      <div class="body">
+        <dl>
+          <dt>操作</dt><dd>mVB toolbar 的 Questions 鍵（<strong>不再有題型選單</strong>）。</dd>
+          <dt>期望</dt>
+          <dd class="expect">畫面壓暗、中央一個透空預置框 <strong>748 × 421、水平置中、16:9</strong>；四角各一顆把手；框下方提示列「Drag to select an area」＋ ✕。<strong>Panel 此時還沒出現。</strong></dd>
+          <dt>陷阱</dt>
+          <dd class="trap">舊流程是先選題型再截圖。如果還看得到題型選單，裝到的是舊版。</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="case" data-id="c-sc17">
+      <summary><input type="checkbox" /><span class="ttl">框放到最大時停在四邊各 16px 安全邊距</span><span class="ac">SC-17</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>拖把手把框往四個方向拉到底。</dd>
+        <dt>期望</dt><dd class="expect">框停在<strong>距視窗邊緣各 16 px</strong>；不貼齊、不超出。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-sc18">
+      <summary><input type="checkbox" /><span class="ttl">16:9 只是預設，比例不鎖定</span><span class="ac">SC-18</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>只拖單一邊或單一角，拉成細長條與接近正方形。</dd>
+        <dt>期望</dt><dd class="expect">兩種都做得到。長寬可獨立調整。</dd>
+        <dt>陷阱</dt><dd class="trap">早期版本鎖 16:9 —— 若拖一邊時另一邊跟著動，就是舊行為。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-sc10">
+      <summary><input type="checkbox" /><span class="ttl">雙螢幕時遮罩只出現在觸發的那一個螢幕</span><span class="ac">SC-10</span></summary>
+      <div class="body"><dl>
+        <dt>前提</dt><dd>接兩個螢幕。<strong>沒有雙螢幕就跳過，不要猜。</strong></dd>
+        <dt>期望</dt><dd class="expect">遮罩只在觸發 Questions 的那一個螢幕上。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-sc11">
+      <summary><input type="checkbox" /><span class="ttl">解析度改變時重新套用規則，但不關閉遮罩</span><span class="ac">SC-11</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>遮罩開著時改解析度或螢幕排列（<code>adb shell wm size</code> 亦可）。</dd>
+        <dt>期望</dt><dd class="expect">框與 Panel 重新套用尺寸上下限與位置規則；<strong>遮罩不關閉、框選不丟棄</strong>。</dd>
+      </dl></div>
+    </details>
+
+    <div class="sec-head" id="s2"><h2>2. 動框之後</h2><span class="sc">子頁 2 · Story 2</span></div>
+
+    <details class="case" data-id="c-4">
+      <summary><input type="checkbox" /><span class="ttl">動框 → 提示消失、Panel 出現在框右側、預設是非題</span><span class="ac">4</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>移動或縮放框一次。</dd>
+        <dt>期望</dt><dd class="expect">提示列連同它的 ✕ 一起消失；Panel 出現在框<strong>右側</strong>（短版）：6 顆題型膠囊、<strong>預設選中 True or false</strong>、<strong>不顯示設定段</strong>、Capture 可按。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-5b">
+      <summary><input type="checkbox" /><span class="ttl">什麼都不改直接按 Capture，以是非題成立</span><span class="ac">5b</span></summary>
+      <div class="body"><dl>
+        <dt>期望</dt><dd class="expect">不需要先點任何題型，直接 Capture 就以<strong>是非題</strong>建立草稿。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-sc12">
+      <summary><input type="checkbox" /><span class="ttl">框縮到 150px 就停住（且不會靜默取消）</span><span class="ac">SC-12</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>持續縮小框，寬與高分別試。</dd>
+        <dt>期望</dt><dd class="expect">觸及 <strong>150 px</strong> 該方向停止；<strong>另一個方向仍可獨立調整</strong>。</dd>
+        <dt>為什麼要測</dt><dd class="trap">這條 AC 解的是舊的「框可縮到 &lt;2pt 並被 commit → 靜默取消」。縮到極小卻還能按 Capture 就是壞的。</dd>
+      </dl></div>
+    </details>
+
+    <div class="sec-head" id="s3"><h2>3. 設定段</h2><span class="sc">子頁 2 · Story 3</span></div>
+
+    <details class="case" data-id="c-5">
+      <summary><input type="checkbox" /><span class="ttl">選擇題／投票題長出三段設定</span><span class="ac">5</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>在 Panel 上選 Multiple choice，再選 Poll。</dd>
+        <dt>期望</dt><dd class="expect">面板長成長版，出現<strong>三段</strong>：Answer options（預設第一顆）、Number of options（2–6，<strong>預設 2</strong>）、<strong>選項標示 ABC／123（預設 ABC）</strong>。</dd>
+        <dt>順帶檢查</dt><dd>Answer options 的文案<strong>依題型分歧</strong>：選擇題是 Single-select／Multi-select，投票題是 Single-vote／Multi-votes（決策 #10）。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-9">
+      <summary><input type="checkbox" /><span class="ttl">其餘四型沒有設定段</span><span class="ac">決策 #9</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>逐一點 True/False、Audio、Short answer、Sketch。</dd>
+        <dt>期望</dt><dd class="expect">面板維持短版，<strong>不出現任何設定段</strong>。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-sc13">
+      <summary><input type="checkbox" /><span class="ttl">題型來回切換，三段回到預設值（不記憶）</span><span class="ac">SC-13</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>選擇題調成「4 個選項、複選、123」→ 改選是非題 → <strong>再改回選擇題</strong>。</dd>
+        <dt>期望</dt><dd class="expect">三段全部回到預設（<strong>2 個選項、單選、ABC</strong>），不保留上次調整。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-sc3">
+      <summary><input type="checkbox" /><span class="ttl">設定寫入草稿，並在 pre-start 的摘要 chip 上看得到</span><span class="ac">SC-3</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>選擇題設「5 個選項、複選、123」→ Capture。</dd>
+        <dt>期望</dt><dd class="expect">pre-start 的 Options 選項卡是 <strong>5 個</strong>、標號為 <strong>1/2/3/4/5</strong>、摘要 chip 反映複選。</dd>
+        <dt>陷阱</dt><dd class="trap">選項數與標號是兩段不同的設定，要分別確認 —— 只看數量對不代表標號有帶過去。</dd>
+      </dl></div>
+    </details>
+
+    <div class="sec-head" id="s4"><h2>4. 面板位置</h2><span class="sc">子頁 2 · Story 4（純函數 <code>PanelPlacer</code>）</span></div>
+
+    <details class="case" data-id="c-sc7">
+      <summary><input type="checkbox" /><span class="ttl">右側放不下 → Panel 翻到左側，截圖框不位移</span><span class="ac">SC-7</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>把框拖到畫面右緣，直到右側空間小於面板寬 + 24。</dd>
+        <dt>期望</dt><dd class="expect">Panel 翻到左側、間距 24 px；<strong>截圖框本身不動</strong>（讓位的永遠是 Panel）。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-sc25">
+      <summary><input type="checkbox" /><span class="ttl">40px 遲滯：在臨界帶內不來回換邊</span><span class="ac">SC-25</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>接上一條，把框慢慢往回拖。</dd>
+        <dt>期望</dt><dd class="expect">要到右側空間 <strong>&gt; 面板寬 + 24 + 40</strong> 才翻回右側。<strong>在 +24 到 +64 之間維持左側不動</strong>。</dd>
+        <dt>怎麼看</dt><dd class="trap">在臨界點附近來回微調。<strong>面板快速左右跳動就是遲滯沒生效</strong> —— 這正是它要防的。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-sc26">
+      <summary><input type="checkbox" /><span class="ttl">兩側都放不下 → overlay 在框內，維持當前側</span><span class="ac">SC-26 / SC-27</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>把框放大到左右都容不下面板，然後<strong>繼續放更大</strong>。</dd>
+        <dt>期望</dt><dd class="expect">Panel overlay 在框內、<strong>維持它當下所在那一側</strong>；<strong>不因為框變大而換邊</strong>；不自動縮小框。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-sc9">
+      <summary><input type="checkbox" /><span class="ttl">框拖到上／下緣時 Panel 被推回畫面內，Cancel 永遠按得到</span><span class="ac">SC-9</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd><strong>先選擇題讓面板變長版</strong>，再把框拖到畫面最下緣，然後最上緣。</dd>
+        <dt>期望</dt><dd class="expect">Panel 往回推、貼齊畫面邊緣就停住並沿邊滑。<strong>Cancel 與 Capture 永遠完整可見且可按。</strong></dd>
+        <dt>為什麼是重點</dt><dd class="trap">提示消失後 footer 的 Cancel 是<strong>唯一</strong>的退出入口。它被切出畫面 = 老師沒辦法離開。Android 可用高度比 Windows 少，更容易踩到。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-sc8">
+      <summary><input type="checkbox" /><span class="ttl">拖曳過程中 Panel 不動，放手後才過場</span><span class="ac">SC-8</span></summary>
+      <div class="body"><dl>
+        <dt>期望</dt><dd class="expect">拖／縮的<strong>過程中</strong>面板位置固定；<strong>放手後</strong>才以短過場動畫重新定位。</dd>
+        <dt>與 SC-25 的差別</dt><dd>SC-8 防「拖曳中面板跟著跳」，40px 遲滯防「停在臨界點來回換邊」。兩者是不同問題，要分開看。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-sc14">
+      <summary><input type="checkbox" /><span class="ttl">面板由短版長成長版的當下就避讓</span><span class="ac">SC-14</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>把框移到<strong>面板長高後會超出畫面</strong>的位置（靠近下緣），然後才選選擇題。</dd>
+        <dt>期望</dt><dd class="expect">長高的<strong>當下立即</strong>往回推，<strong>不等下一次手勢</strong>。</dd>
+      </dl></div>
+    </details>
+
+    <div class="sec-head" id="s5"><h2>5. 離開遮罩</h2><span class="sc">子頁 2 · Story 5 — <strong>2026-09-01 行為反轉</strong></span></div>
+
+    <details class="case" data-id="c-sc6">
+      <summary><input type="checkbox" /><span class="ttl">提示上的 ✕ ＝ 取消整個截圖流程（不是只關提示）</span><span class="ac">SC-6</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>剛進遮罩、<strong>還沒動框</strong>時按提示列上的 ✕。</dd>
+        <dt>期望</dt><dd class="expect">遮罩<strong>整個關閉</strong>、回到工具列、框選丟棄，<strong>不跳任何確認框</strong>。</dd>
+        <dt>陷阱</dt><dd class="trap"><strong>這是 2026-09-01 反轉的行為。</strong>舊 spec 是「只關掉提示，留在遮罩裡」。若按了 ✕ 還留在遮罩，就是舊行為。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-sc6a">
+      <summary><input type="checkbox" /><span class="ttl">提示消失後沒有 ✕，退出改走 Cancel</span><span class="ac">SC-6a</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>動一次框讓提示消失。</dd>
+        <dt>期望</dt><dd class="expect">畫面上<strong>沒有 ✕ 可按</strong>；退出走 footer 的 Cancel。<strong>任何時刻都恰好有一個可見的退出入口。</strong></dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-sc5">
+      <summary><input type="checkbox" /><span class="ttl">Cancel 直接關閉，不跳確認框</span><span class="ac">SC-5</span></summary>
+      <div class="body"><dl>
+        <dt>期望</dt><dd class="expect">直接關閉遮罩、丟棄框選。<strong>不出現「Close question?」對話框。</strong></dd>
+        <dt>陷阱</dt><dd class="trap">那個確認框在 2026-08-28 <strong>整個作廢</strong>（原 <code>SC-5a</code> 一併廢除），Figma 也已移除。<strong>它出現就是 bug。</strong></dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-sc15">
+      <summary><input type="checkbox" /><span class="ttl">系統返回手勢／返回鍵＝同樣直接關閉</span><span class="ac">SC-15</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>遮罩顯示中的<strong>任何時候</strong>（提示還在時、提示消失後）做系統返回。</dd>
+        <dt>期望</dt><dd class="expect">行為與 Cancel 完全相同：直接關閉、丟棄框選、不跳確認框。</dd>
+        <dt>備註</dt><dd>Android 沒有 Esc，這條在本平台指的就是返回手勢／返回鍵。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-sc16">
+      <summary><input type="checkbox" /><span class="ttl">Capture → 遮罩立即關閉，直接進 pre-start</span><span class="ac">SC-16 / 7</span></summary>
+      <div class="body"><dl>
+        <dt>期望</dt><dd class="expect">遮罩立即關閉，畫面前進到<strong>作答頁 pre-start</strong>。<strong>中間不再有 Setting 頁。</strong></dd>
+        <dt>同時確認</dt><dd class="trap">此刻<strong>不應該有任何上傳或建題的網路請求</strong>。<pre><code>adb logcat | grep -iE "quizzes|resources"</code></pre></dd>
+      </dl></div>
+    </details>
+
+    <div class="sec-head" id="s6"><h2>6. pre-start 版面</h2><span class="sc">子頁 4 · <code>S2-19</code> 只有三處不同</span></div>
+
+    <details class="case" data-id="c-s219">
+      <summary><input type="checkbox" /><span class="ttl">pre-start 與進行中逐項比對，只有三處不同</span><span class="ac">S2-19</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>在 pre-start 截圖，派題後再截一次，兩張並排比對。</dd>
+        <dt>只有這三處可以不同</dt>
+        <dd class="expect"><ol>
+          <li>主要按鈕（Start question ↔ Stop submissions）</li>
+          <li>計時器是否走動</li>
+          <li>右欄是空狀態還是名冊</li>
+        </ol></dd>
+        <dt>必須相同</dt>
+        <dd class="trap">題型摘要 chip、<strong>題目縮圖</strong>、<strong>Options 選項卡</strong>、右欄 Responses 標頭／Refresh／計數、欄位配置、面板位置。<br />
+        <strong>不得為 pre-start 另做版面或隱藏任何既有元件。</strong>早期 POC 的做法（大碼錶取代縮圖、移除 Options）<strong>已作廢</strong>。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-timer">
+      <summary><input type="checkbox" /><span class="ttl">計時器在 pre-start 停在 00:00</span><span class="ac">S2-19</span></summary>
+      <div class="body"><dl>
+        <dt>期望</dt><dd class="expect">計時器在<strong>與進行中相同的位置</strong>顯示 <strong>00:00 且不走動</strong>。票名裡的「碼錶」指的是這個，不是換版面。</dd>
+      </dl></div>
+    </details>
+
+    <div class="sec-head" id="s7"><h2>7. 選班三態</h2><span class="sc">子頁 3 <code>S2-10/11/12</code> · 子頁 4 <code>S2-17/18</code></span></div>
+
+    <details class="case" data-id="c-s212">
+      <summary><input type="checkbox" /><span class="ttl">完全沒有教室 → 兩顆按鈕，不彈任何浮動視窗</span><span class="ac">S2-12 / S2-17</span></summary>
+      <div class="body"><dl>
+        <dt>前提</dt><dd>登入後<strong>不要進任何班級</strong>，直接出題。</dd>
+        <dt>期望</dt><dd class="expect">右欄顯示「<strong>No students yet</strong>／Start a one-time class, or pick one you've already made.」＋ <strong>One-time class</strong> 與 <strong>My classes</strong> 兩顆按鈕；<strong>不出現任何浮動視窗</strong>；Start question 反灰；<strong>不顯示骨架卡</strong>；左欄照常有題目縮圖與 Options。</dd>
+        <dt>為什麼不自動彈</dt><dd>這時老師還有一個系統替他決定不了的選擇（開一次性班級 vs 用既有班級），自動彈任何一個都是替他做決定。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-s211">
+      <summary><input type="checkbox" /><span class="ttl">有教室但 0 學生 → join class 面板自動出現</span><span class="ac">S2-11 / S2-18</span></summary>
+      <div class="body"><dl>
+        <dt>前提</dt><dd>先進一個班級，<strong>不要讓學生加入</strong>，再出題。</dd>
+        <dt>期望</dt><dd class="expect">join class 面板<strong>自動出現</strong>在右側；右欄「<strong>Waiting for students to join…</strong>／Share the class link so your students can join.」，<strong>沒有按鈕</strong>（行動在 join class 面板上）；Start question 反灰。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-s210">
+      <summary><input type="checkbox" /><span class="ttl">有教室且有學生 → 直接名冊，什麼都不彈</span><span class="ac">S2-10</span></summary>
+      <div class="body"><dl>
+        <dt>期望</dt><dd class="expect"><strong>不出現任何浮動視窗</strong>；右欄顯示名冊；Start question <strong>可按</strong>。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-s216">
+      <summary><input type="checkbox" /><span class="ttl">第 1 位學生加入時，join class 面板不自動關閉</span><span class="ac">S2-16</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>停在「有教室 0 學生」，讓一位學生從瀏覽器加入。</dd>
+        <dt>期望</dt><dd class="expect">join class 面板<strong>不自動關閉、位置不動</strong>；右欄由空狀態轉為名冊；Start question 轉為可按。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-s213">
+      <summary><input type="checkbox" /><span class="ttl">按 One-time class → 直接起班，join class 面板出現</span><span class="ac">S2-13</span></summary>
+      <div class="body"><dl>
+        <dt>期望</dt><dd class="expect">起一次性班級，<strong>不經選班卡</strong>；join class 面板出現（班級碼／QR）；右欄轉為「Waiting for students to join…」。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-s214">
+      <summary><input type="checkbox" /><span class="ttl">按 My classes → 選班卡出現；直接關掉會回到空狀態</span><span class="ac">S2-14 / 決策 #12</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>按 My classes 叫出選班卡，<strong>不選班直接關掉</strong>。</dd>
+        <dt>期望</dt><dd class="expect">回到 pre-start 空狀態；<strong>草稿與截圖保留</strong>；<strong>兩顆按鈕仍在</strong>。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-s215">
+      <summary><input type="checkbox" /><span class="ttl">選班 → Enter class 後換成 join class 面板，不自動派題</span><span class="ac">S2-15</span></summary>
+      <div class="body"><dl>
+        <dt>期望</dt><dd class="expect">按鈕轉 spinner、卡片尺寸不變；進班後選班卡<strong>換成</strong> join class 面板；右欄「Waiting for students to join…」；<strong>不自動派題</strong>。</dd>
+      </dl></div>
+    </details>
+
+    <div class="sec-head" id="s8"><h2>8. 派題與結束</h2><span class="sc">子頁 3 <code>S2-1</code>／子頁 4 <code>S2-2</code>／<code>15</code>／<code>S2-20</code></span></div>
+
+    <details class="case" data-id="c-s24">
+      <summary><input type="checkbox" /><span class="ttl">現場 0 學生時 Start question 一律反灰（不論有無教室）</span><span class="ac">S2-4</span></summary>
+      <div class="body"><dl>
+        <dt>期望</dt><dd class="expect">三態裡只要現場人數是 0，Start question 就反灰。<strong>「無教室例外放行」已取消。</strong></dd>
+        <dt>注意判定來源</dt><dd class="trap">是<strong>現場實際在線人數</strong>，不是名冊格子數。帳號教室會為整個名冊建座位，用格子數判定會在 0 人時就放行。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-s21">
+      <summary><input type="checkbox" /><span class="ttl">Start question → loading，期間不可重複點</span><span class="ac">S2-1</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>有學生的狀態下按 Start question，<strong>期間連點數次</strong>。</dd>
+        <dt>期望</dt><dd class="expect">按鈕內 loading、<strong>不可重複點</strong>；依序上傳 → 派送；成功後同一頁轉為進行中。</dd>
+        <dt>同時確認</dt><dd class="trap"><strong>上傳與建題請求應該在這一刻才出現</strong>（Capture 當下不該有）。<pre><code>adb logcat | grep -iE "quizzes|resources"</code></pre></dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-s21fail">
+      <summary><input type="checkbox" /><span class="ttl">派題失敗留在原畫面，草稿完整可重試</span><span class="ac">S2-1</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>按下 Start question 的<strong>瞬間</strong>斷網（<code>adb shell svc wifi disable</code>）。</dd>
+        <dt>期望</dt><dd class="expect">toast 提示；<strong>留在 pre-start</strong>、草稿與截圖完整；恢復網路後<strong>可以直接再按一次</strong>。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-s22">
+      <summary><input type="checkbox" /><span class="ttl">派題完成 → 同一面板原地轉進行中，位置零移動</span><span class="ac">S2-2 / 決策 #10</span></summary>
+      <div class="body"><dl>
+        <dt>期望</dt><dd class="expect">計時器開跑、按鈕變 Stop submissions、右欄轉名冊。<strong>面板位置零移動、不重新掛載、版面零變化。</strong></dd>
+        <dt>怎麼看出重新掛載</dt><dd class="trap">如果面板<strong>閃一下</strong>或位置跳動，就是關掉重開而不是原地轉換。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-s220">
+      <summary><input type="checkbox" /><span class="ttl">從未有學生也能按 Stop submissions</span><span class="ac">15 / S2-20</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>派題後讓學生離線（或一開始就沒人作答），按 Stop submissions。</dd>
+        <dt>期望</dt><dd class="expect"><strong>恆可按</strong>且正常結束收件。不看學生數、不看是否曾有學生、不看有無作答資料。</dd>
+        <dt>為什麼</dt><dd>Stop 是「結束」不是「送出」，擋住只會把老師鎖在他想離開的狀態裡。</dd>
+      </dl></div>
+    </details>
+
+    <div class="sec-head" id="s9"><h2>9. 丟棄草稿</h2><span class="sc">子頁 3 <code>13</code>／<code>S2-21</code></span></div>
+
+    <details class="case" data-id="c-13">
+      <summary><input type="checkbox" /><span class="ttl">pre-start 按 ✕ → 「Discard this question?」，確認後乾淨關窗</span><span class="ac">13</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>pre-start（未派題）按 ✕ → Discard。</dd>
+        <dt>期望</dt><dd class="expect">出現「<strong>Discard this question?</strong>」確認框；確認後關閉面板回工具列。</dd>
+        <dt>關鍵：不可有網路請求</dt>
+        <dd class="trap"><strong>logcat 必須零 quizzes 請求。</strong><pre><code>adb logcat -c &amp;&amp; adb logcat | grep -i quizzes</code></pre>
+        這是曾經壞掉的地方：pre-start 被當成進行中，去 <code>PUT /api/v3/quizzes/</code> 關一個從未建立的題目 → 後端不認 → 錯誤 toast 且<strong>視窗關不掉</strong>。</dd>
+        <dt>再確認</dt><dd>重新出題時<strong>會重新要求截圖權限</strong> → 證明草稿確實被丟棄。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-13cancel">
+      <summary><input type="checkbox" /><span class="ttl">確認框按 Cancel → 留在 pre-start，草稿完整</span><span class="ac">13</span></summary>
+      <div class="body"><dl>
+        <dt>期望</dt><dd class="expect">對話框收起，<strong>留在 pre-start</strong>，題目縮圖與 Options 都在。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-live-close">
+      <summary><input type="checkbox" /><span class="ttl">反向：派題後的 ✕ 仍是「Close question」並正常關窗</span><span class="ac">13 反向</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>派題進入進行中之後按 ✕。</dd>
+        <dt>期望</dt><dd class="expect">文案是「<strong>Close question</strong>」（不是 Discard）；確認後打 <code>PUT .../quizzes/{id}</code> 得到 200，視窗正常關閉。</dd>
+        <dt>為什麼要測</dt><dd class="trap">短路只能吃掉 pre-start。<strong>若把判斷寫成恆真，進行中的關窗就再也不會通知後端</strong>，學生端會留著一題沒人收得回來的題目。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-s221">
+      <summary><input type="checkbox" /><span class="ttl">派送進行中 ✕ 不可用</span><span class="ac">S2-21</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>按下 Start question 後<strong>立刻連拍數張</strong> ✕。</dd>
+        <dt>期望</dt><dd class="expect">派送有結果之前 ✕ 是<strong>灰的且點不動</strong>；有結果後恢復。</dd>
+        <dt>為什麼</dt><dd>這中間關窗會扔掉一份可能正要成功的題目 —— 題目已在後端建立，而關它所需的 id 隨視窗一起消失。</dd>
+      </dl></div>
+    </details>
+
+    <div class="sec-head" id="s10"><h2>10. 缺陷迴歸</h2><span class="sc">這條分支上修過的五個，<a href="defects.html">詳見缺陷紀錄</a></span></div>
+
+    <details class="case" data-id="c-d1">
+      <summary><input type="checkbox" /><span class="ttl">pre-start 無班級時，<strong>不</strong>顯示「請檢查網路」</span><span class="ac">D1</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>登入但不進班 → 出題 → 停在 pre-start 空狀態。</dd>
+        <dt>期望</dt><dd class="expect">畫面上<strong>沒有</strong>「Please check your internet connection and try again.」。</dd>
+        <dt>背景</dt><dd>旗標算的是「網路 AND socket」，而 socket 是進課堂才連 —— 沒有 lesson 時必然為 false，於是畫面同時說「去開一次性班級」和「請檢查網路」。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-d2">
+      <summary><input type="checkbox" /><span class="ttl">無班級但<strong>真的斷網</strong>時，仍要提示</span><span class="ac">D2</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>停在 pre-start 空狀態 → <code>adb shell svc wifi disable</code>。</dd>
+        <dt>期望</dt><dd class="expect">網路提示<strong>出現</strong>。恢復網路後消失。</dd>
+        <dt>為什麼兩條都要測</dt><dd class="trap">D1 的第一版修法把 <code>net</code> 連同 <code>sock</code> 一起短路掉了 —— 偽陽性沒了，但<strong>真的斷網也不提示</strong>。<strong>只驗 D1 會讓這個回歸溜過去。</strong></dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-d3">
+      <summary><input type="checkbox" /><span class="ttl">End class 之後，再出題仍拿得到兩顆按鈕</span><span class="ac">D3</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt>
+        <dd><ol>
+          <li>登入 → 開 Quiz Tool</li>
+          <li>開截圖題</li>
+          <li>加入課程</li>
+          <li><strong>End class</strong></li>
+          <li><strong>再開一次截圖題</strong></li>
+        </ol></dd>
+        <dt>期望</dt><dd class="expect">右欄是「No students yet」＋ <strong>One-time class / My classes 兩顆按鈕</strong>。</dd>
+        <dt>壞掉時的樣子</dt><dd class="trap">顯示「Waiting for students to join…」而且<strong>整個 session 都回不來</strong> —— 判定同時依賴教室狀態（flow）與視窗是否存在（非 flow），而 teardown 先清 lessonId、後收視窗，唯一那次發射看到的是舊的視窗狀態。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-d5">
+      <summary><input type="checkbox" /><span class="ttl">出完題關窗後，投影指示器熄滅</span><span class="ac">D5</span></summary>
+      <div class="body"><dl>
+        <dt>前提</dt>
+        <dd class="trap"><strong>只在這條路徑上會發生</strong>：<code>!useVSApi &amp;&amp; MVB-bound &amp;&amp; Android 14+</code>。先確認裝置走哪條：
+        <pre><code>adb logcat -c &amp;&amp; adb logcat | grep -E "useVSApi|usePersistentSession"</code></pre>
+        <code>useVSApi = true</code>（ViewSonic 機器）就<strong>驗不到這條，請跳過</strong>，不要當成通過。</dd>
+        <dt>操作</dt><dd>出一題 → 派題 → Stop submissions → 關閉作答窗。</dd>
+        <dt>期望</dt><dd class="expect">狀態列的<strong>投放／錄製指示器消失</strong>。</dd>
+        <dt>壞掉時的樣子</dt><dd>指示器一直亮到 app 被關閉 —— MediaProjection、VirtualDisplay 與約 100MB buffer 都還活著。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-d5b">
+      <summary><input type="checkbox" /><span class="ttl">丟棄草稿也要釋放（不只派題後）</span><span class="ac">D5 反向</span></summary>
+      <div class="body"><dl>
+        <dt>操作</dt><dd>出一題 → <strong>pre-start 直接 Discard</strong>（不派題）。</dd>
+        <dt>期望</dt><dd class="expect">投影指示器同樣熄滅。兩個出口（丟棄、作答結束）都綁在同一條規則上。</dd>
+      </dl></div>
+    </details>
+
+    <div class="sec-head" id="s11"><h2>11. 六題型掃描</h2><span class="sc">每一型都要走一次 —— 六個作答窗是六份獨立實作</span></div>
+
+    <details class="case" data-id="c-t-tf">
+      <summary><input type="checkbox" /><span class="ttl">True / False</span><span class="ac">全流程</span></summary>
+      <div class="body"><dl>
+        <dt>走一遍</dt><dd>Capture → pre-start（無 Setting 頁）→ ✕ 丟棄確認 → 重來 → Start question → 原地轉進行中 → Stop submissions。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-t-mc">
+      <summary><input type="checkbox" /><span class="ttl">Multiple choice（含三段設定帶入）</span><span class="ac">全流程 + SC-3</span></summary>
+      <div class="body"><dl>
+        <dt>額外確認</dt><dd class="expect">遮罩上設的選項數、單／複選、ABC／123 都要正確反映在 pre-start 的 Options 卡與摘要 chip 上。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-t-poll">
+      <summary><input type="checkbox" /><span class="ttl">Poll（文案應為 Single-vote／Multi-votes）</span><span class="ac">全流程 + 決策 #10</span></summary>
+      <div class="body"><dl>
+        <dt>額外確認</dt><dd class="trap">Answer options 的文案<strong>不可</strong>與選擇題共用 —— 共用會讓投票題讀起來像有標準答案。</dd>
+      </dl></div>
+    </details>
+
+    <details class="case" data-id="c-t-sa">
+      <summary><input type="checkbox" /><span class="ttl">Short answer</span><span class="ac">全流程</span></summary>
+      <div class="body"><dl><dt>走一遍</dt><dd>同 True/False。</dd></dl></div>
+    </details>
+
+    <details class="case" data-id="c-t-audio">
+      <summary><input type="checkbox" /><span class="ttl">Audio</span><span class="ac">全流程</span></summary>
+      <div class="body"><dl><dt>走一遍</dt><dd>同 True/False。</dd></dl></div>
+    </details>
+
+    <details class="case" data-id="c-t-sketch">
+      <summary><input type="checkbox" /><span class="ttl">Sketch response（<strong>單頁</strong>，走另一條狀態機）</span><span class="ac">全流程 + 決策 #11</span></summary>
+      <div class="body"><dl>
+        <dt>額外確認</dt>
+        <dd class="expect">同樣<strong>直接進 pre-start</strong>（不再經過它的編輯窗）；出來的是<strong>單頁</strong>題目。</dd>
+        <dt>不該有的</dt>
+        <dd class="trap"><strong>沒有 add more question 入口</strong>（決策 #11：暫時不做，遮罩是唯一入口）。這是目前的產品決策，不是缺陷。</dd>
+      </dl></div>
+    </details>
+
+    <p class="note" style="margin-top:26px">
+      驗證中發現異常時：先確認是<strong>行為錯</strong>還是<strong>spec 已改</strong>——
+      子頁 2 在 2026-08-27／08-28／09-01 改過四輪，其中 <code>SC-6</code>（✕ 的語意）與
+      Cancel 確認框是<strong>行為反轉</strong>而非補充。本機 clone 見
+      <code>confluence/myViewboar/</code>。
+    </p>
+  </main>
+</div>
+
+<script>
+(function () {
+  var KEY = 'qtfv2-verify-v1';
+  var cases = Array.prototype.slice.call(document.querySelectorAll('.case'));
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { state = {}; }
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* 私密視窗等：忽略 */ }
+  }
+  function paint() {
+    var done = 0;
+    cases.forEach(function (c) {
+      var on = !!state[c.dataset.id];
+      c.dataset.done = on ? '1' : '0';
+      c.querySelector('input[type=checkbox]').checked = on;
+      if (on) done++;
+    });
+    document.getElementById('done').textContent = done;
+    document.getElementById('total').textContent = cases.length;
+    document.getElementById('bar').style.width = cases.length ? (done / cases.length * 100) + '%' : '0';
+    applyFilter();
+  }
+  var filter = 'all';
+  function applyFilter() {
+    cases.forEach(function (c) {
+      var on = c.dataset.done === '1';
+      c.hidden = (filter === 'todo' && on) || (filter === 'done' && !on);
+    });
+  }
+
+  cases.forEach(function (c) {
+    var box = c.querySelector('input[type=checkbox]');
+    // 勾選不要順便展開／收合那張卡
+    box.addEventListener('click', function (e) { e.stopPropagation(); });
+    box.addEventListener('change', function () {
+      state[c.dataset.id] = box.checked;
+      if (!box.checked) delete state[c.dataset.id];
+      save(); paint();
+    });
+  });
+
+  document.querySelectorAll('.filters button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      filter = b.dataset.f;
+      document.querySelectorAll('.filters button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      applyFilter();
+    });
+  });
+  document.getElementById('expand').addEventListener('click', function () {
+    cases.forEach(function (c) { c.open = true; });
+  });
+  document.getElementById('collapse').addEventListener('click', function () {
+    cases.forEach(function (c) { c.open = false; });
+  });
+  document.getElementById('reset').addEventListener('click', function () {
+    var n = Object.keys(state).length;
+    if (!n) { alert('目前沒有任何勾選。'); return; }
+    if (!confirm('清空全部 ' + n + ' 項勾選？此動作無法復原。')) return;
+    state = {};
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    paint();
+  });
+
+  paint();
+})();
+</script>
+</body>
+</html>
