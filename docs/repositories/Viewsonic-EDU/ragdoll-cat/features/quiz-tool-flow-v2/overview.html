@@ -452,6 +452,38 @@ flowchart LR
       <tbody>
         <tr>
           <td><span class="badge badge-new">落差</span></td>
+          <td><strong>pre-start 的 One-time class 按下去沒有任何回饋</strong>（<code>S2-13</code>）</td>
+          <td>
+            起班 API 往返期間，按鈕<strong>功能上鎖住了、外觀完全沒變</strong>：
+            <code>MvbPendingClassEmptyStateView.setActionsEnabled(false)</code> 只設
+            <code>isEnabled</code>，而那兩顆的 <code>bg_neutral0_radius400_line_neutral300_border200</code>
+            與 <code>@color/neutral_900</code> <strong>都沒有 <code>state_enabled</code> 分支</strong>，
+            也沒有任何 spinner。老師按下去畫面靜止，不知道有沒有反應。
+            <br /><br />
+            <strong>開發者已記下這是缺口</strong>（<code>docs/testing-strategy/features/pre-start-empty-state.md</code>：
+            「<em>沒有視覺差、也沒有 golden……Figma 沒有 disabled 變體的稿</em>」），
+            判斷是「設計稿沒給，所以做不出來」。
+            <br /><br />
+            <strong>但 spec 其實有說法。</strong> <code>S2-13</code> 的 Then 欄雖然只寫「起班、join class 面板出現」，
+            同一份 spec 另有兩處：
+            <ul>
+              <li><strong>決策 #9</strong>：「選班等待表達 → <strong>按鈕內 spinner、卡片不變形</strong>」——
+                  理由是「等待狀態內嵌在觸發它的按鈕上，是最不打擾的表達」。<strong>這是通則，沒限定只在選班卡上。</strong></li>
+              <li>該 story 的狀態覆蓋明列 <code>Loading 按鈕內 spinner</code></li>
+              <li><code>AC 9</code> 對<strong>選班卡上</strong>的 Enter class／Start now 是明文要求 spinner</li>
+            </ul>
+            所以同一個動作（起一次性班級）在兩個入口有兩種表達 —— 選班卡的 Start now 有 spinner，
+            pre-start 的 One-time class 什麼都沒有。而且這裡的等待可能更長（等 socket → 建 room →
+            <code>runCreateLesson</code>）。
+            <br /><br />
+            <strong>Jay 的看法</strong>：應該要有 loading 或 disable 的視覺。
+            「Figma 沒有 disabled 變體」是該<strong>回頭請設計補稿</strong>的理由，不是不做的理由 ——
+            spec 自己就有先例（決策 #32：「刻意與 Figma 分歧，需回頭請設計改稿」）。
+            <strong>不嚴重（不會壞，只是無回饋），待討論。</strong>
+          </td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-new">落差</span></td>
           <td><strong>拖曳中面板該「不動」還是「消失」</strong>（<code>SC-8</code>）</td>
           <td>
             <strong>實作與 spec 不一致，而且測試釘住的是實作那一邊。</strong>

@@ -399,6 +399,16 @@ adb install -r ../build/app/outputs/apk/edla/debug/app-edla-debug.apk</code></pr
       <summary><input type="checkbox" /><span class="ttl">按 One-time class → 直接起班，join class 面板出現</span><span class="ac">S2-13</span></summary>
       <div class="body"><dl>
         <dt>期望</dt><dd class="expect">起一次性班級，<strong>不經選班卡</strong>；join class 面板出現（班級碼／QR）；右欄轉為「Waiting for students to join…」。</dd>
+        <dt>⚠️ 已知：按下之後沒有任何回饋</dt>
+        <dd class="trap">
+          API 往返期間按鈕<strong>功能上鎖住了、外觀完全沒變</strong>（<code>setActionsEnabled</code>
+          只設 <code>isEnabled</code>，而背景與文字色都沒有 <code>state_enabled</code> 分支，也沒有 spinner）。
+          <strong>畫面靜止不代表沒反應，別誤判成卡死。</strong>網路慢時特別明顯。
+          待討論，見 <a href="overview.html#open">總覽 §8</a>。
+        </dd>
+        <dt>順帶驗一件真的會壞的事</dt>
+        <dd class="expect"><strong>連點兩次不可以建出兩個班級。</strong>
+          防重入擋在 listener 裡而不是靠 <code>isEnabled</code>（後者擋不住 <code>performClick()</code>）。</dd>
       </dl></div>
     </details>
 
