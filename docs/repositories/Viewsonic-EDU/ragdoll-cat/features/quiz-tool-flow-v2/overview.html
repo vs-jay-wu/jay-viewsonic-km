@@ -11,6 +11,7 @@
   <nav class="toc" aria-label="目錄">
     <h2>目錄</h2>
     <ul>
+      <li><a href="#asof">📌 文件基準</a></li>
       <li><a href="#tldr">0. 一句話</a></li>
       <li><a href="#scale">1. 規模與參與者</a></li>
       <li><a href="#flow">2. 流程：改版前後</a>
@@ -44,6 +45,33 @@
     <div class="doc-nav">
       <a href="overview.html" class="active">📘 總覽 (overview)</a>
       <a href="defects.html">🐛 缺陷紀錄 (defects)</a>
+    </div>
+
+
+    <div class="callout" id="asof">
+      <strong>📌 這份文件的基準</strong>
+      <table style="margin:8px 0 0">
+        <tbody>
+          <tr><th style="width:150px">分支 tip</th>
+              <td><code>004c7300</code> — <code>fix[VSFT-10067]: release the capture session at the window a capture now opens</code>（2026-09-03 09:12）</td></tr>
+          <tr><th>基準點</th><td><code>a9438387</code>（＝ 撰寫當下的 <code>origin/develop</code> tip）</td></tr>
+          <tr><th>當時規模</th><td>194 commits · 417 檔 · +29,320 −10,618</td></tr>
+          <tr><th>撰寫日</th><td>2026-09-03</td></tr>
+        </tbody>
+      </table>
+      <p style="margin:10px 0 0">
+        <strong>檢查這份文件落後多少：</strong>
+      </p>
+      <pre style="margin:6px 0"><code>git fetch origin
+git log --oneline 004c7300..origin/feature/quiz-tool-flow-v2   # 之後新增的 commit
+git rev-list --count 004c7300..origin/feature/quiz-tool-flow-v2</code></pre>
+      <p style="margin:10px 0 0">
+        ⚠️ <strong>這條分支被 force-push 過。</strong>若上面的指令噴
+        <code>unknown revision</code>，代表 <code>004c7300</code> 已被 rebase 掉，
+        歷史整條重寫 —— 那時無法用 commit 範圍比對，改看
+        <code>git log --oneline --since=2026-09-03 origin/feature/quiz-tool-flow-v2</code>
+        並重新核對本文的 §1 規模數字。
+      </p>
     </div>
 
     <div class="callout warn">

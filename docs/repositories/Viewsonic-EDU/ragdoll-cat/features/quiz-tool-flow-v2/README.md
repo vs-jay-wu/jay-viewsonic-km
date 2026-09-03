@@ -27,9 +27,26 @@ Lydia、Jacky、Jay 三人共同開發與 review，**尚未合併回 develop**�
 `defects.html` 每則都寫了「**為什麼沒被擋下來**」—— 每一個缺陷都通過了編譯、
 通過了當時的測試、通過了至少一次 review 才留下來，那部分才是後來的人用得上的。
 
-## 現況（2026-09-03）
+## 文件基準
 
-- 194 commits、417 檔、+29,320 −10,618
+| | |
+|---|---|
+| 分支 tip | `004c7300` — `fix[VSFT-10067]: release the capture session at the window a capture now opens`（2026-09-03 09:12） |
+| 基準點 | `a9438387`（撰寫當下的 `origin/develop` tip） |
+| 當時規模 | 194 commits · 417 檔 · +29,320 −10,618 |
+
+檢查落後多少：
+
+```bash
+git fetch origin
+git log --oneline 004c7300..origin/feature/quiz-tool-flow-v2
+```
+
+> ⚠️ 這條分支**被 force-push 過**。若上面噴 `unknown revision`，代表 `004c7300`
+> 已被 rebase 掉、歷史整條重寫，改用 `--since=2026-09-03` 並重新核對 overview §1 的規模數字。
+
+## 現況（截至上述基準）
+
 - 18 支 PR，17 merged、1 open（#1144 繪圖題編輯窗刪除）
 - **CI gate 從未在這條分支跑過** —— `ci.yml` 只涵蓋 `develop` 與 `release/**`
 - Windows 線的對應票（VSFT-10064 / 10066 / 10068）已 STAGE READY，可作行為對照
