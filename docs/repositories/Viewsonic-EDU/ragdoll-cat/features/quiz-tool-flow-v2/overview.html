@@ -460,9 +460,13 @@ flowchart LR
             與 <code>@color/neutral_900</code> <strong>都沒有 <code>state_enabled</code> 分支</strong>，
             也沒有任何 spinner。老師按下去畫面靜止，不知道有沒有反應。
             <br /><br />
-            <strong>開發者已記下這是缺口</strong>（<code>docs/testing-strategy/features/pre-start-empty-state.md</code>：
-            「<em>沒有視覺差、也沒有 golden……Figma 沒有 disabled 變體的稿</em>」），
-            判斷是「設計稿沒給，所以做不出來」。
+            <strong>這個缺口已經被記在 repo 裡</strong>（Lydia，<code>7cf8da23d</code>，2026-08-31，
+            <code>docs/testing-strategy/features/pre-start-empty-state.md</code> 的 Gaps 節），
+            而且<strong>兩條路都列了</strong>：「Figma 沒有 disabled 變體的稿；
+            <em>要嘛補 <code>state_enabled="false"</code> selector + 一張 golden，要嘛請設計補稿</em>」——
+            也就是<strong>知道缺、等人決定走哪條</strong>，不是判斷不該做。
+            同一節還記了另一個缺口：「連點兩次只建一次班」<strong>目前只在 mock 上驗過</strong>，
+            缺 device androidTest。
             <br /><br />
             <strong>但 spec 其實有說法。</strong> <code>S2-13</code> 的 Then 欄雖然只寫「起班、join class 面板出現」，
             同一份 spec 另有兩處：
