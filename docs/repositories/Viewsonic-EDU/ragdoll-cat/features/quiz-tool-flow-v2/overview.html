@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>Quiz Tool 啟動流程改版 — feature branch 全覽</title>
+<link rel="stylesheet" href="assets/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#tldr">0. 一句話</a></li>
+      <li><a href="#scale">1. 規模與參與者</a></li>
+      <li><a href="#flow">2. 流程：改版前後</a>
+        <ul>
+          <li><a href="#flow-before" class="sub">2.1 develop（已上線）</a></li>
+          <li><a href="#flow-after" class="sub">2.2 本分支</a></li>
+        </ul>
+      </li>
+      <li><a href="#tickets">3. 六張票的分工</a></li>
+      <li><a href="#arch">4. 架構改動</a>
+        <ul>
+          <li><a href="#arch-new" class="sub">4.1 新增</a></li>
+          <li><a href="#arch-gone" class="sub">4.2 移除</a></li>
+        </ul>
+      </li>
+      <li><a href="#prs">5. PR 一覽</a></li>
+      <li><a href="#defects">6. Review 抓到的缺陷</a></li>
+      <li><a href="#pattern">7. 一再重演的形狀</a></li>
+      <li><a href="#open">8. 待決與已知缺口</a></li>
+      <li><a href="#ops">9. 在這條分支上工作</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Quiz Tool 啟動流程改版 <span class="badge badge-warn">feature/quiz-tool-flow-v2 · 未合併</span></h1>
+    <div class="meta">
+      ragdoll-cat（ClassSwift Android）&middot; 2026-08-20 → 2026-09-03（持續中）&middot;
+      194 commits / 417 檔 / +29,320 −10,618 &middot;
+      對應資料夾 <code>docs/repositories/Viewsonic-EDU/ragdoll-cat/features/quiz-tool-flow-v2/</code>
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html" class="active">📘 總覽 (overview)</a>
+      <a href="defects.html">🐛 缺陷紀錄 (defects)</a>
+    </div>
+
+    <div class="callout warn">
+      <strong>這份文件不分「誰做的」。</strong> Lydia、Jacky、Jay 三人在同一條分支上共同 review 與修復，
+      多數缺陷是「A 改了流程、B 的模組在它底下失效、C 在 review 抓到」的形式。
+      記錄的是<strong>缺陷的形狀與修法</strong>，不是責任歸屬。
+    </div>
+
+    <h2 id="tldr">0. 一句話</h2>
+    <p>
+      <strong>出題流程從「截圖 → Setting 頁 → 派題」改成「截圖（含設定）→ pre-start 作答窗 → Start question 才派題」。</strong>
+      題型與選項的設定搬進截圖遮罩上的 Question Panel，六個 MVB Setting 頁全部消失；
+      作答窗往前長出一個「還沒開始」的 pre-start 狀態，成為上傳與派送的唯一觸發點。
+    </p>
+
+    <h2 id="scale">1. 規模與參與者</h2>
+    <table>
+      <thead><tr><th>項目</th><th>值</th></tr></thead>
+      <tbody>
+        <tr><td>基準</td><td><code>origin/develop</code>（已上線的版本）</td></tr>
+        <tr><td>commits</td><td>194</td></tr>
+        <tr><td>檔案 / 行數</td><td>417 檔，+29,320 −10,618</td></tr>
+        <tr><td>期間</td><td>2026-08-20 → 2026-09-03（持續中）</td></tr>
+        <tr><td>作者</td><td>Lydia 119 · Jacky 55 · Jay 20</td></tr>
+        <tr><td>PR</td><td>18 支（17 merged、1 open）</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="flow">2. 流程：改版前後</h2>
+
+    <h3 id="flow-before">2.1 develop（已上線）</h3>
+    <pre class="mermaid">
+flowchart LR
+  A[mVB 題型選單] --> B[StartQuiz IPC<br/>帶 quiz_type]
+  B --> C[截圖遮罩<br/>只框選]
+  C --> D[Setting 頁<br/>Mvb*EditWindow<br/>選項設定 + 上傳]
+  D --> E[派題]
+  E --> F[作答窗]
+  style D fill:#fee2e2,stroke:#dc2626
+    </pre>
+    <p>設定與上傳都在 Setting 頁；截圖完成即上傳，Start question 直接派題。</p>
+
+    <h3 id="flow-after">2.2 本分支</h3>
+    <pre class="mermaid">
+flowchart LR
+  A[mVB Questions 鍵<br/>不再帶題型] --> B[截圖遮罩<br/>+ Question Panel<br/>題型 / 選項 / ABC-123]
+  B --> C[Capture]
+  C --> D[作答窗 pre-start<br/>草稿成形，不上傳]
+  D -->|Start question| E[上傳 → 建題 → 派送]
+  E --> F[同一視窗原地轉進行中]
+  style B fill:#dbeafe,stroke:#2563eb
+  style D fill:#dbeafe,stroke:#2563eb
+    </pre>
+    <ul>
+      <li><strong>Setting 頁整層消失</strong>（六個題型）—— 設定改在遮罩上做完。</li>
+      <li><strong>pre-start</strong>：版面與進行中完全一致，只有三處不同（主要按鈕、計時器是否走動、右欄空狀態或名冊）。</li>
+      <li><strong>上傳延後</strong>：capture 只寄放截圖，Start question 才上傳建題。</li>
+      <li><strong>沒有班級也走得到 pre-start</strong>，右欄給「One-time class / My classes」兩顆按鈕。</li>
+    </ul>
+
+    <h2 id="tickets">3. 六張票的分工</h2>
+    <table>
+      <thead><tr><th>票</th><th>範圍</th><th>commits</th><th>狀態</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10065">VSFT-10065</a></td>
+          <td>截圖遮罩改版：預置框、Question Panel、設定移入、面板避讓</td>
+          <td>88</td><td>進行中</td>
+        </tr>
+        <tr>
+          <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10069">VSFT-10069</a></td>
+          <td>pre-start 選班空狀態三態、取得班級的兩顆按鈕、失敗態</td>
+          <td>35</td><td>PR MERGED</td>
+        </tr>
+        <tr>
+          <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10047">VSFT-10047</a></td>
+          <td>啟動狀態機：自動開啟、toggle 三態、失敗與逾時、背景預啟動</td>
+          <td>26</td><td>進行中</td>
+        </tr>
+        <tr>
+          <td><a href="https://viewsonic-vsi.atlassian.net/browse/VSFT-10067">VSFT-10067</a></td>
+          <td>pre-start 狀態本身：Setting 頁移除、碼錶、Start disable 收斂、✕ 丟棄</td>
+          <td>14</td><td>進行中</td>
+        </tr>
+        <tr><td>NO-TICKET</td><td>review 修正、跨票接線、rebase 調和</td><td>26</td><td>—</td></tr>
+        <tr>
+          <td colspan="2">VSFT-10049 / 10108 / 10009 / 10006（各 1–2）</td>
+          <td>4</td><td>多數 IN CODE REVIEW</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="note">
+      Windows 線的對應票（VSFT-10064 / 10066 / 10068）皆已 <strong>STAGE READY</strong>，
+      可作為行為對照 —— 兩平台的 AC 同源（spec 子頁 2/3/4）。
+    </p>
+
+    <h2 id="arch">4. 架構改動</h2>
+
+    <h3 id="arch-new">4.1 新增（42 個 main 類別）</h3>
+    <table>
+      <thead><tr><th>群組</th><th>類別</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>截圖遮罩</strong></td>
+          <td><code>MvbQuizMaskWindow</code>、<code>MvbQuizMaskSelectionView</code>／<code>Animator</code>、
+              <code>MvbQuestionPanelWindow</code>／<code>Widget</code>、<code>CSChipView</code>、
+              <code>QuestionPanelForm</code>／<code>Selection</code></td>
+          <td>框選 + 題型面板，取代舊的 <code>MvbCropImageWindow</code></td>
+        </tr>
+        <tr>
+          <td><strong>面板定位</strong></td>
+          <td><code>PanelPlacer</code>、<code>PanelScreenPosition</code>、
+              <code>BesideAnchorWindowPlacement</code>、<code>SideBySideWindowPositioner</code></td>
+          <td>左右避讓 + 40px 遲滯 + 上下夾制（純函數，可單元測）</td>
+        </tr>
+        <tr>
+          <td><strong>pre-start</strong></td>
+          <td><code>MvbPreStartUiHelper</code>、<code>MvbStartQuestionGate</code>、
+              <code>MvbStartWindowReloader</code>、<code>MvbQuizPendingDispatchQueue</code></td>
+          <td>六個作答窗共用的 pre-start 決策與丟棄路徑</td>
+        </tr>
+        <tr>
+          <td><strong>選班狀態</strong></td>
+          <td><code>PendingSelectClassState</code>、<code>StudentPresenceState</code>、
+              <code>TeacherInClassEvaluator</code>、<code>ClassListErrorState</code>、
+              <code>PendingClassEmptyStateResolver</code>、<code>MvbPendingClassEmptyStateView</code></td>
+          <td>「有沒有班／有沒有學生」的單一真相來源與三態判定</td>
+        </tr>
+        <tr>
+          <td><strong>啟動鏈</strong></td>
+          <td><code>MvbActivationCoordinator</code>、<code>MvbActivationLoginDriver</code>、
+              <code>MvbActivationStateStore</code>、<code>MvbIdentitySwitchTeardown</code>、
+              <code>MvbActivationStatusWindow</code>／<code>Model</code>、<code>ClassSwiftServicePromoter</code>、
+              <code>ForegroundPromotionOutcome</code></td>
+          <td>背景預啟動、狀態卡全面移交 CS、身分切換清理</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 id="arch-gone">4.2 移除（19 個 main 類別）</h3>
+    <table>
+      <thead><tr><th>群組</th><th>類別</th><th>為什麼</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>六個 MVB Setting 頁</td>
+          <td><code>Mvb{TrueFalse,MultipleChoice,PollQuiz,ShortAnswer,AudioQuiz}EditWindow</code>
+              ＋（#1144 進行中）<code>MvbSketchResponseEditWindow</code></td>
+          <td>capture 直達 pre-start，六型全部不再經過</td>
+        </tr>
+        <tr>
+          <td>設定面板</td>
+          <td><code>MvbOptionPanel</code>、<code>MvbOptionPanelMode</code></td>
+          <td>唯一的兩個 host layout 隨編輯窗刪除；設定已由遮罩的 question panel 接手</td>
+        </tr>
+        <tr>
+          <td>舊截圖窗</td>
+          <td><code>MvbCropImageWindow</code></td>
+          <td>由 <code>MvbQuizMaskWindow</code> 取代（Capture 鈕現在只在 panel 上）</td>
+        </tr>
+        <tr>
+          <td>啟動 Fragment 群</td>
+          <td><code>MvbEntryActivity</code>、<code>MvbActivateFragment</code>、
+              <code>MvbNoNetworkFragment</code>、<code>Mvb*LoginApiErrorFragment</code> 等 8 個</td>
+          <td>啟動狀態卡改由 CS 的 overlay 視窗承擔（VSFT-10047）</td>
+        </tr>
+        <tr>
+          <td>班級維護對話框</td>
+          <td><code>MvbDeleteClassDialogWindow</code>、<code>MvbRenameClassDialogWindow</code>、
+              <code>RenameClassNameValidator</code></td>
+          <td>班級維護一律回 Hub（VSFT-10006／10009）</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="prs">5. PR 一覽</h2>
+    <table>
+      <thead><tr><th>#</th><th>票</th><th>內容</th><th>狀態</th></tr></thead>
+      <tbody>
+        <tr><td>1126</td><td>10065</td><td>搬入選取框元件並改互動模型 (1)</td><td>merged</td></tr>
+        <tr><td>1127</td><td>10067</td><td>Start question 依現場學生數反灰</td><td>merged</td></tr>
+        <tr><td>1128</td><td>10067</td><td>pre-start：capture 後不派題，Start question 成唯一觸發點</td><td>merged</td></tr>
+        <tr><td>1129</td><td>10006/10009</td><td>選班畫面對齊 Hub — 移除改名／刪除／建班入口</td><td>merged</td></tr>
+        <tr><td>1130</td><td>10069</td><td>pre-start 選班空狀態三態與取得班級行動 (1)</td><td>merged</td></tr>
+        <tr><td>1132</td><td>10065</td><td>Question Panel 本體與避讓狀態機 (2+3)</td><td>merged</td></tr>
+        <tr><td>1133</td><td>10065</td><td>遮罩與 Panel 接上 MVB 截圖路徑 (4)</td><td>merged</td></tr>
+        <tr><td>1134</td><td>10067</td><td>pre-start ✕ 丟棄草稿 (13)、派送中鎖 ✕ (S2-21)</td><td>merged</td></tr>
+        <tr><td>1135</td><td>10065</td><td><strong>截圖目的地改接作答窗 pre-start (5+8)</strong></td><td>merged</td></tr>
+        <tr><td>1136</td><td>10108</td><td>Open Hub 落在 My Class（走 Hub deep-link）</td><td>merged</td></tr>
+        <tr><td>1137</td><td>10065</td><td>pre-start 沒有班級時不要謊報離線</td><td>merged</td></tr>
+        <tr><td>1139</td><td>10069</td><td>選班卡的 S2-30 失敗態與三條出口</td><td>merged</td></tr>
+        <tr><td>1140</td><td>10065</td><td>沒有班級時仍要回報真正的斷線（接 #1137 review）</td><td>merged</td></tr>
+        <tr><td>1141</td><td>10069</td><td>End class 後 pre-start 拿不到取得班級的兩顆按鈕</td><td>merged</td></tr>
+        <tr><td>1142</td><td>10067</td><td>移除 capture 路徑已到不了的五個 MVB 編輯窗</td><td>merged</td></tr>
+        <tr><td>1143</td><td>10065</td><td><strong>繪圖題改走 pre-start 作答窗 (9)</strong></td><td>merged</td></tr>
+        <tr><td>1144</td><td>10067</td><td>刪掉最後一個 Setting 頁（繪圖題編輯窗）</td><td><strong>open</strong></td></tr>
+        <tr><td>1145</td><td>10067</td><td>capture session 改由作答窗釋放（接 #1142 review）</td><td>merged</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="defects">6. Review 抓到的缺陷</h2>
+    <p>
+      詳見 <a href="defects.html">缺陷紀錄</a>。這裡只列<strong>使用者可見</strong>的五個，
+      它們有一個共同形狀，見下一節。
+    </p>
+    <table>
+      <thead><tr><th>症狀</th><th>根因</th><th>修在</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>pre-start 沒有班級時謊報「請檢查網路」</td>
+          <td>旗標算的是「網路 AND socket」，而 socket 是進課堂才連</td>
+          <td>#1137 → #1140</td>
+        </tr>
+        <tr>
+          <td>沒有班級時<strong>真的斷網</strong>反而不提示</td>
+          <td>上一個修法把 <code>net</code> 一起短路掉了</td>
+          <td>#1140</td>
+        </tr>
+        <tr>
+          <td>End class 之後拿不到取得班級的兩顆按鈕（整個 session）</td>
+          <td>判定同時依賴 flow 與「視窗是否存在」，後者不是 flow</td>
+          <td>#1141</td>
+        </tr>
+        <tr>
+          <td>pre-start ✕ 關不掉視窗、跳錯誤 toast</td>
+          <td><code>if/else</code> 把新的 <code>PRE_START</code> 當成進行中，去關一個從未建立的題目</td>
+          <td>#1134</td>
+        </tr>
+        <tr>
+          <td>投影指示器不熄、MediaProjection 常駐（~100MB）</td>
+          <td>釋放規則綁在編輯窗 tag，而 capture 已改落在作答窗</td>
+          <td>#1145</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="pattern">7. 一再重演的形狀</h2>
+    <div class="callout">
+      <strong>「模組沒被改，但它依賴的前提被改了。」</strong>
+      這條分支上使用者可見的缺陷，多數不是誰寫錯，而是<strong>流程從某個模組底下換掉，而型別系統對此沒有意見</strong>。
+    </div>
+    <table>
+      <thead><tr><th>案例</th><th>沒被改的模組</th><th>被抽掉的前提</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>capture session 洩漏</td>
+          <td><code>CaptureSessionReleasePolicy</code>（自 VSFT-9013 起一行沒動）</td>
+          <td>「截圖後開的是編輯窗」</td>
+        </tr>
+        <tr>
+          <td>End class 後空狀態消失</td>
+          <td><code>PendingSelectClassState</code></td>
+          <td>「教室狀態發射時，視窗狀態已經是最終值」</td>
+        </tr>
+        <tr>
+          <td>pre-start ✕ 關不掉</td>
+          <td><code>showCloseConfirmDialog</code> 的 <code>if/else</code></td>
+          <td>「<code>QuizState</code> 只有結果頁與進行中兩種」</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>三個共通點：</strong></p>
+    <ol>
+      <li><strong>編譯器不會擋。</strong> <code>if/else</code> 不像 <code>when</code> 會因新列舉值而失效；
+          tag 集合寫死常數不會因路由改變而失效。</li>
+      <li><strong>失效是無聲的。</strong> 沒有 crash、沒有 log，只是某個狀態永遠停在錯的值。</li>
+      <li><strong>既有測試擋不住</strong>，因為測試往往把那個帶著隱性依賴的判斷式 stub 掉了
+          （<code>PendingSelectClassStateTest</code> 注入 <code>isTeacherInClass = String::isNotEmpty</code>，
+          正好蓋掉真正的依賴）。</li>
+    </ol>
+    <p class="note">
+      實務上的解法都一樣：<strong>把隱性輸入變成顯式的、可觀察的參數</strong>，
+      並在測試裡走一次真實的狀態轉換（而不是斷言靜止值 —— 那常常剛好等於初始值而假綠）。
+    </p>
+
+    <h2 id="open">8. 待決與已知缺口</h2>
+    <table>
+      <thead><tr><th></th><th>項目</th><th>現況</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-warn">決策</span></td>
+          <td><strong>繪圖題編輯窗要不要刪</strong></td>
+          <td>
+            #1142 保留它當「未來做加頁時的參考實作」（多頁草稿的規則寫在裡面：上傳中鎖導覽、
+            刪頁／重拍的落定條件、<code>canStart</code> 等每頁 S3 url）。
+            <strong>#1144 主張刪掉</strong> —— slice 9 之後它已完全不可達。兩者都成立，是取捨不是對錯。
+          </td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-warn">流程</span></td>
+          <td><strong>CI gate 從未在這條分支跑過</strong></td>
+          <td>
+            <code>ci.yml</code> 的 <code>on.pull_request.branches</code> 只有 <code>develop</code> 與
+            <code>release/**</code>。實測 #1139／#1143／#1145 都只有 DevSecOps scan 通過 ——
+            <strong>compile + lint + unit 全部只靠本機</strong>。
+          </td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-warn">測試</span></td>
+          <td>兩條 flaky 測試（在 gate 內）</td>
+          <td>
+            <code>MvbQuizCollectionWindowModelTest &gt; entering a class clears pendingSelectClass…</code>、
+            <code>MvbMultipleChoiceStartWindowRevealBehaviorTest &gt; tapping option 1 bar…</code>。
+            兩條都是順序相依，單獨跑綠。
+          </td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-warn">測試</span></td>
+          <td>Roborazzi golden 未重錄</td>
+          <td>
+            <code>verifyRoborazziStagDebug</code> <strong>不在 CI gate 內</strong>，
+            改視覺後要自己跑。分支上長期有數張紅的。
+          </td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-info">未驗</span></td>
+          <td>capture session 洩漏的實際影響範圍</td>
+          <td>
+            只在 <code>!useVSApi &amp;&amp; isMyViewBoardBound &amp;&amp; sdkInt ≥ 34</code> 成立時發生。
+            <strong>IFP 出貨機若走 VSApi 就碰不到</strong>。尚未在裝置上確認
+            （log：<code>[B][onCreate] : useVSApi = ?</code>）。
+          </td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-info">未驗</span></td>
+          <td><code>requestedWindowTag</code> 的 unbind 競態</td>
+          <td>
+            要 <code>ScreenshotActivity</code> 在兩次 suspend 之間讀到 <code>isBound() == false</code>。
+            Jacky 與 Jay 都未能證明實機可達。該處 KDoc 仍寫「sensible default beats opening nothing」，
+            但那五個 tag 的 fallback 現在是 opening nothing + 錯誤 toast。
+          </td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-info">未定</span></td>
+          <td>finish 階段畫面（子頁 3 <code>Q4</code>）</td>
+          <td>按下 Stop submissions 之後的畫面仍未定；<strong>目前沒有任何票在扛</strong>。</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-info">未定</span></td>
+          <td>`13` 的丟棄確認框文案</td>
+          <td>Figma 只給了標題「Discard this question?」，body 與按鈕沿用既有句型。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="ops">9. 在這條分支上工作</h2>
+
+    <h3>9.1 切過來之後一定要做</h3>
+    <pre><code>./gradlew :app:mergeStagDebugResources --rerun-tasks</code></pre>
+    <p>
+      否則 <code>processStagDebugResources</code> 會拿殘留的合併資源去 link 已刪除的 dimen，
+      噴 <code>resource dimen/... not found</code>。切分支後改動 <code>nav_graph.xml</code> 的話，
+      safe-args 產生碼也要 <code>--rerun-tasks</code> 重跑。
+    </p>
+
+    <h3>9.2 本機自己跑 gate（CI 不會幫你跑）</h3>
+    <pre><code>./gradlew compileStagDebugSources lintStagDebug testStagDebugUnitTest \
+          compileStagDebugAndroidTestSources --continue</code></pre>
+    <p>
+      最後一項<strong>不在 CI 的清單裡</strong>，androidTest 源集曾因此靜默腐化過一段時間
+      （<code>ActivationKoinTestRule</code>／<code>KoinIntegrationTestRule</code> 的簽名漂移）。
+    </p>
+
+    <h3>9.3 rebase 的陷阱</h3>
+    <div class="callout warn">
+      這條 feature branch <strong>被 force-push 過</strong>（rebase 到 develop）。
+      upstream 一旦重寫，<code>git rebase origin/feature/quiz-tool-flow-v2</code> 會因為 merge-base
+      退回 develop 分岔點而<strong>開始重播上游所有 commit</strong>（實測 21 檔衝突）。正解是明確指定舊基底：
+      <pre><code>git rebase --onto origin/feature/quiz-tool-flow-v2 &lt;你的舊基底 SHA&gt;</code></pre>
+      先用 <code>git merge-base --is-ancestor &lt;舊 tip&gt; origin/feature/quiz-tool-flow-v2</code>
+      判斷是「純新增」還是「被重寫」。
+    </div>
+
+    <h3>9.4 fusion 建置與驗證</h3>
+    <pre><code>cd edu-droid-flutter/android
+./gradlew :app:assembleEdlaDebug -PclassswiftRepoPath=&lt;ragdoll-cat 路徑&gt;
+# APK 在 edu-droid-flutter/build/app/outputs/apk/edla/debug/（repo 根目錄的 build/，不在 android/ 下）</code></pre>
+    <p>
+      裝完先確認 overlay 權限：<code>adb shell appops get com.viewsonic.droid SYSTEM_ALERT_WINDOW</code>。
+      fusion 模式<strong>沒有任何地方檢查它</strong>，權限一掉就是完全靜默的失敗。
+    </p>
+
+    <h3>9.5 Commit 格式</h3>
+    <p>
+      Conventional Commits ＋ 票號在中括號，英文：<code>fix[VSFT-10067]: subject</code>。
+      沒有票寫 <code>[NO-TICKET]</code>。<code>Co-Authored-By</code> 是慣例。
+    </p>
+  </main>
+</div>
+<script src="assets/mermaid-init.js"></script>
+</body>
+</html>

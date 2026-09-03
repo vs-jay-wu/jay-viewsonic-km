@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>Quiz Tool 流程改版 — 缺陷紀錄</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#how">0. 怎麼讀這份</a></li>
+      <li><a href="#d1">D1 pre-start 謊報離線</a></li>
+      <li><a href="#d2">D2 真斷網反而不提示</a></li>
+      <li><a href="#d3">D3 End class 後空狀態消失</a></li>
+      <li><a href="#d4">D4 pre-start ✕ 關不掉</a></li>
+      <li><a href="#d5">D5 capture session 洩漏</a></li>
+      <li><a href="#d6">D6 註解描述已消失的路徑</a></li>
+      <li><a href="#t">7. 測試自身的缺陷</a>
+        <ul>
+          <li><a href="#t1" class="sub">T1 假綠：斷言撞上初始值</a></li>
+          <li><a href="#t2" class="sub">T2 假綠：stub 掉真正的依賴</a></li>
+          <li><a href="#t3" class="sub">T3 假綠：測到不了的元件</a></li>
+          <li><a href="#t4" class="sub">T4 collector 被例外帶走</a></li>
+          <li><a href="#t5" class="sub">T5 fixture 餵矛盾狀態</a></li>
+        </ul>
+      </li>
+      <li><a href="#lessons">8. 可以帶走的判準</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>缺陷紀錄 <span class="badge badge-info">feature/quiz-tool-flow-v2</span></h1>
+    <div class="meta">
+      三人共同 review &amp; fix 期間累積 &middot; 2026-08-20 → 2026-09-03
+    </div>
+    <div class="doc-nav">
+      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="defects.html" class="active">🐛 缺陷紀錄 (defects)</a>
+    </div>
+
+    <h2 id="how">0. 怎麼讀這份</h2>
+    <p>
+      每則記三件事：<strong>症狀</strong>（使用者看到什麼）、<strong>為什麼沒被擋下來</strong>、
+      <strong>修法的形狀</strong>。不記誰寫的 —— 這條分支上多數缺陷是
+      「A 改流程、B 的模組在底下失效、C 在 review 抓到」，責任歸屬對後來的人沒有用。
+    </p>
+    <p>
+      <strong>「為什麼沒被擋下來」是重點。</strong> 每一則都通過了編譯、通過了當時的測試、
+      通過了至少一次 review 才留下來。
+    </p>
+
+    <h2 id="d1">D1 &nbsp; pre-start 沒有班級時謊報「請檢查網路」</h2>
+    <table>
+      <tbody>
+        <tr><th>症狀</th><td>畫面同時說「No students yet，去開一次性班級」與「Please check your internet connection」。實機 ping 8.8.8.8 與 API host 都 0% 丟包。</td></tr>
+        <tr><th>根因</th><td>旗標算的是「真網路 AND socket 已連線」，而 <strong>socket 是進課堂才連的</strong>。沒有 lesson 時它必然為 false。</td></tr>
+        <tr><th>為什麼沒被擋</th><td>這個狀態在改版前<strong>不可達</strong> —— 舊流程要先有班級才走得到作答窗。slice 8 讓 capture 直達 pre-start、`S2-12` 又明訂沒有教室也要能到，它才第一次出現。</td></tr>
+        <tr><th>修法</th><td>加入「有沒有 lesson」作為第三個判斷項。</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="d2">D2 &nbsp; 沒有班級時「真的斷網」反而不提示</h2>
+    <table>
+      <tbody>
+        <tr><th>症狀</th><td>guest 的背景啟用鏈因斷網失敗 → 停在沒有 lessonId 的狀態 → 老師拿到<strong>零個</strong>網路提示。pre-start 空狀態兩顆按鈕仍可點，失敗只發泛用 toast。</td></tr>
+        <tr><th>根因</th><td>D1 的修法寫成 <code>hasLesson &amp;&amp; !(net &amp;&amp; sock)</code>，沒有 lesson 時整條短路，<strong>把 <code>net</code> 也一起丟掉了</strong>。</td></tr>
+        <tr><th>為什麼沒被擋</th><td>D1 的四條測試在新式子下全部照樣綠 —— 它們的 <code>network</code> 預設是 true，沒有任何一條走「沒有 lesson ＋ 斷網」。</td></tr>
+        <tr><th>修法</th><td><code>!net || (hasLesson &amp;&amp; !sock)</code> —— 把 <code>net</code> 提到 <code>hasLesson</code> 之外，成為獨立的警告理由。</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>形狀：</strong>一個修法把「必然發生的偽陽性」換成了「只在真的出事時發生的偽陰性」。
+      淨值仍是正的，但不必付這個代價 —— 兩個條件本來就該獨立。
+    </div>
+
+    <h2 id="d3">D3 &nbsp; End class 之後拿不到取得班級的兩顆按鈕</h2>
+    <table>
+      <tbody>
+        <tr><th>症狀</th><td>登入 → 開截圖題 → 加入課程 → <strong>End class</strong> → 再開截圖題，右欄顯示 <code>WAITING_FOR_STUDENTS</code> 而不是兩顆按鈕。<strong>整個 session 都回不來。</strong></td></tr>
+        <tr><th>根因</th><td>
+          <code>isTeacherInClass</code> 有兩個輸入，只有一個是 flow：除了 <code>lessonId</code>，
+          它還讀 <code>CSWindowManager</code> 裡 JOIN_CLASS 視窗是否存在。而 teardown 的順序是
+          <code>endLesson()</code>（清 lessonId，<strong>唯一的一次發射</strong>）→ 之後才
+          <code>removeAllWindowsExcept</code>。那次發射看到「lessonId 已空但視窗還在」→ 正確地答「在課堂中」；
+          視窗真的消失時<strong>已經沒有第二次發射</strong>。
+        </td></tr>
+        <tr><th>為什麼沒被擋</th><td>
+          既有測試把 <code>isTeacherInClass</code> 注入成 <code>String::isNotEmpty</code> ——
+          <strong>正好 stub 掉那個帶著隱性依賴的判斷式</strong>。
+        </td></tr>
+        <tr><th>修法</th><td>
+          把視窗變動變成顯式的建構式參數（預設接 <code>OnCSWindowChangedListener</code> 的
+          <code>callbackFlow</code>），與教室狀態一起 <code>merge</code>。
+        </td></tr>
+      </tbody>
+    </table>
+    <p class="note">
+      判斷式本身從頭到尾都是對的 —— <code>isPending()</code>（每次呼叫重新求值）全程回 true。
+      <strong>壞的是沒有人再問它一次。</strong>
+    </p>
+
+    <h2 id="d4">D4 &nbsp; pre-start 按 ✕ 關不掉視窗、跳錯誤 toast</h2>
+    <table>
+      <tbody>
+        <tr><th>症狀</th><td>連著網路時 pre-start 的視窗<strong>無法關閉</strong>；斷網反而關得掉（那條分支走本地關窗、不打 API）。</td></tr>
+        <tr><th>根因</th><td>
+          <code>showCloseConfirmDialog()</code> 只分「結果頁」與「其他」，<code>PRE_START</code> 掉進「其他」
+          被當成進行中的測驗 → 打 <code>PUT /api/v3/quizzes/{quiz_id}</code> 去關一個<strong>從未建立</strong>的題目
+          （pre-start 不上傳不建題，quizId 是空字串）→ 後端不認 → 錯誤 toast，而視窗還在。
+          文案也講「Unfinished responses will be lost」，但 pre-start 一個 response 都沒有。
+        </td></tr>
+        <tr><th>為什麼沒被擋</th><td>
+          那是 <code>if/else</code> 而不是 <code>when</code>。<strong><code>QuizState</code> 新增第七個值時，編譯器沒有對任何人施壓。</strong>
+        </td></tr>
+        <tr><th>修法</th><td>在既有邏輯前加短路，六個題型共用同一個 helper；另加一支反射掃描的接線測試，確保沒有題型漏掉。</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="d5">D5 &nbsp; capture session 洩漏、投影指示器不熄</h2>
+    <table>
+      <tbody>
+        <tr><th>症狀</th><td>
+          出完題、視窗都關了，狀態列還掛著投放圖示；<code>ScreenCaptureSession</code>、
+          media-projection 型 FGS 與 MediaProjection 的 native buffer（約 100MB）撐到 service 銷毀。
+        </td></tr>
+        <tr><th>根因</th><td>
+          釋放規則 <code>CaptureSessionReleasePolicy.editQuizTags</code> 認的是<strong>編輯窗</strong> tag，
+          而 capture 現在落在 pre-start <strong>作答窗</strong>。<code>shouldRelease</code> 因此永遠回 false。
+        </td></tr>
+        <tr><th>為什麼沒被擋</th><td>
+          <strong>這個判定沒有安全的失效模式。</strong>
+          <code>CaptureSessionForegroundPolicy.decide(isSuccessful = true)</code> 回 <code>KEEP</code>，
+          理由正是「稍後會有人釋放」；而成功路徑上唯一的釋放來源就是 <code>shouldRelease</code>。
+          tag 一旦對不上，不是降級而是<strong>擱淺</strong>，且完全無聲。
+          該檔案自 VSFT-9013 起<strong>一行沒改</strong> —— 它壞掉不是因為被改，是因為前提被抽掉。
+        </td></tr>
+        <tr><th>修法</th><td>
+          改用既有的 <code>WindowTag.getMvbQuizStartWindowTagList()</code>（它的 KDoc 本來就寫著這是截圖路徑的集合），
+          讓路由與釋放規則綁在同一個來源。
+        </td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>適用範圍未驗證。</strong>只在 <code>!useVSApi &amp;&amp; isMyViewBoardBound &amp;&amp; sdkInt ≥ 34</code>
+      三者同時成立時發生。走 VSApi 的 ViewSonic 機器不使用 MediaProjection，Android 13 以下走一次性流程（截完自己 stop）。
+      <strong>IFP 出貨機若走 VSApi 就碰不到這個問題。</strong>
+    </div>
+
+    <h2 id="d6">D6 &nbsp; 註解描述的路徑已經不存在</h2>
+    <table>
+      <tbody>
+        <tr><th>症狀</th><td>
+          KDoc 寫「這裡只剩繪圖題編輯窗解得出東西，<strong>因為繪圖題的草稿是在它的編輯窗裡編寫的</strong>」——
+          在寫下的當天是對的，slice 9 落地後理由就不成立了（草稿 model 改由 <code>openInPreStart</code> 自己建）。
+        </td></tr>
+        <tr><th>為什麼沒被擋</th><td>沒有任何工具檢查註解與程式的一致性。它甚至不會過期得很明顯 —— 讀起來仍然像現況。</td></tr>
+        <tr><th>修法</th><td>
+          發現當天就改（同一支 PR 補 commit）。<strong>結論沒變、理由變了</strong>，而
+          「讀起來像現況、實際上已經錯的理由」比沒有理由更糟 —— 下一個人會把它當成活的不變式往上接東西。
+        </td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      修正時的第一版寫成「繪圖題<strong>一度</strong>是例外……<strong>後來</strong>改成……」。
+      那是 changelog 不是註解：會立刻過期，而且沒人會回來更新。歷史屬於 commit 與 Jira，
+      <strong>註解只描述現在的性質</strong>。
+    </div>
+
+    <h2 id="t">7. 測試自身的缺陷</h2>
+    <p>這條分支上「測試看起來綠、其實沒在測東西」出現了五種不同形狀，值得各記一筆。</p>
+
+    <h3 id="t1">T1 &nbsp; 斷言剛好撞上初始值</h3>
+    <p>
+      <code>_shouldWarnOffline</code> 的初始值就是 <code>false</code>，而 collector 跑在
+      <code>Dispatchers.IO</code> 上。建構完立刻讀 <code>.value</code> 讀到的是初始值，
+      不是算出來的結果 —— 期望 <code>false</code> 的斷言在 collector 還沒跑到時就通過。
+    </p>
+    <p>
+      <strong>實測：用那種寫法把判斷式退回沒有修正的版本，0 條紅。</strong>
+      解法是走一次真實轉換（進班且 socket 斷 → 等到警告 → 離開課堂 → 等到不警告），
+      那個 <code>false</code> 才是算出來的。
+    </p>
+
+    <h3 id="t2">T2 &nbsp; stub 掉了真正要測的依賴</h3>
+    <p>
+      <code>PendingSelectClassStateTest</code> 注入 <code>isTeacherInClass = String::isNotEmpty</code>，
+      而 D3 的整個問題就出在真實的 <code>isTeacherInClass</code> 還會讀視窗狀態。
+      <strong>把帶著隱性依賴的判斷式換成單純的字串檢查，等於把要測的東西移除了。</strong>
+    </p>
+
+    <h3 id="t3">T3 &nbsp; 測一個到不了的元件</h3>
+    <p>
+      <code>MvbOptionPanelBehaviorTest</code> 的 11 條測試直接 inflate view、不經編輯窗，
+      所以在 host layout 被刪之後<strong>仍然全綠</strong>。
+      「看起來是覆蓋、實際上釘的是到不了的元件」比沒有測試更誤導 —— 它讓覆蓋率報告說謊。
+      同一個問題也出現在策略文件上（<code>mvb-quiz-edit-option-panel.md</code> 把已刪主體的測試標成 <code>[x]</code>）。
+    </p>
+
+    <h3 id="t4">T4 &nbsp; collector 被第一個例外帶走</h3>
+    <p>
+      <code>AmplitudeEventBuilder</code> 透過 <code>KoinJavaComponent.inject</code> 取依賴；
+      測試沒啟動 Koin 時它在 <code>collect</code> 內丟例外，<strong>連帶殺掉整條 coroutine</strong>。
+      症狀極誤導：<strong>第一次發射成功，所以只驗一次的測試全綠</strong>，
+      只有需要第二次發射的案例才逾時。
+    </p>
+    <p class="note">
+      生產環境有 Koin 所以不會因這個原因丟，但<strong>形狀相同</strong>：那個 <code>send()</code> 若因任何原因丟出，
+      該視窗的離線提示就終身失效。已知、未修。
+    </p>
+
+    <h3 id="t5">T5 &nbsp; fixture 餵矛盾的狀態</h3>
+    <p>
+      四個測試把 <code>QuizStartWindowModel</code> stub 成 <code>QUIZ_RESULTS</code>，
+      卻給 <code>QuizManager</code> 一個預設的 <code>QuizzingUiState()</code>（＝<code>QUIZZING</code>），
+      而視窗讀的是後者。一度被誤判為產品回歸，實際上是 fixture 自己不一致。
+    </p>
+
+    <h2 id="lessons">8. 可以帶走的判準</h2>
+    <table>
+      <thead><tr><th>情境</th><th>做法</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>某個判斷同時依賴 flow 與非 flow 的輸入</td>
+          <td><strong>把非 flow 那半也接成訊號</strong>，否則就是把某個時間點的快照當成持續狀態。
+              故障形狀固定：狀態卡住，沒有錯誤。</td>
+        </tr>
+        <tr>
+          <td>新增列舉值</td>
+          <td>找出所有 <code>if/else</code> 形式的分派 —— <code>when</code> 會逼你處理，<code>if/else</code> 不會。</td>
+        </tr>
+        <tr>
+          <td>tag / 常數集合</td>
+          <td><strong>從真正的來源推導，不要手抄。</strong>手抄的清單對「來源改變」毫無反應，
+              而那正是最常見的迴歸。</td>
+        </tr>
+        <tr>
+          <td>斷言一個「什麼都沒發生」的狀態</td>
+          <td>先讓它經過一次真實轉換，證明 collector 活著，再翻回期望值。
+              直接斷言靜止值常常剛好等於初始值。</td>
+        </tr>
+        <tr>
+          <td>寫測試時想 stub 掉一個複雜的依賴</td>
+          <td>先問：<strong>那個複雜性本身是不是要測的東西？</strong>（見 T2）</td>
+        </tr>
+        <tr>
+          <td>刪除死碼</td>
+          <td>連它的測試一起刪。留下的測試若「刪掉 host 仍然全綠」，它釘的就是到不了的東西。</td>
+        </tr>
+        <tr>
+          <td>修完一個模組後</td>
+          <td>問「有沒有別的模組<strong>假設了我剛剛改掉的那件事</strong>」——
+              這條分支上多數缺陷來自這裡，而不是來自寫錯。</td>
+        </tr>
+        <tr>
+          <td>驗證測試有效性</td>
+          <td>做變異測試：把修法退回缺陷的樣子，看紅幾條。<strong>0 條紅代表那條測試沒有在測東西。</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  </main>
+</div>
+</body>
+</html>
