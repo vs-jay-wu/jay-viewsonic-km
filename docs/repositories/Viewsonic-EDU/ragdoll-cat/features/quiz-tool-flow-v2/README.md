@@ -46,7 +46,7 @@ python3 scripts/clone-atlassian.py conf docs/.../quiz-tool-flow-v2/confluence/my
 
 | | |
 |---|---|
-| CS（`ragdoll-cat`）tip | `fe4f8770` — `fix[NO-TICKET]: drop the lesson locally even when End Class is refused`（2026-09-03 16:44，**在 `develop` 上**） |
+| CS（`ragdoll-cat`）tip | `893ff709` — `ci: bump version to 1.8.2 [skip ci]`（2026-09-03 17:37，**在 `develop` 上，＝ tag `v1.8.2`**） |
 | mvbf（`edu-droid-flutter`）tip | `d86ea2d67` — `[Refactor][VSFT-10047] 移除 file_manage_menu_overlay 已死的 ClassSwiftBloc import`（2026-09-03 16:57，**在 `master` 上**） |
 | 規模基準點 | `a9438387`（合併前的 `origin/develop` tip，2026-09-01 10:55） |
 | 當時規模 | 205 commits · 427 檔 · +30,712 −10,675（CS 側，對 `a9438387`） |
@@ -61,8 +61,8 @@ python3 scripts/clone-atlassian.py conf docs/.../quiz-tool-flow-v2/confluence/my
 
 ```bash
 git fetch origin
-git log --oneline fe4f8770..origin/develop
-git rev-list --count fe4f8770..origin/develop
+git log --oneline 893ff709..origin/develop
+git rev-list --count 893ff709..origin/develop
 ```
 
 > ⚠️ **兩邊的 SHA 存活狀況不同，別套用同一個假設：**

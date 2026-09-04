@@ -43,7 +43,7 @@
     </div>
 
     <div class="callout" id="asof">
-      <strong>📌 基準：CS <code>develop</code> tip <code>fe4f8770</code>（2026-09-03 16:44）</strong>
+      <strong>📌 基準：CS <code>develop</code> tip <code>893ff709</code>（＝ tag <code>v1.8.2</code>，2026-09-03 17:37）</strong>
       —— 與 <a href="overview.html#asof">overview</a> 同一版；過期檢查指令見那裡。
       <br />
       本頁記的是<strong>已經修掉</strong>的缺陷，所以不會因為分支前進而變錯；
@@ -227,6 +227,34 @@
       而視窗讀的是後者。一度被誤判為產品回歸，實際上是 fixture 自己不一致。
     </p>
 
+    <h3 id="t6">T6 &nbsp; 把整張被測的接線換成假的</h3>
+    <p>
+      T2 的同一個形狀，但尺度是<strong>整個依賴圖</strong>。CS 的 Koin 有
+      <strong>188 個註冊</strong>（本分支 <code>di/</code> 動了 <strong>+82 / −14</strong>），
+      而<strong>沒有任何一個測試解析過真正的 <code>KoinModules</code></strong> ——
+      每個 androidTest 的 rule 都是
+      <code>startKoin { modules(buildTestModule()) }</code>，<strong>全量替代成 fake</strong>，
+      而且是明文決策（<code>tests.md</code> D2：「<code>startKoin</code> 全量替代 test module」）。
+      <code>koin-test</code> 甚至不在單元測試的 classpath 上（只有 <code>androidTestImplementation</code>）。
+    </p>
+    <p>
+      <strong>為什麼「app 開得起來」不算證據：</strong>Koin 的 <code>single</code> 預設是 lazy，
+      缺一個 binding 只在<strong>第一次解析到它</strong>時才丟。手動測過的路徑正常，
+      不能推論沒走到的路徑沒事 —— 而故障點會落在使用者身上，不是 CI 上。
+    </p>
+    <p class="note">
+      這幾個 fake module 還是<strong>照著 <code>KoinModules</code> 的形狀手抄的</strong>
+      （<code>ActivationKoinTestRule</code> 的註解自稱「the same wiring shape as
+      <code>KoinModules</code>」）—— 於是正式接線改了、假接線沒改時，測試照樣全綠。
+      跟 §8「tag / 常數集合要從來源推導、不要手抄」是同一條，只是抄的東西變成了整張圖。
+    </p>
+    <p class="note">
+      附帶：<code>initKoin</code> 裡綁了 <code>ApiConnectionWarmUp.warmUp()</code>（真的 TLS 連線）。
+      它是 <code>Dispatchers.IO</code> 上 fire-and-forget、失敗被 <code>runCatching</code> 吞掉，
+      所以<strong>不會</strong>擋住圖驗證測試 —— 但 DI 初始化夾帶網路副作用，
+      讓「起一次容器」這件事不再是純的。
+    </p>
+
     <h2 id="lessons">8. 可以帶走的判準</h2>
     <table>
       <thead><tr><th>情境</th><th>做法</th></tr></thead>
@@ -262,6 +290,13 @@
           <td>修完一個模組後</td>
           <td>問「有沒有別的模組<strong>假設了我剛剛改掉的那件事</strong>」——
               這條分支上多數缺陷來自這裡，而不是來自寫錯。</td>
+        </tr>
+        <tr>
+          <td>用假的接線／假的容器跑測試</td>
+          <td>問<strong>「正式接線壞掉時，這條測試會不會紅？」</strong>
+              全量替代的 fake module 對正式註冊的改動完全無感 ——
+              它測的是你手抄的那張圖，不是要出貨的那張。至少要有<strong>一條</strong>
+              解析真正容器的測試，否則 DI 的故障一律留給使用者發現（見 T6）。</td>
         </tr>
         <tr>
           <td>驗證測試有效性</td>
