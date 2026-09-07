@@ -321,15 +321,18 @@ quiz 視窗是 `WRAP_CONTENT`，實機量到的是 1.1997 / 1.2000，完全正�
 
 ## 7. 交付狀態與剩餘 todo
 
-### 已完成（ragdoll-cat `develop`，21 檔 / +273 −80）
+### 已完成
+
+**PR：<https://github.com/Viewsonic-EDU/ragdoll-cat/pull/1150>**
+分支 `jay/VSFT-10092-quiz-surfaces-1.2x` → `develop`，30 檔 / +393 −93，兩筆 commit
+（`refactor` 那筆只有接縫與 API、零接線；`feat` 那筆是接線、遷移與測試）。
 
 | 項目 | 內容 |
 |---|---|
 | 機制 | `Context.scaledBy(factor)`、`Context.mvbQuizContext()`、`Float.dpToPx(context)` 多載、`AppConstants.MVB_QUIZ_UI_SCALE = 1.2f` |
-| 接線 | `KoinModules.kt` 15 個 `Mvb*` quiz factory；`ScreenshotActivity` 的出題面板（mask 明確排除） |
-| 接線 | …外加 `MvbSpinnerWindow` |
+| 接線 | `KoinModules.kt` 15 個 `Mvb*` quiz factory ＋ `MvbSpinnerWindow`；`ScreenshotActivity` 的出題面板（mask 明確排除） |
 | 繞過點 | 32 個呼叫點換成 `dpToPx(context)`：`MvbTextTrueFalseStartWindow`(13)、`MvbCollection*DetailView`(6)、`WcagPatternTiles`+2 呼叫端(5)、正解 badge(3)、`MvbActivationStatusWindow`(2)、`MvbSpinnerWindow`(2)、`MvbTextQuizDiscloseOption`(1) |
-| 測試 | `MvbQuizUiScaleSnapshotTest`（數值 + 視覺兩條），全套 gate 綠 |
+| 測試 | `MvbQuizUiScaleSnapshotTest`（接線 / 倍率 / 視覺三條）＋ `CSResultOptionBarItemSnapshotTest.result_bar_multichar_label_chip`，全套 gate 綠 |
 | 驗證 | IFP8652 真機六種截圖題 + Close question 的 before/after；答題窗 2607×1488 → 3129×1786（×1.2002）。Random draw 另在 Pixel Tablet（density 320）跑完整流程：外框 1141×944 → **1369×1132**（×1.1998） |
 | 評審 | PM / UI / UX 已看過並認可（2026-09-04） |
 
