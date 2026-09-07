@@ -167,6 +167,8 @@ CS 既有註解以英文為主，也有中文（如 `PendingClassEntryWindowMana
 
 ## 相關
 
+- `cs-review` — review 這個 repo 的程式碼時（Roborazzi fixture 與 production 的一致性、
+  改視窗畫法時幾何被未加權程式碼消費、review 與既有決定衝突的處理）
 - [[mvbf]] — IPC 對面那一端；fusion build 也從那邊發動
 - `docs/mvb-ipc-spec.md`（該 repo）— 兩邊的訊息契約
 - 動到 OLF 檔案格式語意時另外叫 `olf-vnext`

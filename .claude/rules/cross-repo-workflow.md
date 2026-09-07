@@ -13,7 +13,7 @@
 所以要對任何專案 repo 做事（**改檔、review、commit 都算**）之前：
 
 1. **先呼叫對應的 repo skill**，例如 `mvbf`（= `edu-droid-flutter`）、`mvbf-commit`；
-   `cs`（= `ragdoll-cat`，ClassSwift Android）；`olfparser`（＋ `-review` / `-commit` /
+   `cs`（= `ragdoll-cat`，ClassSwift Android，＋ `cs-review`）；`olfparser`（＋ `-review` / `-commit` /
    `-verify`）。skill 裡有該 repo 的個人層慣例，
    以及「該讀哪些團隊 rules」的清單。
    > 動到 **OLF 檔案格式語意**時（不限 repo，mvbf 也算）另外叫 `olf-vnext`。
