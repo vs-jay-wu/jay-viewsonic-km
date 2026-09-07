@@ -130,12 +130,38 @@ description: "Use when writing anything that leaves your own head for someone el
 
 ---
 
-## 6. 兩個機械性但會咬人的細節
+## 6. 機械性但會咬人的細節
 
-**平台會吃掉格式。** Jira 的 markdown→ADF 轉換會把**含兩個底線**的識別字吃掉
-（`FOO_BAR_BAZ` → `FOO*BAR*BAZ`），反引號、`\_` 轉義、fenced code block 三種都救不了；
-單底線（`foo_bar`）沒問題。**契約常數送出後要複查渲染結果**，救不了就改成
-「確切值見 PR 描述」並確認 PR 那邊是完整的。
+### ⚠️ Jira：`jira_add_comment` 的**回傳值本身是有損的**，不要拿它判斷格式
+
+送出後 MCP 回的那個 `body` 是 ADF→純文字的轉換結果，會把粗體、code span、
+清單、標題全部攤平，看起來像「Jira 把我的格式吃光了」。**實際儲存的內容是好的。**
+
+實際犯過（VSFT-10092）：看到回傳值裡 `` `*mvb*` `` 變成 `**mvb**`、
+`` `[Quiz Tool][Android]` `` 少一個中括號，就對使用者宣告「ADF 轉換把格式吃掉了」。
+用 `jira_get_issue(issue_key, include="comments")` 讀回來一看，backtick、粗體、
+兩個中括號全都在 —— 從頭到尾沒壞過。
+
+**規則**：
+
+1. 送出後**不要**看 `jira_add_comment` 的回傳值就下結論。
+2. 要確認就用 `jira_get_issue(..., include="comments")` 讀回來 —— 它回的是
+   忠實的 markdown。
+3. 只有讀回來**真的**壞了才修。**絕對不要**因為 echo 看起來怪就重貼一則
+   —— 那會在對方的票上洗版，而且原本那則是好的。
+
+### Jira 真正會吃掉的：含兩個底線的識別字
+
+markdown→ADF 會把 `FOO_BAR_BAZ` 變成 `FOO*BAR*BAZ`，反引號、`\_` 轉義、
+fenced code block 三種都救不了；單底線（`foo_bar`）沒問題。
+
+這一條是**讀回來確認過**的真實案例，跟上面那個假警報不同。契約常數送出後
+用上面第 2 點複查一次，救不了就改成「確切值見 PR 描述」並確認 PR 那邊是完整的。
+
+### 不要為此寫 markdown→ADF 轉換器
+
+`jira_add_comment` 本來就吃 markdown 且儲存正確。多一層轉換是解一個不存在的問題，
+只會多一個會壞的東西。缺的是驗證方式，不是轉換器。
 
 **量測數字要用對方的基準。** 貼自己開發機的數字（例如「約 4 秒」）會讓對方照那個
 體感訂 timeout，而他們的日常機器可能慢好幾倍。要嘛標明機器等級，要嘛直接給
