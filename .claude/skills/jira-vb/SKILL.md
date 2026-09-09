@@ -1,12 +1,21 @@
 ---
 name: jira-vb
-description: 在 VB 專案（EDU - Software）開 Jira 單。2026-09-09 起新單一律開這裡，不再開 VSFT。含欄位清單、Team uuid、命名慣例與查證方式。
+description: 在 VB 專案（EDU - Software）開 Jira 單。2026-09-09 起新單開這裡、不再開 VSFT（狸貓版維持 MT-，見 mvb-rewrite）。含欄位清單、Team uuid、標題慣例與查證方式。
 ---
 
 # 在 VB 開 Jira 單
 
-**新開的 ticket 一律建在 `VB`（EDU - Software）。** `VSFT`（myViewBoard Suite）是舊落點，
-既有的 VSFT 單留在原地不搬。
+**新開的 ticket 建在 `VB`（EDU - Software）——狸貓版除外。** `VSFT`（myViewBoard Suite）
+是舊落點，既有的 VSFT 單留在原地不搬。
+
+| 範圍 | 開哪裡 |
+|---|---|
+| mvbf / ClassSwift / 學生端 web，以及其餘一切 | **`VB-*`**（取代 `VSFT-*`） |
+| 狸貓版原生重寫線（`edu-mvb-android-playground` / `edu-mvb-mac-playground` / `edu-swallow-app`） | **維持 `MT-*`**，見 `mvb-rewrite` skill |
+
+> **這條界線是專案負責人 2026-09-09 當場裁定的工作規則，不是查證過的組織政策。** 起因是
+> `mvb-rewrite` skill 記著「狸貓版用 MT-」與新規定打架，而 MT 在 2026-09-08 仍有
+> MT-3048～MT-3059 持續建立。日後若觀察到狸貓版也開 VB，以實際為準並回來改這裡。
 
 > ⚠️ **不要用「既有票的分布」推該開在哪個 project。** 那只反映過去，看不出組織換了落點——
 > 2026-09-09 就是這樣開錯的（用 fishing-cat 的 commit 票號 221/221 都是 VSFT 推導）。

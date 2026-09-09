@@ -42,7 +42,10 @@ description: "Use when the user says 狸貓版 / 狸貓版 mvb / 狸貓, or when
 
 ## Ticket / commit 慣例
 
-- **Jira 用 `MT-` 系列**，不是 mvbf/cs 的 `VSFT-`。
+- **Jira 用 `MT-` 系列**，不是 mvbf/cs 那條線的票號。
+  **狸貓版是「新單一律開 VB」的唯一例外**——其餘產品線 2026-09-09 起從 `VSFT-` 改開 `VB-`，
+  狸貓版維持 `MT-`（專案負責人 2026-09-09 裁定的工作規則，非查證過的組織政策；
+  依據是 MT 在 2026-09-08 仍有 MT-3048～MT-3059 持續建立）。VB 那邊的開單慣例見 `jira-vb`。
 - 分支：`MT-<n>-<英文 kebab slug>`（例：`MT-2486-renderer-fidelity`）。
 - Commit：**Conventional Commits + 尾綴 MT key**，無 gitmoji、無 mvbf 的 `[Type]`：
   - `feat(canvas): present 換頁跳過隱藏頁 (S3, spec 0298) MT-2496`
