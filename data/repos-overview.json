@@ -2,82 +2,157 @@
   "_meta": {
     "description": "ViewSonic EDU GitHub 組織的 repo 概覽，供 AI 快速理解各專案用途",
     "organization": "Viewsonic-EDU",
-    "updated": "2026-08-24",
-    "totalRepos": 325
+    "updated": "2026-09-08",
+    "totalRepos": 331
   },
   "products": {
     "mvb": {
       "fullName": "myViewBoard",
-      "aliases": ["mvb", "myViewBoard", "myviewboard"],
+      "aliases": [
+        "mvb",
+        "myViewBoard",
+        "myviewboard"
+      ],
       "description": "ViewSonic 教育 SaaS 平台，提供 Web 入口、帳號管理、授權、內容管理等服務"
     },
     "mvbf": {
       "fullName": "myViewBoard Flutter",
-      "aliases": ["mvbf", "mvb flutter", "myViewBoard app"],
+      "aliases": [
+        "mvbf",
+        "mvb flutter",
+        "myViewBoard app"
+      ],
       "description": "myViewBoard 行動端 Flutter App（Android / iOS）",
       "dependencies": [
-        { "repo": "ragdoll-cat", "product": "classswift", "note": "整合 ClassSwift 教師端功能" }
+        {
+          "repo": "ragdoll-cat",
+          "product": "classswift",
+          "note": "整合 ClassSwift 教師端功能"
+        }
       ]
     },
     "sparrow": {
       "fullName": "myViewBoard for Windows v3",
-      "aliases": ["sparrow", "mvbw", "mvbw v3", "mvb windows", "myViewBoard Windows"],
+      "aliases": [
+        "sparrow",
+        "mvbw",
+        "mvbw v3",
+        "mvb windows",
+        "myViewBoard Windows"
+      ],
       "description": "Windows UWP 白板與簡報應用程式，代號 Sparrow。myViewBoard for Windows 的現行世代（v3）；前一代是 vboard（v2）。單純講 mvbw 通常指這個"
     },
     "vboard": {
       "fullName": "myViewBoard for Windows v2",
-      "aliases": ["vboard", "mvbw v2", "ViewBoard"],
+      "aliases": [
+        "vboard",
+        "mvbw v2",
+        "ViewBoard"
+      ],
       "description": "myViewBoard for Windows 的前一代（v2），連同其跨平台白板引擎與 .mvb/.olf 檔案格式函式庫。現行世代是 sparrow（v3）"
     },
     "vbos": {
       "fullName": "ViewBoard OS",
-      "aliases": ["vbos", "ViewBoardOS", "IFP OS"],
+      "aliases": [
+        "vbos",
+        "ViewBoardOS",
+        "IFP OS"
+      ],
       "description": "ViewSonic IFP（互動式平板）Android 系統層應用，包含 Launcher、側邊工具列、VSApi 等"
     },
     "airsync": {
       "fullName": "AirSync",
-      "aliases": ["as", "airsync", "AirSync"],
+      "aliases": [
+        "as",
+        "airsync",
+        "AirSync"
+      ],
       "description": "無線投屏與螢幕共享解決方案（WebRTC 為基礎）"
     },
     "dm": {
       "fullName": "ViewSonic Manager",
-      "aliases": ["dm", "manager", "Device Manager", "ViewSonic Manager"],
+      "aliases": [
+        "dm",
+        "manager",
+        "Device Manager",
+        "ViewSonic Manager"
+      ],
       "description": "企業裝置管理（MDM）平台，提供 Web 儀表板、後端 API、Android Agent 等"
     },
     "classswift": {
       "fullName": "ClassSwift",
-      "aliases": ["classswift", "ClassSwift", "cs"],
+      "aliases": [
+        "classswift",
+        "ClassSwift",
+        "cs"
+      ],
       "description": "課堂互動與管理工具，包含 Hub（Web）、Windows App、Teacher App、Student App 等"
     },
     "oc": {
       "fullName": "Originals Content",
-      "aliases": ["oc", "originals", "original", "originals content", "myViewBoard Originals"],
+      "aliases": [
+        "oc",
+        "originals",
+        "original",
+        "originals content",
+        "myViewBoard Originals"
+      ],
       "description": "教育內容管理系統（CMS），提供課程與內容素材管理"
     },
     "swiftai": {
       "fullName": "SwiftAI",
-      "aliases": ["swiftai", "SwiftAI", "LexiQuiz", "GPT-Nexus"],
+      "aliases": [
+        "swiftai",
+        "SwiftAI",
+        "LexiQuiz",
+        "GPT-Nexus"
+      ],
       "description": "AI 教育功能套件，含 OCR、問題生成（LexiQuiz）、AI Server（GPT-Nexus）等"
     },
     "vs-account": {
       "fullName": "ViewSonic Account",
-      "aliases": ["vs-account", "account", "uService"],
+      "aliases": [
+        "vs-account",
+        "account",
+        "uService"
+      ],
       "description": "ViewSonic 統一帳號與身份驗證服務（OIDC / SSO）"
     },
     "omni-monitor": {
       "fullName": "OmniMonitor",
-      "aliases": ["omni-monitor", "OmniMonitor"],
+      "aliases": [
+        "omni-monitor",
+        "OmniMonitor"
+      ],
       "description": "NestJS + Nx monorepo，監控平台 CLI 工具與應用"
     },
     "lynx": {
       "fullName": "Lynx RAG",
-      "aliases": ["lynx", "Lynx"],
+      "aliases": [
+        "lynx",
+        "Lynx"
+      ],
       "description": "RAG（檢索增強生成）pipeline，基於 PostgreSQL + pgvector，對外提供 MCP server"
     },
     "salessupport": {
       "fullName": "AI Sales Support",
-      "aliases": ["salessupport", "sales support", "AI 銷售助理"],
+      "aliases": [
+        "salessupport",
+        "sales support",
+        "AI 銷售助理"
+      ],
       "description": "AI 驅動的銷售支援平台，含資料擷取、語意搜尋、聊天前端"
+    },
+    "mvb-rewrite": {
+      "fullName": "狸貓版 myViewBoard（2026 原生重寫線）",
+      "aliases": [
+        "狸貓版",
+        "狸貓版mvb",
+        "狸貓",
+        "狸貓版 myViewBoard",
+        "mvb 重寫版"
+      ],
+      "description": "2026 年啟動的 myViewBoard 原生重寫線，三個 repo 各對應一個平台（Android / macOS / Windows），共用同一套 AI-native 開發流程（spec 編號 + gate + worktree）與 MT- 系列 Jira ticket；文件格式走 OLF v-next。既有 Flutter（mvbf）與 Sparrow 是行為真實來源，不是實作藍本。口語一律講中文「狸貓版」，沒有人講英文代號；json key 只是 ASCII 佔位"
     }
   },
   "repos": [
@@ -85,13 +160,19 @@
       "name": "edu-droid-flutter",
       "product": "mvbf",
       "description": "myViewBoard 主要 Flutter 行動端 App（Android / iOS）",
-      "tech": ["Flutter", "Dart"]
+      "tech": [
+        "Flutter",
+        "Dart"
+      ]
     },
     {
       "name": "edu-droid-flutter-vsapi",
       "product": "mvbf",
       "description": "mvbf 使用的 VSApi Flutter plugin，封裝 ViewSonic 裝置 API",
-      "tech": ["Flutter", "Dart"]
+      "tech": [
+        "Flutter",
+        "Dart"
+      ]
     },
     {
       "name": "edu-droid-flutter-foreground_task",
@@ -167,7 +248,12 @@
       "name": "edu-sparrow-app",
       "product": "sparrow",
       "description": "myViewBoard for Windows v3，基於 UWP 的互動式白板與簡報應用（代號 Sparrow）。PPTX 匯入是透過 Sparrow.Bridge 起 olfparser 的 pptx2olf 子行程，不走 Rust 的 mvbx_pptx_olf_api",
-      "tech": ["C++", "C#", ".NET", "UWP"]
+      "tech": [
+        "C++",
+        "C#",
+        ".NET",
+        "UWP"
+      ]
     },
     {
       "name": "edu-sparrow-libolf-v2",
@@ -188,19 +274,27 @@
       "name": "edu-vboard-main",
       "product": "vboard",
       "description": "myViewBoard for Windows v2 主程式（桌面端白板應用）。PPTX 匯入走 DllImport(\"mvbx_pptx_olf_api.dll\")，即 Rust parser；repo 內附的那顆 DLL 是 1.7.9",
-      "tech": ["C++", "Qt"]
+      "tech": [
+        "C++",
+        "Qt"
+      ]
     },
     {
       "name": "edu-vboard-libolf",
       "product": "vboard",
       "description": "MVB / OLF 檔案格式核心函式庫（C++）",
-      "tech": ["C++"]
+      "tech": [
+        "C++"
+      ]
     },
     {
       "name": "edu-vboard-libflipchart",
       "product": "vboard",
       "description": "Flipchart 檔案格式解析函式庫（.NET）",
-      "tech": ["C#", ".NET"]
+      "tech": [
+        "C#",
+        ".NET"
+      ]
     },
     {
       "name": "edu-vboard-olfspec",
@@ -211,7 +305,9 @@
       "name": "edu-pptx-olf-parser-rust",
       "product": "vboard",
       "description": "PPTX 轉 OLF 格式解析器（Rust 實作），舊世代。libs/parser_v3 為核心；以 Azure DevOps submodule 的形式被 edu-pptx-olf-rust-ffi 引用，本 repo 是 GitHub 上的對應鏡像。目前的消費端是 mvbf 與 mvbw v2，mvbw v3 已改用 olfparser",
-      "tech": ["Rust"]
+      "tech": [
+        "Rust"
+      ]
     },
     {
       "name": "edu-pptx-olf-rust-ffi",
@@ -227,25 +323,36 @@
       "name": "edu-vbos-vlauncher3",
       "product": "vbos",
       "description": "ViewBoard IFP 主畫面 Launcher，基於 AOSP Launcher3（Android 13）",
-      "tech": ["Android", "Java", "Kotlin"]
+      "tech": [
+        "Android",
+        "Java",
+        "Kotlin"
+      ]
     },
     {
       "name": "edu-vbos-vsapi",
       "product": "vbos",
       "description": "統一封裝 ViewSonic IFP 廠商 API 的共用層（VSApi）",
-      "tech": ["Android", "Java"]
+      "tech": [
+        "Android",
+        "Java"
+      ]
     },
     {
       "name": "edu-vbos-sidetoolbar",
       "product": "vbos",
       "description": "ViewBoard IFP 側邊浮動工具列 App",
-      "tech": ["Android"]
+      "tech": [
+        "Android"
+      ]
     },
     {
       "name": "edu-vbos-authenticator",
       "product": "vbos",
       "description": "IFP 裝置 SSO 認證器，管理 AccountManager auth_token",
-      "tech": ["Android"]
+      "tech": [
+        "Android"
+      ]
     },
     {
       "name": "edu-vbos-authenticator-mqtt",
@@ -256,7 +363,9 @@
       "name": "edu-vbos-viewboard-ota",
       "product": "vbos",
       "description": "ViewBoard IFP 韌體 OTA 更新服務",
-      "tech": ["Android"]
+      "tech": [
+        "Android"
+      ]
     },
     {
       "name": "edu-vbos-library",
@@ -267,25 +376,33 @@
       "name": "edu-vbos-quicksettings",
       "product": "vbos",
       "description": "ViewBoard 快速設定面板（Quick Settings）",
-      "tech": ["Android"]
+      "tech": [
+        "Android"
+      ]
     },
     {
       "name": "edu-vbos-documentsui",
       "product": "vbos",
       "description": "AOSP DocumentsUI 的 ViewBoard 客製化版本（Android 11）",
-      "tech": ["Android"]
+      "tech": [
+        "Android"
+      ]
     },
     {
       "name": "edu-vbos-screenlock",
       "product": "vbos",
       "description": "ViewBoard 螢幕鎖定應用",
-      "tech": ["Android"]
+      "tech": [
+        "Android"
+      ]
     },
     {
       "name": "edu-vbos-wallpaperpicker",
       "product": "vbos",
       "description": "ViewBoard 桌布選擇器",
-      "tech": ["Android"]
+      "tech": [
+        "Android"
+      ]
     },
     {
       "name": "edu-vbos-debug-agent",
@@ -401,7 +518,11 @@
       "name": "edu-airsync-monorepo",
       "product": "airsync",
       "description": "AirSync 投屏服務主 monorepo（Nx），含前後端與共用套件",
-      "tech": ["TypeScript", "Node.js", "Nx"]
+      "tech": [
+        "TypeScript",
+        "Node.js",
+        "Nx"
+      ]
     },
     {
       "name": "edu-airsync-terragrunt",
@@ -469,7 +590,9 @@
       "name": "edu-as-golang-server",
       "product": "airsync",
       "description": "AirSync 後端 Go server",
-      "tech": ["Go"]
+      "tech": [
+        "Go"
+      ]
     },
     {
       "name": "edu-as-mirror",
@@ -598,7 +721,9 @@
       "product": "airsync",
       "description": "Pion WebRTC（Go）fork",
       "type": "fork",
-      "tech": ["Go"]
+      "tech": [
+        "Go"
+      ]
     },
     {
       "name": "edu-as-pion-transport",
@@ -629,7 +754,9 @@
       "product": "airsync",
       "description": "Google Abseil C++ 函式庫 fork（AirSync dependency）",
       "type": "fork",
-      "tech": ["C++"]
+      "tech": [
+        "C++"
+      ]
     },
     {
       "name": "edu-as-spdlog",
@@ -664,7 +791,10 @@
       "name": "AirSync_SR_POC_model",
       "product": "airsync",
       "description": "AirSync 超解析度（Super Resolution）AI model PoC，基於 TFLite（GPU/CPU/NPU）",
-      "tech": ["TensorFlow Lite", "Android"]
+      "tech": [
+        "TensorFlow Lite",
+        "Android"
+      ]
     },
     {
       "name": "airsync-super-resolution-model-source",
@@ -675,19 +805,27 @@
       "name": "airsync_super_resolution_algorithm",
       "product": "airsync",
       "description": "AirSync 超解析度演算法實作（Java + C++）",
-      "tech": ["Java", "C++"]
+      "tech": [
+        "Java",
+        "C++"
+      ]
     },
     {
       "name": "edu-dm-api",
       "product": "dm",
       "description": "ViewSonic Manager REST API 後端（舊版）",
-      "tech": ["Node.js"]
+      "tech": [
+        "Node.js"
+      ]
     },
     {
       "name": "edu-dm-api-nestjs",
       "product": "dm",
       "description": "ViewSonic Manager REST API 後端（NestJS 重構版）",
-      "tech": ["NestJS", "TypeScript"]
+      "tech": [
+        "NestJS",
+        "TypeScript"
+      ]
     },
     {
       "name": "edu-dm-api-next",
@@ -698,7 +836,11 @@
       "name": "edu-dm-dashboard",
       "product": "dm",
       "description": "ViewSonic Manager Web 儀表板前端 monorepo",
-      "tech": ["Angular", "TypeScript", "Nx"]
+      "tech": [
+        "Angular",
+        "TypeScript",
+        "Nx"
+      ]
     },
     {
       "name": "edu-dm-dashboard-mobile",
@@ -714,7 +856,10 @@
       "name": "edu-dm-agent-monorepo",
       "product": "dm",
       "description": "ViewSonic Manager Android Agent App（MDM 裝置端）",
-      "tech": ["Android", "Kotlin"]
+      "tech": [
+        "Android",
+        "Kotlin"
+      ]
     },
     {
       "name": "edu-dm-agent-mqtt-prebuild-script",
@@ -725,13 +870,19 @@
       "name": "edu-device-manager-mobile",
       "product": "dm",
       "description": "ViewSonic Manager 行動端 App（Kotlin Multiplatform，Android + iOS）",
-      "tech": ["Kotlin Multiplatform", "Compose"]
+      "tech": [
+        "Kotlin Multiplatform",
+        "Compose"
+      ]
     },
     {
       "name": "edu-dm-iot-nestjs",
       "product": "dm",
       "description": "Manager IoT 服務（NestJS），處理裝置 MQTT 通訊",
-      "tech": ["NestJS", "MQTT"]
+      "tech": [
+        "NestJS",
+        "MQTT"
+      ]
     },
     {
       "name": "edu-dm-pipeline",
@@ -742,13 +893,19 @@
       "name": "edu-dm-devops-monorepo",
       "product": "dm",
       "description": "Manager 可觀測性 IaC（LGTM stack on EKS、CloudWatch、Grafana）",
-      "tech": ["Terraform", "Terragrunt"]
+      "tech": [
+        "Terraform",
+        "Terragrunt"
+      ]
     },
     {
       "name": "edu-dm-terragrunt-infra",
       "product": "dm",
       "description": "Manager 應用程式基礎設施 IaC（ECS、RDS、ALB、CloudFront 等）",
-      "tech": ["Terraform", "Terragrunt"]
+      "tech": [
+        "Terraform",
+        "Terragrunt"
+      ]
     },
     {
       "name": "edu-dm-lgtm-observability",
@@ -774,7 +931,9 @@
       "name": "edu-dm-test-amapi-restful",
       "product": "dm",
       "description": "Google AMAPI 測試客戶端（Kotlin），示範 Android Management API 操作",
-      "tech": ["Kotlin"]
+      "tech": [
+        "Kotlin"
+      ]
     },
     {
       "name": "edu-dm-knowledge-base",
@@ -815,25 +974,36 @@
       "name": "manager-ai-features-service",
       "product": "dm",
       "description": "Manager AI 功能服務，提供自然語言指令處理（Python + uv）",
-      "tech": ["Python"]
+      "tech": [
+        "Python"
+      ]
     },
     {
       "name": "edu-software-manager-api",
       "product": "dm",
       "description": "Software Manager API 後端（NestJS）",
-      "tech": ["NestJS"]
+      "tech": [
+        "NestJS"
+      ]
     },
     {
       "name": "ClassSwift_Hub_E2E_Test",
       "product": "classswift",
       "description": "ClassSwift Hub Web E2E 自動化測試框架（Python + Pytest + Selenium/Appium）",
-      "tech": ["Python", "Pytest", "Selenium", "Appium"]
+      "tech": [
+        "Python",
+        "Pytest",
+        "Selenium",
+        "Appium"
+      ]
     },
     {
       "name": "ClassSwift_Windows_App_E2E_Test",
       "product": "classswift",
       "description": "ClassSwift Windows App 自動化測試（登入 / 註冊流程）",
-      "tech": ["Python"]
+      "tech": [
+        "Python"
+      ]
     },
     {
       "name": "ClassSwift_Tools",
@@ -854,15 +1024,25 @@
       "name": "full-client-e2e-testing",
       "product": "classswift",
       "description": "ClassSwift Windows 混合應用 E2E 測試框架（WinAppDriver + Playwright）",
-      "tech": ["WinAppDriver", "Playwright"]
+      "tech": [
+        "WinAppDriver",
+        "Playwright"
+      ]
     },
     {
       "name": "ocelot",
       "product": "classswift",
-      "aliases": ["api-swift", "cs backend", "ClassSwift backend"],
+      "aliases": [
+        "api-swift",
+        "cs backend",
+        "ClassSwift backend"
+      ],
       "hostPrefix": "api-swift",
       "description": "ClassSwift 平台後端服務（cs 主 backend API），負責課堂管理、群組、任務、AI 整合與即時通訊；User Properties 中 server-side 來源（users / organization 等資料表）由此 service 提供",
-      "tech": ["Python", "FastAPI"]
+      "tech": [
+        "Python",
+        "FastAPI"
+      ]
     },
     {
       "name": "ocelot-socket",
@@ -877,31 +1057,78 @@
     {
       "name": "african-golden-cat",
       "product": "classswift",
-      "aliases": ["admin-swift", "cs Hub", "ClassSwift Hub"],
+      "aliases": [
+        "admin-swift",
+        "cs Hub",
+        "ClassSwift Hub"
+      ],
       "hostPrefix": "admin-swift",
       "description": "ClassSwift Hub / Admin Web App 前端（React + Vite + nginx）",
-      "tech": ["TypeScript", "React", "Vite"],
+      "tech": [
+        "TypeScript",
+        "React",
+        "Vite"
+      ],
       "dependencies": [
-        { "repo": "ocelot", "product": "classswift", "note": "呼叫 cs backend API" }
+        {
+          "repo": "ocelot",
+          "product": "classswift",
+          "note": "呼叫 cs backend API"
+        }
       ]
     },
     {
       "name": "maine-coon-cat",
       "product": "classswift",
-      "aliases": ["cs Windows (Electron)", "ClassSwift Desktop"],
+      "aliases": [
+        "cs Windows (Electron)",
+        "ClassSwift Desktop"
+      ],
       "description": "ClassSwift 跨平台桌面應用（Electron + React 18 + Vite），目前 cs Windows app 的 Electron 實作版本",
-      "tech": ["Electron", "React", "TypeScript", "Vite"],
+      "tech": [
+        "Electron",
+        "React",
+        "TypeScript",
+        "Vite"
+      ],
       "dependencies": [
-        { "repo": "ocelot", "product": "classswift", "note": "呼叫 cs backend API" }
+        {
+          "repo": "ocelot",
+          "product": "classswift",
+          "note": "呼叫 cs backend API"
+        }
       ]
     },
     {
       "name": "fishing-cat",
       "product": "classswift",
-      "aliases": ["learn-swift"],
+      "aliases": [
+        "learn-swift",
+        "cs 學生端",
+        "student web"
+      ],
       "hostPrefix": "learn-swift",
-      "description": "ClassSwift Lesson / 學生端 Web App，host 為 `learn-swift.*`",
-      "tech": ["TypeScript", "React"]
+      "description": "ClassSwift Lesson / 學生端 Web App（**現役**），host 為 `learn-swift.*`。新版重寫在 edu-participant-web，屆時 participant UI/UX 會由該 repo 取代；repo 內 docs/knowledge/ 有為了重寫而整理的業務規則知識庫",
+      "tech": [
+        "TypeScript",
+        "React"
+      ]
+    },
+    {
+      "name": "edu-participant-web",
+      "product": "classswift",
+      "aliases": [
+        "participant web",
+        "新學生端",
+        "cs 學生端新版"
+      ],
+      "description": "ClassSwift 學生端 Web 的**新版重寫**（尚未上線），會部署到新 site 並取代 fishing-cat 的 participant UI/UX。工作以 repo 內 docs/slices 的 `S-####` 切片追蹤，commit 前綴接受 `S-####` 或 `VSFT-####`；規範入口是 CONSTITUTION.md",
+      "tech": [
+        "TypeScript",
+        "React",
+        "Nx",
+        "Vite"
+      ]
     },
     {
       "name": "Meriti-AI-Tools",
@@ -912,7 +1139,10 @@
       "name": "ragdoll-cat",
       "product": "classswift",
       "description": "ClassSwift 教師端 Android App（Views XML + Retrofit + SocketIO）",
-      "tech": ["Android", "Kotlin"]
+      "tech": [
+        "Android",
+        "Kotlin"
+      ]
     },
     {
       "name": "asiatic-wildcat",
@@ -923,7 +1153,9 @@
       "name": "flat-headed-cat",
       "product": "classswift",
       "description": "ClassSwift Windows App 自動更新 Launcher（下載並啟動 ClassSwift.exe）",
-      "tech": ["C#"]
+      "tech": [
+        "C#"
+      ]
     },
     {
       "name": "persian-cat",
@@ -933,10 +1165,14 @@
     {
       "name": "margay",
       "product": "classswift",
-      "aliases": ["api-swift-product"],
+      "aliases": [
+        "api-swift-product"
+      ],
       "hostPrefix": "api-swift-product",
       "description": "ClassSwift 產品相關 backend（host `api-swift-product.*`）。註：先前描述為「產品頁面入口（Portal） / React」，但依 cougar config 是 backend，前端 tech 待覆核",
-      "tech": ["React"]
+      "tech": [
+        "React"
+      ]
     },
     {
       "name": "chartreux-cat",
@@ -946,16 +1182,24 @@
     {
       "name": "siamese-cat",
       "product": "classswift",
-      "aliases": ["swift-tools"],
+      "aliases": [
+        "swift-tools"
+      ],
       "hostPrefix": "swift-tools",
       "description": "ClassSwift 轉盤抽選系統前端，支援 WebView 多平台整合（Windows / Android / Web），host 為 `swift-tools.*`",
-      "tech": ["TypeScript", "React"]
+      "tech": [
+        "TypeScript",
+        "React"
+      ]
     },
     {
       "name": "chinchilla-cat",
       "product": "classswift",
       "description": "ClassSwift 教室系統 K6 負載測試腳本（TypeScript）",
-      "tech": ["K6", "TypeScript"]
+      "tech": [
+        "K6",
+        "TypeScript"
+      ]
     },
     {
       "name": "bay-cat",
@@ -965,7 +1209,9 @@
     {
       "name": "iriomote-cat",
       "product": "classswift",
-      "aliases": ["app-link"],
+      "aliases": [
+        "app-link"
+      ],
       "hostPrefix": "app-link",
       "description": "App-Link 重導向服務，處理登入 / 登出 app-link flow（host 為 `app-link.*.classswift.com`，含 prd 別名 `app-link.classswift.com`）"
     },
@@ -978,13 +1224,20 @@
       "name": "edu-oc-portal",
       "product": "oc",
       "description": "myViewBoard Originals Content 管理後台（CMS）",
-      "tech": ["React"]
+      "tech": [
+        "React"
+      ]
     },
     {
       "name": "edu-oc-portal-picker",
       "product": "oc",
       "description": "Originals Content 素材選取器 web app（Next.js，部署於 myviewboard.com/originals/picker/，設計成被 mvb 主站嵌入挑素材）",
-      "tech": ["Next.js", "React", "GraphQL", "pnpm"]
+      "tech": [
+        "Next.js",
+        "React",
+        "GraphQL",
+        "pnpm"
+      ]
     },
     {
       "name": "edu-originals-game-web",
@@ -995,19 +1248,28 @@
       "name": "swiftai-ai-server",
       "product": "swiftai",
       "description": "SwiftAI AI Server（GPT-Nexus），整合 GPT 等 LLM 的後端服務",
-      "tech": ["Python", "FastAPI"]
+      "tech": [
+        "Python",
+        "FastAPI"
+      ]
     },
     {
       "name": "swiftai-backend-server",
       "product": "swiftai",
       "description": "SwiftAI 後端伺服器（LexiQuiz），提供 AI 題目生成 API",
-      "tech": ["Python", "FastAPI"]
+      "tech": [
+        "Python",
+        "FastAPI"
+      ]
     },
     {
       "name": "swiftai-ocr-server",
       "product": "swiftai",
       "description": "SwiftAI OCR Server（GCP-Nexus），基於 GCP Vision API 的 OCR 微服務",
-      "tech": ["Python", "FastAPI"]
+      "tech": [
+        "Python",
+        "FastAPI"
+      ]
     },
     {
       "name": "swiftai-keyword-ocr-api",
@@ -1018,7 +1280,10 @@
       "name": "swiftai-dashboard-service",
       "product": "swiftai",
       "description": "SwiftAI 管理儀表板前端（Next.js）",
-      "tech": ["Next.js", "TypeScript"]
+      "tech": [
+        "Next.js",
+        "TypeScript"
+      ]
     },
     {
       "name": "swiftai-question-generator-usa-india-api",
@@ -1029,7 +1294,10 @@
       "name": "swiftai-infra-cdk",
       "product": "swiftai",
       "description": "SwiftAI 雲端基礎設施 IaC（AWS CDK）",
-      "tech": ["AWS CDK", "TypeScript"]
+      "tech": [
+        "AWS CDK",
+        "TypeScript"
+      ]
     },
     {
       "name": "kanghsuan-quizpipeline-script",
@@ -1045,19 +1313,29 @@
       "name": "edu-viewsonic-account-monorepo",
       "product": "vs-account",
       "description": "ViewSonic 帳號 uService 集合 monorepo（NestJS）",
-      "tech": ["NestJS", "TypeScript"]
+      "tech": [
+        "NestJS",
+        "TypeScript"
+      ]
     },
     {
       "name": "edu-viewsonic-account-monorepo-serverless",
       "product": "vs-account",
       "description": "ViewSonic 帳號 uService serverless 版本（NestJS + Serverless Framework）",
-      "tech": ["NestJS", "TypeScript"]
+      "tech": [
+        "NestJS",
+        "TypeScript"
+      ]
     },
     {
       "name": "edu-vs-account-frontend",
       "product": "vs-account",
       "description": "ViewSonic 帳號管理前端（Nx monorepo）",
-      "tech": ["React", "TypeScript", "Nx"]
+      "tech": [
+        "React",
+        "TypeScript",
+        "Nx"
+      ]
     },
     {
       "name": "edu-vs-account-frontend-landing-page",
@@ -1083,25 +1361,37 @@
       "name": "edu-mvb-auth-oidc",
       "product": "mvb",
       "description": "myViewBoard OIDC 認證伺服器（OAuth2 + SSO）",
-      "tech": ["Node.js"]
+      "tech": [
+        "Node.js"
+      ]
     },
     {
       "name": "edu-mvb-api-core",
       "product": "mvb",
       "description": "myViewBoard Core API 後端（前台 myviewboard.com + 後台 Admin Portal，NestJS v2 重構版）",
-      "tech": ["NestJS", "TypeScript"]
+      "tech": [
+        "NestJS",
+        "TypeScript"
+      ]
     },
     {
       "name": "edu-mvb-web-portal",
       "product": "mvb",
       "description": "myViewBoard Web 入口 monorepo，含 instance 管理、MSP、網站（myviewboard.com revamp）等",
-      "tech": ["Angular", "TypeScript"]
+      "tech": [
+        "Angular",
+        "TypeScript"
+      ]
     },
     {
       "name": "edu-mvb-admin-portal",
       "product": "mvb",
       "description": "myViewBoard Admin Portal（管理後台），含 Core 功能管理與系統設定（Nx monorepo）",
-      "tech": ["Angular", "TypeScript", "Nx"]
+      "tech": [
+        "Angular",
+        "TypeScript",
+        "Nx"
+      ]
     },
     {
       "name": "edu-mvb-backend-libs",
@@ -1112,7 +1402,9 @@
       "name": "edu-mvb-mqtt",
       "product": "mvb",
       "description": "myViewBoard MQTT 服務，橋接 Companion App 與 IFP ViewBoard（Aedes + Redis + BullMQ）",
-      "tech": ["Node.js"]
+      "tech": [
+        "Node.js"
+      ]
     },
     {
       "name": "edu-mvb-launcher-mqtt",
@@ -1178,19 +1470,29 @@
       "name": "edu-omni-monitor",
       "product": "omni-monitor",
       "description": "OmniMonitor 平台 CLI 工具與後端應用（NestJS + Nx monorepo）",
-      "tech": ["NestJS", "TypeScript", "Nx"]
+      "tech": [
+        "NestJS",
+        "TypeScript",
+        "Nx"
+      ]
     },
     {
       "name": "edu-lynx-rag",
       "product": "lynx",
       "description": "Lynx RAG pipeline：PostgreSQL + pgvector + LiteLLM，對外提供 MCP server",
-      "tech": ["Python", "PostgreSQL", "pgvector"]
+      "tech": [
+        "Python",
+        "PostgreSQL",
+        "pgvector"
+      ]
     },
     {
       "name": "salessupport-data-service",
       "product": "salessupport",
       "description": "Sales Support 資料擷取、處理與語意搜尋服務（向量 embedding）",
-      "tech": ["Python"]
+      "tech": [
+        "Python"
+      ]
     },
     {
       "name": "salessupport-informationretrieval-frontend",
@@ -1216,13 +1518,18 @@
       "name": "ai-bff-server",
       "product": null,
       "description": "AI BFF（Backend for Frontend）server（Fastify）",
-      "tech": ["Node.js", "Fastify"]
+      "tech": [
+        "Node.js",
+        "Fastify"
+      ]
     },
     {
       "name": "ai-button-foundation",
       "product": null,
       "description": "跨產品 AI 助理基礎設施，為 Device Manager、TeamOne、AirSync 提供統一 AI 對話體驗",
-      "tech": ["TypeScript"]
+      "tech": [
+        "TypeScript"
+      ]
     },
     {
       "name": "edu-gcp-ai-agent",
@@ -1233,19 +1540,26 @@
       "name": "llm-safeguard-service",
       "product": null,
       "description": "LLM 內容安全防護服務",
-      "tech": ["Python"]
+      "tech": [
+        "Python"
+      ]
     },
     {
       "name": "llm-evalsuite-evaluation-toolbox",
       "product": null,
       "description": "SSS LLM EvalSuite：ML / LLM 專案的評估與 E2E 測試函式庫",
-      "tech": ["Python"]
+      "tech": [
+        "Python"
+      ]
     },
     {
       "name": "langgraph-workshop",
       "product": null,
       "description": "LangGraph AI workflow 學習專案，含 ReAct Agent 與 LLM 安全護欄範例",
-      "tech": ["Python", "LangGraph"]
+      "tech": [
+        "Python",
+        "LangGraph"
+      ]
     },
     {
       "name": "sss-langflow",
@@ -1256,13 +1570,18 @@
       "name": "universal-knowledge-graph",
       "product": null,
       "description": "多語言知識圖譜平台（Neo4j + LangChain + LightRAG），支援中英文 AI 問答",
-      "tech": ["Python", "Neo4j"]
+      "tech": [
+        "Python",
+        "Neo4j"
+      ]
     },
     {
       "name": "chinese-knowledge-graph",
       "product": null,
       "description": "中文詞彙 / 成語資料處理系統，支援圖資料庫儲存",
-      "tech": ["Python"]
+      "tech": [
+        "Python"
+      ]
     },
     {
       "name": "chinese-material-ocr-script",
@@ -1283,7 +1602,9 @@
       "name": "teamone-handwriting-recognition-api",
       "product": null,
       "description": "CoreAI 手寫辨識 API，含合成資料生成與模型訓練（ML）",
-      "tech": ["Python"]
+      "tech": [
+        "Python"
+      ]
     },
     {
       "name": "teamone-summary-server",
@@ -1299,13 +1620,19 @@
       "name": "gai-airflow",
       "product": null,
       "description": "GAI（生成式 AI）Airflow 資料 pipeline 編排平台（Data Galaxy 中央 pipeline）",
-      "tech": ["Python", "Airflow"]
+      "tech": [
+        "Python",
+        "Airflow"
+      ]
     },
     {
       "name": "edu-data-science-airflow-dags",
       "product": null,
       "description": "資料科學 Airflow DAGs（ETL / 資料管線）",
-      "tech": ["Python", "Airflow"]
+      "tech": [
+        "Python",
+        "Airflow"
+      ]
     },
     {
       "name": "edu-data-science-infra-terragrunt",
@@ -1316,7 +1643,10 @@
       "name": "vsx-data-dbt",
       "product": null,
       "description": "ViewSonic 資料倉儲 dbt 轉換模型",
-      "tech": ["dbt", "SQL"]
+      "tech": [
+        "dbt",
+        "SQL"
+      ]
     },
     {
       "name": "vsx-data-lakehouse",
@@ -1342,13 +1672,20 @@
       "name": "edu-fe-common-lib",
       "product": null,
       "description": "ViewSonic 教育平台前端共用元件庫（Storybook 文件）",
-      "tech": ["TypeScript", "Storybook"]
+      "tech": [
+        "TypeScript",
+        "Storybook"
+      ]
     },
     {
       "name": "edu-display-core",
       "product": null,
       "description": "串流顯示核心元件（WebRTC / OWT），C++ 引擎 + .NET wrapper + DirectShow filter，以 NuGet 發佈",
-      "tech": ["C++", "C#", ".NET"]
+      "tech": [
+        "C++",
+        "C#",
+        ".NET"
+      ]
     },
     {
       "name": "edu-display-owtrtc",
@@ -1359,20 +1696,32 @@
       "name": "edu-origami",
       "product": null,
       "description": "Origami — NestJS REST API，基於 PostgreSQL + S3-compatible storage",
-      "tech": ["NestJS", "TypeScript"]
+      "tech": [
+        "NestJS",
+        "TypeScript"
+      ]
     },
     {
       "name": "cougar",
       "product": "classswift",
-      "aliases": ["cs infra", "ClassSwift IaC"],
+      "aliases": [
+        "cs infra",
+        "ClassSwift IaC"
+      ],
       "description": "AWS 多環境基礎設施 IaC（CDK v2），管理 VPC、EKS、RDS、Redis、S3、CloudFront 等；`config/{prd,stg,dev}.json` 提供 domainNamePrefix ↔ projectName 對應，是 cs 生態系命名反查的權威來源",
-      "tech": ["AWS CDK", "TypeScript"]
+      "tech": [
+        "AWS CDK",
+        "TypeScript"
+      ]
     },
     {
       "name": "sand-cat",
       "product": null,
       "description": "ArgoCD GitOps 設定，定義 Kubernetes cluster 應用部署方式",
-      "tech": ["ArgoCD", "Kubernetes"]
+      "tech": [
+        "ArgoCD",
+        "Kubernetes"
+      ]
     },
     {
       "name": "test-ci",
@@ -1383,13 +1732,17 @@
       "name": "tf-openclaw",
       "product": null,
       "description": "OpenClaw AI SRE Terraform 部署（k3s on EC2，vsx-shared 環境）",
-      "tech": ["Terraform"]
+      "tech": [
+        "Terraform"
+      ]
     },
     {
       "name": "tf-aws-alert",
       "product": null,
       "description": "AWS 事件告警 Terraform（RDS/ElastiCache snapshot SNS + Lambda → Teams/Email）",
-      "tech": ["Terraform"]
+      "tech": [
+        "Terraform"
+      ]
     },
     {
       "name": "uservice-infra-terragrunt",
@@ -1405,13 +1758,17 @@
       "name": "edu-infra-mvb",
       "product": "mvb",
       "description": "myViewBoard 雲端基礎設施 IaC",
-      "tech": ["Terraform"]
+      "tech": [
+        "Terraform"
+      ]
     },
     {
       "name": "edu-infra-shared",
       "product": null,
       "description": "跨產品共用雲端基礎設施 IaC",
-      "tech": ["Terraform"]
+      "tech": [
+        "Terraform"
+      ]
     },
     {
       "name": "edu-infra-network",
@@ -1427,7 +1784,9 @@
       "name": "edu-gai-infra-terraform",
       "product": null,
       "description": "生成式 AI（GAI）相關基礎設施 IaC（Terraform）",
-      "tech": ["Terraform"]
+      "tech": [
+        "Terraform"
+      ]
     },
     {
       "name": "edu-terraform-aws-instance-scheduler",
@@ -1448,7 +1807,10 @@
       "name": "edu-ota-update",
       "product": null,
       "description": "OTA 更新服務 monorepo（NestJS + Nx），含 infra/",
-      "tech": ["NestJS", "Nx"]
+      "tech": [
+        "NestJS",
+        "Nx"
+      ]
     },
     {
       "name": "edu-ota-update-legacy",
@@ -1464,45 +1826,68 @@
       "name": "abyssinian",
       "product": null,
       "description": "Backstage Portal — 工程師宇宙管理平台（Universe management platform）",
-      "tech": ["Backstage", "React"]
+      "tech": [
+        "Backstage",
+        "React"
+      ]
     },
     {
       "name": "puma",
       "product": "classswift",
-      "aliases": ["classswift (host)"],
+      "aliases": [
+        "classswift (host)"
+      ],
       "hostPrefix": "classswift",
       "description": "ClassSwift 主站前端（host 為 `classswift.*.classswift.com`，依 cougar config 的 admin region 配置）。先前描述為「學習平台 Web」，與 host 命名不太吻合，待覆核",
-      "tech": ["React", "TypeScript"]
+      "tech": [
+        "React",
+        "TypeScript"
+      ]
     },
     {
       "name": "marbled-cat",
       "product": null,
       "description": "學習平台（Learning Platform）另一前端實作",
-      "tech": ["React", "TypeScript"]
+      "tech": [
+        "React",
+        "TypeScript"
+      ]
     },
     {
       "name": "panthera",
       "product": null,
       "description": "前端 Web 應用（React + Vite），處理認證流程與使用者管理",
-      "tech": ["React", "TypeScript", "Vite"]
+      "tech": [
+        "React",
+        "TypeScript",
+        "Vite"
+      ]
     },
     {
       "name": "panther",
       "product": null,
       "description": "前端 Web 應用（React + Vite），認證與使用者管理（同 panthera 相關）",
-      "tech": ["React", "TypeScript", "Vite"]
+      "tech": [
+        "React",
+        "TypeScript",
+        "Vite"
+      ]
     },
     {
       "name": "jungle-cat",
       "product": null,
       "description": "後台管理工具 Admin Tool（React）",
-      "tech": ["React"]
+      "tech": [
+        "React"
+      ]
     },
     {
       "name": "bobcat",
       "product": null,
       "description": "產品頁面後台 Portal（React）",
-      "tech": ["React"]
+      "tech": [
+        "React"
+      ]
     },
     {
       "name": "caracal",
@@ -1513,25 +1898,37 @@
       "name": "bengal-cat",
       "product": null,
       "description": "電商平台付款與訂單管理微服務（FastAPI）",
-      "tech": ["Python", "FastAPI"]
+      "tech": [
+        "Python",
+        "FastAPI"
+      ]
     },
     {
       "name": "norweigian-forest-cat",
       "product": null,
       "description": "Mock Auth Server（Express.js + Redis），供測試與開發環境使用",
-      "tech": ["Node.js", "Express", "Redis"]
+      "tech": [
+        "Node.js",
+        "Express",
+        "Redis"
+      ]
     },
     {
       "name": "oncilla",
       "product": null,
       "description": "React + Vite 前端應用（功能待確認）",
-      "tech": ["React", "Vite"]
+      "tech": [
+        "React",
+        "Vite"
+      ]
     },
     {
       "name": "golden-cat",
       "product": null,
       "description": "AWS SSM Parameter Store 管理工具（匯出 / 上傳 / 刪除跨環境參數）",
-      "tech": ["Python"]
+      "tech": [
+        "Python"
+      ]
     },
     {
       "name": "kodkod",
@@ -1542,32 +1939,44 @@
       "name": "jaguar",
       "product": null,
       "description": "Python 共用日誌（Log）套件，供多個後端服務引用",
-      "tech": ["Python"]
+      "tech": [
+        "Python"
+      ]
     },
     {
       "name": "lynx",
       "product": null,
       "description": "ClassSwift 相關前端 Web（yarn dev，功能待確認）",
-      "tech": ["TypeScript"]
+      "tech": [
+        "TypeScript"
+      ]
     },
     {
       "name": "unified-service-gateway",
       "product": null,
       "description": "高效能 API Gateway（Go），統一多個後端服務入口",
-      "tech": ["Go"]
+      "tech": [
+        "Go"
+      ]
     },
     {
       "name": "sqlalchemy-declarative-extensions",
       "product": null,
       "description": "SQLAlchemy 宣告式擴充套件 OSS fork",
       "type": "fork",
-      "tech": ["Python"]
+      "tech": [
+        "Python"
+      ]
     },
     {
       "name": "edu-amplify-poc",
       "product": "airsync",
       "description": "AirSync AWS Amplify 整合 PoC，展示如何將 WebRTC logs 發送至雲端",
-      "tech": ["React", "Vite", "AWS Amplify"]
+      "tech": [
+        "React",
+        "Vite",
+        "AWS Amplify"
+      ]
     },
     {
       "name": "edu-ado-github-migrator",
@@ -1708,13 +2117,21 @@
       "name": "edu-vsds-sample-app",
       "product": null,
       "description": "VSDS（ViewSonic Design System）測試 sample app（Vite + React + TypeScript + Tailwind + Radix UI）",
-      "tech": ["React", "TypeScript", "Tailwind CSS"]
+      "tech": [
+        "React",
+        "TypeScript",
+        "Tailwind CSS"
+      ]
     },
     {
       "name": "edu-hr-nexus",
       "product": null,
       "description": "內部 HR 招募智慧平台，以 AI 從 104 人力銀行篩選履歷（React + Next.js + Claude Agent SDK）",
-      "tech": ["React", "Next.js", "Claude"]
+      "tech": [
+        "React",
+        "Next.js",
+        "Claude"
+      ]
     },
     {
       "name": "poc-ai-backend",
@@ -1725,7 +2142,10 @@
       "name": "poc-ai-frontend",
       "product": null,
       "description": "AI PoC 前端（React + Vite）",
-      "tech": ["React", "Vite"]
+      "tech": [
+        "React",
+        "Vite"
+      ]
     },
     {
       "name": "poc-ai-infra",
@@ -1765,11 +2185,22 @@
     {
       "name": "balinese-cat",
       "product": "classswift",
-      "aliases": ["cs Windows (WPF)", "SWIFT_WPF"],
+      "aliases": [
+        "cs Windows (WPF)",
+        "SWIFT_WPF"
+      ],
       "description": "ClassSwift Windows app 的 WPF 實作版本（C# / .NET，目錄 `SWIFT_WPF/Swift/ClassSwift/`）。與 maine-coon-cat (Electron) 並存且皆活躍維護中，新舊關係待確認",
-      "tech": ["C#", "WPF", ".NET"],
+      "tech": [
+        "C#",
+        "WPF",
+        ".NET"
+      ],
       "dependencies": [
-        { "repo": "ocelot", "product": "classswift", "note": "呼叫 cs backend API" }
+        {
+          "repo": "ocelot",
+          "product": "classswift",
+          "note": "呼叫 cs backend API"
+        }
       ]
     },
     {
@@ -1786,7 +2217,9 @@
       "name": "calico-cat",
       "product": null,
       "description": "React App（Create React App），功能待確認",
-      "tech": ["React"]
+      "tech": [
+        "React"
+      ]
     },
     {
       "name": "chantilly-tiffany-cat",
@@ -1879,12 +2312,44 @@
       "name": "youtube-video-summary-script",
       "product": null,
       "description": "YouTube 影片摘要生成腳本（Python 3.12）",
-      "tech": ["Python"]
+      "tech": [
+        "Python"
+      ]
     },
     {
       "name": "edu-vsds-sample-app",
       "product": null,
       "description": "VSDS（ViewSonic Design System）元件測試 sample app"
+    },
+    {
+      "name": "edu-mvb-android-playground",
+      "product": "mvb-rewrite",
+      "description": "狸貓版 Android：myViewBoard 原生 Android port（Kotlin + Compose）。行為真實來源＝edu-droid-flutter，mac port 只當工程加速器；預設分支 droid-port",
+      "tech": [
+        "Kotlin",
+        "Jetpack Compose",
+        "Gradle"
+      ]
+    },
+    {
+      "name": "edu-mvb-mac-playground",
+      "product": "mvb-rewrite",
+      "description": "狸貓版 macOS：myViewBoard 原生 macOS 重寫（Swift + SwiftUI，macOS 13+）。這條線最早開，AI-native 流程的發源地；預設分支 mvb-port",
+      "tech": [
+        "Swift",
+        "SwiftUI",
+        "Xcode"
+      ]
+    },
+    {
+      "name": "edu-swallow-app",
+      "product": "mvb-rewrite",
+      "description": "狸貓版 Windows（Swallow）：以 WinUI 3 / Windows App SDK + .NET 10 重寫 myViewBoard for Windows（Sparrow）。OLF v-next 原生讀寫；預設分支 master",
+      "tech": [
+        "C#",
+        ".NET 10",
+        "WinUI 3"
+      ]
     }
   ]
 }
