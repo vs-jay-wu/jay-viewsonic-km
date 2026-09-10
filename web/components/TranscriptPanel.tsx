@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import Icon from "@/components/Icon";
 
 type BlockKind = "text" | "thinking" | "tool_use" | "tool_result" | "image";
@@ -39,11 +41,17 @@ function fmtTime(iso: string | null): string {
   });
 }
 
-function BlockView({ block }: { block: Block }) {
+function BlockView({ block, markdown }: { block: Block; markdown: boolean }) {
   const [open, setOpen] = useState(block.kind === "text");
 
   if (block.kind === "text") {
-    return (
+    // Claude 的輸出本來就是 markdown，照原字串印會看到一堆 ## 與 |---|
+    return markdown ? (
+      <div className="md-body">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{block.text}</ReactMarkdown>
+        {block.truncated && <p className="text-xs text-gray-400">…（已截斷）</p>}
+      </div>
+    ) : (
       <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-800">
         {block.text}
         {block.truncated && <span className="text-xs text-gray-400">…（已截斷）</span>}
@@ -96,7 +104,14 @@ export default function TranscriptPanel({
   const [showSidechain, setShowSidechain] = useState(false);
   // 預設只看對話 —— 不濾的話整個面板會被 Bash／工具輸出淹掉，讀不到重點
   const [showTools, setShowTools] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  /** 往前補內容時，用來把捲動位置釘在原本看的那一行 */
+  const restoreRef = useRef<{ height: number; top: number } | null>(null);
+  /** 自動補到滿一屏的次數上限 —— 濾掉工具輸出後可能一整段都沒東西可顯示，
+   *  沒有上限就會一路把 60MB 讀完 */
+  const autoFillRef = useRef(0);
 
   const fetchPage = useCallback(
     async (before?: number) => {
@@ -120,6 +135,7 @@ export default function TranscriptPanel({
         setPage(p);
         setMessages(p.messages);
         setLoading(false);
+        autoFillRef.current = 0;
         requestAnimationFrame(() => bottomRef.current?.scrollIntoView());
       })
       .catch((e: Error) => {
@@ -131,16 +147,40 @@ export default function TranscriptPanel({
     return () => { cancelled = true; };
   }, [fetchPage]);
 
-  const loadEarlier = async () => {
-    if (!page?.hasMore) return;
+  const loadEarlier = useCallback(async () => {
+    const el = scrollRef.current;
+    if (!page?.hasMore || loadingMore) return;
+    setLoadingMore(true);
+    // 先記住現在的高度與位置，內容往前接上之後要補回去
+    if (el) restoreRef.current = { height: el.scrollHeight, top: el.scrollTop };
     try {
       const p = await fetchPage(page.from);
       setPage({ ...p, messages: [] });
       setMessages((prev) => [...p.messages, ...prev]);
     } catch (e) {
       setError((e as Error).message);
+      restoreRef.current = null;
+    } finally {
+      setLoadingMore(false);
     }
-  };
+  }, [page, loadingMore, fetchPage]);
+
+  // 內容往前接上後把捲動位置釘回去，不然畫面會整段跳走
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const r = restoreRef.current;
+    if (!el || !r) return;
+    el.scrollTop = r.top + (el.scrollHeight - r.height);
+    restoreRef.current = null;
+  }, [messages]);
+
+  // 捲到接近頂端就自動往前載
+  const onScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    autoFillRef.current = 0; // 使用者自己在捲，重新給自動補的額度
+    if (el.scrollTop < 120) void loadEarlier();
+  }, [loadEarlier]);
 
   const visible = messages
     .filter((m) => (showMeta || !m.isMeta) && (showSidechain || !m.isSidechain))
@@ -152,8 +192,21 @@ export default function TranscriptPanel({
     .filter((m) => m.blocks.length > 0);
   const hiddenCount = messages.length - visible.length;
 
+  /**
+   * 內容不夠高就繼續往前載 —— 一頁 512KB 濾掉工具輸出後可能只剩幾行，
+   * 甚至一行都沒有，那時沒有捲軸可捲，使用者會卡在空白畫面。
+   */
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || loading || loadingMore || !page?.hasMore) return;
+    if (el.scrollHeight > el.clientHeight + 40) return;
+    if (autoFillRef.current >= 12) return;
+    autoFillRef.current += 1;
+    void loadEarlier();
+  }, [visible.length, loading, loadingMore, page, loadEarlier]);
+
   return (
-    <aside className="flex h-full w-[34rem] max-w-[46vw] shrink-0 flex-col border-l border-gray-200 bg-white">
+    <aside className="flex h-full w-[40rem] max-w-[52vw] shrink-0 flex-col border-l border-gray-200 bg-white">
       <div className="flex items-start gap-3 border-b border-gray-200 px-4 py-3">
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-semibold text-gray-900">{title}</h2>
@@ -184,7 +237,11 @@ export default function TranscriptPanel({
         {hiddenCount > 0 && <span className="text-gray-400">隱藏 {hiddenCount} 則</span>}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-3"
+      >
         {loading ? (
           <p className="text-sm text-gray-400">載入中…</p>
         ) : error ? (
@@ -193,13 +250,22 @@ export default function TranscriptPanel({
           </div>
         ) : (
           <>
-            {page?.hasMore && (
-              <button
-                onClick={loadEarlier}
-                className="mb-3 w-full rounded-lg border border-gray-200 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
-              >
-                載入更早的內容
-              </button>
+            {page?.hasMore ? (
+              <div className="mb-3 flex items-center justify-center gap-1.5 py-1.5 text-xs text-gray-400">
+                {loadingMore ? (
+                  <>
+                    <Icon name="spinner" size={13} className="animate-spin" /> 載入更早的內容…
+                  </>
+                ) : autoFillRef.current >= 12 ? (
+                  <button onClick={loadEarlier} className="text-gray-500 underline">
+                    這一段沒有對話，繼續往前載
+                  </button>
+                ) : (
+                  <>往上捲會自動載入更早的內容</>
+                )}
+              </div>
+            ) : (
+              <div className="mb-3 text-center text-xs text-gray-300">—— 對話開頭 ——</div>
             )}
             <div className="space-y-4">
               {visible.map((m, i) => (
@@ -223,7 +289,7 @@ export default function TranscriptPanel({
                   </div>
                   <div className="space-y-1.5 pl-1">
                     {m.blocks.map((b, j) => (
-                      <BlockView key={j} block={b} />
+                      <BlockView key={j} block={b} markdown={m.role === "assistant"} />
                     ))}
                   </div>
                 </div>

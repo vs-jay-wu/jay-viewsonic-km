@@ -24,3 +24,59 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Claude 的輸出是 markdown。沒裝 @tailwindcss/typography，樣式寫在這裡共用。 */
+.md-body {
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: #1f2937;
+  word-break: break-word;
+}
+.md-body > * + * { margin-top: 0.6em; }
+.md-body h1, .md-body h2, .md-body h3, .md-body h4 {
+  font-weight: 600;
+  color: #111827;
+  line-height: 1.35;
+}
+.md-body h1 { font-size: 1.05rem; margin-top: 1.2em; }
+.md-body h2 { font-size: 1rem; margin-top: 1.2em; }
+.md-body h3 { font-size: 0.925rem; margin-top: 1em; }
+.md-body ul { list-style: disc; padding-left: 1.25rem; }
+.md-body ol { list-style: decimal; padding-left: 1.25rem; }
+.md-body li + li { margin-top: 0.25em; }
+.md-body li > ul, .md-body li > ol { margin-top: 0.25em; }
+.md-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  background: #f3f4f6;
+  padding: 0.1em 0.35em;
+  border-radius: 0.25rem;
+}
+.md-body pre {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  overflow-x: auto;
+}
+.md-body pre code { background: transparent; padding: 0; font-size: 0.8em; }
+.md-body blockquote {
+  border-left: 3px solid #e5e7eb;
+  padding-left: 0.75rem;
+  color: #4b5563;
+}
+.md-body a { color: #0369a1; text-decoration: underline; }
+.md-body strong { font-weight: 600; color: #111827; }
+.md-body hr { border-color: #e5e7eb; margin: 1em 0; }
+/* 表格可能比面板寬：讓它自己橫向捲，而不是把每一格壓成一字一行。
+   thead/tbody 用 max-content 撐開自然寬度，外層 table 負責捲。 */
+.md-body table { display: block; overflow-x: auto; border-collapse: collapse; }
+.md-body thead, .md-body tbody { display: table; width: max-content; min-width: 100%; }
+.md-body td, .md-body th { min-width: 6rem; }
+.md-body th, .md-body td {
+  border: 1px solid #e5e7eb;
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+.md-body th { background: #f9fafb; font-weight: 600; }
