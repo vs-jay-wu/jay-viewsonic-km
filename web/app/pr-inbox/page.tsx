@@ -319,6 +319,7 @@ export default function PrInboxPage() {
           </div>
           <p className="mt-1 text-xs text-gray-400">
             存在 <code>data/pr-inbox-runs/</code>（gitignored，不進版控）。
+            自動清理：沒叫 AI 的留 7 天，派過 AI 的留 30 天。
           </p>
 
           {loading ? (

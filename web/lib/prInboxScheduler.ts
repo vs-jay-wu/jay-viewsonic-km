@@ -1,7 +1,7 @@
 import { readFile, mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { repoPath } from "@/lib/repo";
-import { lockState, triggerRun } from "@/lib/prInbox";
+import { lockState, pruneRuns, triggerRun } from "@/lib/prInbox";
 
 const CONFIG_FILE = repoPath("data/local-state/pr-inbox-watch.json");
 const MIN_INTERVAL_SECONDS = 60;
@@ -92,6 +92,8 @@ async function writeConfig(config: ScheduleConfig): Promise<void> {
  */
 async function tick(): Promise<void> {
   const rt = runtime();
+  // 順手清過期紀錄（保留天數見 prInbox.ts 的 RETAIN_DAYS）
+  await pruneRuns().catch(() => undefined);
   rt.lastTickAt = new Date().toISOString();
   rt.nextRunAt = new Date(Date.now() + rt.intervalSeconds * 1000).toISOString();
 
@@ -127,6 +129,7 @@ function startTimer(intervalSeconds: number, detectOnly: boolean): void {
 
 /** server 啟動時呼叫（instrumentation.ts）。設定存在磁碟，所以重開會自己接回去。 */
 export async function initScheduler(): Promise<void> {
+  await pruneRuns().catch(() => undefined);
   const config = await readConfig();
   if (config.enabled) startTimer(config.intervalSeconds, config.detectOnly);
   else stopTimer();

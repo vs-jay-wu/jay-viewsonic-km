@@ -131,7 +131,8 @@ grep -nE 'jay-viewsonic-km|docs/(features|domains|repositories)/|\.claude/(rules
 
 - 開關排程：km web 的「PR 巡邏」頁（排程掛在 web server 裡，設定存
   `data/local-state/pr-inbox-watch.json`）。要讓 web 常駐：`./scripts/setup-km-web.sh --install`
-- 執行紀錄與花費：`data/pr-inbox-runs/`（gitignored），web 的「PR 巡邏」頁可看可刪
+- 執行紀錄與花費：`data/pr-inbox-runs/`（gitignored），web 的「PR 巡邏」頁可看可刪；
+  自動清理：沒叫 AI 的留 7 天，派過 AI 的留 30 天
 - **AI 執行期間會上鎖**，排程碰到鎖直接跳過 —— 同一批 PR 不會被 review 兩次
 - 排程啟動的那個 claude 會多收到一段系統提示：非互動、不要提問、超過 3 筆自己挑
   優先度最高的 3 筆

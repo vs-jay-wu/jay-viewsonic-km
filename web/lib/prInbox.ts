@@ -5,6 +5,22 @@ import { repoPath } from "@/lib/repo";
 
 export const RUNS_DIR = "data/pr-inbox-runs";
 
+/**
+ * 紀錄保留天數。沒叫 AI 的那些（clean / detected / skipped / 偵測失敗）
+ * 看過就沒用了，留 7 天；真的派過 AI 的要留久一點才查得到花費與當時的判斷。
+ */
+export const RETAIN_DAYS = 7;
+export const RETAIN_DAYS_AI = 30;
+
+/**
+ * 這筆算不算「AI 執行過」。
+ * claude 有 metadata 就是跑過；aborted 是被中斷的（多半死在 AI 那段，
+ * 而且正是最需要事後追的），一律當 AI 那組看待。
+ */
+function isAiRun(rec: { claude: ClaudeMeta | null; status: string }): boolean {
+  return rec.claude !== null || rec.status === "aborted";
+}
+
 export interface RunPr {
   repo: string;
   number: number;
@@ -100,6 +116,50 @@ export async function deleteRun(id: string): Promise<boolean> {
     );
   }
   return deleted;
+}
+
+export interface PruneResult {
+  deleted: string[];
+  keptAi: number;
+  kept: number;
+}
+
+/**
+ * 清掉過期的執行紀錄（連 .prs.json 與 .log 一起）。
+ *
+ * 用 startedAt 判斷，讀不到就退回檔名裡的時間戳 —— 兩者都拿不到就不動它，
+ * 寧可留著也不要誤刪。
+ */
+export async function pruneRuns(now = Date.now()): Promise<PruneResult> {
+  const runs = await listRuns(10_000);
+  const result: PruneResult = { deleted: [], keptAi: 0, kept: 0 };
+
+  for (const r of runs) {
+    const ai = isAiRun(r);
+    const startedMs = Date.parse(r.startedAt || "") || runIdToMs(r.id);
+    if (!startedMs) {
+      if (ai) result.keptAi++;
+      else result.kept++;
+      continue;
+    }
+    const ageDays = (now - startedMs) / 86_400_000;
+    if (ageDays > (ai ? RETAIN_DAYS_AI : RETAIN_DAYS)) {
+      if (await deleteRun(r.id)) result.deleted.push(r.id);
+    } else if (ai) {
+      result.keptAi++;
+    } else {
+      result.kept++;
+    }
+  }
+  return result;
+}
+
+/** 檔名形態是 YYYYMMDD-HHMMSS（本機時間）。 */
+function runIdToMs(id: string): number {
+  const m = id.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/);
+  if (!m) return 0;
+  const [, y, mo, d, h, mi, s] = m;
+  return new Date(+y, +mo - 1, +d, +h, +mi, +s).getTime();
 }
 
 export async function lockState(): Promise<LockState> {

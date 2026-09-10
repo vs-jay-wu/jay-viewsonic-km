@@ -29,6 +29,9 @@ cd web && npm run dev        # http://localhost:3000
 | `/sessions` | Claude session 檢視、pin、多選刪除 | `~/.claude/projects`、`data/local-state/session-pins.json` |
 
 `data/pr-inbox-runs/` 與 `data/local-state/` 是本機狀態，兩者都 gitignored。
+PR 巡邏的執行紀錄會自動清：**沒叫 AI 的留 7 天，派過 AI（或被中斷）的留 30 天**
+（`web/lib/prInbox.ts` 的 `RETAIN_DAYS` / `RETAIN_DAYS_AI`），
+在 server 啟動、每輪巡邏、每次開 `/pr-inbox` 時各檢查一次。
 
 ## 專案同步規則
 
