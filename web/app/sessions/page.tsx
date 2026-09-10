@@ -170,12 +170,22 @@ export default function SessionsPage() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-5xl mx-auto px-8 py-10">
-        <h1 className="text-2xl font-semibold text-gray-900">Claude Sessions</h1>
-        <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
-          本機 <code className="text-xs">~/.claude/projects</code> 底下的 session 記錄。
-          目前 {sessions.length} 個、共 {mb(totalBytes)}。
-          pin 住的 session 不能被刪 —— pin 在這裡就是「別動它」的意思。
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Claude Sessions</h1>
+            <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
+              本機 <code className="text-xs">~/.claude/projects</code> 底下的 session 記錄。
+              目前 {sessions.length} 個、共 {mb(totalBytes)}。
+              pin 住的 session 不能被刪 —— pin 在這裡就是「別動它」的意思。
+            </p>
+          </div>
+          <button
+            onClick={load}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            <Icon name="refresh" size={15} className={loading ? "animate-spin" : ""} /> 重新掃描
+          </button>
+        </div>
 
         {error && (
           <div className="mt-6 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -208,13 +218,13 @@ export default function SessionsPage() {
 
         {/* 篩選 */}
         <div className="mt-7 flex flex-wrap items-center gap-3">
-          <div className="relative">
+          <div className="relative flex-1 min-w-[11rem]">
             <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="搜尋標題／id／分支"
-              className="w-64 rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-500 focus:border-gray-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-500 focus:border-gray-500 focus:outline-none"
             />
           </div>
           <select
@@ -233,12 +243,6 @@ export default function SessionsPage() {
             <input type="checkbox" checked={pinnedOnly} onChange={(e) => setPinnedOnly(e.target.checked)} />
             只看 pin 住的
           </label>
-          <button
-            onClick={load}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-          >
-            <Icon name="refresh" size={15} className={loading ? "animate-spin" : ""} /> 重新掃描
-          </button>
         </div>
 
         {/* 操作列 */}
@@ -258,7 +262,11 @@ export default function SessionsPage() {
           <button
             onClick={removeSelected}
             disabled={selected.size === 0 || busy}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-40"
+            className={`ml-auto inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium ${
+              selected.size === 0 || busy
+                ? "cursor-not-allowed bg-gray-200 text-gray-400"
+                : "bg-red-600 text-white hover:bg-red-700"
+            }`}
           >
             <Icon name={busy ? "spinner" : "trash"} size={15} className={busy ? "animate-spin" : ""} />
             刪除選取
