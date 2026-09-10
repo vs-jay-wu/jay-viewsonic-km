@@ -29,6 +29,16 @@ Android / Flutter app 開發的建置效能與磁碟空間筆記。
 | `~/.gradle/gradle.properties` | 開啟 build cache、平行建置 |
 | `~/.gradle/init.d/cache-cleanup.gradle` | 讓 Gradle 自動清掉閒置的快取與 wrapper 發行檔 |
 
+行程回收工具（`memclean`）另有一支：
+
+```bash
+./scripts/setup-memclean.sh --dry-run
+./scripts/setup-memclean.sh
+```
+
+它只在 `~/.zshrc` 附加一行 `source`，指向本 repo 的 `shell/memclean.zsh` ——
+函式本體在版控裡。詳見 [dev-process-memory-reclaim.md](dev-process-memory-reclaim.md#工具memclean)。
+
 ### 換電腦 / 分享給別人
 
 clone 這個 repo，跑一次 `setup-gradle-global.sh`，結束。

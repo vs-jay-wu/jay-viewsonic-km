@@ -32,8 +32,8 @@ macOS 的 swap 由 `dynamic_pager` 自動管理，**沒有可調上限**；實�
 年齡完全不相關。剛啟動只有 18 MB，**一旦真的跑過專案分析就膨脹到 ~2.3 GB 且不再縮回**。
 當時 9 隻裡有 5 隻是膨脹狀態，合計約 11 GB。
 
-**所以不要用「關掉設定」來處理。** 關掉換來的是每次要用都得改設定＋重開 session，
-而省下的只有你真的用了的那幾次 —— 那幾次本來就是你需要它。**改成事後回收**。
+處置方式（**不關設定、改成事後回收**）與理由見下方
+[「決定：不從 `km/.mcp.json` 拿掉 `Flutter-MCP-Server`」](#決定不從-kmmcpjson-拿掉-flutter-mcp-server)。
 
 ### 它從哪個設定檔來：用 `lsof` 查，不要用猜的
 
@@ -54,6 +54,22 @@ lsof -a -p <mcp-pid> -d cwd -Fn | grep '^n'
 | `~/.claude/settings.json` | ❌ 完全沒有 mcp 欄位 |
 | `km/.mcp.json` | ✅ |
 | `mvbf/.mcp.json` | ✅（但那是 mvbf session 的路徑） |
+
+### 決定：**不**從 `km/.mcp.json` 拿掉 `Flutter-MCP-Server`
+
+2026-09-10 討論後的結論，記下來避免日後（包括 AI）重新提議關掉。
+
+**理由**：關掉的成本是「每次要用都得改設定＋重開 session」，是**日常、每次都付**的成本；
+而省下的只有「你真的用了 Flutter MCP」的那幾次 —— 那幾次本來就是你需要它。
+配合上面「用過才膨脹」的判準，沒用到的 session 它只佔 18 MB，本來就不是負擔。
+
+**所以改成事後回收**：`memstat` 看到不對勁時打一次 `memclean`。
+
+**翻案條件**（其中任一成立就該重新評估）：
+
+- 剛啟動、沒用過的 mcp-server 也開始佔數百 MB 以上 —— 表示「用過才膨脹」不再成立
+- Claude Code 提供 session 內即時切換 MCP 且免重開（`/mcp` 可能已經可以，**未實測**）
+- km 的日常工作開始經常需要 Flutter MCP —— 那反而該讓它常駐
 
 ---
 
@@ -86,7 +102,20 @@ lsof -a -p <mcp-pid> -d cwd -Fn | grep '^n'
 
 ## 工具：`memclean`
 
-寫在 `~/.zshrc`（`memstat` 旁邊），跟 `memstat` 同一個口徑用 top 的 `MEM`（physical footprint）而非 RSS。
+本體在本 repo 的 [`shell/memclean.zsh`](../../../shell/memclean.zsh)，跟 `memstat` 同一個口徑，
+用 top 的 `MEM`（physical footprint）而非 RSS。
+
+```bash
+./scripts/setup-memclean.sh --dry-run   # 先看會改什麼
+./scripts/setup-memclean.sh             # 在 ~/.zshrc 附加一行 source
+./scripts/setup-memclean.sh --remove    # 移除
+```
+
+寫進 `~/.zshrc` 的只有一行 `source`，**函式本體留在版控裡** —— 改 `shell/memclean.zsh`
+立刻生效，不必重跑 setup。腳本冪等，並且會擋下「`~/.zshrc` 裡另有內嵌 `memclean()` 定義」
+的情況（那會覆蓋 repo 版本）。
+
+> `memstat` 是既有的個人函式，仍然只在 `~/.zshrc`，沒有納入本 repo。
 
 ```
 memclean              # dry-run，只列出與可回收量，不殺
