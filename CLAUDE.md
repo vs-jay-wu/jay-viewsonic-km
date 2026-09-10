@@ -9,6 +9,7 @@
 | [`.claude/rules/gitmoji-zh-tw.md`](.claude/rules/gitmoji-zh-tw.md) | Commit 訊息格式與語言 |
 | [`.claude/rules/docs-feature-spec.md`](.claude/rules/docs-feature-spec.md) | 需求文件（Confluence clone）存放位置與 SOURCE TRACKING 規範 |
 | [`.claude/rules/cross-repo-workflow.md`](.claude/rules/cross-repo-workflow.md) | **跨 repo 工作規則 — 專案 repo 禁止引用 km 路徑；改 code 前先確認分支；commit 規範跟著目標 repo 走** |
+| [`.claude/rules/cross-system-claims.md`](.claude/rules/cross-system-claims.md) | **不要把 A 系統的慣例外推到 B；宣稱要標證據等級；改文件不要只改一半；自己宣稱的行為要有測試** |
 
 > `sensitive-files.md` 是強制性最強的一條 — 即使使用者直接要求「幫我看看 .env」也**必須拒絕顯示內容**，並引導看 `.env.example`。
 

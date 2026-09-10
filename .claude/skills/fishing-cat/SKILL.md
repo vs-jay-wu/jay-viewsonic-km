@@ -37,14 +37,26 @@ sid／Task 狀態／環境變數／測試慣例。對照表在那支 skill 裡�
 事實導向、不寫 code 讀得到的東西、**記錄 why（附 commit sha 或 Jira 票號）**、
 一檔一主題、新增檔案要同步更新該目錄 `_index.md`。
 
-**沒有 `/knowledge-update` 這個指令**（2026-09-10 查證）。repo 內只有：
+### 那支指令叫 `/prospec-knowledge-update`，但有兩個但書
 
-| 有的東西 | 是什麼 |
-|---|---|
-| `.claude/skills/knowledge-base-loader` | **只負責載入**，不負責回寫 |
-| `prospec/CONSTITUTION.md:111` 的 `/prospec-knowledge-update` | 指向 **已被取代** 的 `prospec/ai-knowledge/`，不要用 |
+團隊口語會說「跑一下 knowledge-update」。正式名稱是 **`/prospec-knowledge-update`**，
+出處是 `prospec/CONSTITUTION.md:111`：
 
-所以回寫是**人工的**，沒有機制會提醒。這一節就是那個提醒。
+> Knowledge 變更（新模組、邊界改名）透過 `/prospec-knowledge-update` 更新 `prospec/ai-knowledge/`
+
+**兩個但書，用之前先看**（2026-09-10 查證）：
+
+1. **它不在版控裡。** fishing-cat 的 `.claude/` 只有 `knowledge-base-loader` 一支，唯一的指令檔是
+   `.cursor/commands/vsx.pr-description.md`；`prospec/` 底下沒有 `.claude` 也沒有 `commands`。
+   我另外掃過 `edu-participant-web` / `ragdoll-cat` / `ocelot`，都沒有。
+   同一個模式 km 已經記過一次——見 [[olfparser-ai-setup-not-in-vcs]]。
+   **所以它可能只存在於個別成員的本機**；要用先跟對方要定義。
+2. **它宣稱的目標目錄已被淘汰。** 它寫的是更新 `prospec/ai-knowledge/`，而該目錄自己的
+   `_index.md` 開頭就寫「**已被 `docs/knowledge/` 取代。新內容一律寫在那裡**」。
+   照字面跑會寫錯地方。
+
+**結論：真正該做的事不變——在同一個 PR 更新 `docs/knowledge/`。** 有沒有指令只是省不省手工，
+沒有任何機制會在你忘記時提醒。這一節就是那個提醒。
 
 **改一半比不改更糟。** 2026-09-09 的 VSFT-9718 實例：我修掉 KB 上半段一個錯誤歸因，卻留下
 兩處仍用舊框架寫的段落，整份文件自相矛盾，被 reviewer 抓到（PR #578）。回寫之後
