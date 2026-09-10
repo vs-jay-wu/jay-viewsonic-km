@@ -46,8 +46,23 @@
 **清單超過 3 筆時，問要處理哪幾筆。** 除此之外整條流程自己跑完 ——
 包含**張貼留言，不需要再問**（Jay 2026-09-10 明確授權，適用範圍僅限這個 command）。
 
-仍然不自動做的：`git commit`、修改任何專案 repo 的程式碼、送出 approve /
-request changes（`gh pr review`）。這三件要另外問。
+仍然不自動做的：`git commit`、修改任何專案 repo 的程式碼。這兩件要另外問。
+
+**送出 approve / request changes（`gh pr review`）要看授權**。三種模式：
+
+| 模式 | 行為 |
+|---|---|
+| `off`（預設） | 只用 `gh pr comment` 留言，不碰 approve / request changes |
+| `approve` | 子程序 verdict 是 approve **且**沒有任何 MUST／SHOULD finding 時可以 approve；要改的只留言 |
+| `full` | 同上，另外在有至少一條**自己驗證過**的 MUST 時可以 request changes |
+
+- **互動執行**（Jay 直接叫這個 command）：預設 `off`。Jay 當場說可以才送。
+- **排程執行**：模式由 `data/local-state/pr-inbox-watch.json` 的 `reviewVerdict`
+  決定（web 的「PR 巡邏」頁可改），`scripts/pr-inbox-watch.sh` 會把對應的規則
+  寫進系統提示。
+
+不論哪個模式：**不確定就退回留言**。只有 SHOULD／NIT／QUESTION 不要 request
+changes —— 那是留言的事，卡不卡是 Jay 的決定。送出後在回報裡寫明是哪一種與理由。
 
 ### 1. 先報清單
 

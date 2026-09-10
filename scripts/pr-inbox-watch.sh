@@ -26,6 +26,9 @@
 #   ./scripts/pr-inbox-watch.sh --trigger manual 同上，但標記為手動觸發
 #   ./scripts/pr-inbox-watch.sh --detect-only    只偵測，不叫 AI
 #   ./scripts/pr-inbox-watch.sh --force-unlock   強制清掉殘留的鎖
+#   ./scripts/pr-inbox-watch.sh --verdicts approve
+#                                  臨時覆寫「允不允許送出 review 判定」
+#                                  off（只留言，預設）／approve／full
 #
 # 排程：不在這支腳本裡，而是掛在 km web server（見 web/lib/prInboxScheduler.ts）。
 #       在 web 的「PR 巡邏」頁開關，設定存 data/local-state/pr-inbox-watch.json。
@@ -40,20 +43,46 @@ REPO_ROOT="${0:A:h:h}"
 RUNS_DIR="$REPO_ROOT/data/pr-inbox-runs"
 LOCK_DIR="$RUNS_DIR/.lock"
 WS="$REPO_ROOT/local.workspace.json"
+WATCH_CONFIG="$REPO_ROOT/data/local-state/pr-inbox-watch.json"
 
 TRIGGER="scheduled"
 DETECT_ONLY=false
+VERDICT_MODE=""   # 空 = 讀設定檔
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --trigger)      TRIGGER="${2:?--trigger 需要 scheduled|manual}"; shift ;;
     --detect-only)  DETECT_ONLY=true ;;
+    --verdicts)     VERDICT_MODE="${2:?--verdicts 需要 off|approve|full}"; shift ;;
     --force-unlock) rm -rf "$LOCK_DIR"; echo "已清掉 $LOCK_DIR"; exit 0 ;;
     -h|--help)      sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "未知參數：$1（用 --help 看用法）" >&2; exit 2 ;;
   esac
   shift
 done
+
+# ─── 這輪允不允許送出 review 判定 ────────────────────────────────────────────
+#
+#   off      只留言（gh pr comment），不碰 approve / request changes
+#   approve  沒有 MUST／SHOULD 的時候可以 approve；不送 request changes
+#   full     approve 與 request changes 都可以
+#
+# 預設 off。送 approve / request changes 是**代表 Jay 對別人的 PR 表態**，
+# 而且 GitHub 會通知對方、也會影響 merge 門檻 —— 要開就要是明確的決定，
+# 不能因為「反正 AI 看過了」就默默打開。
+# 設定在 web 的「PR 巡邏」頁（存 data/local-state/pr-inbox-watch.json），
+# 或用 --verdicts 臨時覆寫。
+#
+# 這段刻意放在最前面：write_record 會把模式一起寫進紀錄，驗證晚一步就會留下
+# 沒驗證過的值（實際踩到：--verdicts bogus 被原樣記成 verdictMode=bogus）。
+if [[ -z "$VERDICT_MODE" && -f "$WATCH_CONFIG" ]]; then
+  VERDICT_MODE="$(jq -r '.reviewVerdict // "off"' "$WATCH_CONFIG" 2>/dev/null || echo off)"
+fi
+case "${VERDICT_MODE:-off}" in
+  off|approve|full) VERDICT_MODE="${VERDICT_MODE:-off}" ;;
+  *) echo "⚠️  reviewVerdict=\"$VERDICT_MODE\" 不認識，退回 off" >&2; VERDICT_MODE=off ;;
+esac
+
 
 mkdir -p "$RUNS_DIR"
 
@@ -78,8 +107,10 @@ write_record() {
     --argjson prCount "${3:-0}" \
     --argjson prs "$(cat "$PRS_FILE" 2>/dev/null || echo '[]')" \
     --argjson claude "${4:-null}" \
+    --arg verdictMode "${VERDICT_MODE:-off}" \
     '{id:$id, startedAt:$startedAt, finishedAt:$finishedAt, status:$status,
-      note:$note, trigger:$trigger, prCount:$prCount, prs:$prs, claude:$claude}' \
+      note:$note, trigger:$trigger, prCount:$prCount, prs:$prs, claude:$claude,
+      verdictMode:$verdictMode}' \
     > "$RECORD"
   RECORD_WRITTEN=1
 }
@@ -180,15 +211,44 @@ if [[ -f "$WS" ]]; then
 fi
 [[ ${#CLAUDE_ARGS[@]} -eq 0 ]] && CLAUDE_ARGS=(--permission-mode bypassPermissions)
 
-# 這段是給非互動環境的補充規則：沒有人可以回答問題，所以不要問；
-# 同時把 command 本身「不自動做」的三件事再釘一次。
-read -r -d '' EXTRA <<'PROMPT' || true
-你在排程（非互動）環境中執行，stdin 沒有人 —— 不要提問，也不要等待確認。
-清單超過 3 筆時，自行挑優先度最高的 3 筆處理，其餘在最後列成「未處理」清單。
-仍然禁止：git commit、修改任何專案 repo 的程式碼、gh pr review（approve / request changes）。
+case "$VERDICT_MODE" in
+  off)
+    read -r -d '' VERDICT_RULE <<'PROMPT' || true
+禁止送出 approve 或 request changes（`gh pr review`）—— 只用 `gh pr comment` 留言，
+也就是給 review-pr.sh 的 verdict 一律當成 comment 處理。
 PROMPT
+    ;;
+  approve)
+    read -r -d '' VERDICT_RULE <<'PROMPT' || true
+你可以代表 Jay 送出 **approve**（`gh pr review --approve`），但只在同時成立時：
+  1. 子程序回的 verdict 是 approve，且
+  2. findings 裡沒有任何 MUST 或 SHOULD（只有 NIT／QUESTION 也算可以 approve），且
+  3. 該 finding 都已經自己驗證過（照 command 裡的複核步驟）。
+**不要**送 request changes —— 要改的就留言說明，讓 Jay 自己決定要不要卡。
+不確定就退回留言。approve 之後在回報裡明確寫出「已 approve」與理由。
+PROMPT
+    ;;
+  full)
+    read -r -d '' VERDICT_RULE <<'PROMPT' || true
+你可以代表 Jay 送出 **approve** 或 **request changes**（`gh pr review`）：
+  - approve：子程序 verdict 是 approve 且沒有 MUST／SHOULD 的 finding
+  - request changes：至少有一條**自己驗證過**的 MUST。只有 SHOULD／NIT／QUESTION
+    的時候不要 request changes，留言就好
+不確定、或 finding 驗不到底，就退回留言。送出後在回報裡寫明是哪一種與理由。
+PROMPT
+    ;;
+esac
 
-echo "▶ 啟動 claude 處理（$(date -u +%H:%M:%SZ)）…"
+# 這段是給非互動環境的補充規則：沒有人可以回答問題，所以不要問；
+# 同時把 command 本身「不自動做」的事再釘一次。
+EXTRA="你在排程（非互動）環境中執行，stdin 沒有人 —— 不要提問，也不要等待確認。
+清單超過 3 筆時，自行挑優先度最高的 3 筆處理，其餘在最後列成「未處理」清單。
+
+$VERDICT_RULE
+
+仍然禁止：git commit、修改任何專案 repo 的程式碼。"
+
+echo "▶ 啟動 claude 處理（$(date -u +%H:%M:%SZ)，判定模式 $VERDICT_MODE）…"
 CLAUDE_JSON="$(mktemp)"
 set +e
 claude -p "/handle-pr-inbox" \
@@ -217,7 +277,7 @@ CLAUDE_META="$(jq -n --argjson code "$CLAUDE_CODE" --slurpfile r "$CLAUDE_JSON" 
 rm -f "$CLAUDE_JSON"
 
 if [[ "$CLAUDE_CODE" -eq 0 ]]; then
-  write_record handled "已交給 AI 處理 $PR_COUNT 筆" "$PR_COUNT" "$CLAUDE_META"
+  write_record handled "已交給 AI 處理 $PR_COUNT 筆（判定模式 $VERDICT_MODE）" "$PR_COUNT" "$CLAUDE_META"
   echo "✓ 完成（花費 $(jq -r '.costUsd // "?"' <<< "$CLAUDE_META") USD，$(jq -r '.numTurns // "?"' <<< "$CLAUDE_META") turns）"
 else
   write_record failed "claude 離開碼 $CLAUDE_CODE" "$PR_COUNT" "$CLAUDE_META"

@@ -7,12 +7,28 @@ const CONFIG_FILE = repoPath("data/local-state/pr-inbox-watch.json");
 const MIN_INTERVAL_SECONDS = 60;
 const DEFAULT_INTERVAL_SECONDS = 1800;
 
+/**
+ * AI 可不可以代表 Jay 對別人的 PR 送出 review 判定。
+ *
+ *   off      只留言（預設）
+ *   approve  沒有 MUST／SHOULD 時可以 approve，不送 request changes
+ *   full     approve 與 request changes 都可以
+ *
+ * 實際規則是 scripts/pr-inbox-watch.sh 依這個值組系統提示給 AI。
+ */
+export type ReviewVerdictMode = "off" | "approve" | "full";
+
 export interface ScheduleConfig {
   enabled: boolean;
   intervalSeconds: number;
   /** true = 排程只偵測、不啟動 AI（人不在時的保險模式） */
   detectOnly: boolean;
+  reviewVerdict: ReviewVerdictMode;
   updatedAt: string;
+}
+
+function normaliseVerdict(v: unknown): ReviewVerdictMode {
+  return v === "approve" || v === "full" ? v : "off";
 }
 
 export interface SchedulerState extends ScheduleConfig {
@@ -62,7 +78,7 @@ export async function readConfig(): Promise<ScheduleConfig> {
   if (!raw) {
     return {
       enabled: false, intervalSeconds: DEFAULT_INTERVAL_SECONDS,
-      detectOnly: false, updatedAt: "",
+      detectOnly: false, reviewVerdict: "off", updatedAt: "",
     };
   }
   try {
@@ -71,12 +87,13 @@ export async function readConfig(): Promise<ScheduleConfig> {
       enabled: !!c.enabled,
       intervalSeconds: clampInterval(c.intervalSeconds),
       detectOnly: !!c.detectOnly,
+      reviewVerdict: normaliseVerdict(c.reviewVerdict),
       updatedAt: c.updatedAt ?? "",
     };
   } catch {
     return {
       enabled: false, intervalSeconds: DEFAULT_INTERVAL_SECONDS,
-      detectOnly: false, updatedAt: "",
+      detectOnly: false, reviewVerdict: "off", updatedAt: "",
     };
   }
 }
@@ -139,12 +156,14 @@ export async function setSchedule(input: {
   enabled: boolean;
   intervalSeconds?: number;
   detectOnly?: boolean;
+  reviewVerdict?: ReviewVerdictMode;
 }): Promise<SchedulerState> {
   const current = await readConfig();
   const config: ScheduleConfig = {
     enabled: input.enabled,
     intervalSeconds: clampInterval(input.intervalSeconds ?? current.intervalSeconds),
     detectOnly: input.detectOnly ?? current.detectOnly,
+    reviewVerdict: normaliseVerdict(input.reviewVerdict ?? current.reviewVerdict),
     updatedAt: new Date().toISOString(),
   };
   await writeConfig(config);

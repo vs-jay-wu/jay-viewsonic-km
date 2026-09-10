@@ -54,6 +54,8 @@ export interface RunRecord {
   prs: RunPr[];
   claude: ClaudeMeta | null;
   hasLog: boolean;
+  /** 那一輪允不允許送出 review 判定（off / approve / full） */
+  verdictMode?: string;
 }
 
 export interface LockState {

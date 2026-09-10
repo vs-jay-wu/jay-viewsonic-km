@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentState, setSchedule } from "@/lib/prInboxScheduler";
+import { currentState, setSchedule, type ReviewVerdictMode } from "@/lib/prInboxScheduler";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
     enabled?: boolean;
     intervalSeconds?: number;
     detectOnly?: boolean;
+    reviewVerdict?: ReviewVerdictMode;
   };
   if (typeof body.enabled !== "boolean") {
     return NextResponse.json({ error: "要給 enabled（true/false）" }, { status: 400 });
@@ -21,6 +22,7 @@ export async function POST(req: NextRequest) {
     enabled: body.enabled,
     intervalSeconds: body.intervalSeconds,
     detectOnly: body.detectOnly,
+    reviewVerdict: body.reviewVerdict,
   });
   return NextResponse.json({ ok: true, watcher });
 }

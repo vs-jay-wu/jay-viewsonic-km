@@ -13,14 +13,18 @@ interface ClaudeMeta {
 }
 interface RunRecord {
   id: string; startedAt: string; finishedAt: string; status: string; note: string;
-  trigger: string; prCount: number; prs: RunPr[]; claude: ClaudeMeta | null; hasLog: boolean;
+  trigger: string; prCount: number; prs: RunPr[]; claude: ClaudeMeta | null;
+  hasLog: boolean; verdictMode?: string;
 }
 interface LockState {
   locked: boolean; pid: number | null; startedAt: string | null;
   runId: string | null; alive: boolean;
 }
+type VerdictMode = "off" | "approve" | "full";
+
 interface WatcherState {
-  enabled: boolean; intervalSeconds: number; detectOnly: boolean; updatedAt: string;
+  enabled: boolean; intervalSeconds: number; detectOnly: boolean;
+  reviewVerdict: VerdictMode; updatedAt: string;
   running: boolean; lastTickAt: string | null; nextRunAt: string | null;
   lastSkipReason: string | null;
 }
@@ -63,6 +67,7 @@ export default function PrInboxPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [intervalMin, setIntervalMin] = useState(30);
   const [detectOnly, setDetectOnly] = useState(false);
+  const [verdict, setVerdict] = useState<VerdictMode>("off");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [log, setLog] = useState<{ id: string; log: string } | null>(null);
 
@@ -80,6 +85,7 @@ export default function PrInboxPage() {
       if (typeof json.watcher?.detectOnly === "boolean") {
         setDetectOnly(json.watcher.detectOnly);
       }
+      if (json.watcher?.reviewVerdict) setVerdict(json.watcher.reviewVerdict);
     }
     setLoading(false);
   }, []);
@@ -243,6 +249,43 @@ export default function PrInboxPage() {
             </div>
           </div>
 
+          {/* 送不送出 review 判定 */}
+          <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50/60 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm font-medium text-gray-900">AI 的 review 判定</span>
+              <select
+                value={verdict}
+                onChange={(e) => {
+                  const v = e.target.value as VerdictMode;
+                  setVerdict(v);
+                  post("/api/pr-inbox/watcher",
+                    { enabled: !!watcher?.enabled, reviewVerdict: v },
+                    "verdict");
+                }}
+                className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-800"
+              >
+                <option value="off">只留言（不 approve、不 request changes）</option>
+                <option value="approve">可以 approve（不送 request changes）</option>
+                <option value="full">approve ＋ request changes 都可以</option>
+              </select>
+              {verdict !== "off" && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
+                  <Icon name="alert" size={12} /> 會代表你對別人的 PR 表態
+                </span>
+              )}
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-gray-500">
+              {verdict === "off" &&
+                "只用 gh pr comment 留言。approve／request changes 一律不送。"}
+              {verdict === "approve" &&
+                "子程序 verdict 是 approve、且沒有任何 MUST／SHOULD finding 時才送 approve；要改的只留言，不送 request changes。"}
+              {verdict === "full" &&
+                "approve 同上；另外在有至少一條「自己驗證過」的 MUST 時會送 request changes。只有 SHOULD／NIT／QUESTION 不會 request changes。"}
+              {" "}不確定一律退回留言。草稿含本機／km 路徑時會被守門擋下、完全不貼
+              （<code>review-pr.sh</code> 的洩漏檢查）。
+            </p>
+          </div>
+
           <p className="mt-3 text-xs leading-relaxed text-gray-400">
             排程掛在這個 web server 裡（設定寫進 <code>data/local-state/pr-inbox-watch.json</code>，
             server 重開會自己接回去），所以 <strong className="text-gray-500">web 沒開就不會巡邏</strong> ——
@@ -376,6 +419,10 @@ export default function PrInboxPage() {
                           <div><dt className="text-gray-400">run id</dt><dd className="font-mono text-gray-700">{r.id}</dd></div>
                           <div><dt className="text-gray-400">結束</dt><dd className="text-gray-700">{fmtTime(r.finishedAt)}</dd></div>
                           <div><dt className="text-gray-400">說明</dt><dd className="text-gray-700">{r.note || "—"}</dd></div>
+                          <div>
+                            <dt className="text-gray-400">判定模式</dt>
+                            <dd className="text-gray-700">{r.verdictMode ?? "off"}</dd>
+                          </div>
                           {r.claude && (
                             <>
                               <div><dt className="text-gray-400">花費</dt><dd className="text-gray-700">{fmtCost(r.claude.costUsd)}</dd></div>
