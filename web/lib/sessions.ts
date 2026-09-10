@@ -5,6 +5,7 @@ import { repoPath } from "@/lib/repo";
 
 const PROJECTS_DIR = path.join(os.homedir(), ".claude", "projects");
 const PINS_FILE = repoPath("data/local-state/session-pins.json");
+const META_CACHE_FILE = repoPath("data/local-state/session-meta-cache.json");
 const HEAD_BYTES = 64 * 1024;
 
 /** session id 是 uuid；只認這個形狀，避免拿到奇怪的路徑。 */
@@ -110,8 +111,6 @@ function parseHead(head: string): HeadMeta {
     title: "", titleSource: "none", cwd: null,
     gitBranch: null, version: null, createdAt: null,
   };
-  let customTitle: string | null = null;
-  let agentName: string | null = null;
   let prompt: string | null = null;
 
   const lines = head.split("\n");
@@ -124,8 +123,6 @@ function parseHead(head: string): HeadMeta {
     } catch {
       continue;
     }
-    if (typeof rec.customTitle === "string" && !customTitle) customTitle = rec.customTitle;
-    if (typeof rec.agentName === "string" && !agentName) agentName = rec.agentName;
     if (typeof rec.cwd === "string" && !meta.cwd) meta.cwd = rec.cwd;
     if (typeof rec.gitBranch === "string" && !meta.gitBranch) meta.gitBranch = rec.gitBranch;
     if (typeof rec.version === "string" && !meta.version) meta.version = rec.version;
@@ -141,11 +138,66 @@ function parseHead(head: string): HeadMeta {
     }
   }
 
-  if (customTitle) { meta.title = customTitle; meta.titleSource = "custom"; }
-  else if (agentName) { meta.title = agentName; meta.titleSource = "agent"; }
-  else if (prompt) { meta.title = prompt; meta.titleSource = "prompt"; }
+  if (prompt) { meta.title = prompt; meta.titleSource = "prompt"; }
   else { meta.title = "(未命名)"; meta.titleSource = "none"; }
   return meta;
+}
+
+/**
+ * 掃 custom-title / agent-name 記錄。
+ *
+ * **不能只讀開頭。** `/rename` 是對話進行到一半才寫入的，實際看過的例子落在
+ * 48MB 檔案的第 2.9MB —— 只讀 64KB 的話標題會退回「第一句 prompt」，
+ * 用真標題搜尋就找不到那個 session（Jay 2026-09-10 回報）。
+ *
+ * 整份掃，但用 4MB 分塊讀 + 先做字串比對再 JSON.parse；並且只掃
+ * `fromOffset` 之後的部分（檔案只會往後長，掃過的結果由呼叫端快取）。
+ * 同一種記錄取**最後一筆** —— 最新的改名才是現在的標題。
+ */
+async function scanTitleRecords(
+  file: string,
+  fromOffset = 0,
+  fileSize?: number
+): Promise<{ customTitle: string | null; agentName: string | null; scannedBytes: number }> {
+  const CHUNK = 4 * 1024 * 1024;
+  const fh = await open(file, "r");
+  let customTitle: string | null = null;
+  let agentName: string | null = null;
+  let pos = Math.max(0, fromOffset);
+  try {
+    const size = fileSize ?? (await fh.stat()).size;
+    let carry = "";
+    const buf = Buffer.alloc(CHUNK);
+    while (pos < size) {
+      const { bytesRead } = await fh.read(buf, 0, CHUNK, pos);
+      if (bytesRead <= 0) break;
+      pos += bytesRead;
+      const text = carry + buf.subarray(0, bytesRead).toString("utf8");
+      const lastNl = text.lastIndexOf("\n");
+      // 尾巴那半行留給下一塊，不然 JSON 被切斷
+      carry = lastNl === -1 ? text : text.slice(lastNl + 1);
+      const complete = lastNl === -1 ? "" : text.slice(0, lastNl);
+      if (!complete) continue;
+      for (const line of complete.split("\n")) {
+        if (!line.includes('"custom-title"') && !line.includes('"agent-name"')) continue;
+        try {
+          const rec = JSON.parse(line) as {
+            type?: string; customTitle?: string; agentName?: string;
+          };
+          if (rec.type === "custom-title" && typeof rec.customTitle === "string") {
+            customTitle = rec.customTitle;
+          } else if (rec.type === "agent-name" && typeof rec.agentName === "string") {
+            agentName = rec.agentName;
+          }
+        } catch {
+          // 壞行／半行，跳過
+        }
+      }
+    }
+    return { customTitle, agentName, scannedBytes: pos };
+  } finally {
+    await fh.close();
+  }
 }
 
 /** 目錄名是把 cwd 的 / 換成 - 編碼的，還原不回原樣，只能當顯示用的後備。 */
@@ -153,8 +205,99 @@ function decodeProjectDir(dir: string): string {
   return dir.replace(/^-/, "/").replace(/-/g, "/");
 }
 
+/**
+ * 每個 session 檔的解析結果快取。
+ *
+ * 標題要掃全檔（見 scanTitleRecords），430MB 每次列清單都重掃太慢。
+ * 用 size + mtime 當有效性判斷；檔案只是變長（正在進行的 session）就只掃
+ * 新增的那一段，標題沿用上次掃到的。
+ */
+interface MetaCacheEntry {
+  size: number;
+  mtimeMs: number;
+  scannedBytes: number;
+  customTitle: string | null;
+  agentName: string | null;
+  promptTitle: string;
+  cwd: string | null;
+  gitBranch: string | null;
+  version: string | null;
+  createdAt: string | null;
+}
+type MetaCache = Record<string, MetaCacheEntry>;
+
+async function readMetaCache(): Promise<MetaCache> {
+  const raw = await readFile(META_CACHE_FILE, "utf8").catch(() => null);
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as MetaCache;
+  } catch {
+    return {};
+  }
+}
+
+async function writeMetaCache(cache: MetaCache): Promise<void> {
+  await mkdir(path.dirname(META_CACHE_FILE), { recursive: true });
+  await writeFile(META_CACHE_FILE, JSON.stringify(cache), "utf8");
+}
+
+/** custom-title 優先，其次 agent 名，最後才退回第一句 prompt。 */
+function pickTitle(e: MetaCacheEntry): {
+  title: string;
+  titleSource: SessionInfo["titleSource"];
+} {
+  if (e.customTitle) return { title: e.customTitle, titleSource: "custom" };
+  if (e.agentName) return { title: e.agentName, titleSource: "agent" };
+  if (e.promptTitle && e.promptTitle !== "(未命名)") {
+    return { title: e.promptTitle, titleSource: "prompt" };
+  }
+  return { title: "(未命名)", titleSource: "none" };
+}
+
+async function buildMeta(
+  file: string,
+  size: number,
+  mtimeMs: number,
+  cached: MetaCacheEntry | undefined
+): Promise<MetaCacheEntry> {
+  // 快取仍然有效
+  if (cached && cached.size === size && cached.mtimeMs === mtimeMs) return cached;
+
+  // 檔案只是變長（session 還在進行）→ 只掃新增的那段
+  if (cached && size > cached.scannedBytes) {
+    const scan = await scanTitleRecords(file, cached.scannedBytes, size);
+    return {
+      ...cached,
+      size,
+      mtimeMs,
+      scannedBytes: scan.scannedBytes,
+      customTitle: scan.customTitle ?? cached.customTitle,
+      agentName: scan.agentName ?? cached.agentName,
+    };
+  }
+
+  // 全新或被截短過 → 完整解析
+  const head = await readHead(file).catch(() => "");
+  const headMeta = parseHead(head);
+  const scan = await scanTitleRecords(file, 0, size);
+  return {
+    size,
+    mtimeMs,
+    scannedBytes: scan.scannedBytes,
+    customTitle: scan.customTitle,
+    agentName: scan.agentName,
+    promptTitle: headMeta.title,
+    cwd: headMeta.cwd,
+    gitBranch: headMeta.gitBranch,
+    version: headMeta.version,
+    createdAt: headMeta.createdAt,
+  };
+}
+
 export async function listSessions(): Promise<SessionInfo[]> {
   const pins = await readPins();
+  const cache = await readMetaCache();
+  const nextCache: MetaCache = {};
   const projectDirs = await readdir(PROJECTS_DIR, { withFileTypes: true }).catch(() => []);
 
   const perProject = await Promise.all(
@@ -173,8 +316,9 @@ export async function listSessions(): Promise<SessionInfo[]> {
             const file = path.join(dirPath, `${id}.jsonl`);
             const st = await stat(file).catch(() => null);
             if (!st) return null;
-            const head = await readHead(file).catch(() => "");
-            const meta = parseHead(head);
+            const meta = await buildMeta(file, st.size, st.mtimeMs, cache[id]);
+            nextCache[id] = meta;
+            const { title, titleSource } = pickTitle(meta);
             const sidecarPath = path.join(dirPath, id);
             const hasSidecar = await stat(sidecarPath).then(
               (s) => s.isDirectory(),
@@ -185,8 +329,8 @@ export async function listSessions(): Promise<SessionInfo[]> {
               id,
               projectDir: d.name,
               cwd: meta.cwd ?? decodeProjectDir(d.name),
-              title: meta.title,
-              titleSource: meta.titleSource,
+              title,
+              titleSource,
               gitBranch: meta.gitBranch,
               version: meta.version,
               sizeBytes: st.size,
@@ -202,10 +346,14 @@ export async function listSessions(): Promise<SessionInfo[]> {
       })
   );
 
-  return perProject
+  const sessions = perProject
     .flat()
     .filter((s): s is SessionInfo => s !== null)
     .sort((a, b) => (a.modifiedAt < b.modifiedAt ? 1 : -1));
+
+  // 只留這次真的看到的 session，順便把刪掉的清出快取
+  await writeMetaCache(nextCache).catch(() => undefined);
+  return sessions;
 }
 
 export interface DeleteResult {
