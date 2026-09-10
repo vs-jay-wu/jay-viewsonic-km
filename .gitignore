@@ -13,3 +13,6 @@ local.workspace.json
 
 # PR 巡邏的執行紀錄與鎖（本機狀態，不進版控）
 data/pr-inbox-runs/
+
+# Claude session pin 等本機狀態（不進版控）
+data/local-state/
