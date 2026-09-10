@@ -221,21 +221,27 @@ PROMPT
     ;;
   approve)
     read -r -d '' VERDICT_RULE <<'PROMPT' || true
-你可以代表 Jay 送出 **approve**（`gh pr review --approve`），但只在同時成立時：
-  1. 子程序回的 verdict 是 approve，且
-  2. findings 裡沒有任何 MUST 或 SHOULD（只有 NIT／QUESTION 也算可以 approve），且
-  3. 該 finding 都已經自己驗證過（照 command 裡的複核步驟）。
-**不要**送 request changes —— 要改的就留言說明，讓 Jay 自己決定要不要卡。
-不確定就退回留言。approve 之後在回報裡明確寫出「已 approve」與理由。
+你可以代表 Jay 送出 **approve**（`gh pr review --approve`），判準由上往下第一個成立的算：
+  - 沒把握、finding 驗不到底 → 留言
+  - 有自己驗證過的 MUST → 留言（這個模式不送 request changes，讓 Jay 決定要不要卡）
+  - 有**程式碼層**的 SHOULD 未解 → 留言，不 approve
+  - 只剩**文件類** SHOULD（PR 描述／註解與 head 不符）→ **approve，但在內容裡寫明條件**
+  - 只有 NIT／QUESTION → approve
+approve 之後在回報裡明確寫出「已 approve」與理由。
 PROMPT
     ;;
   full)
     read -r -d '' VERDICT_RULE <<'PROMPT' || true
-你可以代表 Jay 送出 **approve** 或 **request changes**（`gh pr review`）：
-  - approve：子程序 verdict 是 approve 且沒有 MUST／SHOULD 的 finding
-  - request changes：至少有一條**自己驗證過**的 MUST。只有 SHOULD／NIT／QUESTION
-    的時候不要 request changes，留言就好
-不確定、或 finding 驗不到底，就退回留言。送出後在回報裡寫明是哪一種與理由。
+你可以代表 Jay 送出 **approve** 或 **request changes**（`gh pr review`）。
+判準由上往下第一個成立的算：
+  - 沒把握、finding 驗不到底 → 留言
+  - 有至少一條**自己追到程式碼確認過**的 MUST → request changes
+  - 有**程式碼層**的 SHOULD 未解 → 留言，不 approve
+  - 只剩**文件類** SHOULD（PR 描述／註解與 head 不符）→ **approve，但在內容裡寫明條件**
+    （例：「描述有 N 處與 head 不符（列出來），請在合併前同步」）—— 那類意見不影響
+    程式碼能不能出，壓住 approve 只會讓 PR 停在 REVIEW_REQUIRED 等人處理
+  - 只有 NIT／QUESTION → approve
+送出後在回報裡寫明是哪一種與理由。
 PROMPT
     ;;
 esac

@@ -60,10 +60,26 @@
 | `approve` | 只送 approve；要改的只留言，不卡對方 |
 | `off` | 只用 `gh pr comment` 留言 |
 
-不論哪個模式，這幾條不變：
+### 判準（決定送哪一種）
 
-- **不確定就退回留言。** 判定是會通知對方、也會影響 merge 門檻的動作，
-  沒把握就不要用它表態。
+由上往下第一個成立的就是答案：
+
+| 情況 | 送出 |
+|---|---|
+| 沒把握、finding 驗不到底 | 留言 |
+| 有至少一條**自己追到程式碼確認過**的 MUST | request changes（`full` 模式；`approve`／`off` 模式退回留言） |
+| 有**程式碼層**的 SHOULD 未解 | 留言 —— 不 approve |
+| 只剩**文件類** SHOULD（PR 描述、註解、README 與 head 不符） | **approve，但在內容裡寫明條件** |
+| 只有 NIT／QUESTION | approve |
+
+**為什麼文件類 SHOULD 不壓住 approve**：那類意見不影響程式碼能不能出。壓住的話
+PR 會停在 `REVIEW_REQUIRED` 等人手動處理，自動化在這一類上就沒有結論 ——
+而「有結論」才是這條流程存在的理由（Jay 2026-09-10 裁定）。改成附條件 approve：
+球一樣回到作者手上，但不卡 merge。條件要具體寫出來，例如
+「描述有四處與 head 不符（列出來），請在合併前同步」。
+
+其餘不變：
+
 - 只有 SHOULD／NIT／QUESTION **不要** request changes —— 那是留言的事，
   要不要卡是 Jay 的決定。
 - MUST 一定要**自己追到程式碼確認過**才用來 request changes（見第 4 節）。

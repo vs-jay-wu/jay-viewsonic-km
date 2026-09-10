@@ -278,9 +278,11 @@ export default function PrInboxPage() {
               {verdict === "off" &&
                 "只用 gh pr comment 留言。approve／request changes 一律不送 —— review 不會有結論，球留在你手上。"}
               {verdict === "approve" &&
-                "子程序 verdict 是 approve、且沒有任何 MUST／SHOULD finding 時才送 approve；要改的只留言，不送 request changes。"}
+                "沒有 MUST、也沒有程式碼層 SHOULD 時送 approve；有 MUST 只留言，不送 request changes。"}
               {verdict === "full" &&
-                "approve 同上；另外在有至少一條「自己驗證過」的 MUST 時會送 request changes。只有 SHOULD／NIT／QUESTION 不會 request changes。"}
+                "approve 同上；另外在有至少一條「自己追到程式碼確認過」的 MUST 時送 request changes。只有 SHOULD／NIT／QUESTION 不會 request changes。"}
+              {verdict !== "off" &&
+                " 只剩文件類 SHOULD（PR 描述／註解與 head 不符）時會附條件 approve —— 壓住的話 PR 會停在 REVIEW_REQUIRED 等你手動處理。"}
               {" "}不確定一律退回留言。草稿含本機／km 路徑時會被守門擋下、完全不貼
               （<code>review-pr.sh</code> 的洩漏檢查）。
             </p>
