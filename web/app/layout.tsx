@@ -6,7 +6,7 @@ import Sidebar from "@/components/Sidebar";
 const geist = Geist({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Teams Archive",
+  title: "KM 工作台",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
