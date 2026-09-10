@@ -8,7 +8,6 @@ import Icon, { type IconName } from "@/components/Icon";
 interface Chat {
   id: number;
   topic: string | null;
-  message_count: number;
 }
 
 const TOOLS: { href: string; label: string; icon: IconName }[] = [
@@ -64,7 +63,6 @@ export default function Sidebar() {
           >
             <Icon name="hash" size={14} className="text-white/40" />
             <span className="truncate flex-1">{chat.topic || "(無標題)"}</span>
-            <span className="text-xs text-white/40 shrink-0">{chat.message_count}</span>
           </Link>
         ))}
       </nav>
