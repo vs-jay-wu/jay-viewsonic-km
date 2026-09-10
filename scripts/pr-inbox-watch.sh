@@ -93,6 +93,15 @@ on_signal() {
 
 # ─── 上鎖 ───────────────────────────────────────────────────────────────────
 
+# 有沒有 AI 還在處理 PR（不看鎖，直接看行程）。
+# 用途：父 shell 被 SIGKILL（trap 跑不到）時鎖會留下但持有者已死，
+# 這時單看 pid 會判定「死鎖」而回收 —— 但它 spawn 的 claude 還活著，
+# 一回收就會派第二隻去 review 同一批 PR。所以回收前先問這一句。
+ai_still_running() {
+  pgrep -f 'claude -p /handle-pr-inbox' >/dev/null 2>&1 \
+    || pgrep -f 'scripts/review-pr.sh' >/dev/null 2>&1
+}
+
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   holder="$(cat "$LOCK_DIR/pid" 2>/dev/null || echo '')"
   if [[ -n "$holder" ]] && kill -0 "$holder" 2>/dev/null; then
@@ -100,9 +109,22 @@ if ! mkdir "$LOCK_DIR" 2>/dev/null; then
     write_record skipped "上一輪仍在執行（pid $holder）" 0
     exit 0
   fi
-  echo "⚠️  發現死鎖（持有者 ${holder:-未知} 已不在），回收後繼續"
+  if ai_still_running; then
+    echo "⏭  持有者 ${holder:-未知} 已不在，但 AI 行程還在跑 —— 不回收鎖，這次跳過"
+    write_record skipped "孤兒 AI 行程仍在處理 PR（原持有者 ${holder:-未知} 已不在）" 0
+    exit 0
+  fi
+  echo "⚠️  發現死鎖（持有者 ${holder:-未知} 已不在，且無 AI 行程），回收後繼續"
   rm -rf "$LOCK_DIR"
   mkdir "$LOCK_DIR" || { echo "搶不到鎖，放棄" >&2; exit 1; }
+fi
+
+# 鎖不存在但 AI 還在跑（例如鎖被手動 --force-unlock 清掉）也一樣要讓路
+if ai_still_running; then
+  echo "⏭  已有 AI 行程在處理 PR，這次跳過"
+  write_record skipped "已有 AI 行程在處理 PR" 0
+  rm -rf "$LOCK_DIR"
+  exit 0
 fi
 echo $$ > "$LOCK_DIR/pid"
 echo "$STARTED_AT" > "$LOCK_DIR/startedAt"
