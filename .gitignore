@@ -10,3 +10,6 @@ local.workspace.json
 
 # Claude Code 排程任務鎖檔（session 專用，不 commit）
 .claude/scheduled_tasks.lock
+
+# PR 巡邏的執行紀錄與鎖（本機狀態，不進版控）
+data/pr-inbox-runs/

@@ -121,3 +121,16 @@ grep -nE 'jay-viewsonic-km|docs/(features|domains|repositories)/|\.claude/(rules
 ```
 
 **不要自動 commit。** 貼留言不用問，commit 要問。
+
+---
+
+## 排程執行（不用手動叫）
+
+`scripts/pr-inbox-watch.sh` 會定期做**偵測**（就是上面那支 `--json`，不用 AI、不花錢），
+只有真的有待處理的 PR 才啟動 `claude -p /handle-pr-inbox`。
+
+- 安裝／停用排程：`./scripts/setup-pr-inbox-watch.sh --install [--interval 1800]` / `--uninstall`
+- 執行紀錄與花費：`data/pr-inbox-runs/`（gitignored），web 的「PR 巡邏」頁可看可刪
+- **AI 執行期間會上鎖**，排程碰到鎖直接跳過 —— 同一批 PR 不會被 review 兩次
+- 排程啟動的那個 claude 會多收到一段系統提示：非互動、不要提問、超過 3 筆自己挑
+  優先度最高的 3 筆
