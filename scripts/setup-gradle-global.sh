@@ -2,7 +2,7 @@
 # 套用 Gradle 全域（user home）建置優化設定。
 #
 # 這支腳本只動 ~/.gradle/ 底下的檔案，不碰任何 repo：
-#   ~/.gradle/gradle.properties          → build cache / 平行建置 / daemon 記憶體
+#   ~/.gradle/gradle.properties          → build cache / 平行建置 / daemon 記憶體上限與閒置回收
 #   ~/.gradle/init.d/cache-cleanup.gradle → 自動清理沒在用的 Gradle 版本與 wrapper
 #
 # 冪等：重跑不會重複寫入。已存在但值不同的 key 會被更新（並顯示 diff）。
@@ -40,6 +40,14 @@ DESIRED=(
   "org.gradle.caching=true"       # 開啟 build cache：跨 worktree / 跨 repo 重用 task 產物
   "org.gradle.parallel=true"      # 多模組平行建置
   "org.gradle.daemon=true"        # 保留 daemon（預設就是 true，明寫避免被別處關掉）
+  # ── 記憶體收斂（2026-09-10 加，24GB 機器）──
+  # Android Studio 與 CLI 會各起一隻 Gradle daemon，Kotlin daemon 再一隻，
+  # 三隻都吃 -Xmx4096m 時實測合計 10.2GB，把 swap 推到 26.7/28GB。
+  # 這三個 key 在 edu-droid-flutter 全 repo 都沒設過（已 grep 確認），不涉優先序衝突。
+  # 專案自己的 org.gradle.jvmargs 刻意不在這裡蓋 —— 那是團隊共用設定。
+  "kotlin.daemon.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m"  # 原本繼承 Gradle 的 4096m
+  "org.gradle.workers.max=4"                                   # parallel=true 但原本沒設上限
+  "org.gradle.daemon.idletimeout=1800000"                      # 預設 3 小時 → 30 分鐘
 )
 
 status() {
@@ -80,7 +88,9 @@ for entry in "${DESIRED[@]}"; do
     current=$(grep -E "^[[:space:]]*${key//./\\.}[[:space:]]*=" "$PROPS" 2>/dev/null | tail -1 | sed 's/^[^=]*=//' | tr -d '[:space:]' || true)
   fi
 
-  if [ "$current" = "$val" ]; then
+  # current 已被 tr -d 去掉空白，val 也要同樣處理，否則含空白的值永遠比不相等
+  val_cmp="${val// /}"
+  if [ "$current" = "$val_cmp" ]; then
     echo "  ✓ $key=$val（已設定）"
     continue
   fi

@@ -10,6 +10,7 @@ Android / Flutter app 開發的建置效能與磁碟空間筆記。
 | 本頁 | 一次性 global 設定（Gradle build cache、快取自動清理） |
 | [parallel-development.md](parallel-development.md) | mvbf 平行開發：worktree vs APFS clonefile 的實測比較 |
 | [dart-analysis-server-memory.md](dart-analysis-server-memory.md) | mvbf 的 Dart analysis server 吃到 14G：排除 `plugin/` 的設定與原因 |
+| [dev-process-memory-reclaim.md](dev-process-memory-reclaim.md) | 機器當機層級：哪些開發行程在漏、`pkill` 殺錯目標的坑、`memclean` 回收工具 |
 
 ---
 
@@ -63,11 +64,81 @@ Gradle 的 build cache **預設是關閉的**。實測（2026-08，Jay 的機器
 org.gradle.caching=true     # build cache：跨 worktree / 跨 repo 重用 task 產物
 org.gradle.parallel=true    # 多模組平行建置
 org.gradle.daemon=true      # 明寫，避免被別處關掉（預設本來就是 true）
+
+# 記憶體收斂，見下節
+kotlin.daemon.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
+org.gradle.workers.max=4
+org.gradle.daemon.idletimeout=1800000
 ```
 
 **為什麼放 `~/.gradle/` 而不是 repo 的 `android/gradle.properties`？**
 放 repo 會強迫整個團隊用同一組設定、還會進 git；`org.gradle.parallel` 之類的選項
 跟每個人的機器規格有關，不該由 repo 決定。放 user home 才是正確的層級。
+
+---
+
+## daemon 記憶體收斂
+
+24 GB 的機器上，三隻 JVM 全是 `-Xmx4096m`（`ps -o args=` 直接讀出來），合計 **10.2 GB**：
+
+| 行程 | 來源 | 實測 footprint |
+|---|---|---|
+| Gradle daemon | Android Studio（內建 jbr） | 3288 MB |
+| Gradle daemon | CLI（homebrew openjdk） | 4293 MB |
+| Kotlin daemon | **繼承 Gradle 的 jvmargs** | 2556 MB |
+
+AS 與 CLI 的 daemon **context 不同、無法共用**，所以兩隻是常態，不是異常。
+
+### 設定與實測結果
+
+| key | 值 | 實測證據 |
+|---|---|---|
+| `kotlin.daemon.jvmargs` | `-Xmx2048m -XX:MaxMetaspaceSize=512m` | daemon 實際 args = `-Xmx2048m -XX:MaxMetaspaceSize=512m` |
+| `org.gradle.workers.max` | `4` | `--info` 輸出 `Using 4 worker leases.` |
+| `org.gradle.daemon.idletimeout` | `1800000`（30 分） | 新 daemon log `idleTimeout=1800000`；改設定前的是 `10800000` |
+
+**專案自己的 `org.gradle.jvmargs` 刻意不在 `~/.gradle` 蓋掉。**
+mvbf 的 `android/gradle.properties` 設 `-Xmx4096m`，那是團隊共用設定，
+全域壓低有 build OOM 風險，不該由個人設定替團隊決定。
+
+三個 key 在 `edu-droid-flutter` 全 repo 都沒出現過（已 grep 確認），所以不涉及優先序問題。
+
+### 例外：Kotlin daemon 有自己的閒置時鐘
+
+`--info` 露出 Kotlin daemon 的啟動參數帶著：
+
+```
+--daemon-autoshutdownIdleSeconds=7200
+```
+
+**2 小時，不歸 `org.gradle.daemon.idletimeout` 管。** 所以那條 30 分鐘只縮到 Gradle daemon。
+不過 Kotlin daemon 現在上限只有 2048m，賴著的代價從 2556 MB 降到 2 GB 以內。
+
+要更狠可以 `kotlin.compiler.execution.strategy=in-process` 完全不開獨立 daemon，
+但那會把編譯壓進 Gradle daemon 的 heap，**未實測，沒有套用**。
+
+### 怎麼驗證
+
+```bash
+pkill -f 'GradleDaemon|KotlinCompileDaemon'
+# 跑一次會編 Kotlin 的 build，然後：
+ps -eo pid,args | grep KotlinCompileDaemon | grep -o '\-Xmx[0-9]*m'
+grep -ao 'idleTimeout=[0-9]*' ~/.gradle/daemon/*/daemon-<pid>.out.log
+```
+
+**驗證時的兩個坑**（實際踩過）：
+
+1. **`FROM-CACHE` 不算數。** 第一次跑顯示 `BUILD SUCCESSFUL` 但 task 是 `FROM-CACHE`，
+   根本沒編譯、沒起 Kotlin daemon。要 `--no-build-cache` 且每次改動原始檔。
+2. **要有已知答案的對照組。** 只看到 `2048m` 不足以證明是設定生效 ——
+   實測時加了兩組：命令列 `-Pkotlin.daemon.jvmargs=-Xmx1536m` 應得 1536m（✅），
+   暫時抽掉 `~/.gradle` 那行應繼承專案的 4096m（✅）。
+   對照組 B 順帶把「Kotlin daemon 繼承 Gradle jvmargs」從推論升級成實測。
+
+### 相關
+
+行程層級的回收（`dart mcp-server`、`memclean` 工具、`pkill` 殺錯目標）見
+[dev-process-memory-reclaim.md](dev-process-memory-reclaim.md)。
 
 ---
 

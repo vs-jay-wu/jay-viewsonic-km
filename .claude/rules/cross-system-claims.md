@@ -20,6 +20,8 @@
 | VSFT 有 `Scrum Team` 下拉欄 → VB 也有 | VB 是 `Team`（Atlassian Team，**吃 uuid**），而且**有預設值會自動帶入別的隊** | `jira_get_create_fields` |
 | edu-participant-web 的 plan doc 說「與 ocelot `(?<!\\)\$` 對齊」→ 抄進 fishing-cat 的註解與 KB | 那條正則屬於 **Word 匯出的消費端**，而且**有一樣的 bug**；ocelot 沒有任何地方轉義 `$` | `grep -rn 'regex_latex' app/` 看它在哪個模組、誰呼叫 |
 | 使用者說「所有 ticket 開 VB」→ 照抄「所有」 | 狸貓版仍在用 `MT-`（前一天還在建票） | 查 MT 專案最近有沒有新票 |
+| mvbf 的 `.mcp.json` 有 `Flutter-MCP-Server` → 在 km 跑出來的那隻也是它來的 | km 自己有一份 `.mcp.json`（mvbf 那份的複製），行程 cwd 全在 km | `lsof -a -p <pid> -d cwd -Fn` 看行程實際掛在哪 |
+| 「`~/.gradle` 的優先序高於專案 gradle.properties」寫進註解 | 沒實測過。而且本次三個 key 專案根本沒設，優先序**根本不適用** | 先 `grep` 確認有沒有衝突，沒衝突就別提優先序 |
 
 **做法**：要寫「與 X 一致／依據 X」之前，先回答兩個問題——
 
@@ -85,6 +87,9 @@ grep -n '<被推翻的說法>' <改過的檔案>
 
 ## 動手前的固定動作（濃縮版）
 
+0. 講「某某設定／檔案是這個行為的來源」之前，用**執行期證據**確認
+   （行程用 `lsof -a -p <pid> -d cwd -Fn`；設定值用 `ps -o args=` 讀實際參數），
+   不要從「哪個檔案裡有這個字串」反推
 1. 這個 repo 有沒有自己的入口？（`CLAUDE.md`／`AGENTS.md`／`CONSTITUTION.md`／
    `.claude/skills/` 的 loader）——有就先讀，見 [`cross-repo-workflow.md`](cross-repo-workflow.md) §0
 2. 我要寫的每一句「依據 X」，X 查過了嗎？是產生端還是消費端？
