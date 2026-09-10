@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import Icon from "@/components/Icon";
 
 interface KeyMessage {
   teams_msg_id: string;
@@ -46,7 +47,7 @@ export default function SummaryPage() {
   if (summaries.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-400">
-        <span className="text-4xl">📋</span>
+        <Icon name="clipboard" size={40} className="text-gray-300" />
         <p className="text-sm">尚無摘要</p>
         <p className="text-xs text-gray-300">請透過 Claude 生成此聊天室的摘要</p>
       </div>

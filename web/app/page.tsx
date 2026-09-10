@@ -1,24 +1,25 @@
 import Link from "next/link";
 import { listChats } from "@/lib/db";
+import Icon, { type IconName } from "@/components/Icon";
 
 export const dynamic = "force-dynamic";
 
-const TOOLS = [
+const TOOLS: { href: string; icon: IconName; title: string; desc: string }[] = [
   {
     href: "/memory",
-    icon: "🧹",
+    icon: "cpu",
     title: "記憶體狀況",
     desc: "看目前記憶體／swap，並執行 memclean 清掉殭屍開發行程",
   },
   {
     href: "/pr-inbox",
-    icon: "🔁",
+    icon: "refresh",
     title: "PR 巡邏",
     desc: "定期偵測待處理的 PR，必要時才叫 Claude 跑 /handle-pr-inbox",
   },
   {
     href: "/sessions",
-    icon: "🗂️",
+    icon: "layers",
     title: "Claude Sessions",
     desc: "檢視本機 session、pin 住重要的、批次刪掉不要的",
   },
@@ -60,7 +61,9 @@ export default function Home() {
               className="group rounded-xl border border-gray-200 p-4 hover:border-gray-400 hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-start gap-3">
-                <span className="text-2xl leading-none">{t.icon}</span>
+                <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-gray-600 group-hover:bg-gray-900 group-hover:text-white transition-colors">
+                  <Icon name={t.icon} size={18} />
+                </span>
                 <div className="min-w-0">
                   <div className="font-medium text-gray-900 group-hover:underline">
                     {t.title}
@@ -93,7 +96,7 @@ export default function Home() {
                     href={`/chat/${chat.id}`}
                     className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
                   >
-                    <span className="text-gray-300">#</span>
+                    <Icon name="hash" size={14} className="text-gray-300" />
                     <span className="flex-1 truncate text-sm text-gray-800">
                       {chat.topic || "(無標題)"}
                     </span>

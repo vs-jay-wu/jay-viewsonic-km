@@ -2,6 +2,7 @@
 
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import Icon from "@/components/Icon";
 
 interface Chat {
   id: number;
@@ -42,7 +43,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                   : "text-gray-400 hover:text-gray-600"
               }`}
             >
-              💬 對話
+              <span className="inline-flex items-center gap-1.5"><Icon name="message" size={14} /> 對話</span>
             </button>
             <button
               onClick={() => router.push(`/chat/${chatId}/summary`)}
@@ -52,7 +53,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                   : "text-gray-400 hover:text-gray-600"
               }`}
             >
-              📋 摘要
+              <span className="inline-flex items-center gap-1.5"><Icon name="clipboard" size={14} /> 摘要</span>
             </button>
           </div>
         </div>

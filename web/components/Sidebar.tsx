@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
+import Icon, { type IconName } from "@/components/Icon";
 
 interface Chat {
   id: number;
@@ -10,11 +11,11 @@ interface Chat {
   message_count: number;
 }
 
-const TOOLS = [
-  { href: "/", label: "首頁", icon: "🏠" },
-  { href: "/memory", label: "記憶體", icon: "🧹" },
-  { href: "/pr-inbox", label: "PR 巡邏", icon: "🔁" },
-  { href: "/sessions", label: "Claude Sessions", icon: "🗂️" },
+const TOOLS: { href: string; label: string; icon: IconName }[] = [
+  { href: "/", label: "首頁", icon: "home" },
+  { href: "/memory", label: "記憶體", icon: "cpu" },
+  { href: "/pr-inbox", label: "PR 巡邏", icon: "refresh" },
+  { href: "/sessions", label: "Claude Sessions", icon: "layers" },
 ];
 
 export default function Sidebar() {
@@ -47,7 +48,7 @@ export default function Sidebar() {
               t.href === "/" ? pathname === "/" : pathname.startsWith(t.href)
             )}
           >
-            <span className="text-base">{t.icon}</span>
+            <Icon name={t.icon} size={16} className="text-white/60" />
             <span className="truncate flex-1">{t.label}</span>
           </Link>
         ))}
@@ -61,7 +62,7 @@ export default function Sidebar() {
             href={`/chat/${chat.id}`}
             className={itemClass(activeChatId === chat.id)}
           >
-            <span className="text-lg">#</span>
+            <Icon name="hash" size={14} className="text-white/40" />
             <span className="truncate flex-1">{chat.topic || "(無標題)"}</span>
             <span className="text-xs text-white/40 shrink-0">{chat.message_count}</span>
           </Link>
