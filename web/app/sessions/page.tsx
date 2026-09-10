@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
+import TranscriptPanel from "@/components/TranscriptPanel";
 
 interface SessionInfo {
   id: string;
@@ -62,6 +63,7 @@ export default function SessionsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<DeleteResult[] | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -167,9 +169,12 @@ export default function SessionsPage() {
 
   const failed = results?.filter((r) => !r.ok) ?? [];
 
+  const openSession = sessions.find((s) => s.id === openId) ?? null;
+
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="max-w-5xl mx-auto px-8 py-10">
+    <div className="flex min-h-0 flex-1">
+      <div className="min-w-0 flex-1 overflow-y-auto">
+      <div className="mx-auto max-w-5xl px-8 py-10">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Claude Sessions</h1>
@@ -286,7 +291,13 @@ export default function SessionsPage() {
               <li
                 key={s.id}
                 className={`flex items-start gap-3 px-4 py-3 ${
-                  selected.has(s.id) ? "bg-red-50/40" : s.pinned ? "bg-amber-50/40" : ""
+                  openId === s.id
+                    ? "bg-sky-50"
+                    : selected.has(s.id)
+                      ? "bg-red-50/40"
+                      : s.pinned
+                        ? "bg-amber-50/40"
+                        : ""
                 }`}
               >
                 <input
@@ -306,9 +317,13 @@ export default function SessionsPage() {
                   <Icon name="pin" size={16} />
                 </button>
 
-                <div className="min-w-0 flex-1">
+                <button
+                  onClick={() => setOpenId(openId === s.id ? null : s.id)}
+                  title="看這個 session 的對話紀錄"
+                  className="min-w-0 flex-1 text-left"
+                >
                   <div className="flex items-baseline gap-2">
-                    <span className="truncate text-sm text-gray-900">{s.title}</span>
+                    <span className="truncate text-sm text-gray-900 hover:underline">{s.title}</span>
                     {s.titleSource !== "custom" && (
                       <span className="shrink-0 text-[11px] text-gray-400">
                         {SOURCE_LABEL[s.titleSource]}
@@ -324,7 +339,7 @@ export default function SessionsPage() {
                     {s.version && <span>v{s.version}</span>}
                     {s.hasSidecar && <span>sidecar {mb(s.sidecarBytes)}</span>}
                   </div>
-                </div>
+                </button>
 
                 <div className="shrink-0 text-right">
                   <div className="text-sm text-gray-700">{mb(s.sizeBytes + s.sidecarBytes)}</div>
@@ -335,6 +350,16 @@ export default function SessionsPage() {
           </ul>
         )}
       </div>
+      </div>
+
+      {openSession && (
+        <TranscriptPanel
+          key={openSession.id}
+          sessionId={openSession.id}
+          title={openSession.title}
+          onClose={() => setOpenId(null)}
+        />
+      )}
     </div>
   );
 }
