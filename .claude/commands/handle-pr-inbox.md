@@ -48,21 +48,26 @@
 
 仍然不自動做的：`git commit`、修改任何專案 repo 的程式碼。這兩件要另外問。
 
-**送出 approve / request changes（`gh pr review`）要看授權**。三種模式：
+**approve / request changes 也自己送，不用問**（Jay 2026-09-10 明確授權）。
+只留言沒有自動化的價值 —— review 要有結論，球才會離開他手上。
+
+模式來自 `data/local-state/pr-inbox-watch.json` 的 `reviewVerdict`
+（web 的「PR 巡邏」頁可改）。**互動與排程共用同一個設定，不分兩套。**
 
 | 模式 | 行為 |
 |---|---|
-| `off`（預設） | 只用 `gh pr comment` 留言，不碰 approve / request changes |
-| `approve` | 子程序 verdict 是 approve **且**沒有任何 MUST／SHOULD finding 時可以 approve；要改的只留言 |
-| `full` | 同上，另外在有至少一條**自己驗證過**的 MUST 時可以 request changes |
+| `full`（預設） | 沒有 MUST／SHOULD → approve；有**自己驗證過**的 MUST → request changes |
+| `approve` | 只送 approve；要改的只留言，不卡對方 |
+| `off` | 只用 `gh pr comment` 留言 |
 
-- **互動執行**（Jay 直接叫這個 command）：預設 `off`。Jay 當場說可以才送。
-- **排程執行**：模式由 `data/local-state/pr-inbox-watch.json` 的 `reviewVerdict`
-  決定（web 的「PR 巡邏」頁可改），`scripts/pr-inbox-watch.sh` 會把對應的規則
-  寫進系統提示。
+不論哪個模式，這幾條不變：
 
-不論哪個模式：**不確定就退回留言**。只有 SHOULD／NIT／QUESTION 不要 request
-changes —— 那是留言的事，卡不卡是 Jay 的決定。送出後在回報裡寫明是哪一種與理由。
+- **不確定就退回留言。** 判定是會通知對方、也會影響 merge 門檻的動作，
+  沒把握就不要用它表態。
+- 只有 SHOULD／NIT／QUESTION **不要** request changes —— 那是留言的事，
+  要不要卡是 Jay 的決定。
+- MUST 一定要**自己追到程式碼確認過**才用來 request changes（見第 4 節）。
+- 送出後在回報裡寫明是哪一種與理由。
 
 ### 1. 先報清單
 
@@ -97,11 +102,21 @@ repo → 該讀哪些 km skill 的對應已寫在腳本裡（`ragdoll-cat`→`cs
 ### 3. 先驗 finding，再貼
 
 **不要用 `--post`。** 它會重跑一次子程序（無狀態），貼出去的東西不保證是你驗過的那份。
-驗完之後貼 `--save-body` 存下來的檔案：
+驗完之後貼 `--save-body` 存下來的檔案。**用哪一個指令看第 0 節的授權模式與驗證結果**：
 
 ```bash
+# 沒問題（沒有 MUST／SHOULD）→ approve
+gh pr review <n> --repo <owner/repo> --approve --body-file /tmp/pr-<n>.md
+
+# 有自己驗證過的 MUST，且模式是 full → request changes
+gh pr review <n> --repo <owner/repo> --request-changes --body-file /tmp/pr-<n>.md
+
+# 其餘（模式是 off、只有 SHOULD／NIT／QUESTION、或沒把握）→ 留言
 gh pr comment <n> --repo <owner/repo> --body-file /tmp/pr-<n>.md
 ```
+
+同一筆只送一次。`gh pr review` 本身就會帶上 body，不要再額外補一則 comment。
+自己的 PR 不能 approve（GitHub 會擋），那種只能留言。
 
 貼之前自己 grep 一次（`review-pr.sh` 只在 `--post` 路徑上守門，手動貼沒有）：
 
@@ -128,14 +143,16 @@ grep -nE 'jay-viewsonic-km|docs/(features|domains|repositories)/|\.claude/(rules
 ### 5. 回報
 
 ```
-待處理 N 筆（掃描範圍：<repos>）
-已貼：
-  <repo>#<n>  verdict=<x>  <一句話>  （驗證結果／我改了什麼）  <留言連結>
+待處理 N 筆（掃描範圍：<repos>，判定模式：<off|approve|full>）
+已送出：
+  <repo>#<n>  送出=<approve|request-changes|comment>  verdict=<x>  <一句話>
+              （驗證結果／我改了什麼）  <連結>
 未處理：
   <repo>#<n>  <理由>
 ```
 
-**不要自動 commit。** 貼留言不用問，commit 要問。
+**不要自動 commit。** 留言與 review 判定都不用問，`git commit` 與改專案 repo
+的程式碼要問。
 
 ---
 

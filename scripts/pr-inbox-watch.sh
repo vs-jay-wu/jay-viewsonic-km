@@ -63,24 +63,25 @@ done
 
 # ─── 這輪允不允許送出 review 判定 ────────────────────────────────────────────
 #
-#   off      只留言（gh pr comment），不碰 approve / request changes
-#   approve  沒有 MUST／SHOULD 的時候可以 approve；不送 request changes
-#   full     approve 與 request changes 都可以
+#   full     approve 與 request changes 都可以（預設）
+#   approve  只送 approve；要改的只留言，不卡對方
+#   off      只留言（gh pr comment）
 #
-# 預設 off。送 approve / request changes 是**代表 Jay 對別人的 PR 表態**，
-# 而且 GitHub 會通知對方、也會影響 merge 門檻 —— 要開就要是明確的決定，
-# 不能因為「反正 AI 看過了」就默默打開。
+# 預設 full：只留言的話 review 沒有結論，球不會離開 Jay 手上，自動化就沒意義
+# （Jay 2026-09-10 的決定）。送出判定會通知對方、也會影響 merge 門檻，所以
+# 規則本身很嚴：沒把握退回留言、只有 SHOULD／NIT 不 request changes、
+# MUST 要自己追到程式碼確認過。
 # 設定在 web 的「PR 巡邏」頁（存 data/local-state/pr-inbox-watch.json），
 # 或用 --verdicts 臨時覆寫。
 #
 # 這段刻意放在最前面：write_record 會把模式一起寫進紀錄，驗證晚一步就會留下
 # 沒驗證過的值（實際踩到：--verdicts bogus 被原樣記成 verdictMode=bogus）。
 if [[ -z "$VERDICT_MODE" && -f "$WATCH_CONFIG" ]]; then
-  VERDICT_MODE="$(jq -r '.reviewVerdict // "off"' "$WATCH_CONFIG" 2>/dev/null || echo off)"
+  VERDICT_MODE="$(jq -r '.reviewVerdict // "full"' "$WATCH_CONFIG" 2>/dev/null || echo full)"
 fi
-case "${VERDICT_MODE:-off}" in
-  off|approve|full) VERDICT_MODE="${VERDICT_MODE:-off}" ;;
-  *) echo "⚠️  reviewVerdict=\"$VERDICT_MODE\" 不認識，退回 off" >&2; VERDICT_MODE=off ;;
+case "${VERDICT_MODE:-full}" in
+  off|approve|full) VERDICT_MODE="${VERDICT_MODE:-full}" ;;
+  *) echo "⚠️  reviewVerdict=\"$VERDICT_MODE\" 不認識，退回預設 full" >&2; VERDICT_MODE=full ;;
 esac
 
 
@@ -107,7 +108,7 @@ write_record() {
     --argjson prCount "${3:-0}" \
     --argjson prs "$(cat "$PRS_FILE" 2>/dev/null || echo '[]')" \
     --argjson claude "${4:-null}" \
-    --arg verdictMode "${VERDICT_MODE:-off}" \
+    --arg verdictMode "${VERDICT_MODE:-full}" \
     '{id:$id, startedAt:$startedAt, finishedAt:$finishedAt, status:$status,
       note:$note, trigger:$trigger, prCount:$prCount, prs:$prs, claude:$claude,
       verdictMode:$verdictMode}' \

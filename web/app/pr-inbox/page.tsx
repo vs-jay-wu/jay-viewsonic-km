@@ -67,7 +67,7 @@ export default function PrInboxPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [intervalMin, setIntervalMin] = useState(30);
   const [detectOnly, setDetectOnly] = useState(false);
-  const [verdict, setVerdict] = useState<VerdictMode>("off");
+  const [verdict, setVerdict] = useState<VerdictMode>("full");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [log, setLog] = useState<{ id: string; log: string } | null>(null);
 
@@ -264,9 +264,9 @@ export default function PrInboxPage() {
                 }}
                 className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-800"
               >
+                <option value="full">approve ＋ request changes 都可以（預設）</option>
+                <option value="approve">只送 approve（要改的只留言）</option>
                 <option value="off">只留言（不 approve、不 request changes）</option>
-                <option value="approve">可以 approve（不送 request changes）</option>
-                <option value="full">approve ＋ request changes 都可以</option>
               </select>
               {verdict !== "off" && (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
@@ -276,7 +276,7 @@ export default function PrInboxPage() {
             </div>
             <p className="mt-2 text-xs leading-relaxed text-gray-500">
               {verdict === "off" &&
-                "只用 gh pr comment 留言。approve／request changes 一律不送。"}
+                "只用 gh pr comment 留言。approve／request changes 一律不送 —— review 不會有結論，球留在你手上。"}
               {verdict === "approve" &&
                 "子程序 verdict 是 approve、且沒有任何 MUST／SHOULD finding 時才送 approve；要改的只留言，不送 request changes。"}
               {verdict === "full" &&

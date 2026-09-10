@@ -10,13 +10,15 @@ const DEFAULT_INTERVAL_SECONDS = 1800;
 /**
  * AI 可不可以代表 Jay 對別人的 PR 送出 review 判定。
  *
- *   off      只留言（預設）
- *   approve  沒有 MUST／SHOULD 時可以 approve，不送 request changes
- *   full     approve 與 request changes 都可以
+ *   full     approve 與 request changes 都可以（預設）
+ *   approve  只送 approve；要改的只留言，不卡對方
+ *   off      只留言
  *
+ * 預設 full：只留言的話 review 沒有結論，球不會離開 Jay 手上。
  * 實際規則是 scripts/pr-inbox-watch.sh 依這個值組系統提示給 AI。
  */
 export type ReviewVerdictMode = "off" | "approve" | "full";
+const DEFAULT_VERDICT: ReviewVerdictMode = "full";
 
 export interface ScheduleConfig {
   enabled: boolean;
@@ -28,7 +30,8 @@ export interface ScheduleConfig {
 }
 
 function normaliseVerdict(v: unknown): ReviewVerdictMode {
-  return v === "approve" || v === "full" ? v : "off";
+  if (v === "off" || v === "approve" || v === "full") return v;
+  return DEFAULT_VERDICT;
 }
 
 export interface SchedulerState extends ScheduleConfig {
@@ -78,7 +81,7 @@ export async function readConfig(): Promise<ScheduleConfig> {
   if (!raw) {
     return {
       enabled: false, intervalSeconds: DEFAULT_INTERVAL_SECONDS,
-      detectOnly: false, reviewVerdict: "off", updatedAt: "",
+      detectOnly: false, reviewVerdict: DEFAULT_VERDICT, updatedAt: "",
     };
   }
   try {
@@ -93,7 +96,7 @@ export async function readConfig(): Promise<ScheduleConfig> {
   } catch {
     return {
       enabled: false, intervalSeconds: DEFAULT_INTERVAL_SECONDS,
-      detectOnly: false, reviewVerdict: "off", updatedAt: "",
+      detectOnly: false, reviewVerdict: DEFAULT_VERDICT, updatedAt: "",
     };
   }
 }

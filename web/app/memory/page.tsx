@@ -215,8 +215,8 @@ export default function MemoryPage() {
           </label>
           <label className="inline-flex items-center gap-2 text-gray-700">
             <input type="checkbox" checked={langServer} onChange={(e) => setLangServer(e.target.checked)} />
-            含 dart language-server
-            <span className="text-xs text-gray-400">（VS Code 會重開）</span>
+            含編輯器持有的 dart language-server
+            <span className="text-xs text-gray-400">（會立刻重開；孤兒已預設納入）</span>
           </label>
         </div>
 
