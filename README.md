@@ -11,12 +11,21 @@ cd web && npm run dev        # http://localhost:3000
 > `better-sqlite3` 是原生模組。換過 Node 版本後會出現
 > `NODE_MODULE_VERSION` 不合而整站 500，跑 `npm rebuild better-sqlite3` 修好。
 
+要讓它常駐（登入自動起、掛掉自動重啟）：
+
+```bash
+./scripts/setup-km-web.sh --install     # --status / --restart / --logs / --uninstall
+```
+
+常駐與手動 `npm run dev` 會搶同一個 port，兩者只留一個（或用 `--port` 換）。
+**PR 巡邏的排程掛在這個 server 裡，server 沒開就不會巡邏。**
+
 | 頁面 | 做什麼 | 背後的東西 |
 |---|---|---|
 | `/` | 首頁：Teams 歸檔概況與工具入口 | `data/teams.db` |
 | `/chat/<id>` | Teams 訊息瀏覽與月摘要 | `/teams-scrape`、`/teams-summarize` |
 | `/memory` | 記憶體／swap 用量、執行 memclean、檢視腳本 | `shell/memclean.py`（終端機的 `memclean` 同源） |
-| `/pr-inbox` | PR 巡邏：排程開關、手動觸發、執行紀錄與花費 | `scripts/pr-inbox-watch.sh`、`scripts/setup-pr-inbox-watch.sh` |
+| `/pr-inbox` | PR 巡邏：排程開關、手動觸發、執行紀錄與花費 | `scripts/pr-inbox-watch.sh`（排程本身跑在 web server 裡） |
 | `/sessions` | Claude session 檢視、pin、多選刪除 | `~/.claude/projects`、`data/local-state/session-pins.json` |
 
 `data/pr-inbox-runs/` 與 `data/local-state/` 是本機狀態，兩者都 gitignored。

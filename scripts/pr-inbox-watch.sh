@@ -27,7 +27,9 @@
 #   ./scripts/pr-inbox-watch.sh --detect-only    只偵測，不叫 AI
 #   ./scripts/pr-inbox-watch.sh --force-unlock   強制清掉殘留的鎖
 #
-# 排程安裝：./scripts/setup-pr-inbox-watch.sh --install
+# 排程：不在這支腳本裡，而是掛在 km web server（見 web/lib/prInboxScheduler.ts）。
+#       在 web 的「PR 巡邏」頁開關，設定存 data/local-state/pr-inbox-watch.json。
+#       要讓 web 常駐：./scripts/setup-km-web.sh --install
 #
 # 需要：gh（已登入）、jq、claude
 
@@ -61,6 +63,8 @@ RECORD="$RUNS_DIR/$ID.json"
 PRS_FILE="$RUNS_DIR/$ID.prs.json"
 LOG_FILE="$RUNS_DIR/$ID.log"
 
+RECORD_WRITTEN=0
+
 # 寫一筆紀錄。用 jq 組，避免標題裡的引號把 JSON 弄壞。
 # $1 status  $2 note  $3 prCount  $4 claude json（可空字串）
 write_record() {
@@ -77,6 +81,14 @@ write_record() {
     '{id:$id, startedAt:$startedAt, finishedAt:$finishedAt, status:$status,
       note:$note, trigger:$trigger, prCount:$prCount, prs:$prs, claude:$claude}' \
     > "$RECORD"
+  RECORD_WRITTEN=1
+}
+
+# 被 kill（或 Ctrl-C）時也要留下紀錄，否則事後查不出「那輪跑去哪了」。
+on_signal() {
+  [[ "$RECORD_WRITTEN" -eq 0 ]] && write_record aborted "被中斷（收到訊號）" "${PR_COUNT:-0}"
+  rm -rf "$LOCK_DIR"
+  exit 143
 }
 
 # ─── 上鎖 ───────────────────────────────────────────────────────────────────
@@ -95,7 +107,8 @@ fi
 echo $$ > "$LOCK_DIR/pid"
 echo "$STARTED_AT" > "$LOCK_DIR/startedAt"
 echo "$ID" > "$LOCK_DIR/runId"
-trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
+trap 'rm -rf "$LOCK_DIR"' EXIT
+trap on_signal INT TERM
 
 # ─── 偵測（不用 AI）─────────────────────────────────────────────────────────
 

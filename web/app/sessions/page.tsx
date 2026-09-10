@@ -209,18 +209,18 @@ export default function SessionsPage() {
         {/* 篩選 */}
         <div className="mt-7 flex flex-wrap items-center gap-3">
           <div className="relative">
-            <Icon name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="搜尋標題／id／分支"
-              className="w-64 rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm"
+              className="w-64 rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-500 focus:border-gray-500 focus:outline-none"
             />
           </div>
           <select
             value={project}
             onChange={(e) => setProject(e.target.value)}
-            className="max-w-xs rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700"
+            className="max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800"
           >
             <option value="all">全部專案（{sessions.length}）</option>
             {projects.map(([cwd, n]) => (

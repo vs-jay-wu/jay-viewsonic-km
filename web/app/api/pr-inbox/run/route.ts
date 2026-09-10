@@ -13,6 +13,6 @@ export async function POST(req: NextRequest) {
       { status: 409 }
     );
   }
-  const { pid } = triggerRun(!!body.detectOnly);
+  const { pid } = triggerRun({ detectOnly: !!body.detectOnly, trigger: "manual" });
   return NextResponse.json({ ok: true, pid }, { status: 202 });
 }

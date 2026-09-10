@@ -1,10 +1,9 @@
 import { readFile, readdir, stat, unlink } from "fs/promises";
 import path from "path";
 import { spawn } from "child_process";
-import { repoPath, run } from "@/lib/repo";
+import { repoPath } from "@/lib/repo";
 
 export const RUNS_DIR = "data/pr-inbox-runs";
-const LAUNCHD_LABEL = "com.jay-viewsonic-km.pr-inbox-watch";
 
 export interface RunPr {
   repo: string;
@@ -31,7 +30,7 @@ export interface RunRecord {
   id: string;
   startedAt: string;
   finishedAt: string;
-  /** clean=沒待處理 detected=只偵測 handled=叫過 AI skipped=被鎖擋掉 failed/detect-failed */
+  /** clean=沒待處理 detected=只偵測 handled=叫過 AI skipped=被鎖擋掉 aborted=被 kill failed/detect-failed */
   status: string;
   note: string;
   trigger: string;
@@ -48,13 +47,6 @@ export interface LockState {
   runId: string | null;
   /** 持有者行程還活著嗎（false = 死鎖，下一輪會自己回收） */
   alive: boolean;
-}
-
-export interface WatcherState {
-  loaded: boolean;
-  intervalSeconds: number | null;
-  plistExists: boolean;
-  raw: string;
 }
 
 /** 只允許 <id>.json 形態的 id，避免路徑穿越。 */
@@ -137,41 +129,19 @@ export async function lockState(): Promise<LockState> {
   return { locked: true, pid, startedAt, runId, alive };
 }
 
-export async function watcherState(): Promise<WatcherState> {
-  const { stdout } = await run(
-    "/bin/zsh",
-    [repoPath("scripts/setup-pr-inbox-watch.sh"), "--status"],
-    { timeoutMs: 15_000 }
-  );
-  const loaded = stdout.includes(`已載入：${LAUNCHD_LABEL}`);
-  const m = stdout.match(/interval = (\d+)/);
-  return {
-    loaded,
-    intervalSeconds: m ? Number(m[1]) : null,
-    plistExists: loaded || stdout.includes("plist 存在"),
-    raw: stdout.trim(),
-  };
-}
-
-export async function setWatcher(
-  action: "install" | "uninstall",
-  intervalSeconds?: number
-): Promise<{ ok: boolean; output: string }> {
-  const args = [repoPath("scripts/setup-pr-inbox-watch.sh"), `--${action}`];
-  if (action === "install" && intervalSeconds) {
-    args.push("--interval", String(Math.max(60, Math.floor(intervalSeconds))));
-  }
-  const { stdout, stderr, code } = await run("/bin/zsh", args, { timeoutMs: 30_000 });
-  return { ok: code === 0, output: (stdout + stderr).trim() };
-}
-
 /**
- * 手動觸發一輪。detached 丟出去就不管 —— AI 那段可能跑好幾分鐘，
- * 不能綁在 HTTP request 上。重入保護在腳本自己的鎖裡。
+ * 觸發一輪。detached 丟出去就不管 —— AI 那段可能跑好幾分鐘，不能綁在
+ * HTTP request 上，也不該因為 dev server 重啟就被殺掉。
+ * 重入保護在腳本自己的鎖裡。
  */
-export function triggerRun(detectOnly: boolean): { pid: number | null } {
-  const args = [repoPath("scripts/pr-inbox-watch.sh"), "--trigger", "manual"];
-  if (detectOnly) args.push("--detect-only");
+export function triggerRun(
+  opts: { detectOnly?: boolean; trigger?: "manual" | "scheduled" } = {}
+): { pid: number | null } {
+  const args = [
+    repoPath("scripts/pr-inbox-watch.sh"),
+    "--trigger", opts.trigger ?? "manual",
+  ];
+  if (opts.detectOnly) args.push("--detect-only");
   const child = spawn("/bin/zsh", args, {
     cwd: repoPath(),
     detached: true,

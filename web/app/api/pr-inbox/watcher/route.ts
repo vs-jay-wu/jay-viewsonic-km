@@ -1,17 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { setWatcher, watcherState } from "@/lib/prInbox";
+import { currentState, setSchedule } from "@/lib/prInboxScheduler";
 
 export const dynamic = "force-dynamic";
 
+export async function GET() {
+  return NextResponse.json({ watcher: await currentState() });
+}
+
+/** 開關排程與調整間隔。設定寫進檔案，server 重開會自己接回去。 */
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as {
-    action?: "install" | "uninstall";
+    enabled?: boolean;
     intervalSeconds?: number;
+    detectOnly?: boolean;
   };
-  if (body.action !== "install" && body.action !== "uninstall") {
-    return NextResponse.json({ error: "action 要是 install 或 uninstall" }, { status: 400 });
+  if (typeof body.enabled !== "boolean") {
+    return NextResponse.json({ error: "要給 enabled（true/false）" }, { status: 400 });
   }
-  const res = await setWatcher(body.action, body.intervalSeconds);
-  if (!res.ok) return NextResponse.json({ error: res.output }, { status: 500 });
-  return NextResponse.json({ ok: true, output: res.output, watcher: await watcherState() });
+  const watcher = await setSchedule({
+    enabled: body.enabled,
+    intervalSeconds: body.intervalSeconds,
+    detectOnly: body.detectOnly,
+  });
+  return NextResponse.json({ ok: true, watcher });
 }

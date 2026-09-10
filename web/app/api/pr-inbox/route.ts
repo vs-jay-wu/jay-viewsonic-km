@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { listRuns, lockState, watcherState } from "@/lib/prInbox";
+import { listRuns, lockState } from "@/lib/prInbox";
+import { currentState } from "@/lib/prInboxScheduler";
 
 export const dynamic = "force-dynamic";
 
@@ -7,7 +8,7 @@ export async function GET() {
   const [runs, lock, watcher] = await Promise.all([
     listRuns(),
     lockState(),
-    watcherState(),
+    currentState(),
   ]);
   return NextResponse.json({ runs, lock, watcher });
 }

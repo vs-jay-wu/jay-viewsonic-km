@@ -204,7 +204,7 @@ export default function MemoryPage() {
               min={0}
               value={age}
               onChange={(e) => setAge(Number(e.target.value))}
-              className="w-20 rounded-md border border-gray-200 px-2 py-1 text-sm"
+              className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900"
             />
             分鐘
           </label>

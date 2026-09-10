@@ -20,7 +20,9 @@ interface LockState {
   runId: string | null; alive: boolean;
 }
 interface WatcherState {
-  loaded: boolean; intervalSeconds: number | null; plistExists: boolean; raw: string;
+  enabled: boolean; intervalSeconds: number; detectOnly: boolean; updatedAt: string;
+  running: boolean; lastTickAt: string | null; nextRunAt: string | null;
+  lastSkipReason: string | null;
 }
 
 const STATUS: Record<string, { label: string; icon: IconName; cls: string }> = {
@@ -29,6 +31,7 @@ const STATUS: Record<string, { label: string; icon: IconName; cls: string }> = {
   handled:         { label: "AI 已處理", icon: "play",    cls: "bg-indigo-50 text-indigo-700 border-indigo-200" },
   skipped:         { label: "跳過（鎖住）", icon: "lock", cls: "bg-gray-50 text-gray-600 border-gray-200" },
   failed:          { label: "失敗",     icon: "alert",   cls: "bg-red-50 text-red-700 border-red-200" },
+  aborted:         { label: "被中斷",   icon: "x",       cls: "bg-amber-50 text-amber-700 border-amber-200" },
   "detect-failed": { label: "偵測失敗", icon: "alert",   cls: "bg-red-50 text-red-700 border-red-200" },
 };
 
@@ -59,6 +62,7 @@ export default function PrInboxPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [intervalMin, setIntervalMin] = useState(30);
+  const [detectOnly, setDetectOnly] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [log, setLog] = useState<{ id: string; log: string } | null>(null);
 
@@ -72,6 +76,9 @@ export default function PrInboxPage() {
       setWatcher(json.watcher);
       if (json.watcher?.intervalSeconds) {
         setIntervalMin(Math.round(json.watcher.intervalSeconds / 60));
+      }
+      if (typeof json.watcher?.detectOnly === "boolean") {
+        setDetectOnly(json.watcher.detectOnly);
       }
     }
     setLoading(false);
@@ -161,20 +168,41 @@ export default function PrInboxPage() {
             <div className="flex items-center gap-2.5">
               <span
                 className={`inline-flex h-2.5 w-2.5 rounded-full ${
-                  watcher?.loaded ? "bg-emerald-500" : "bg-gray-300"
+                  watcher?.enabled ? "bg-emerald-500" : "bg-gray-300"
                 }`}
               />
               <h2 className="text-sm font-semibold text-gray-900">
-                定期偵測 {watcher?.loaded ? "已啟用" : "未啟用"}
+                定期偵測 {watcher?.enabled ? "已啟用" : "未啟用"}
               </h2>
-              {watcher?.loaded && watcher.intervalSeconds && (
+              {watcher?.enabled && (
                 <span className="text-xs text-gray-400">
                   每 {Math.round(watcher.intervalSeconds / 60)} 分鐘
+                  {watcher.nextRunAt && ` · 下次 ${fmtTime(watcher.nextRunAt)}`}
+                </span>
+              )}
+              {watcher?.enabled && watcher.detectOnly && (
+                <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs text-sky-700">
+                  只偵測
                 </span>
               )}
             </div>
 
             <div className="flex items-center gap-2">
+              <label className="inline-flex items-center gap-1.5 text-sm text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={detectOnly}
+                  onChange={(e) => {
+                    setDetectOnly(e.target.checked);
+                    if (watcher?.enabled) {
+                      post("/api/pr-inbox/watcher",
+                        { enabled: true, intervalSeconds: intervalMin * 60, detectOnly: e.target.checked },
+                        "detectOnly");
+                    }
+                  }}
+                />
+                只偵測不叫 AI
+              </label>
               <label className="inline-flex items-center gap-1.5 text-sm text-gray-600">
                 間隔
                 <input
@@ -182,21 +210,21 @@ export default function PrInboxPage() {
                   min={1}
                   value={intervalMin}
                   onChange={(e) => setIntervalMin(Number(e.target.value))}
-                  className="w-16 rounded-md border border-gray-200 px-2 py-1 text-sm"
+                  className="w-16 rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900"
                 />
                 分
               </label>
-              {watcher?.loaded ? (
+              {watcher?.enabled ? (
                 <>
                   <button
-                    onClick={() => post("/api/pr-inbox/watcher", { action: "install", intervalSeconds: intervalMin * 60 }, "reinstall")}
+                    onClick={() => post("/api/pr-inbox/watcher", { enabled: true, intervalSeconds: intervalMin * 60, detectOnly }, "apply")}
                     disabled={!!busy}
                     className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                   >
                     套用間隔
                   </button>
                   <button
-                    onClick={() => post("/api/pr-inbox/watcher", { action: "uninstall" }, "uninstall")}
+                    onClick={() => post("/api/pr-inbox/watcher", { enabled: false }, "disable")}
                     disabled={!!busy}
                     className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                   >
@@ -205,7 +233,7 @@ export default function PrInboxPage() {
                 </>
               ) : (
                 <button
-                  onClick={() => post("/api/pr-inbox/watcher", { action: "install", intervalSeconds: intervalMin * 60 }, "install")}
+                  onClick={() => post("/api/pr-inbox/watcher", { enabled: true, intervalSeconds: intervalMin * 60, detectOnly }, "enable")}
                   disabled={!!busy}
                   className="rounded-lg bg-gray-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-black disabled:opacity-50"
                 >
@@ -216,8 +244,17 @@ export default function PrInboxPage() {
           </div>
 
           <p className="mt-3 text-xs leading-relaxed text-gray-400">
-            走 launchd（<code>com.jay-viewsonic-km.pr-inbox-watch</code>）。啟用後只要有待處理的 PR
-            就會自動叫 AI 去看並留言 —— 那是會對外送出的動作，不想自動化就別啟用，改用下面的手動觸發。
+            排程掛在這個 web server 裡（設定寫進 <code>data/local-state/pr-inbox-watch.json</code>，
+            server 重開會自己接回去），所以 <strong className="text-gray-500">web 沒開就不會巡邏</strong> ——
+            要讓它常駐請跑 <code>./scripts/setup-km-web.sh --install</code>。
+            啟用後只要有待處理的 PR 就會自動叫 AI 去看並留言，那是會對外送出的動作；
+            不想自動化就別啟用，改用下面的手動觸發。
+            {watcher?.lastTickAt && (
+              <>
+                {" "}上次檢查 {fmtTime(watcher.lastTickAt)}
+                {watcher.lastSkipReason ? `（跳過：${watcher.lastSkipReason}）` : ""}。
+              </>
+            )}
           </p>
 
           {/* 鎖狀態 */}
