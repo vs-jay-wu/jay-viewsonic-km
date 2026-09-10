@@ -421,10 +421,14 @@ export async function setConfig(input: Partial<MyPrsConfig>): Promise<MyPrsConfi
   return config;
 }
 
-/** 設定說要開但這個 instance 沒掛上 timer 就補掛，狀態才不會騙人。 */
+/**
+ * 設定說要開但這個 instance 沒掛上 timer 就補掛，狀態才不會騙人。
+ * 順便處理「還沒有任何快照」的情況 —— 不然剛裝好要等一個間隔才有東西看。
+ */
 export async function ensureTimer(): Promise<void> {
   const config = await readConfig();
   const rt = runtime();
   if (config.enabled && !rt.timer) startTimer(config.intervalSeconds);
   if (!config.enabled && rt.timer) stopTimer();
+  if (config.enabled && !rt.running && !(await readSnapshot())) void runOnce();
 }

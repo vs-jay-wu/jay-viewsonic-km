@@ -7,7 +7,7 @@ export type IconName =
   | "home" | "cpu" | "refresh" | "layers" | "hash" | "message" | "clipboard"
   | "trash" | "pin" | "pinOff" | "play" | "code" | "check" | "x" | "alert"
   | "clock" | "spinner" | "chevronRight" | "chevronDown" | "external" | "coins"
-  | "search" | "lock";
+  | "search" | "lock" | "gitPr" | "bell";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></>,
@@ -33,6 +33,8 @@ const PATHS: Record<IconName, React.ReactNode> = {
   coins: <><ellipse cx="12" cy="6.5" rx="8" ry="3.5" /><path d="M4 6.5v5c0 1.9 3.6 3.5 8 3.5s8-1.6 8-3.5v-5" /><path d="M4 11.5v5c0 1.9 3.6 3.5 8 3.5s8-1.6 8-3.5v-5" /></>,
   search: <><circle cx="11" cy="11" r="6" /><path d="m16 16 5 5" /></>,
   lock: <><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
+  gitPr: <><circle cx="6.5" cy="5.5" r="2.5" /><circle cx="6.5" cy="18.5" r="2.5" /><path d="M6.5 8v8" /><circle cx="17.5" cy="18.5" r="2.5" /><path d="M17.5 16V9.5a3 3 0 0 0-3-3h-3.5" /><path d="m13 4 -2 2.5 2 2.5" /></>,
+  bell: <><path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6" /><path d="M10.5 20a2 2 0 0 0 3 0" /></>,
 };
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, "name"> {

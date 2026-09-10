@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { listChats } from "@/lib/db";
+import { readSnapshot } from "@/lib/myPrs";
 import Icon, { type IconName } from "@/components/Icon";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,12 @@ const TOOLS: { href: string; icon: IconName; title: string; desc: string }[] = [
     icon: "cpu",
     title: "記憶體狀況",
     desc: "看目前記憶體／swap，並執行 memclean 清掉殭屍開發行程",
+  },
+  {
+    href: "/my-prs",
+    icon: "gitPr",
+    title: "我的 PR",
+    desc: "自己開的單現在什麼狀態；有人 review 或 approve 就通知",
   },
   {
     href: "/pr-inbox",
@@ -33,7 +40,35 @@ function fmtDate(iso: string | null | undefined): string {
   });
 }
 
-export default function Home() {
+function relTime(iso: string | null): string {
+  if (!iso) return "—";
+  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (min < 60) return `${Math.max(min, 1)} 分前`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} 小時前`;
+  return `${Math.floor(h / 24)} 天前`;
+}
+
+function decisionText(pr: {
+  reviewDecision: string | null;
+  approvedBy: string[];
+  changesRequestedBy: string[];
+}): { text: string; cls: string } {
+  const who = (n: string[]) => (n.length ? ` · ${n.join("、")}` : "");
+  if (pr.reviewDecision === "APPROVED") {
+    return { text: `approved${who(pr.approvedBy)}`, cls: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+  }
+  if (pr.reviewDecision === "CHANGES_REQUESTED") {
+    return { text: `要求修改${who(pr.changesRequestedBy)}`, cls: "border-amber-200 bg-amber-50 text-amber-700" };
+  }
+  return { text: "等 review", cls: "border-gray-200 bg-gray-50 text-gray-500" };
+}
+
+export default async function Home() {
+  // 只讀 server 定時抓好的快照，開首頁不會打 GitHub
+  const myPrs = await readSnapshot().catch(() => null);
+  const openPrs = (myPrs?.prs ?? []).filter((p) => p.state === "OPEN");
+
   const chats = listChats() as (ReturnType<typeof listChats>[number] & {
     last_synced_at?: string | null;
   })[];
@@ -74,6 +109,46 @@ export default function Home() {
             </Link>
           ))}
         </div>
+
+        {/* 我的 PR：只在真的有開著的單時才佔版面 */}
+        {openPrs.length > 0 && (
+          <div className="mt-10">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-sm font-semibold text-gray-900">
+                我開著的 PR <span className="font-normal text-gray-400">{openPrs.length}</span>
+              </h2>
+              <Link href="/my-prs" className="text-xs text-gray-400 hover:text-gray-700 hover:underline">
+                全部（含近期 merged）→
+              </Link>
+            </div>
+            <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200">
+              {openPrs.map((pr) => {
+                const d = decisionText(pr);
+                return (
+                  <li key={pr.url} className="flex items-center gap-3 px-4 py-3">
+                    <a
+                      href={pr.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="min-w-0 flex-1 truncate text-sm text-gray-800 hover:underline"
+                    >
+                      <span className="font-mono text-xs text-gray-500">
+                        {pr.repo.split("/").pop()}#{pr.number}
+                      </span>{" "}
+                      {pr.title}
+                    </a>
+                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs ${d.cls}`}>
+                      {d.text}
+                    </span>
+                    <span className="shrink-0 text-xs text-gray-400">
+                      {relTime(pr.updatedAt)}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         {/* Teams Archive */}
         <div className="mt-10">

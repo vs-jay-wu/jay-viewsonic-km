@@ -24,11 +24,13 @@ cd web && npm run dev        # http://localhost:3000
 |---|---|---|
 | `/` | 首頁：Teams 歸檔概況與工具入口 | `data/teams.db` |
 | `/chat/<id>` | Teams 訊息瀏覽與月摘要 | `/teams-scrape`、`/teams-summarize` |
+| `/my-prs` | 我的 PR：open 與近期 merged 的狀態；有人 review／approve 就通知 | `scripts/my-prs.sh`（server 定時抓，開頁面只讀快照） |
 | `/memory` | 記憶體／swap 用量、執行 memclean、檢視腳本 | `shell/memclean.py`（終端機的 `memclean` 同源） |
 | `/pr-inbox` | PR 巡邏：排程開關、手動觸發、執行紀錄與花費 | `scripts/pr-inbox-watch.sh`（排程本身跑在 web server 裡） |
 | `/sessions` | Claude session 檢視、pin、多選刪除 | `~/.claude/projects`、`data/local-state/session-pins.json` |
 
-`data/pr-inbox-runs/` 與 `data/local-state/` 是本機狀態，兩者都 gitignored。
+`data/pr-inbox-runs/` 與 `data/local-state/` 是本機狀態（PR 快照、通知事件、session pin 與
+解析快取都在裡面），兩者都 gitignored。
 PR 巡邏的執行紀錄會自動清：**沒叫 AI 的留 7 天，派過 AI（或被中斷）的留 30 天**
 （`web/lib/prInbox.ts` 的 `RETAIN_DAYS` / `RETAIN_DAYS_AI`），
 在 server 啟動、每輪巡邏、每次開 `/pr-inbox` 時各檢查一次。
