@@ -187,9 +187,9 @@ export default function SessionsPage() {
   const openSession = sessions.find((s) => s.id === openId) ?? null;
 
   return (
-    <div className="flex min-h-0 flex-1">
-      <div className="min-w-0 flex-1 overflow-y-auto">
-      <div className={`mx-auto max-w-5xl py-10 ${openId ? "px-5" : "px-8"}`}>
+    <div className="min-h-0 flex-1">
+      <div className="h-full overflow-y-auto">
+      <div className="mx-auto max-w-5xl px-8 py-10">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Claude Sessions</h1>
@@ -268,7 +268,7 @@ export default function SessionsPage() {
               <button
                 key={key}
                 onClick={() => setView(key)}
-                className={`px-3 py-2 ${
+                className={`min-w-[6.5rem] px-3 py-2 text-center ${
                   view === key
                     ? "bg-gray-900 text-white"
                     : "bg-white text-gray-600 hover:bg-gray-50"
@@ -278,30 +278,8 @@ export default function SessionsPage() {
               </button>
             ))}
           </div>
-          {view === "stale" && (
-            <label className="inline-flex items-center gap-1.5 text-sm text-gray-600">
-              超過
-              <select
-                value={staleDays}
-                onChange={(e) => setStaleDays(Number(e.target.value))}
-                className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-800"
-              >
-                {[30, 60, 90, 180].map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-              天沒用
-            </label>
-          )}
-        </div>
 
-        {view === "stale" && (
-          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs leading-relaxed text-amber-800">
-            超過 {staleDays} 天沒動過、且<strong className="font-semibold">沒有</strong> pin
-            住的 session，共 {stale.length} 個、{mb(staleBytes)}。這裡只是幫你挑出來，
-            不會自動刪 —— 刪掉不可逆，要留的先 pin 起來再全選。
-          </p>
-        )}
+        </div>
 
         {/* 操作列 */}
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg bg-gray-50 px-4 py-2.5 text-sm">
@@ -331,6 +309,28 @@ export default function SessionsPage() {
           </button>
         </div>
 
+        {view === "stale" && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
+            <label className="inline-flex items-center gap-1.5">
+              超過
+              <select
+                value={staleDays}
+                onChange={(e) => setStaleDays(Number(e.target.value))}
+                className="rounded-md border border-amber-300 bg-white px-2 py-1 text-xs text-gray-800"
+              >
+                {[30, 60, 90, 180].map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+              天沒動過、且沒有 pin 住的
+            </label>
+            <span>共 {stale.length} 個、{mb(staleBytes)}</span>
+            <span className="text-amber-700/80">
+              只是幫你挑出來，不會自動刪；要留的先 pin 起來再全選
+            </span>
+          </div>
+        )}
+
         {/* 清單 */}
         {loading ? (
           <p className="mt-6 text-sm text-gray-400">掃描中…</p>
@@ -349,7 +349,7 @@ export default function SessionsPage() {
                     : selected.has(s.id)
                       ? "bg-red-50/40"
                       : s.pinned
-                        ? "bg-amber-50/40"
+                        ? "bg-gray-50"
                         : ""
                 }`}
               >

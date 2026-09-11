@@ -206,7 +206,9 @@ export default function TranscriptPanel({
   }, [visible.length, loading, loadingMore, page, loadEarlier]);
 
   return (
-    <aside className="flex h-full w-[40rem] max-w-[52vw] shrink-0 flex-col border-l border-gray-200 bg-white">
+    <aside
+      className="fixed inset-y-0 right-0 z-40 flex w-[40rem] max-w-[46vw] flex-col border-l border-gray-200 bg-white shadow-2xl"
+    >
       <div className="flex items-start gap-3 border-b border-gray-200 px-4 py-3">
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-semibold text-gray-900">{title}</h2>
