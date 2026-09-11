@@ -154,7 +154,7 @@ function parseHead(head: string): HeadMeta {
  * `fromOffset` 之後的部分（檔案只會往後長，掃過的結果由呼叫端快取）。
  * 同一種記錄取**最後一筆** —— 最新的改名才是現在的標題。
  */
-async function scanTitleRecords(
+export async function scanTitleRecords(
   file: string,
   fromOffset = 0,
   fileSize?: number
@@ -212,7 +212,7 @@ function decodeProjectDir(dir: string): string {
  * 用 size + mtime 當有效性判斷；檔案只是變長（正在進行的 session）就只掃
  * 新增的那一段，標題沿用上次掃到的。
  */
-interface MetaCacheEntry {
+export interface MetaCacheEntry {
   size: number;
   mtimeMs: number;
   scannedBytes: number;
@@ -242,7 +242,7 @@ async function writeMetaCache(cache: MetaCache): Promise<void> {
 }
 
 /** custom-title 優先，其次 agent 名，最後才退回第一句 prompt。 */
-function pickTitle(e: MetaCacheEntry): {
+export function pickTitle(e: MetaCacheEntry): {
   title: string;
   titleSource: SessionInfo["titleSource"];
 } {

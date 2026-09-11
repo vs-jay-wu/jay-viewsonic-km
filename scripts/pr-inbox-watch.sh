@@ -26,6 +26,8 @@
 #   ./scripts/pr-inbox-watch.sh --trigger manual 同上，但標記為手動觸發
 #   ./scripts/pr-inbox-watch.sh --detect-only    只偵測，不叫 AI
 #   ./scripts/pr-inbox-watch.sh --force-unlock   強制清掉殘留的鎖
+#   ./scripts/pr-inbox-watch.sh --quiet-check    只回答「現在算不算靜音時段」
+#                                  印出窗口與判定並離開（0=要巡邏 / 1=靜音）
 #   ./scripts/pr-inbox-watch.sh --verdicts approve
 #                                  臨時覆寫「允不允許送出 review 判定」
 #                                  off（只留言，預設）／approve／full
@@ -47,6 +49,7 @@ WATCH_CONFIG="$REPO_ROOT/data/local-state/pr-inbox-watch.json"
 
 TRIGGER="scheduled"
 DETECT_ONLY=false
+QUIET_CHECK=false
 VERDICT_MODE=""   # 空 = 讀設定檔
 
 while [[ $# -gt 0 ]]; do
@@ -55,6 +58,7 @@ while [[ $# -gt 0 ]]; do
     --detect-only)  DETECT_ONLY=true ;;
     --verdicts)     VERDICT_MODE="${2:?--verdicts 需要 off|approve|full}"; shift ;;
     --force-unlock) rm -rf "$LOCK_DIR"; echo "已清掉 $LOCK_DIR"; exit 0 ;;
+    --quiet-check)  QUIET_CHECK=true ;;
     -h|--help)      sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "未知參數：$1（用 --help 看用法）" >&2; exit 2 ;;
   esac
@@ -96,25 +100,38 @@ esac
 # 這裡是後備 —— 排程本體在 web server（web/lib/prInboxScheduler.ts），
 # 它靜音時段根本不會 spawn。這支腳本被 launchd／cron／手動排程直接叫到時
 # 才輪到這段。刻意不寫執行紀錄：一晚會堆出近百筆「因為半夜所以沒跑」。
-if [[ "$TRIGGER" == "scheduled" && -f "$WATCH_CONFIG" ]]; then
+
+# 回傳 0 = 現在是靜音時段。順便把窗口與現在幾點放進 QUIET_{A,B,H}。
+is_quiet_now() {
+  QUIET_A=0; QUIET_B=8; QUIET_H=$(( 10#$(TZ=Asia/Taipei date +%H) ))
+  [[ -f "$WATCH_CONFIG" ]] || return 1
   # 不能寫 `.quietHours.enabled // true`：jq 的 // 把 false 也當成「沒有值」，
   # 於是「停用靜音」會被翻回 true，半夜以外的時間也照樣跳過。
-  q_on="$(jq -r '.quietHours.enabled != false' "$WATCH_CONFIG" 2>/dev/null || echo true)"
-  q_a="$(jq -r '.quietHours.startHour // 0' "$WATCH_CONFIG" 2>/dev/null || echo 0)"
-  q_b="$(jq -r '.quietHours.endHour // 8' "$WATCH_CONFIG" 2>/dev/null || echo 8)"
-  if [[ "$q_on" == "true" ]]; then
-    h=$(( 10#$(TZ=Asia/Taipei date +%H) ))
-    if (( q_a <= q_b )); then
-      (( h >= q_a && h < q_b )) && quiet=1 || quiet=0
-    else
-      # 跨午夜（例：22 → 6）
-      (( h >= q_a || h < q_b )) && quiet=1 || quiet=0
-    fi
-    if (( quiet )); then
-      printf '⏭  靜音時段（台北 %02d:00–%02d:00，現在 %02d 點），這次跳過\n' "$q_a" "$q_b" "$h"
-      exit 0
-    fi
+  local on
+  on="$(jq -r '.quietHours.enabled != false' "$WATCH_CONFIG" 2>/dev/null || echo true)"
+  QUIET_A="$(jq -r '.quietHours.startHour // 0' "$WATCH_CONFIG" 2>/dev/null || echo 0)"
+  QUIET_B="$(jq -r '.quietHours.endHour // 8' "$WATCH_CONFIG" 2>/dev/null || echo 8)"
+  [[ "$on" == "true" ]] || return 1
+  if (( QUIET_A <= QUIET_B )); then
+    (( QUIET_H >= QUIET_A && QUIET_H < QUIET_B ))
+  else
+    # 跨午夜（例：22 → 6）
+    (( QUIET_H >= QUIET_A || QUIET_H < QUIET_B ))
   fi
+}
+
+if $QUIET_CHECK; then
+  if is_quiet_now; then
+    printf '靜音中：台北 %02d:00–%02d:00，現在 %02d 點\n' "$QUIET_A" "$QUIET_B" "$QUIET_H"
+    exit 1
+  fi
+  printf '要巡邏：台北 %02d:00–%02d:00，現在 %02d 點\n' "$QUIET_A" "$QUIET_B" "$QUIET_H"
+  exit 0
+fi
+
+if [[ "$TRIGGER" == "scheduled" ]] && is_quiet_now; then
+  printf '⏭  靜音時段（台北 %02d:00–%02d:00，現在 %02d 點），這次跳過\n' "$QUIET_A" "$QUIET_B" "$QUIET_H"
+  exit 0
 fi
 
 mkdir -p "$RUNS_DIR"

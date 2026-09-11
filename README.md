@@ -43,6 +43,17 @@ PR 巡邏的執行紀錄會自動清：**沒叫 AI 的留 7 天，派過 AI（�
 （`web/lib/prInbox.ts` 的 `RETAIN_DAYS` / `RETAIN_DAYS_AI`），
 在 server 啟動、每輪巡邏、每次開 `/pr-inbox` 時各檢查一次。
 
+### 測試
+
+```bash
+cd web && npm test                       # vitest：靜音時段、紀錄保留、session 標題
+./scripts/tests/quiet-hours.test.sh      # shell 那側的靜音判定（含 jq // 的坑）
+```
+
+這些測試釘住的是**已經出過一次的 bug**，不是為了覆蓋率：`custom-title`
+落在檔案開頭 64KB 之外、`jq` 的 `//` 把 `false` 當成「沒有值」、保留天數的
+AI／非 AI 分類、`endHour` 不含。改動判準時它們會紅。
+
 ## 專案同步規則
 
 - 本機根目錄：`/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs`
