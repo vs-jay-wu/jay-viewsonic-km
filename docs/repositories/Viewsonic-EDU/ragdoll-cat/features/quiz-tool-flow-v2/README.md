@@ -7,13 +7,13 @@ Lydia、Jacky、Jay 三人共同開發與 review，**已於 2026-09-03 合併回
 
 | 檔案 | 內容 |
 |---|---|
-| [`overview.html`](overview.html) | 流程改版前後、六張票的分工、架構增刪、PR 一覽、待決事項、**在這條分支上工作的注意事項** |
+| [`index.html`](index.html) | 流程改版前後、六張票的分工、架構增刪、PR 一覽、待決事項、**在這條分支上工作的注意事項** |
 | [`defects.html`](defects.html) | review 期間抓到的缺陷（含「為什麼沒被擋下來」）、測試自身的五種假綠、可帶走的判準 |
 | [`verify.html`](verify.html) | **實機驗證清單** —— 59 項 / 12 區（含 §12 mVB 邊界互動），含操作步驟／期望結果／陷阱；勾選存 localStorage，可一鍵清空 |
 | [`jira/`](jira/) | 八張票的本機 clone，**含留言** —— Android 線五張（10065 / 10067 / 10069 / 10047 / 10049）＋ **Windows 線三張**（10064 / 10066 / 10068，皆已 STAGE READY，可作行為對照） |
 | [`confluence/myViewboar/`](confluence/myViewboar/) | spec 總覽 ＋ 子頁 2／3／4 的本機 clone |
 
-用瀏覽器開 `overview.html`。
+用瀏覽器開 `index.html`。
 
 **票與 spec 都在本機** —— 查證 AC、決策編號、未決問題不必連 Jira / Confluence，
 也不需要動用 MCP。票的 clone **含留言**：這條線上不少決策的唯一落點是留言而不是票面
@@ -24,7 +24,7 @@ python3 scripts/clone-atlassian.py jira docs/.../quiz-tool-flow-v2/jira VSFT-100
 python3 scripts/clone-atlassian.py conf docs/.../quiz-tool-flow-v2/confluence/myViewboar 606797937 …
 ```
 
-> clone 是鏡像，**不要直接改內容**；本機結論寫在 `defects.html` 或 `overview.html`。
+> clone 是鏡像，**不要直接改內容**；本機結論寫在 `defects.html` 或 `index.html`。
 > 重抓前先 `git diff` 確認沒有未上游的補充，並同步更新各檔的 `cloned_version` / `cloned_at`。
 
 ## 一句話
@@ -75,7 +75,7 @@ git rev-list --count 893ff709..origin/develop
 > 那個指令照樣回成功。要用 `merge-base --is-ancestor`。
 
 **維護規則：任何一次在更新的 base 上修改這些文件，就一併換掉上表的戳記**
-（三個檔案都有：`README.md`、`overview.html`、`defects.html`）。只改內容不換戳記，
+（三個檔案都有：`README.md`、`index.html`、`defects.html`）。只改內容不換戳記，
 等於讓下一個人拿舊 SHA 去比對新內容 —— 比沒有戳記更糟。
 若只是換戳記、內容未重新查證，commit message 要講明白。
 

@@ -38,6 +38,35 @@ docs/features/<feature-folder-name>/
         └── ...
 ```
 
+## HTML 文件集的慣例
+
+`docs/` 底下用 HTML 寫的文件（不是 Confluence clone、不是 md 筆記）照這一套，
+km web 的「文件」頁靠它索引（`web/lib/docsRules.ts`，有測試）。
+
+- **一個 feature 資料夾 = 一份文件集**，放在
+  `docs/features/<feature>/`（跨產品）或
+  `docs/repositories/<org>/<repo>/features/<feature>/`（單一 repo）。
+- **入口一律 `index.html`**（2026-09-11 起；在那之前叫 `overview.html`，已全部改名）。
+  目錄 URL 會自動解析到它，瀏覽器與 web server 兩邊都成立。
+- 每份 HTML 的 `<head>` 要有：
+
+  ```html
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="km-doc-kind" content="overview">
+  <meta name="km-doc-status" content="active">
+  <meta name="km-doc-tickets" content="VSFT-6964,VB-1945">   <!-- 沒有就省略 -->
+  ```
+
+  | meta | 值 |
+  |---|---|
+  | `km-doc-kind` | `overview` `goal` `findings` `investigation` `verify` `test` `defects` `report` `handoff` `reference` `open-questions` `superseded` |
+  | `km-doc-status` | `active`（預設）／`done`／`superseded` |
+  | `km-doc-tickets` | 逗號分隔的票號，**只寫這份文件的主題票**，不要把內文提到的全列進來 |
+
+- **狀態不要只寫在 `<h1>` 的裝飾字裡**（「開發中」「已被取代」）——那是給人看的，
+  機器讀不到；`km-doc-status` 才是索引與排序的依據。兩邊要一致。
+- `<html lang="zh-Hant">`；樣式放同資料夾的 `assets/style.css`。
+
 ## Confluence Clone 規則
 
 **一個 Confluence 頁面對應一個 md 檔**，依 **space** 分子資料夾、全部放在 `confluence/` 下。

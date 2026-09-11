@@ -41,6 +41,12 @@ const TOOLS: { href: string; icon: IconName; title: string; desc: string }[] = [
     desc: "定期偵測待處理的 PR，必要時才叫 Claude 跑 /handle-pr-inbox",
   },
   {
+    href: "/docs",
+    icon: "clipboard",
+    title: "文件",
+    desc: "docs/ 底下的 HTML 文件集；可 pin、點了用瀏覽器開",
+  },
+  {
     href: "/sessions",
     icon: "layers",
     title: "Claude Sessions",

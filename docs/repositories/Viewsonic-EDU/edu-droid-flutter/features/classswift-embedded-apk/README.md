@@ -36,7 +36,7 @@ PR #208 解掉「首次可用性」；剩餘差距是三條使用者抉擇路徑
 
 | 檔案 | 內容 |
 |---|---|
-| [overview.html](overview.html) | 總覽：原始文件、build / 執行期架構圖、release target 對應、決議 D1–D9、review 修正摘要、交接待辦 |
+| [index.html](index.html) | 總覽：原始文件、build / 執行期架構圖、release target 對應、決議 D1–D9、review 修正摘要、交接待辦 |
 | [goal.html](goal.html) | 北極星目標與現況差距：目標 vs PR #208 對照、4 個 gap（新鮮度耦合、使用者抉擇殘留、region gate、競態窗口） |
 | [findings.html](findings.html) | **融合 POC findings（2026-07-31）**：CS 以 wrapper module 編進 MVB 成功、零改 CS 檔案；坑 P1–P5、待驗證 R1–R9 |
 | [investigation.html](investigation.html) | 接手調查清單：合併前後待辦與研究向問題（Q1–Q8） |

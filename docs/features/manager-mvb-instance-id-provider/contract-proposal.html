@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <title>Manager 讀取 MVB Instance ID — Contract 草案</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="km-doc-kind" content="reference">
+<meta name="km-doc-status" content="active">
 <link rel="stylesheet" href="assets/style.css" />
 </head>
 <body>
@@ -39,7 +42,7 @@
       2026-07-30 起草、07-31 補 §7/§8 &middot; 供與 VB-1399 工程師討論用，尚未定案
     </div>
     <div class="doc-nav">
-      <a href="overview.html">📘 總覽 (overview)</a>
+      <a href="index.html">📘 總覽 (overview)</a>
       <a href="findings.html">🛠️ 調查 findings</a>
       <a href="open-questions.html">❓ open questions</a>
       <a href="contract-proposal.html" class="active">📐 contract 草案</a>
@@ -824,7 +827,7 @@ static Future ensureInitialized() async {
         </tr>
         <tr>
           <td>(c) enroll 後由後端通知 dm</td>
-          <td>❌ <strong>不需要且應避免</strong>。這正是 <a href="overview.html#alternative">overview §3.3 理由 #4「組織耦合」</a>要避開的：provider 方案的主要優點就是<strong>兩邊後端 schema 都不動、無需後端對後端呼叫</strong>；加這條就把優點還回去，換到的只有延遲，而延遲已被 (a) 解掉</td>
+          <td>❌ <strong>不需要且應避免</strong>。這正是 <a href="index.html#alternative">overview §3.3 理由 #4「組織耦合」</a>要避開的：provider 方案的主要優點就是<strong>兩邊後端 schema 都不動、無需後端對後端呼叫</strong>；加這條就把優點還回去，換到的只有延遲，而延遲已被 (a) 解掉</td>
         </tr>
       </tbody>
     </table>

@@ -71,4 +71,4 @@ git log --oneline 093103866..master -- \
 - **尚未驗證**：游標高度 / 選取 / IME / 多行斷行 / lasso resize 後進編輯 /
   OLF 實際存檔內容 / mvbW 雙向開檔
 
-詳見 [`../findings.html`](../findings.html) §10–11 與 [`../overview.html`](../overview.html)。
+詳見 [`../findings.html`](../findings.html) §10–11 與 [`../index.html`](../index.html)。

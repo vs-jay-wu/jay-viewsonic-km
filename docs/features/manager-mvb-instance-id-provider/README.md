@@ -146,7 +146,7 @@ Manager（Software Instance 管理頁）需要知道「instance ID ↔ 裝置」
 
 | 檔案 | 內容 |
 |---|---|
-| [overview.html](overview.html) | 總覽：兩票分工、資料流圖、為什麼不是 enroll 帶 serial |
+| [index.html](index.html) | 總覽：兩票分工、資料流圖、為什麼不是 enroll 帶 serial |
 | [findings.html](findings.html) | 程式碼調查結果（Hive 機制與實機驗證、儲存保護、簽章配置、POC 實作與結果） |
 | [open-questions.html](open-questions.html) | **會議用文件** —— 每題的狀態、結論、要對方確認的事項（含浮動筆記功能） |
 | [contract-proposal.html](contract-proposal.html) | Provider contract：合約形狀、存取控制、v1 keys、錯誤回報、鏡射機制、版本策略、未初始化處理 |
