@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Icon from "@/components/Icon";
+import Tooltip from "@/components/Tooltip";
 
 type BlockKind = "text" | "thinking" | "tool_use" | "tool_result" | "image";
 
@@ -24,8 +25,19 @@ interface Page {
   id: string;
   sizeBytes: number;
   from: number;
+  to: number;
   hasMore: boolean;
+  hasNewer: boolean;
   messages: Message[];
+}
+
+/** 目前載進來的範圍。兩端各自記，因為兩個方向會分別往外長 */
+interface Range {
+  sizeBytes: number;
+  from: number;
+  to: number;
+  hasMore: boolean;
+  hasNewer: boolean;
 }
 
 const ROLE_LABEL: Record<Message["role"], string> = {
@@ -97,7 +109,7 @@ export default function TranscriptPanel({
   onClose: () => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [page, setPage] = useState<Page | null>(null);
+  const [range, setRange] = useState<Range | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showMeta, setShowMeta] = useState(false);
@@ -105,6 +117,8 @@ export default function TranscriptPanel({
   // 預設只看對話 —— 不濾的話整個面板會被 Bash／工具輸出淹掉，讀不到重點
   const [showTools, setShowTools] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingNewer, setLoadingNewer] = useState(false);
+  const topRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   /** 往前補內容時，用來把捲動位置釘在原本看的那一行 */
@@ -114,8 +128,13 @@ export default function TranscriptPanel({
   const autoFillRef = useRef(0);
 
   const fetchPage = useCallback(
-    async (before?: number) => {
-      const qs = before === undefined ? "" : `?before=${before}`;
+    async (cursor?: { before: number } | { after: number }) => {
+      // after=0 是「跳至首筆」，所以要判斷 key 在不在，不能看真假值
+      const qs = !cursor
+        ? ""
+        : "before" in cursor
+          ? `?before=${cursor.before}`
+          : `?after=${cursor.after}`;
       const res = await fetch(`/api/sessions/${sessionId}/transcript${qs}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "讀取失敗");
@@ -132,7 +151,7 @@ export default function TranscriptPanel({
     fetchPage()
       .then((p) => {
         if (cancelled) return;
-        setPage(p);
+        setRange(p);
         setMessages(p.messages);
         setLoading(false);
         autoFillRef.current = 0;
@@ -149,13 +168,14 @@ export default function TranscriptPanel({
 
   const loadEarlier = useCallback(async () => {
     const el = scrollRef.current;
-    if (!page?.hasMore || loadingMore) return;
+    if (!range?.hasMore || loadingMore) return;
     setLoadingMore(true);
     // 先記住現在的高度與位置，內容往前接上之後要補回去
     if (el) restoreRef.current = { height: el.scrollHeight, top: el.scrollTop };
     try {
-      const p = await fetchPage(page.from);
-      setPage({ ...p, messages: [] });
+      const p = await fetchPage({ before: range.from });
+      // 只動「前端」那一半 —— 往後載進來的範圍要留著
+      setRange((r) => (r ? { ...r, from: p.from, hasMore: p.hasMore } : p));
       setMessages((prev) => [...p.messages, ...prev]);
     } catch (e) {
       setError((e as Error).message);
@@ -163,7 +183,57 @@ export default function TranscriptPanel({
     } finally {
       setLoadingMore(false);
     }
-  }, [page, loadingMore, fetchPage]);
+  }, [range, loadingMore, fetchPage]);
+
+  /** 往後載（只有在「跳至首筆」之後才用得到 —— 平常一開就在最尾端） */
+  const loadNewer = useCallback(async () => {
+    if (!range?.hasNewer || loadingNewer) return;
+    setLoadingNewer(true);
+    try {
+      const p = await fetchPage({ after: range.to });
+      setRange((r) => (r ? { ...r, to: p.to, hasNewer: p.hasNewer } : p));
+      setMessages((prev) => [...prev, ...p.messages]);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoadingNewer(false);
+    }
+  }, [range, loadingNewer, fetchPage]);
+
+  /** 跳到對話開頭。整批換掉，不然中間會缺一大段卻看不出來 */
+  const jumpToStart = useCallback(async () => {
+    if (loading) return;
+    setLoadingMore(true);
+    try {
+      const p = await fetchPage({ after: 0 });
+      restoreRef.current = null;
+      autoFillRef.current = 0;
+      setRange(p);
+      setMessages(p.messages);
+      requestAnimationFrame(() => topRef.current?.scrollIntoView());
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loading, fetchPage]);
+
+  /** 回到最新的一段（跳到開頭之後要回得來） */
+  const jumpToEnd = useCallback(async () => {
+    setLoadingMore(true);
+    try {
+      const p = await fetchPage();
+      restoreRef.current = null;
+      autoFillRef.current = 0;
+      setRange(p);
+      setMessages(p.messages);
+      requestAnimationFrame(() => bottomRef.current?.scrollIntoView());
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [fetchPage]);
 
   // 內容往前接上後把捲動位置釘回去，不然畫面會整段跳走
   useLayoutEffect(() => {
@@ -180,7 +250,8 @@ export default function TranscriptPanel({
     if (!el) return;
     autoFillRef.current = 0; // 使用者自己在捲，重新給自動補的額度
     if (el.scrollTop < 120) void loadEarlier();
-  }, [loadEarlier]);
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) void loadNewer();
+  }, [loadEarlier, loadNewer]);
 
   const visible = messages
     .filter((m) => (showMeta || !m.isMeta) && (showSidechain || !m.isSidechain))
@@ -198,12 +269,15 @@ export default function TranscriptPanel({
    */
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el || loading || loadingMore || !page?.hasMore) return;
+    if (!el || loading || loadingMore || loadingNewer) return;
     if (el.scrollHeight > el.clientHeight + 40) return;
     if (autoFillRef.current >= 12) return;
+    if (!range?.hasMore && !range?.hasNewer) return;
     autoFillRef.current += 1;
-    void loadEarlier();
-  }, [visible.length, loading, loadingMore, page, loadEarlier]);
+    // 在開頭時要往**後**補，不然畫面空白卻沒有東西可載
+    if (range?.hasMore) void loadEarlier();
+    else void loadNewer();
+  }, [visible.length, loading, loadingMore, loadingNewer, range, loadEarlier, loadNewer]);
 
   return (
     <aside
@@ -214,10 +288,20 @@ export default function TranscriptPanel({
           <h2 className="truncate text-sm font-semibold text-gray-900">{title}</h2>
           <p className="mt-0.5 font-mono text-[11px] text-gray-400">
             {sessionId.slice(0, 8)}
-            {page && ` · ${(page.sizeBytes / 1048576).toFixed(1)} MB`}
-            {page?.hasMore && " · 顯示最近一段"}
+            {range && ` · ${(range.sizeBytes / 1048576).toFixed(1)} MB`}
+            {range?.hasMore && !range?.hasNewer && " · 顯示最近一段"}
+            {range?.hasNewer && " · 顯示開頭"}
           </p>
         </div>
+        <Tooltip label={range?.hasNewer ? "回到最新的一段" : "跳到這個 session 的第一則訊息"}>
+          <button
+            onClick={() => void (range?.hasNewer ? jumpToEnd() : jumpToStart())}
+            disabled={loading || loadingMore}
+            className="text-gray-400 hover:text-gray-700 disabled:opacity-40"
+          >
+            <Icon name={range?.hasNewer ? "toBottom" : "toTop"} size={18} />
+          </button>
+        </Tooltip>
         <button onClick={onClose} className="text-gray-400 hover:text-gray-700" title="關閉">
           <Icon name="x" size={18} />
         </button>
@@ -252,7 +336,8 @@ export default function TranscriptPanel({
           </div>
         ) : (
           <>
-            {page?.hasMore ? (
+            <div ref={topRef} />
+            {range?.hasMore ? (
               <div className="mb-3 flex items-center justify-center gap-1.5 py-1.5 text-xs text-gray-400">
                 {loadingMore ? (
                   <>
@@ -302,6 +387,17 @@ export default function TranscriptPanel({
                 </p>
               )}
             </div>
+            {range?.hasNewer && (
+              <div className="mt-3 flex items-center justify-center gap-1.5 py-1.5 text-xs text-gray-400">
+                {loadingNewer ? (
+                  <>
+                    <Icon name="spinner" size={13} className="animate-spin" /> 載入後面的內容…
+                  </>
+                ) : (
+                  <>往下捲會自動載入後面的內容</>
+                )}
+              </div>
+            )}
             <div ref={bottomRef} />
           </>
         )}

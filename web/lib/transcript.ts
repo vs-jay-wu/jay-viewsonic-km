@@ -35,7 +35,12 @@ export interface TranscriptPage {
   sizeBytes: number;
   /** 這一頁是從哪個 byte 開始讀的；當作「再往前」的游標 */
   from: number;
+  /** 這一頁最後一行完整結束在哪個 byte；當作「再往後」的游標 */
+  to: number;
+  /** 前面還有更早的內容 */
   hasMore: boolean;
+  /** 後面還有更新的內容 */
+  hasNewer: boolean;
   messages: TranscriptMessage[];
 }
 
@@ -159,36 +164,54 @@ async function resolveFile(id: string): Promise<string | null> {
 /**
  * 讀一頁對話紀錄。
  *
- * 從尾巴往前讀 —— 想看的一定是最近的內容，而檔案可能 60MB，不能整份載。
- * `before` 給上一頁回傳的 `from`，就會再往前讀一段。
+ * 預設從尾巴往前讀 —— 想看的通常是最近的內容，而檔案可能 60MB，不能整份載。
+ * `before` 給上一頁回傳的 `from` 會再往前讀一段；`after` 給上一頁的 `to` 則往後讀
+ * （「跳至首筆」是 `after: 0`，之後要能一路往後看回來）。
  */
 export async function readTranscript(
   id: string,
-  before?: number
+  opts: { before?: number; after?: number } = {}
 ): Promise<TranscriptPage | null> {
   const file = await resolveFile(id);
   if (!file) return null;
 
   const st = await stat(file);
-  const end = Math.min(before ?? st.size, st.size);
-  const start = Math.max(0, end - CHUNK_BYTES);
+  let start: number;
+  let end: number;
+  if (opts.after !== undefined) {
+    start = Math.max(0, Math.min(opts.after, st.size));
+    end = Math.min(start + CHUNK_BYTES, st.size);
+  } else {
+    end = Math.min(opts.before ?? st.size, st.size);
+    start = Math.max(0, end - CHUNK_BYTES);
+  }
 
   const fh = await open(file, "r");
-  let text: string;
+  let buf: Buffer;
   try {
-    const len = end - start;
-    const buf = Buffer.alloc(len);
-    const { bytesRead } = await fh.read(buf, 0, len, start);
-    text = buf.subarray(0, bytesRead).toString("utf8");
+    const len = Math.max(0, end - start);
+    const b = Buffer.alloc(len);
+    const { bytesRead } = await fh.read(b, 0, len, start);
+    buf = b.subarray(0, bytesRead);
   } finally {
     await fh.close();
   }
 
-  // 不是從檔頭開始讀的話，第一行多半被切一半，丟掉
+  // 兩端被切一半的行都丟掉。位移要在 **byte** 上算，不能先轉字串 ——
+  // 中文是 3 bytes，用字元索引回推 byte 游標會對不準。
+  let lo = 0;
   if (start > 0) {
-    const nl = text.indexOf("\n");
-    text = nl === -1 ? "" : text.slice(nl + 1);
+    const nl = buf.indexOf(0x0a);
+    lo = nl === -1 ? buf.length : nl + 1;
   }
+  let hi = buf.length;
+  if (end < st.size) {
+    const nl = buf.lastIndexOf(0x0a);
+    hi = nl === -1 ? lo : nl + 1;
+  }
+  // 單行大於一個 chunk 時上面會算出空範圍；往後讀要照樣前進，否則會原地打轉
+  const to = hi > lo ? start + hi : end;
+  const text = buf.subarray(lo, Math.max(lo, hi)).toString("utf8");
 
   const messages: TranscriptMessage[] = [];
   for (const line of text.split("\n")) {
@@ -197,11 +220,19 @@ export async function readTranscript(
     try {
       rec = JSON.parse(line) as Record<string, unknown>;
     } catch {
-      continue; // 尾巴那半行（還在寫入中）
+      continue; // 還在寫入中的半行
     }
     const m = messageFromRecord(rec);
     if (m) messages.push(m);
   }
 
-  return { id, sizeBytes: st.size, from: start, hasMore: start > 0, messages };
+  return {
+    id,
+    sizeBytes: st.size,
+    from: start,
+    to,
+    hasMore: start > 0,
+    hasNewer: to < st.size,
+    messages,
+  };
 }
