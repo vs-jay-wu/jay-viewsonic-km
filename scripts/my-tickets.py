@@ -32,7 +32,7 @@ def _load_vb_bugs():
 vb = _load_vb_bugs()
 
 PROJECT = "VB"
-FIELDS = "summary,status,priority,updated,issuetype,assignee"
+FIELDS = f"summary,status,priority,updated,issuetype,assignee,{vb.PRODUCT_FIELD}"
 
 
 def to_row(issue: dict) -> dict:
@@ -44,6 +44,8 @@ def to_row(issue: dict) -> dict:
         "statusCategory": f["status"]["statusCategory"]["name"],
         "priority": (f.get("priority") or {}).get("name") or "Medium",
         "issueType": (f.get("issuetype") or {}).get("name") or "",
+        # VB 的「Project」欄位（多選，取第一個）—— 頁面照它分群
+        "product": vb.product_of(f),
         "updated": f.get("updated"),
         "url": f"{vb.SITE}/browse/{issue['key']}",
     }

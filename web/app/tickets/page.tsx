@@ -5,8 +5,9 @@ import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import { usePrompt } from "@/components/Prompt";
 import {
-  TICKET_GROUPS, groupKeyOf, matchesTicketQuery, sortTickets,
-  type MyTicket, type MyTicketsSnapshot,
+  DEFAULT_VIEW, PRIORITY_ORDER, TICKET_GROUPS, TICKET_SORTS, applyView, groupByProduct,
+  groupKeyOf, issueTypeStyle,
+  type MyTicket, type MyTicketsSnapshot, type TicketSort,
 } from "@/lib/myTicketsRules";
 import { canonicalRepo, defaultSessionTitleForTicket } from "@/lib/workItemRules";
 import type { WorkIndex, WorkItem } from "@/lib/workIndexRules";
@@ -45,7 +46,7 @@ export default function TicketsPage() {
   const [config, setConfig] = useState<Config | null>(null);
   const [scheduler, setScheduler] = useState<Scheduler | null>(null);
   const [workIndex, setWorkIndex] = useState<WorkIndex | null>(null);
-  const [query, setQuery] = useState("");
+  const [view, setView] = useState(DEFAULT_VIEW);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -145,10 +146,28 @@ export default function TicketsPage() {
     }
   };
 
-  const tickets = useMemo(() => {
-    const all = sortTickets(snapshot?.issues ?? []);
-    return all.filter((t) => matchesTicketQuery(t, query));
-  }, [snapshot, query]);
+  const tickets = useMemo(
+    () => applyView(snapshot?.issues ?? [], view),
+    [snapshot, view]
+  );
+
+  /** 多選的過濾條件：點一下加入，再點一下移除 */
+  const toggle = (field: "groups" | "priorities", value: string) =>
+    setView((v) => ({
+      ...v,
+      [field]: v[field].includes(value)
+        ? v[field].filter((x) => x !== value)
+        : [...v[field], value],
+    }));
+
+  /** 這個分組／優先度現在有幾筆（只吃搜尋字串，不吃其他過濾，
+   *  否則選了一個之後其他的數字會全部變 0，看不出還有什麼可選） */
+  const countIn = (field: "groups" | "priorities", value: string) =>
+    applyView(snapshot?.issues ?? [], {
+      ...DEFAULT_VIEW,
+      query: view.query,
+      [field]: [value],
+    }).length;
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -166,8 +185,8 @@ export default function TicketsPage() {
           <div className="relative flex-1 min-w-[16rem]">
             <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              value={view.query}
+              onChange={(e) => setView((v) => ({ ...v, query: e.target.value }))}
               placeholder="搜尋單號、標題、狀態…"
               className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-gray-500"
             />
@@ -192,6 +211,74 @@ export default function TicketsPage() {
           </Tooltip>
         </div>
 
+        {/* 過濾與排序。整列高度固定，選了條件也不會把下面的清單推走 */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+          <span className="text-gray-400">排序</span>
+          <div className="flex flex-wrap gap-1">
+            {TICKET_SORTS.map((s) => (
+              <button
+                key={s.key}
+                onClick={() => setView((v) => ({ ...v, sort: s.key as TicketSort }))}
+                className={`rounded-full border px-2 py-0.5 ${
+                  view.sort === s.key
+                    ? "border-gray-900 bg-gray-900 text-white"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
+          <span className="ml-2 text-gray-400">狀態</span>
+          <div className="flex flex-wrap gap-1">
+            {TICKET_GROUPS.map((g) => {
+              const on = view.groups.includes(g.key);
+              const n = countIn("groups", g.key);
+              return (
+                <button
+                  key={g.key}
+                  onClick={() => toggle("groups", g.key)}
+                  className={`rounded-full border px-2 py-0.5 ${
+                    on ? "border-sky-500 bg-sky-50 text-sky-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {g.label} <span className="text-gray-400">{n}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <span className="ml-2 text-gray-400">優先度</span>
+          <div className="flex flex-wrap gap-1">
+            {PRIORITY_ORDER.map((p) => {
+              const on = view.priorities.includes(p);
+              const n = countIn("priorities", p);
+              if (n === 0 && !on) return null;
+              return (
+                <button
+                  key={p}
+                  onClick={() => toggle("priorities", p)}
+                  className={`rounded-full border px-2 py-0.5 ${
+                    on ? "border-sky-500 bg-sky-50 text-sky-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {p} <span className="text-gray-400">{n}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {(view.groups.length > 0 || view.priorities.length > 0) && (
+            <button
+              onClick={() => setView((v) => ({ ...v, groups: [], priorities: [] }))}
+              className="text-gray-400 hover:text-gray-700"
+            >
+              清掉篩選
+            </button>
+          )}
+        </div>
+
         <div className="mt-2 min-h-[2.5rem] text-xs">
           <div className="text-gray-400">
             {snapshot
@@ -206,13 +293,21 @@ export default function TicketsPage() {
           )}
         </div>
 
-        <ul className="mt-4 divide-y divide-gray-100 rounded-xl border border-gray-200">
-          {tickets.length === 0 && (
-            <li className="px-4 py-8 text-center text-sm text-gray-400">
-              {snapshot ? "沒有符合的單" : "—"}
-            </li>
-          )}
-          {tickets.map((t) => {
+        {tickets.length === 0 && (
+          <p className="mt-4 rounded-xl border border-gray-200 px-4 py-8 text-center text-sm text-gray-400">
+            {snapshot ? "沒有符合的單" : "—"}
+          </p>
+        )}
+
+        {/* 依 Jira 的「Project」欄位分群；群內順序由上面選的排序決定 */}
+        {groupByProduct(tickets).map((g) => (
+        <section key={g.product} className="mt-4">
+          <h2 className="flex items-baseline gap-2 px-1 text-xs font-semibold text-gray-700">
+            {g.product}
+            <span className="font-normal text-gray-400">{g.tickets.length}</span>
+          </h2>
+          <ul className="mt-1.5 divide-y divide-gray-100 rounded-xl border border-gray-200">
+          {g.tickets.map((t) => {
             const item = itemOf(t.key);
             const groupKey = groupKeyOf(t.status);
             const group = TICKET_GROUPS.find((g) => g.key === groupKey);
@@ -237,7 +332,14 @@ export default function TicketsPage() {
                     >
                       {t.status}
                     </span>
-                    <span className="text-[11px] text-gray-400">{t.issueType}</span>
+                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
+                      <Icon
+                        name={issueTypeStyle(t.issueType).icon}
+                        size={13}
+                        className={issueTypeStyle(t.issueType).cls}
+                      />
+                      {t.issueType}
+                    </span>
                     <span className="text-[11px] text-gray-400">{t.priority}</span>
                   </div>
                   <p className="mt-1 text-sm text-gray-800">{t.summary}</p>
@@ -289,7 +391,9 @@ export default function TicketsPage() {
               </li>
             );
           })}
-        </ul>
+          </ul>
+        </section>
+        ))}
       </div>
     </div>
   );

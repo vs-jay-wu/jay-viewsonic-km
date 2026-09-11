@@ -93,17 +93,17 @@ export default function PromptProvider({ children }: { children: React.ReactNode
   return (
     <PromptContext.Provider value={ask}>
       {children}
+      {/* 點背景**不關閉**：這裡面有打到一半的字，手滑一下就沒了（Jay 2026-09-11）。
+          要離開請按取消或 Esc。 */}
       {options && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-6"
-          onClick={() => close(null)}
           role="presentation"
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-label={options.title}
-            onClick={(e) => e.stopPropagation()}
             className="w-full max-w-lg rounded-xl bg-white p-5 shadow-2xl"
           >
             <h2 className="text-sm font-semibold text-gray-900">{options.title}</h2>

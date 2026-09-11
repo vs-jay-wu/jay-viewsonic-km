@@ -19,6 +19,14 @@
   }
 }
 
+/* Tailwind v4 的 placeholder 預設是 currentColor 半透明，對比太低看不清楚
+   （Jay 2026-09-11 回報）。統一釘成 gray-500。 */
+input::placeholder,
+textarea::placeholder {
+  color: #6b7280;
+  opacity: 1;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

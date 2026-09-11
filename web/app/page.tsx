@@ -4,6 +4,7 @@ import { readSnapshot } from "@/lib/myPrs";
 import { classifyError, SOURCE_LABELS, unhealthySources } from "@/lib/health";
 import { orcaPresence } from "@/lib/orca";
 import Icon, { type IconName } from "@/components/Icon";
+import BuildDirsSection from "@/components/BuildDirsSection";
 
 export const dynamic = "force-dynamic";
 
@@ -260,6 +261,31 @@ export default async function Home() {
           </div>
         )}
 
+        {/* build 產物：非同步載入，慢一點出來沒關係（掃描要 du 幾十 GB） */}
+        <BuildDirsSection />
+
+        {/*
+          不常用的東西放下面，平常不該佔注意力（Jay 2026-09-11）。
+          真的壞掉時會自己往上跑 —— 上面那組健康度警告會列出來。
+        */}
+        <div className="mt-10">
+          <h2 className="text-sm font-semibold text-gray-900">其他服務</h2>
+          <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200">
+            {OTHERS.map((o) => (
+              <li key={o.href}>
+                <Link
+                  href={o.href}
+                  className="group flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                >
+                  <Icon name={o.icon} size={15} className="text-gray-300 group-hover:text-gray-500" />
+                  <span className="text-sm text-gray-800">{o.title}</span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-gray-400">{o.desc}</span>
+                  <Icon name="chevronRight" size={14} className="text-gray-300 group-hover:text-gray-600" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
         {/* Teams Archive */}
         <div className="mt-10">
           <div className="flex items-baseline justify-between">
@@ -295,28 +321,6 @@ export default async function Home() {
           )}
         </div>
 
-        {/*
-          不常用的東西放最底下，平常不該佔注意力（Jay 2026-09-11）。
-          真的壞掉時會自己往上跑 —— 上面那組健康度警告會列出來。
-        */}
-        <div className="mt-10">
-          <h2 className="text-sm font-semibold text-gray-900">其他服務</h2>
-          <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200">
-            {OTHERS.map((o) => (
-              <li key={o.href}>
-                <Link
-                  href={o.href}
-                  className="group flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
-                >
-                  <Icon name={o.icon} size={15} className="text-gray-300 group-hover:text-gray-500" />
-                  <span className="text-sm text-gray-800">{o.title}</span>
-                  <span className="min-w-0 flex-1 truncate text-xs text-gray-400">{o.desc}</span>
-                  <Icon name="chevronRight" size={14} className="text-gray-300 group-hover:text-gray-600" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
       </div>
     </div>
   );
