@@ -1,19 +1,55 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
+import { useConfirm } from "@/components/Confirm";
+import { formatBytes } from "@/lib/buildDirRules";
 import {
   DEFAULT_FILTERS, UNGROUPED, filterRepos, groupByProduct,
   type RepoEntry, type ReposOverview,
 } from "@/lib/reposOverviewRules";
+import {
+  PLACEMENT_LABEL, STORAGE_FILTER_LABEL, driftOf, matchesStorageFilter,
+  moveDecision, progressPercent,
+  type MoveAction, type MoveContext, type MoveJob, type RepoStorage,
+  type StorageFilter, type StorageSnapshot,
+} from "@/lib/repoStorageRules";
 
 interface Payload {
   overview: ReposOverview;
   fileModifiedAt: string | null;
 }
 
+interface StoragePayload {
+  snapshots: StorageSnapshot[];
+  job: MoveJob | null;
+  error?: string;
+}
+
 const GITHUB_ORG = "Viewsonic-EDU";
+
+/**
+ * overview 列得出來、但本機與外接碟都沒有的 repo（從來沒 clone 過）。
+ * 腳本只回報「看得到的目錄」，所以這種要在這裡補一筆，
+ * 不然那些列會什麼標記都沒有，看起來像還沒載入完。
+ */
+function absentEntry(name: string, snapshot: StorageSnapshot) {
+  return {
+    storage: {
+      name,
+      org: snapshot.org,
+      placement: "absent" as const,
+      listedOffloaded: false,
+      excluded: false,
+      protectedReason: null,
+    },
+    snapshot,
+  };
+}
+/** 搬移進行中的輪詢間隔。進度本身是 3 秒 du 一次算出來的，再密也沒有新資訊 */
+const POLL_MS = 2000;
 
 function githubUrl(repo: RepoEntry, org: string): string {
   // Jay 自己的 repo 掛在個人帳號底下，不在 org 裡
@@ -34,7 +70,93 @@ function Chip({ children, tone = "gray" }: { children: React.ReactNode; tone?: "
   );
 }
 
-function RepoRow({ repo, org }: { repo: RepoEntry; org: string }) {
+/**
+ * 這個 repo 現在在哪。
+ *
+ * 四種狀態要**一眼分得出來**，所以差異放在「填滿程度」而不是顏色：
+ * 在手邊的是實心深色、不在手邊的是虛線空心、完全沒有的連字都是淡的。
+ * 顏色只留給真正的例外（兩邊都有 = 警告，照 AGENTS.md 琥珀色只給警告）。
+ * 外接碟沒掛載時位置是**依清單推測**的，字尾加問號並改虛線更淡的樣式。
+ */
+const PLACEMENT_STYLE: Record<RepoStorage["placement"], string> = {
+  local: "border-gray-900 bg-gray-900 text-white",
+  external: "border-dashed border-gray-400 bg-white text-gray-600",
+  both: "border-amber-300 bg-amber-100 text-amber-800",
+  absent: "border-dotted border-gray-200 bg-white text-gray-300",
+};
+
+const PLACEMENT_ICON: Record<RepoStorage["placement"], "cpu" | "hardDrive" | "alert" | "x"> = {
+  local: "cpu",
+  external: "hardDrive",
+  both: "alert",
+  absent: "x",
+};
+
+function PlacementChip({ storage, known }: { storage: RepoStorage; known: boolean }) {
+  const guessed = !known && storage.placement === "external";
+  const label = PLACEMENT_LABEL[storage.placement] + (guessed ? "？" : "");
+  return (
+    <Tooltip
+      label={
+        guessed
+          ? "外接硬碟沒掛載，這是依 offloaded 清單推測的，不是實際看到的"
+          : `實際位置：${PLACEMENT_LABEL[storage.placement]}`
+      }
+    >
+      <span
+        className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] font-medium leading-none ${
+          PLACEMENT_STYLE[storage.placement]
+        } ${guessed ? "opacity-60" : ""}`}
+      >
+        <Icon name={PLACEMENT_ICON[storage.placement]} size={10} />
+        {label}
+      </span>
+    </Tooltip>
+  );
+}
+
+function MoveProgress({ job }: { job: MoveJob }) {
+  const pct = progressPercent(job);
+  return (
+    <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+      <div className="flex items-center gap-2 text-xs text-gray-600">
+        <Icon name="spinner" size={12} className="animate-spin text-gray-400" />
+        <span>{job.action === "offload" ? "搬往外接硬碟" : "搬回本機"}</span>
+        <span className="ml-auto tabular-nums text-gray-500">
+          {pct === null
+            ? "計算大小中…"
+            : `${pct}%　${formatBytes(job.copiedBytes)} / ${formatBytes(job.totalBytes)}`}
+        </span>
+      </div>
+      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-gray-200">
+        <div
+          className={`h-full bg-gray-700 transition-all duration-500 ${pct === null ? "w-1/4 animate-pulse" : ""}`}
+          style={pct === null ? undefined : { width: `${pct}%` }}
+        />
+      </div>
+      <p className="mt-1.5 text-[11px] leading-relaxed text-gray-500">
+        複製完會逐檔比對，對得起來才刪來源 —— 中途失敗不會掉資料。
+      </p>
+    </div>
+  );
+}
+
+function RepoRow({
+  repo, org, storage, snapshot, ctx, job, onMove,
+}: {
+  repo: RepoEntry;
+  org: string;
+  storage: RepoStorage | undefined;
+  snapshot: StorageSnapshot | undefined;
+  ctx: MoveContext;
+  job: MoveJob | null;
+  onMove: (repo: RepoStorage, action: MoveAction) => void;
+}) {
+  const decision = storage ? moveDecision(storage, ctx) : null;
+  const drift = storage && snapshot ? driftOf(storage, snapshot) : null;
+  const activeJob =
+    job && job.state === "running" && storage && job.repo === storage.name ? job : null;
+
   return (
     <li className="px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -50,12 +172,51 @@ function RepoRow({ repo, org }: { repo: RepoEntry; org: string }) {
         {repo.archived && <Chip tone="amber">已封存</Chip>}
         {repo.type && <Chip>{repo.type}</Chip>}
         {repo.org && <Chip>{repo.org}</Chip>}
+        {storage && snapshot && (
+          <PlacementChip storage={storage} known={snapshot.externalKnown} />
+        )}
         {repo.hostPrefix && (
           <Tooltip label="部署的 host 前綴">
             <span className="font-mono text-[11px] text-gray-400">{repo.hostPrefix}.*</span>
           </Tooltip>
         )}
+
+        {/* 搬移按鈕靠右。位置固定，不隨其他 chip 數量位移 */}
+        {storage && decision && (
+          <div className="ml-auto">
+            {decision.action === null || !decision.enabled ? (
+              <Tooltip label={decision.reason}>
+                <span className="inline-flex cursor-default items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-[11px] text-gray-400">
+                  <Icon
+                    name={storage.protectedReason ? "lock" : decision.action ? "clock" : "alert"}
+                    size={11}
+                  />
+                  {decision.label}
+                </span>
+              </Tooltip>
+            ) : (
+              <Tooltip label={decision.reason}>
+                <button
+                  onClick={() => onMove(storage, decision.action as MoveAction)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-[11px] text-gray-700 hover:border-gray-500 hover:bg-gray-50"
+                >
+                  <Icon name={decision.action === "offload" ? "toBottom" : "toTop"} size={11} />
+                  {decision.label}
+                </button>
+              </Tooltip>
+            )}
+          </div>
+        )}
       </div>
+
+      {drift && (
+        <div className="mt-1.5 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] leading-relaxed text-amber-700">
+          <Icon name="alert" size={11} className="mt-0.5" />
+          <span>{drift}</span>
+        </div>
+      )}
+
+      {activeJob && <MoveProgress job={activeJob} />}
 
       {(repo.aliases?.length ?? 0) > 0 && (
         <div className="mt-1 flex flex-wrap items-center gap-1">
@@ -87,8 +248,16 @@ export default function ReposPage() {
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [storageFilter, setStorageFilter] = useState<StorageFilter>("all");
   /** 手動收合的群組。未歸類預設就是收的 —— 那一組有一百多個，展開會蓋掉其他產品 */
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set([UNGROUPED]));
+
+  const [storage, setStorage] = useState<StoragePayload | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
+  const confirm = useConfirm();
+  /** 上一次看到的工作狀態；用來偵測「剛剛從進行中變成結束」那一刻 */
+  const lastJobState = useRef<string | null>(null);
 
   useEffect(() => {
     fetch("/api/repos-overview")
@@ -100,14 +269,147 @@ export default function ReposPage() {
       .catch((e: Error) => setError(e.message));
   }, []);
 
+  /**
+   * 讀儲存狀態，順便偵測「剛剛從進行中變成結束」那一刻。
+   *
+   * 偵測刻意做在這裡而不是 effect 裡：effect 裡再 setState 會被
+   * `react-hooks/set-state-in-effect` 擋下，而且會多一輪 render。
+   */
+  const loadStorage = useCallback(async () => {
+    let json: StoragePayload;
+    try {
+      const res = await fetch("/api/repo-storage");
+      json = (await res.json()) as StoragePayload;
+    } catch (e) {
+      setStorage({ snapshots: [], job: null, error: (e as Error).message });
+      return;
+    }
+
+    const was = lastJobState.current;
+    const now = json.job;
+    lastJobState.current = now?.state ?? null;
+    if (was === "running" && now && now.state !== "running") {
+      if (now.state === "done") {
+        setNotice(now.message);
+        setMoveError(null);
+      } else {
+        setMoveError(now.error ?? "搬移失敗");
+      }
+    }
+    setStorage(json);
+  }, []);
+
+  useEffect(() => { void loadStorage(); }, [loadStorage]);
+
+  // 搬移中才輪詢。停下來之後不再打 API —— 這個頁面常常開著沒在看
+  const job = storage?.job ?? null;
+  useEffect(() => {
+    if (job?.state !== "running") return;
+    const t = setInterval(() => { void loadStorage(); }, POLL_MS);
+    return () => clearInterval(t);
+  }, [job?.state, loadStorage]);
+
+  const storageByName = useMemo(() => {
+    const map = new Map<string, { storage: RepoStorage; snapshot: StorageSnapshot }>();
+    for (const snap of storage?.snapshots ?? []) {
+      for (const r of snap.repos) map.set(r.name, { storage: r, snapshot: snap });
+    }
+    return map;
+  }, [storage]);
+
+  const primary = storage?.snapshots[0];
+  const ctx: MoveContext = useMemo(
+    () => ({
+      externalMounted: primary?.externalMounted ?? false,
+      externalVolume: primary?.externalVolume ?? null,
+      busyWith:
+        job?.state === "running" ? { repo: job.repo, action: job.action } : null,
+    }),
+    [primary, job]
+  );
+
+  const startMove = async (target: RepoStorage, action: MoveAction) => {
+    const toExternal = action === "offload";
+    const ok = await confirm({
+      title: toExternal ? `把 ${target.name} 搬到外接硬碟？` : `把 ${target.name} 搬回本機？`,
+      message:
+        `整個目錄會搬過去（含 .git 與未 commit 的改動），` +
+        `並同步更新 local.workspace.json 的 offloaded 清單。\n` +
+        `複製完成後會逐檔比對，對得起來才刪掉來源；比對不過就原地保留，不會掉資料。\n` +
+        `大的 repo 走 USB 可能要好幾分鐘，過程中不要拔硬碟。`,
+      confirmLabel: toExternal ? "搬到外接" : "搬回本機",
+    });
+    if (!ok) return;
+
+    setNotice(null);
+    setMoveError(null);
+    const res = await fetch("/api/repo-storage/move", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repo: target.name, org: target.org, action }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setMoveError(json.error ?? "無法開始搬移");
+      return;
+    }
+    setStorage((s) => (s ? { ...s, job: json.job as MoveJob } : s));
+    lastJobState.current = "running";
+  };
+
+  const runReconcile = async (org: string) => {
+    const ok = await confirm({
+      title: "把 offloaded 清單對齊實際狀態？",
+      message: "只會改 local.workspace.json，不搬任何檔案。",
+      confirmLabel: "對齊清單",
+    });
+    if (!ok) return;
+    setNotice(null);
+    setMoveError(null);
+    const res = await fetch("/api/repo-storage/reconcile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ org }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.ok) {
+      setMoveError(json.error ?? "對齊失敗");
+      return;
+    }
+    setNotice(json.message ?? "清單已對齊");
+    await loadStorage();
+  };
+
   const searching = filters.query.trim().length > 0;
   const groups = useMemo(() => {
     if (!data) return [];
-    return groupByProduct(data.overview, filterRepos(data.overview, filters));
-  }, [data, filters]);
+    const byText = filterRepos(data.overview, filters);
+    const byStorage = byText.filter((r) =>
+      matchesStorageFilter(storageByName.get(r.name)?.storage.placement, storageFilter)
+    );
+    return groupByProduct(data.overview, byStorage);
+  }, [data, filters, storageFilter, storageByName]);
 
   const shown = groups.reduce((n, g) => n + g.repos.length, 0);
   const total = data?.overview.repos.length ?? 0;
+
+  const counts = useMemo(() => {
+    let local = 0;
+    let external = 0;
+    for (const { storage: s } of storageByName.values()) {
+      if (s.placement === "local" || s.placement === "both") local += 1;
+      if (s.placement === "external" || s.placement === "both") external += 1;
+    }
+    return { local, external };
+  }, [storageByName]);
+
+  const driftCount = useMemo(() => {
+    let n = 0;
+    for (const { storage: s, snapshot } of storageByName.values()) {
+      if (driftOf(s, snapshot)) n += 1;
+    }
+    return n;
+  }, [storageByName]);
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -131,8 +433,78 @@ export default function ReposPage() {
           </div>
         )}
 
+        {/* 儲存位置狀態列。高度固定，不隨掛載狀態變動 */}
+        <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-gray-200 px-4 py-2.5 text-xs text-gray-600">
+          <Icon
+            name="hardDrive"
+            size={14}
+            className={primary?.externalMounted ? "text-gray-400" : "text-amber-500"}
+          />
+          {primary ? (
+            <>
+              <span>
+                本機 <b className="font-semibold text-gray-900">{counts.local}</b>
+                　外接 <b className="font-semibold text-gray-900">{counts.external}</b>
+              </span>
+              <span className="text-gray-300">·</span>
+              <span className={primary.externalMounted ? "text-gray-500" : "text-amber-700"}>
+                {primary.externalMounted
+                  ? `${primary.externalVolume ?? primary.externalPath} 已掛載`
+                  : `外接硬碟未掛載${primary.externalVolume ? `（${primary.externalVolume}）` : ""}，位置只能依清單推測`}
+              </span>
+              {driftCount > 0 && (
+                <>
+                  <span className="text-gray-300">·</span>
+                  <span className="text-amber-700">{driftCount} 筆清單與實際不符</span>
+                  <button
+                    onClick={() => void runReconcile(primary.org)}
+                    className="rounded-lg border border-gray-300 px-2 py-0.5 text-[11px] text-gray-700 hover:border-gray-500 hover:bg-gray-50"
+                  >
+                    對齊清單
+                  </button>
+                </>
+              )}
+              <Link
+                href="/repos/history"
+                className="ml-auto inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-0.5 text-[11px] text-gray-700 hover:border-gray-500 hover:bg-gray-50"
+              >
+                <Icon name="clock" size={11} />
+                搬遷紀錄
+              </Link>
+              <button
+                onClick={() => void loadStorage()}
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-0.5 text-[11px] text-gray-700 hover:border-gray-500 hover:bg-gray-50"
+              >
+                <Icon name="refresh" size={11} />
+                重新偵測
+              </button>
+            </>
+          ) : (
+            <span className="text-gray-400">偵測儲存位置中…</span>
+          )}
+        </div>
+
+        {storage?.error && (
+          <div className="mt-2 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-700">
+            <Icon name="alert" size={13} className="mt-0.5" />
+            <span>{storage.error}</span>
+          </div>
+        )}
+        {moveError && (
+          <div className="mt-2 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs text-red-700">
+            <Icon name="alert" size={13} className="mt-0.5" />
+            <span className="whitespace-pre-wrap">{moveError}</span>
+          </div>
+        )}
+        {notice && (
+          <div className="mt-2 flex items-start gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-xs text-gray-600">
+            <Icon name="check" size={13} className="mt-0.5 text-gray-400" />
+            <span className="whitespace-pre-wrap">{notice}</span>
+          </div>
+        )}
+
         {/* 篩選列：高度固定，不隨結果變動（版面不要跳） */}
-        <div className="mt-6 flex flex-wrap items-center gap-3">
+        <div className="mt-4 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[16rem]">
             <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -142,6 +514,15 @@ export default function ReposPage() {
               className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-gray-500"
             />
           </div>
+          <select
+            value={storageFilter}
+            onChange={(e) => setStorageFilter(e.target.value as StorageFilter)}
+            className="rounded-lg border border-gray-300 px-2 py-2 text-xs text-gray-700 outline-none focus:border-gray-500"
+          >
+            {(Object.keys(STORAGE_FILTER_LABEL) as StorageFilter[]).map((k) => (
+              <option key={k} value={k}>{STORAGE_FILTER_LABEL[k]}</option>
+            ))}
+          </select>
           <label className="inline-flex items-center gap-1.5 text-xs text-gray-600">
             <input
               type="checkbox"
@@ -206,9 +587,23 @@ export default function ReposPage() {
                 </button>
                 {open && (
                   <ul className="divide-y divide-gray-100 border-t border-gray-100">
-                    {g.repos.map((r) => (
-                      <RepoRow key={r.name} repo={r} org={data?.overview._meta.organization ?? GITHUB_ORG} />
-                    ))}
+                    {g.repos.map((r) => {
+                      const entry =
+                        storageByName.get(r.name) ??
+                        (primary ? absentEntry(r.name, primary) : undefined);
+                      return (
+                        <RepoRow
+                          key={r.name}
+                          repo={r}
+                          org={data?.overview._meta.organization ?? GITHUB_ORG}
+                          storage={entry?.storage}
+                          snapshot={entry?.snapshot}
+                          ctx={ctx}
+                          job={job}
+                          onMove={(s, a) => void startMove(s, a)}
+                        />
+                      );
+                    })}
                   </ul>
                 )}
               </section>

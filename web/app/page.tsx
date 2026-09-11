@@ -59,7 +59,13 @@ const OTHERS: { href: string; icon: IconName; title: string; desc: string }[] = 
     href: "/repos",
     icon: "repos",
     title: "Repos 總覽",
-    desc: "org 底下每個 repo 是做什麼的、別名、技術與依賴",
+    desc: "org 底下每個 repo 是做什麼的、別名、技術與依賴；也在這裡搬進搬出外接硬碟",
+  },
+  {
+    href: "/repos/history",
+    icon: "hardDrive",
+    title: "搬遷紀錄",
+    desc: "本機 ↔ 外接硬碟的每一次搬移：搬了多少、花多久、有沒有失敗",
   },
 ];
 
