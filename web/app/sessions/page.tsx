@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
 import { useConfirm } from "@/components/Confirm";
+import Tooltip from "@/components/Tooltip";
 import { isStale, STALE_DAYS } from "@/lib/sessionRules";
 import TranscriptPanel from "@/components/TranscriptPanel";
 
@@ -446,13 +447,14 @@ export default function SessionsPage() {
                   className="mt-1"
                 />
 
-                <button
-                  onClick={() => togglePin(s)}
-                  title={s.pinned ? "取消 pin" : "pin 住（防止被刪）"}
-                  className={`mt-0.5 ${s.pinned ? "text-amber-500" : "text-gray-300 hover:text-amber-500"}`}
-                >
-                  <Icon name="pin" size={16} />
-                </button>
+                <Tooltip label={s.pinned ? "取消 pin" : "pin 住（防止被刪）"}>
+                  <button
+                    onClick={() => togglePin(s)}
+                    className={`mt-0.5 ${s.pinned ? "text-amber-500" : "text-gray-300 hover:text-amber-500"}`}
+                  >
+                    <Icon name="pin" size={16} />
+                  </button>
+                </Tooltip>
 
                 <button
                   onClick={() => setOpenId(openId === s.id ? null : s.id)}
@@ -484,27 +486,32 @@ export default function SessionsPage() {
                   <div className="text-[11px] text-gray-400">{relTime(s.modifiedAt)}</div>
                 </div>
 
-                <button
-                  onClick={() => openInOrca(s)}
-                  disabled={busy}
-                  title="在 Orca 開啟（claude --resume）"
-                  className="mt-0.5 shrink-0 text-gray-300 hover:text-sky-600 disabled:opacity-40"
-                >
-                  <Icon name="external" size={15} />
-                </button>
+                <Tooltip label="在 Orca 開一個終端，resume 這個 session" side="left">
+                  <button
+                    onClick={() => openInOrca(s)}
+                    disabled={busy}
+                    className="mt-0.5 shrink-0 text-gray-300 hover:text-sky-600 disabled:opacity-40"
+                  >
+                    <Icon name="external" size={15} />
+                  </button>
+                </Tooltip>
 
-                <button
-                  onClick={() => removeOne(s)}
-                  disabled={s.pinned || busy}
-                  title={s.pinned ? "pin 住的不能刪，先取消 pin" : "刪除這個 session"}
-                  className={`mt-0.5 shrink-0 ${
-                    s.pinned
-                      ? "cursor-not-allowed text-gray-200"
-                      : "text-gray-300 hover:text-red-600"
-                  }`}
+                <Tooltip
+                  label={s.pinned ? "pin 住的不能刪，先取消 pin" : "刪除這個 session（連 sidecar）"}
+                  side="left"
                 >
-                  <Icon name="trash" size={15} />
-                </button>
+                  <button
+                    onClick={() => removeOne(s)}
+                    disabled={s.pinned || busy}
+                    className={`mt-0.5 shrink-0 ${
+                      s.pinned
+                        ? "cursor-not-allowed text-gray-200"
+                        : "text-gray-300 hover:text-red-600"
+                    }`}
+                  >
+                    <Icon name="trash" size={15} />
+                  </button>
+                </Tooltip>
               </li>
             ))}
           </ul>

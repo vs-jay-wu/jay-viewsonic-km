@@ -115,63 +115,70 @@ export async function openSession(input: OpenInput): Promise<OpenOutcome> {
   const { sessionId, cwd } = input;
   if (!UUID_RE.test(sessionId)) return { status: "error", error: "session id 格式不對" };
 
-  const status = await orcaStatus();
-  if (!status.running || !status.runtimeReady) {
-    // 先試著把 Orca 叫起來；`open` 會等到 runtime 可用才回來
-    const opened = await cli<unknown>(["open"]);
-    if (!opened.ok) return { status: "orca-down" };
-  }
+  // ⚠️ **每呼叫一次 CLI 就會啟動一個全新的 Orca.app 行程**，而 macOS 26 的
+  // App Data 保護會對此跳「Orca.app would like to access data from other apps」。
+  // 所以這裡刻意把呼叫次數壓到最少：
+  //   - 不先問 `status`（直接做事，失敗再處理）
+  //   - 不先問 `repo list`（create 失敗會回 selector_not_found，用那個判斷）
+  //   - 重用時只打一次 `terminal switch`（handle 死了它自己會失敗）
+  // 常見情況因此是 2 次（建立＋切換）或 1 次（重用）。
 
-  // ① 這個 session 之前開過、而且那個分頁還活著 → 切過去就好
+  // ① 開過而且分頁還在 → 直接切過去。切不過去就是死了，往下走重開。
   const registry = await readRegistry();
   const known = registry[sessionId];
   if (known) {
-    const shown = await cli<{ terminal?: { connected?: boolean; orphaned?: boolean } }>(
-      ["terminal", "show", "--terminal", known.handle]
-    );
-    const t = shown.result?.terminal;
-    if (shown.ok && t?.connected && !t.orphaned) {
-      await cli<unknown>(["terminal", "switch", "--terminal", known.handle]);
-      return { status: "reused", handle: known.handle };
-    }
+    const switched = await cli<unknown>(["terminal", "switch", "--terminal", known.handle]);
+    if (switched.ok) return { status: "reused", handle: known.handle };
     delete registry[sessionId];
     await writeRegistry(registry);
   }
 
   // ② 已經有人 resume 了同一個 —— 再開一個會變成兩份在寫同一份紀錄。
-  //    記帳掉了（例如狀態檔被刪）而分頁還活著時，會落到這條，結果一樣是不開。
+  //    這一步是 pgrep，不會啟動 Orca。
   const pid = await externalResumePid(sessionId);
   if (pid) return { status: "external", pid };
 
-  // ③ Orca 只認得註冊過的 repo；要不要註冊是 Jay 的決定
-  const repos = await knownRepoPaths();
-  if (!isUnderKnownRepo(cwd, repos)) {
+  // ③ 直接建立；repo 沒註冊時 Orca 會回 selector_not_found，不必先查一次清單
+  const created = await createTerminal(sessionId, cwd);
+  if (!created.ok && created.error?.code === "selector_not_found") {
     if (!input.registerRepo) return { status: "needs-repo", repoPath: cwd };
     const added = await cli<unknown>(["repo", "add", "--path", cwd]);
-    if (!added.ok) {
-      return { status: "error", error: added.error?.message ?? "repo add 失敗" };
-    }
+    if (!added.ok) return { status: "error", error: added.error?.message ?? "repo add 失敗" };
+    const retry = await createTerminal(sessionId, cwd);
+    return finishCreate(retry, sessionId, cwd, registry);
   }
+  return finishCreate(created, sessionId, cwd, registry);
+}
 
-  // 刻意不帶 `--focus`：Orca 1.4.198 帶了它會回
-  // `Timed out waiting for terminal handle after creation`（實測，不帶就正常）。
-  // 改成建立完再 switch 過去，效果一樣。
-  const created = await cli<{ terminal?: { handle?: string } }>([
+/** 刻意不帶 `--focus`：Orca 1.4.198 帶了它會回
+ *  `Timed out waiting for terminal handle after creation`（實測，不帶就正常）。
+ *  改成建立完再 switch，效果一樣。 */
+function createTerminal(sessionId: string, cwd: string) {
+  return cli<{ terminal?: { handle?: string } }>([
     "terminal", "create",
     "--worktree", `path:${cwd}`,
     "--command", `claude --resume ${sessionId}`,
   ]);
+}
+
+async function finishCreate(
+  created: CliResult<{ terminal?: { handle?: string } }>,
+  sessionId: string,
+  cwd: string,
+  registry: Registry
+): Promise<OpenOutcome> {
   const handle = created.result?.terminal?.handle;
   if (!created.ok || !handle) {
-    return { status: "error", error: created.error?.message ?? "terminal create 失敗" };
+    const msg = created.error?.message ?? "terminal create 失敗";
+    // Orca 沒起來時會是連線類的錯誤，跟一般失敗分開講
+    if (/runtime|connect|ECONNREFUSED|not reachable/i.test(msg)) return { status: "orca-down" };
+    return { status: "error", error: msg };
   }
-
   await cli<unknown>(["terminal", "switch", "--terminal", handle]);
   registry[sessionId] = { handle, cwd, openedAt: new Date().toISOString() };
   await writeRegistry(registry);
   return { status: "opened", handle };
 }
-
 
 // ─── 有沒有裝 Orca ───────────────────────────────────────────────────────────
 
