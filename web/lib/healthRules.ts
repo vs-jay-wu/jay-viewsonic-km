@@ -20,11 +20,38 @@ export interface SourceHealth {
  */
 export const FAILURE_ALERT_THRESHOLD = 3;
 
-export function isUnhealthy(
-  h: SourceHealth,
-  threshold = FAILURE_ALERT_THRESHOLD
-): boolean {
-  return h.consecutiveFailures >= threshold;
+/**
+ * 認證類的錯誤**不會自己好** —— token 過期就是過期，等一百次還是失敗。
+ * 這種第一次就該講，不必等累積到門檻。
+ */
+export const AUTH_ALERT_THRESHOLD = 1;
+
+export type ErrorKind = "auth" | "other";
+
+/**
+ * 這個錯誤需不需要人介入。
+ *
+ * 判斷順序有意義：**先排除流量限制**再看認證關鍵字。GitHub 的 rate limit
+ * 也是 403，但那會自己好，不該叫人去重新產 token。
+ */
+export function classifyError(error: string | null): ErrorKind {
+  if (!error) return "other";
+  const e = error.toLowerCase();
+  if (/rate limit|ratelimit|secondary limit|abuse detection|too many requests|429/.test(e)) {
+    return "other";
+  }
+  if (/401|403|unauthorized|forbidden|authentication|bad credentials|token|gh auth|未登入|憑證|認證/.test(e)) {
+    return "auth";
+  }
+  return "other";
+}
+
+export function thresholdFor(kind: ErrorKind): number {
+  return kind === "auth" ? AUTH_ALERT_THRESHOLD : FAILURE_ALERT_THRESHOLD;
+}
+
+export function isUnhealthy(h: SourceHealth): boolean {
+  return h.consecutiveFailures >= thresholdFor(classifyError(h.lastError));
 }
 
 export function emptyHealth(source: string): SourceHealth {
@@ -53,4 +80,44 @@ export function afterFailure(
     lastError: error.slice(0, 500),
     lastErrorAt: at,
   };
+}
+
+
+/**
+ * 從 PR 巡邏的執行紀錄推導連續失敗次數。
+ *
+ * 那一段是 shell 腳本 detached 跑的，TS 這邊看不到結果，只能事後從紀錄推。
+ * 由新到舊走：
+ *   clean / detected / handled → 成功，停止計數
+ *   failed / detect-failed     → 失敗
+ *   skipped / aborted          → **跳過不計**：被鎖擋掉根本沒試，
+ *                                被中斷是人為停掉，都不是服務壞了
+ */
+export interface RunLike {
+  status: string;
+  startedAt: string;
+  note?: string;
+}
+
+export function healthFromRuns(source: string, runsNewestFirst: RunLike[]): SourceHealth {
+  const h = emptyHealth(source);
+  let counting = true;
+  for (const r of runsNewestFirst) {
+    if (r.status === "skipped" || r.status === "aborted") continue;
+    const failed = r.status === "failed" || r.status === "detect-failed";
+    if (failed) {
+      if (counting) {
+        h.consecutiveFailures++;
+        if (!h.lastError) {
+          h.lastError = (r.note ?? r.status).slice(0, 500);
+          h.lastErrorAt = r.startedAt;
+        }
+      }
+    } else {
+      counting = false;
+      if (!h.lastSuccessAt) h.lastSuccessAt = r.startedAt;
+      if (h.lastError) break;
+    }
+  }
+  return h;
 }

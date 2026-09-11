@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { listChats } from "@/lib/db";
 import { readSnapshot } from "@/lib/myPrs";
-import { SOURCE_LABELS, unhealthySources } from "@/lib/health";
+import { classifyError, SOURCE_LABELS, unhealthySources } from "@/lib/health";
 import Icon, { type IconName } from "@/components/Icon";
 
 export const dynamic = "force-dynamic";
@@ -96,33 +96,63 @@ export default async function Home() {
           本機知識庫的操作面板：Teams 歸檔瀏覽，加上幾個常用的維運工具。
         </p>
 
-        {/* 抓取一直失敗的來源。token 過期是每次都失敗，會很快累積到門檻 */}
+        {/* 抓取一直失敗的來源。判準統一在 lib/healthRules.ts，各頁不另寫一套 */}
         {unhealthy.length > 0 && (
-          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-5 py-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-red-800">
-              <Icon name="alert" size={16} />
-              有資料來源連續抓取失敗
-            </div>
-            <ul className="mt-2 space-y-2 text-sm text-red-700">
-              {unhealthy.map((h) => {
-                const meta = SOURCE_LABELS[h.source];
-                return (
-                  <li key={h.source}>
-                    <Link href={meta?.href ?? "/"} className="font-medium underline">
+          <div className="mt-6 space-y-2">
+            {unhealthy.map((h) => {
+              const meta = SOURCE_LABELS[h.source];
+              const needsYou = classifyError(h.lastError) === "auth";
+              return (
+                <div
+                  key={h.source}
+                  className={`rounded-xl border px-5 py-4 ${
+                    needsYou
+                      ? "border-red-200 bg-red-50"
+                      : "border-amber-200 bg-amber-50"
+                  }`}
+                >
+                  <div
+                    className={`flex flex-wrap items-center gap-2 text-sm font-medium ${
+                      needsYou ? "text-red-800" : "text-amber-800"
+                    }`}
+                  >
+                    <Icon name="alert" size={16} />
+                    <Link href={meta?.href ?? "/"} className="underline">
                       {meta?.label ?? h.source}
-                    </Link>{" "}
-                    連續失敗 {h.consecutiveFailures} 次
-                    {h.lastSuccessAt && `，上次成功 ${fmtDate(h.lastSuccessAt)}`}
-                    {meta?.hint && <span className="text-red-600">（{meta.hint}）</span>}
-                    {h.lastError && (
-                      <div className="mt-1 truncate font-mono text-xs text-red-500" title={h.lastError}>
-                        {h.lastError}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+                    </Link>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-normal ${
+                        needsYou
+                          ? "bg-red-600 text-white"
+                          : "bg-amber-200 text-amber-900"
+                      }`}
+                    >
+                      {needsYou ? "需要你處理" : "持續失敗"}
+                    </span>
+                    <span className="font-normal">
+                      連續失敗 {h.consecutiveFailures} 次
+                      {h.lastSuccessAt
+                        ? `，上次成功 ${fmtDate(h.lastSuccessAt)}`
+                        : "，還沒成功過"}
+                    </span>
+                  </div>
+                  {(meta?.hint || h.lastError) && (
+                    <div
+                      className={`mt-1.5 text-xs ${
+                        needsYou ? "text-red-700" : "text-amber-700"
+                      }`}
+                    >
+                      {meta?.hint}
+                      {h.lastError && (
+                        <div className="mt-1 truncate font-mono" title={h.lastError}>
+                          {h.lastError}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
