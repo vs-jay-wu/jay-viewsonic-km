@@ -58,6 +58,33 @@ export interface RunRecord {
   verdictMode?: string;
 }
 
+/**
+ * 巡邏範圍：local.workspace.json 的 .prReview.repos。
+ *
+ * 這份清單是**靜態**的（handle-pr-inbox.sh 也讀同一份）—— 去別的 repo 做事時
+ * 那邊的 PR 不會進巡邏。刻意維持靜態，但畫面上要看得見，不然會誤以為
+ * 「沒跳出來就是沒有」。清單為空時腳本會改成掃所有與我有關的 PR。
+ */
+export interface PrScope {
+  repos: string[];
+  /** 讀不到設定檔時為 false —— UI 要說得出是「沒設定」還是「設定成空」 */
+  configFound: boolean;
+}
+
+export async function readPrScope(): Promise<PrScope> {
+  const raw = await readFile(repoPath("local.workspace.json"), "utf8").catch(() => null);
+  if (!raw) return { repos: [], configFound: false };
+  try {
+    const json = JSON.parse(raw) as { prReview?: { repos?: unknown } };
+    const repos = Array.isArray(json.prReview?.repos)
+      ? json.prReview.repos.filter((r): r is string => typeof r === "string")
+      : [];
+    return { repos, configFound: true };
+  } catch {
+    return { repos: [], configFound: false };
+  }
+}
+
 export interface LockState {
   locked: boolean;
   pid: number | null;

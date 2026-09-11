@@ -33,6 +33,8 @@ interface WatcherState {
   lastSkipReason: string | null; quietNow: boolean; taipeiHour: number;
 }
 
+interface PrScope { repos: string[]; configFound: boolean }
+
 const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
 
 const STATUS: Record<string, { label: string; icon: IconName; cls: string }> = {
@@ -77,6 +79,7 @@ export default function PrInboxPage() {
   const [quiet, setQuiet] = useState<QuietHours>({ enabled: true, startHour: 0, endHour: 8 });
   const [expanded, setExpanded] = useState<string | null>(null);
   const [log, setLog] = useState<{ id: string; log: string } | null>(null);
+  const [scope, setScope] = useState<PrScope | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/pr-inbox");
@@ -85,6 +88,7 @@ export default function PrInboxPage() {
     else {
       setRuns(json.runs);
       setLock(json.lock);
+      setScope(json.scope ?? null);
       setWatcher(json.watcher);
       if (json.watcher?.intervalSeconds) {
         setIntervalMin(Math.round(json.watcher.intervalSeconds / 60));
@@ -162,6 +166,40 @@ export default function PrInboxPage() {
           真的有待處理的 PR 才啟動 Claude 跑 <code className="text-xs">/handle-pr-inbox</code>。
           AI 執行期間會上鎖，排程碰到鎖就跳過 —— 同一批 PR 不會被 review 兩次。
         </p>
+
+        {/* 巡邏範圍 —— 靜態清單，但要看得見，不然會誤以為「沒跳出來就是沒有」 */}
+        <div className="mt-4 rounded-xl border border-gray-200 px-5 py-3.5 text-sm">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span className="font-medium text-gray-900">巡邏範圍</span>
+            {scope?.repos.length ? (
+              <span className="flex flex-wrap gap-1.5">
+                {scope.repos.map((r) => (
+                  <code
+                    key={r}
+                    className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700"
+                  >
+                    {r}
+                  </code>
+                ))}
+              </span>
+            ) : (
+              <span className="text-gray-500">
+                {scope?.configFound
+                  ? "（清單是空的 —— 會掃所有與我有關的 PR）"
+                  : "（讀不到 local.workspace.json）"}
+              </span>
+            )}
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-gray-500">
+            這些 repo 底下<strong className="font-medium text-gray-700">所有</strong>開著的 PR
+            都會進來（不必被指派），再聯集 GitHub 認定與我有關的：review-requested、
+            reviewed-by、mentions、assignee。
+            <strong className="font-medium text-gray-700">清單以外的 repo 只會靠後者帶到</strong>
+            —— 去別的 repo 做事時要自己留意。清單是靜態的，改在{" "}
+            <code className="text-xs">local.workspace.json</code> 的{" "}
+            <code className="text-xs">.prReview.repos</code>（gitignored）。
+          </p>
+        </div>
 
         {error && (
           <div className="mt-6 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

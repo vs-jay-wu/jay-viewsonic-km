@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
+import { isStale, STALE_DAYS } from "@/lib/sessionRules";
 import TranscriptPanel from "@/components/TranscriptPanel";
 
 interface SessionInfo {
@@ -59,7 +60,8 @@ export default function SessionsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [project, setProject] = useState("all");
   const [query, setQuery] = useState("");
-  const [pinnedOnly, setPinnedOnly] = useState(false);
+  const [view, setView] = useState<"all" | "stale" | "pinned">("all");
+  const [staleDays, setStaleDays] = useState(STALE_DAYS);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<DeleteResult[] | null>(null);
@@ -82,11 +84,19 @@ export default function SessionsPage() {
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [sessions]);
 
+  const stale = useMemo(
+    () => sessions.filter((s) => isStale(s, staleDays)),
+    [sessions, staleDays]
+  );
+  const staleBytes = stale.reduce((n, s) => n + s.sizeBytes + s.sidecarBytes, 0);
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return sessions
       .filter((s) => project === "all" || s.cwd === project)
-      .filter((s) => !pinnedOnly || s.pinned)
+      .filter((s) =>
+        view === "pinned" ? s.pinned : view === "stale" ? isStale(s, staleDays) : true
+      )
       .filter(
         (s) =>
           !q ||
@@ -96,10 +106,15 @@ export default function SessionsPage() {
           (s.gitBranch ?? "").toLowerCase().includes(q)
       )
       .sort((a, b) => {
+        // 久沒用那頁把最舊的擺前面：要清的東西從那頭開始看最自然
+        if (view === "stale") return a.modifiedAt < b.modifiedAt ? -1 : 1;
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
         return a.modifiedAt < b.modifiedAt ? 1 : -1;
       });
-  }, [sessions, project, query, pinnedOnly]);
+  }, [sessions, project, query, view, staleDays]);
+
+  // 切換分頁時清掉選取：看不到卻還被勾著的東西，按下刪除會一起消失
+  useEffect(() => { setSelected(new Set()); }, [view]);
 
   const selectable = visible.filter((s) => !s.pinned);
   const totalBytes = sessions.reduce((n, s) => n + s.sizeBytes + s.sidecarBytes, 0);
@@ -244,11 +259,49 @@ export default function SessionsPage() {
               </option>
             ))}
           </select>
-          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={pinnedOnly} onChange={(e) => setPinnedOnly(e.target.checked)} />
-            只看 pin 住的
-          </label>
+          <div className="inline-flex overflow-hidden rounded-lg border border-gray-300 text-sm">
+            {([
+              ["all", `全部（${sessions.length}）`],
+              ["stale", `久沒用（${stale.length}）`],
+              ["pinned", `pin 住的（${sessions.filter((s) => s.pinned).length}）`],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setView(key)}
+                className={`px-3 py-2 ${
+                  view === key
+                    ? "bg-gray-900 text-white"
+                    : "bg-white text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {view === "stale" && (
+            <label className="inline-flex items-center gap-1.5 text-sm text-gray-600">
+              超過
+              <select
+                value={staleDays}
+                onChange={(e) => setStaleDays(Number(e.target.value))}
+                className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-800"
+              >
+                {[30, 60, 90, 180].map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+              天沒用
+            </label>
+          )}
         </div>
+
+        {view === "stale" && (
+          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs leading-relaxed text-amber-800">
+            超過 {staleDays} 天沒動過、且<strong className="font-semibold">沒有</strong> pin
+            住的 session，共 {stale.length} 個、{mb(staleBytes)}。這裡只是幫你挑出來，
+            不會自動刪 —— 刪掉不可逆，要留的先 pin 起來再全選。
+          </p>
+        )}
 
         {/* 操作列 */}
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg bg-gray-50 px-4 py-2.5 text-sm">
