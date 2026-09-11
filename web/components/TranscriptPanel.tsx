@@ -127,6 +127,23 @@ export default function TranscriptPanel({
    *  沒有上限就會一路把 60MB 讀完 */
   const autoFillRef = useRef(0);
 
+  /**
+   * Esc 關掉面板。
+   *
+   * 確認對話框開著的時候要讓給它 —— 兩個都掛在 document 上，而這個先註冊、
+   * 會先跑，光看 `defaultPrevented` 是來不及的（對話框還沒擋下來）。所以直接
+   * 問畫面上有沒有 alertdialog。
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (document.querySelector('[role="alertdialog"]')) return;
+      onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   const fetchPage = useCallback(
     async (cursor?: { before: number } | { after: number }) => {
       // after=0 是「跳至首筆」，所以要判斷 key 在不在，不能看真假值

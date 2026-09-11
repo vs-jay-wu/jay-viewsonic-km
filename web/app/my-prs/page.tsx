@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Icon, { type IconName } from "@/components/Icon";
+import { groupEventsByPr, type MyPrEventLike } from "@/lib/myPrEventRules";
 
 interface PrReview {
   id: string; author: string; state: string; submittedAt: string; url: string;
@@ -22,11 +23,7 @@ interface Snapshot {
   fetchedAs: string; fetchedAt: string; mergedWithinDays: number;
   prs: MyPr[]; lastError?: string | null;
 }
-interface MyPrEvent {
-  id: string; type: "approved" | "changes_requested" | "reviewed" | "commented";
-  at: string; actor: string; repo: string; number: number; title: string;
-  url: string; read: boolean;
-}
+type MyPrEvent = MyPrEventLike;
 interface Config {
   enabled: boolean; intervalSeconds: number; notify: boolean;
   mergedDays: number; updatedAt: string;
@@ -386,32 +383,52 @@ export default function MyPrsPage() {
               還沒有新動靜。有人 review、approve 或留言時會出現在這裡，並跳一則通知。
             </p>
           ) : (
+            /* 照 PR 分群 —— 同一張 PR 常常一次來好幾則，攤平會讀不出是哪幾張有動靜 */
             <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200">
-              {events.slice(0, 30).map((e) => {
-                const m = EVENT_META[e.type];
-                return (
-                  <li
-                    key={e.id}
-                    className={`flex items-center gap-3 px-4 py-2.5 text-sm ${
-                      e.read ? "" : "bg-sky-50/50"
-                    }`}
-                  >
-                    <Icon name={m.icon} size={15} className={m.cls} />
-                    <span className="text-gray-800">{e.actor}</span>
-                    <span className={m.cls}>{m.label}</span>
+              {groupEventsByPr(events).slice(0, 12).map((g) => (
+                <li key={g.key} className={g.unread > 0 ? "bg-sky-50/50" : ""}>
+                  <div className="flex items-center gap-2 px-4 pt-2.5">
                     <a
-                      href={e.url}
+                      href={g.prUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="min-w-0 flex-1 truncate text-xs text-gray-500 hover:underline"
+                      className="min-w-0 flex-1 truncate text-sm text-gray-800 hover:underline"
                     >
-                      <span className="font-mono">{e.repo.split("/").pop()}#{e.number}</span>{" "}
-                      {e.title}
+                      <span className="font-mono text-xs text-gray-500">
+                        {g.repo.split("/").pop()}#{g.number}
+                      </span>{" "}
+                      {g.title}
                     </a>
-                    <span className="shrink-0 text-xs text-gray-400">{relTime(e.at)}</span>
-                  </li>
-                );
-              })}
+                    {g.unread > 0 && (
+                      <span className="shrink-0 rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] text-white">
+                        {g.unread}
+                      </span>
+                    )}
+                    <span className="shrink-0 text-xs text-gray-400">{relTime(g.latestAt)}</span>
+                  </div>
+                  <ul className="px-4 pb-2.5 pt-1">
+                    {g.events.map((e) => {
+                      const m = EVENT_META[e.type];
+                      return (
+                        <li key={e.id} className="flex items-center gap-2 py-0.5 text-xs">
+                          <Icon name={m.icon} size={13} className={m.cls} />
+                          <span className="text-gray-700">{e.actor}</span>
+                          <span className={m.cls}>{m.label}</span>
+                          <a
+                            href={e.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-gray-400 hover:text-gray-700 hover:underline"
+                          >
+                            {relTime(e.at)}
+                          </a>
+                          {!e.read && <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </li>
+              ))}
             </ul>
           )}
         </div>
