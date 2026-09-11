@@ -20,13 +20,67 @@ const DEFAULT_INTERVAL_SECONDS = 1800;
 export type ReviewVerdictMode = "off" | "approve" | "full";
 const DEFAULT_VERDICT: ReviewVerdictMode = "full";
 
+/**
+ * 不巡邏的時段（半夜）。時區固定台北，不跟著機器的 TZ 走 —— 帶電腦出差
+ * 時「台灣時間的半夜」才是 Jay 要的那個意思。
+ *
+ * 只擋**排程**。手動觸發任何時間都能跑，這是「不要半夜自動去動別人的 PR」，
+ * 不是「半夜不准用」。
+ */
+export interface QuietHours {
+  enabled: boolean;
+  /** 起始小時（含），0–23 */
+  startHour: number;
+  /** 結束小時（不含），0–23。start > end 代表跨午夜 */
+  endHour: number;
+}
+
+const TIME_ZONE = "Asia/Taipei";
+const DEFAULT_QUIET: QuietHours = { enabled: true, startHour: 0, endHour: 8 };
+
 export interface ScheduleConfig {
   enabled: boolean;
   intervalSeconds: number;
   /** true = 排程只偵測、不啟動 AI（人不在時的保險模式） */
   detectOnly: boolean;
   reviewVerdict: ReviewVerdictMode;
+  quietHours: QuietHours;
   updatedAt: string;
+}
+
+function clampHour(v: unknown, fallback: number): number {
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) && n >= 0 && n <= 23 ? n : fallback;
+}
+
+function normaliseQuiet(q: unknown): QuietHours {
+  const o = (q ?? {}) as Partial<QuietHours>;
+  return {
+    enabled: o.enabled ?? DEFAULT_QUIET.enabled,
+    startHour: clampHour(o.startHour, DEFAULT_QUIET.startHour),
+    endHour: clampHour(o.endHour, DEFAULT_QUIET.endHour),
+  };
+}
+
+/** 台北時間的現在幾點。用 Intl 取，不依賴機器的 TZ 設定。 */
+export function taipeiHour(now = new Date()): number {
+  return Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: TIME_ZONE,
+      hour: "2-digit",
+      hour12: false,
+    }).format(now)
+  ) % 24;
+}
+
+/** 現在是不是靜音時段。start === end 代表整天都不巡（等於停用排程）。 */
+export function inQuietHours(q: QuietHours, now = new Date()): boolean {
+  if (!q.enabled) return false;
+  const h = taipeiHour(now);
+  // 跨午夜（例：22 → 6）要用 or，不跨的（0 → 8）用 and
+  return q.startHour <= q.endHour
+    ? h >= q.startHour && h < q.endHour
+    : h >= q.startHour || h < q.endHour;
 }
 
 function normaliseVerdict(v: unknown): ReviewVerdictMode {
@@ -40,6 +94,10 @@ export interface SchedulerState extends ScheduleConfig {
   lastTickAt: string | null;
   nextRunAt: string | null;
   lastSkipReason: string | null;
+  /** 現在是不是靜音時段（給 UI 直接顯示，不用自己再算一次時區） */
+  quietNow: boolean;
+  /** 台北時間的現在幾點 */
+  taipeiHour: number;
 }
 
 /**
@@ -81,7 +139,8 @@ export async function readConfig(): Promise<ScheduleConfig> {
   if (!raw) {
     return {
       enabled: false, intervalSeconds: DEFAULT_INTERVAL_SECONDS,
-      detectOnly: false, reviewVerdict: DEFAULT_VERDICT, updatedAt: "",
+      detectOnly: false, reviewVerdict: DEFAULT_VERDICT,
+      quietHours: { ...DEFAULT_QUIET }, updatedAt: "",
     };
   }
   try {
@@ -91,12 +150,14 @@ export async function readConfig(): Promise<ScheduleConfig> {
       intervalSeconds: clampInterval(c.intervalSeconds),
       detectOnly: !!c.detectOnly,
       reviewVerdict: normaliseVerdict(c.reviewVerdict),
+      quietHours: normaliseQuiet(c.quietHours),
       updatedAt: c.updatedAt ?? "",
     };
   } catch {
     return {
       enabled: false, intervalSeconds: DEFAULT_INTERVAL_SECONDS,
-      detectOnly: false, reviewVerdict: DEFAULT_VERDICT, updatedAt: "",
+      detectOnly: false, reviewVerdict: DEFAULT_VERDICT,
+      quietHours: { ...DEFAULT_QUIET }, updatedAt: "",
     };
   }
 }
@@ -116,6 +177,17 @@ async function tick(): Promise<void> {
   await pruneRuns().catch(() => undefined);
   rt.lastTickAt = new Date().toISOString();
   rt.nextRunAt = new Date(Date.now() + rt.intervalSeconds * 1000).toISOString();
+
+  // 靜音時段直接不 spawn。刻意不寫執行紀錄 —— 5 分鐘一輪的話一晚會堆出
+  // 近百筆「因為半夜所以沒跑」，翻紀錄的人要的不是那個。狀態看 UI 的
+  // lastSkipReason 就知道。
+  const config = await readConfig();
+  if (inQuietHours(config.quietHours)) {
+    const { startHour: a, endHour: b } = config.quietHours;
+    rt.lastSkipReason =
+      `靜音時段（台北 ${String(a).padStart(2, "0")}:00–${String(b).padStart(2, "0")}:00）`;
+    return;
+  }
 
   const lock = await lockState();
   if (lock.locked && lock.alive) {
@@ -160,6 +232,7 @@ export async function setSchedule(input: {
   intervalSeconds?: number;
   detectOnly?: boolean;
   reviewVerdict?: ReviewVerdictMode;
+  quietHours?: Partial<QuietHours>;
 }): Promise<SchedulerState> {
   const current = await readConfig();
   const config: ScheduleConfig = {
@@ -167,6 +240,7 @@ export async function setSchedule(input: {
     intervalSeconds: clampInterval(input.intervalSeconds ?? current.intervalSeconds),
     detectOnly: input.detectOnly ?? current.detectOnly,
     reviewVerdict: normaliseVerdict(input.reviewVerdict ?? current.reviewVerdict),
+    quietHours: normaliseQuiet({ ...current.quietHours, ...(input.quietHours ?? {}) }),
     updatedAt: new Date().toISOString(),
   };
   await writeConfig(config);
@@ -183,6 +257,8 @@ export function schedulerState(config: ScheduleConfig): SchedulerState {
     lastTickAt: rt.lastTickAt,
     nextRunAt: rt.nextRunAt,
     lastSkipReason: rt.lastSkipReason,
+    quietNow: inQuietHours(config.quietHours),
+    taipeiHour: taipeiHour(),
   };
 }
 

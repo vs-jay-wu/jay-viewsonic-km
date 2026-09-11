@@ -85,6 +85,38 @@ case "${VERDICT_MODE:-full}" in
 esac
 
 
+# ─── 靜音時段（台北時間的半夜不巡邏）────────────────────────────────────────
+#
+# 只擋 --trigger scheduled。手動觸發任何時間都能跑 —— 這條規則的意思是
+# 「不要半夜自動去動別人的 PR」，不是「半夜不准用」。
+#
+# 時區寫死 Asia/Taipei，不跟機器的 TZ 走：帶電腦出差時，「台灣時間的半夜」
+# 才是這條規則要表達的東西。
+#
+# 這裡是後備 —— 排程本體在 web server（web/lib/prInboxScheduler.ts），
+# 它靜音時段根本不會 spawn。這支腳本被 launchd／cron／手動排程直接叫到時
+# 才輪到這段。刻意不寫執行紀錄：一晚會堆出近百筆「因為半夜所以沒跑」。
+if [[ "$TRIGGER" == "scheduled" && -f "$WATCH_CONFIG" ]]; then
+  # 不能寫 `.quietHours.enabled // true`：jq 的 // 把 false 也當成「沒有值」，
+  # 於是「停用靜音」會被翻回 true，半夜以外的時間也照樣跳過。
+  q_on="$(jq -r '.quietHours.enabled != false' "$WATCH_CONFIG" 2>/dev/null || echo true)"
+  q_a="$(jq -r '.quietHours.startHour // 0' "$WATCH_CONFIG" 2>/dev/null || echo 0)"
+  q_b="$(jq -r '.quietHours.endHour // 8' "$WATCH_CONFIG" 2>/dev/null || echo 8)"
+  if [[ "$q_on" == "true" ]]; then
+    h=$(( 10#$(TZ=Asia/Taipei date +%H) ))
+    if (( q_a <= q_b )); then
+      (( h >= q_a && h < q_b )) && quiet=1 || quiet=0
+    else
+      # 跨午夜（例：22 → 6）
+      (( h >= q_a || h < q_b )) && quiet=1 || quiet=0
+    fi
+    if (( quiet )); then
+      printf '⏭  靜音時段（台北 %02d:00–%02d:00，現在 %02d 點），這次跳過\n' "$q_a" "$q_b" "$h"
+      exit 0
+    fi
+  fi
+fi
+
 mkdir -p "$RUNS_DIR"
 
 ID="$(date +%Y%m%d-%H%M%S)"

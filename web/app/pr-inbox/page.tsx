@@ -22,12 +22,18 @@ interface LockState {
 }
 type VerdictMode = "off" | "approve" | "full";
 
+interface QuietHours {
+  enabled: boolean; startHour: number; endHour: number;
+}
+
 interface WatcherState {
   enabled: boolean; intervalSeconds: number; detectOnly: boolean;
-  reviewVerdict: VerdictMode; updatedAt: string;
+  reviewVerdict: VerdictMode; quietHours: QuietHours; updatedAt: string;
   running: boolean; lastTickAt: string | null; nextRunAt: string | null;
-  lastSkipReason: string | null;
+  lastSkipReason: string | null; quietNow: boolean; taipeiHour: number;
 }
+
+const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
 
 const STATUS: Record<string, { label: string; icon: IconName; cls: string }> = {
   clean:           { label: "沒待處理", icon: "check",   cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
@@ -68,6 +74,7 @@ export default function PrInboxPage() {
   const [intervalMin, setIntervalMin] = useState(30);
   const [detectOnly, setDetectOnly] = useState(false);
   const [verdict, setVerdict] = useState<VerdictMode>("full");
+  const [quiet, setQuiet] = useState<QuietHours>({ enabled: true, startHour: 0, endHour: 8 });
   const [expanded, setExpanded] = useState<string | null>(null);
   const [log, setLog] = useState<{ id: string; log: string } | null>(null);
 
@@ -86,6 +93,7 @@ export default function PrInboxPage() {
         setDetectOnly(json.watcher.detectOnly);
       }
       if (json.watcher?.reviewVerdict) setVerdict(json.watcher.reviewVerdict);
+      if (json.watcher?.quietHours) setQuiet(json.watcher.quietHours);
     }
     setLoading(false);
   }, []);
@@ -191,6 +199,11 @@ export default function PrInboxPage() {
                   只偵測
                 </span>
               )}
+              {watcher?.enabled && watcher.quietNow && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700">
+                  <Icon name="clock" size={12} /> 靜音中，暫停巡邏
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -247,6 +260,54 @@ export default function PrInboxPage() {
                 </button>
               )}
             </div>
+          </div>
+
+          {/* 靜音時段 */}
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-gray-200 bg-gray-50/60 px-4 py-3 text-sm">
+            <label className="inline-flex items-center gap-2 text-gray-700">
+              <input
+                type="checkbox"
+                checked={quiet.enabled}
+                onChange={(e) => {
+                  const q = { ...quiet, enabled: e.target.checked };
+                  setQuiet(q);
+                  post("/api/pr-inbox/watcher",
+                    { enabled: !!watcher?.enabled, quietHours: q }, "quiet");
+                }}
+              />
+              這段時間不巡邏
+            </label>
+            <label className="inline-flex items-center gap-1.5 text-gray-700">
+              <input
+                type="number" min={0} max={23} value={quiet.startHour}
+                onChange={(e) => setQuiet({ ...quiet, startHour: Number(e.target.value) })}
+                className="w-14 rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900"
+              />
+              點 到
+              <input
+                type="number" min={0} max={23} value={quiet.endHour}
+                onChange={(e) => setQuiet({ ...quiet, endHour: Number(e.target.value) })}
+                className="w-14 rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900"
+              />
+              點
+            </label>
+            <button
+              onClick={() => post("/api/pr-inbox/watcher",
+                { enabled: !!watcher?.enabled, quietHours: quiet }, "quiet")}
+              disabled={!!busy}
+              className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              套用
+            </button>
+            <span className="text-xs text-gray-400">
+              台北時間（不跟機器時區走）
+              {watcher && ` · 現在 ${hh(watcher.taipeiHour)}`}
+              {quiet.enabled && ` · ${hh(quiet.startHour)} 起暫停，${hh(quiet.endHour)} 恢復`}
+            </span>
+            <p className="w-full text-xs leading-relaxed text-gray-500">
+              只擋排程。手動觸發任何時間都能跑 —— 這條規則是「不要半夜自動去動別人的 PR」，
+              不是「半夜不准用」。靜音期間不會留執行紀錄（一晚會堆出近百筆「因為半夜所以沒跑」）。
+            </p>
           </div>
 
           {/* 送不送出 review 判定 */}
