@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listChats } from "@/lib/db";
 import { readSnapshot } from "@/lib/myPrs";
+import { SOURCE_LABELS, unhealthySources } from "@/lib/health";
 import Icon, { type IconName } from "@/components/Icon";
 
 export const dynamic = "force-dynamic";
@@ -73,6 +74,8 @@ function decisionText(pr: {
 export default async function Home() {
   // 只讀 server 定時抓好的快照，開首頁不會打 GitHub
   const myPrs = await readSnapshot().catch(() => null);
+  // 連續失敗到門檻的資料來源。偶爾失敗不列 —— 那種警告看久了就會被忽略
+  const unhealthy = await unhealthySources().catch(() => []);
   const openPrs = (myPrs?.prs ?? []).filter((p) => p.state === "OPEN");
 
   const chats = listChats() as (ReturnType<typeof listChats>[number] & {
@@ -92,6 +95,36 @@ export default async function Home() {
         <p className="mt-1.5 text-sm text-gray-500">
           本機知識庫的操作面板：Teams 歸檔瀏覽，加上幾個常用的維運工具。
         </p>
+
+        {/* 抓取一直失敗的來源。token 過期是每次都失敗，會很快累積到門檻 */}
+        {unhealthy.length > 0 && (
+          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-5 py-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-red-800">
+              <Icon name="alert" size={16} />
+              有資料來源連續抓取失敗
+            </div>
+            <ul className="mt-2 space-y-2 text-sm text-red-700">
+              {unhealthy.map((h) => {
+                const meta = SOURCE_LABELS[h.source];
+                return (
+                  <li key={h.source}>
+                    <Link href={meta?.href ?? "/"} className="font-medium underline">
+                      {meta?.label ?? h.source}
+                    </Link>{" "}
+                    連續失敗 {h.consecutiveFailures} 次
+                    {h.lastSuccessAt && `，上次成功 ${fmtDate(h.lastSuccessAt)}`}
+                    {meta?.hint && <span className="text-red-600">（{meta.hint}）</span>}
+                    {h.lastError && (
+                      <div className="mt-1 truncate font-mono text-xs text-red-500" title={h.lastError}>
+                        {h.lastError}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         {/* 工具 */}
         <div className="mt-8 grid gap-3 sm:grid-cols-2">

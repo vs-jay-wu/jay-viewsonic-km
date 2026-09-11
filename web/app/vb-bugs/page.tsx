@@ -42,6 +42,8 @@ export default function VbBugsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<{ product: string; cell: string } | null>(null);
+  /** server 已經抓到更新的一份，但畫面還是舊的 —— 由使用者按一下才換 */
+  const [hasNewer, setHasNewer] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/vb-bugs");
@@ -51,11 +53,28 @@ export default function VbBugsPage() {
       setSnapshot(json.snapshot);
       setConfig(json.config);
       setScheduler(json.scheduler);
+      setHasNewer(false);
     }
     setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  /**
+   * 開著畫面時，server 可能在背景抓到新資料。這裡只輪詢一個很輕的版本端點
+   * （完整資料在幾千張票時是 MB 級，不能每 15 秒拉一次），發現變了就顯示
+   * 一個提示，**不直接換掉畫面** —— 正在看某一格的時候被抽換很煩。
+   */
+  useEffect(() => {
+    if (!snapshot) return;
+    const t = setInterval(async () => {
+      const res = await fetch("/api/vb-bugs/version");
+      if (!res.ok) return;
+      const v = await res.json();
+      if (v.fetchedAt && v.fetchedAt !== snapshot.fetchedAt) setHasNewer(true);
+    }, 15_000);
+    return () => clearInterval(t);
+  }, [snapshot]);
 
   const save = async (patch: Record<string, unknown>) => {
     setBusy(true);
@@ -129,6 +148,19 @@ export default function VbBugsPage() {
             </button>
           </div>
         </div>
+
+        {hasNewer && (
+          <div className="mt-6 flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm text-sky-800">
+            <Icon name="refresh" size={15} />
+            server 已經抓到更新的資料
+            <button
+              onClick={() => load()}
+              className="ml-auto rounded-md bg-sky-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-sky-800"
+            >
+              更新畫面
+            </button>
+          </div>
+        )}
 
         {error && (
           <div className="mt-6 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

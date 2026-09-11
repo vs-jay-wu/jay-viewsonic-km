@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { ensureTimer, readConfig, readSnapshot, schedulerState } from "@/lib/vbBugs";
+import {
+  ensureTimer, readConfig, readSnapshot, refreshInBackground, schedulerState,
+} from "@/lib/vbBugs";
 import { buildMatrix, PRIORITIES, STATUS_GROUPS } from "@/lib/vbBugsRules";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +13,8 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   await ensureTimer();
+  // 順手在背景更新一次，但不 await —— 使用者看到的 loading 只是讀本機快照
+  refreshInBackground();
   const [snapshot, config] = await Promise.all([readSnapshot(), readConfig()]);
   const matrix = snapshot ? buildMatrix(snapshot.issues) : null;
 

@@ -1,6 +1,7 @@
 import { readFile, mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { repoPath, run } from "@/lib/repo";
+import { recordFailure, recordSuccess } from "@/lib/health";
 
 const STATE_DIR = "data/local-state";
 const SNAPSHOT_FILE = repoPath(STATE_DIR, "vb-bugs.json");
@@ -204,6 +205,9 @@ export async function runOnce(opts: { full?: boolean } = {}): Promise<RefreshRes
     const res = await refresh(opts);
     rt.lastRunAt = new Date().toISOString();
     rt.lastError = res.ok ? null : (res.error ?? "抓取失敗");
+    // 連續失敗才會在首頁跳警告（token 過期是每次都失敗，很快就會累積到門檻）
+    if (res.ok) await recordSuccess("vb-bugs");
+    else await recordFailure("vb-bugs", res.error ?? "抓取失敗");
     if (rt.timer) {
       rt.nextRunAt = new Date(Date.now() + rt.intervalSeconds * 1000).toISOString();
     }
@@ -237,6 +241,25 @@ export async function initScheduler(): Promise<void> {
   }
   startTimer(config.intervalSeconds);
   if (!(await readSnapshot())) void runOnce();
+}
+
+/**
+ * 使用者開頁面時順手在背景更新一次，**但不讓他等**。
+ *
+ * 連續重整不該變成連續打 Jira，所以有最小間隔：上次抓完還不到
+ * MIN_BACKGROUND_GAP_MS 就跳過。增量一次只有 1 次 API 呼叫，所以這個
+ * 間隔可以設得很短。
+ */
+const MIN_BACKGROUND_GAP_MS = 60_000;
+
+export function refreshInBackground(): { started: boolean; reason?: string } {
+  const rt = runtime();
+  if (rt.running) return { started: false, reason: "上一輪還在抓" };
+  if (rt.lastRunAt && Date.now() - Date.parse(rt.lastRunAt) < MIN_BACKGROUND_GAP_MS) {
+    return { started: false, reason: "剛抓過" };
+  }
+  void runOnce();
+  return { started: true };
 }
 
 /** 設定說要開但這個 instance 沒掛上 timer 就補掛；沒有快照就先抓一次。 */

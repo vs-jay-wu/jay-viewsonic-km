@@ -1,6 +1,7 @@
 import { readFile, mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { repoPath, run } from "@/lib/repo";
+import { recordFailure, recordSuccess } from "@/lib/health";
 import { notifyMac } from "@/lib/notify";
 
 const STATE_DIR = "data/local-state";
@@ -368,6 +369,9 @@ export async function runOnce(): Promise<RefreshResult> {
     const res = await refresh();
     rt.lastRunAt = new Date().toISOString();
     rt.lastError = res.ok ? null : (res.error ?? "抓取失敗");
+    // 連續失敗才會在首頁跳警告（token 過期是每次都失敗，很快就會累積到門檻）
+    if (res.ok) await recordSuccess("my-prs");
+    else await recordFailure("my-prs", res.error ?? "抓取失敗");
     if (rt.timer) {
       rt.nextRunAt = new Date(Date.now() + rt.intervalSeconds * 1000).toISOString();
     }
@@ -419,6 +423,22 @@ export async function setConfig(input: Partial<MyPrsConfig>): Promise<MyPrsConfi
   if (config.enabled) startTimer(config.intervalSeconds);
   else stopTimer();
   return config;
+}
+
+/**
+ * 使用者開頁面時順手在背景更新一次，**但不讓他等**。
+ * 連續重整不該變成連續打 GitHub，所以有最小間隔。
+ */
+const MIN_BACKGROUND_GAP_MS = 60_000;
+
+export function refreshInBackground(): { started: boolean; reason?: string } {
+  const rt = runtime();
+  if (rt.running) return { started: false, reason: "上一輪還在抓" };
+  if (rt.lastRunAt && Date.now() - Date.parse(rt.lastRunAt) < MIN_BACKGROUND_GAP_MS) {
+    return { started: false, reason: "剛抓過" };
+  }
+  void runOnce();
+  return { started: true };
 }
 
 /**
