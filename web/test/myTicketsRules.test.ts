@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_VIEW, UNCATEGORISED, applyView, attentionRank, groupByProduct, groupKeyOf,
+  DEFAULT_VIEW, DISPLAY_CAP, UNCATEGORISED, applyView, attentionRank, capForDisplay,
+  groupByProduct, groupKeyOf,
   issueTypeStyle, matchesTicketQuery, priorityIndexOf, sortBy, sortTickets,
   type MyTicket,
 } from "@/lib/myTicketsRules";
@@ -211,5 +212,38 @@ describe("applyView — 指派給誰的篩選", () => {
   it("搜尋吃得到指派人的名字", () => {
     expect(applyView(list, { ...DEFAULT_VIEW, assignee: "all", query: "別人" }).map((x) => x.key))
       .toEqual(["VB-2"]);
+  });
+});
+
+describe("未指派與顯示上限", () => {
+  const list = [
+    t({ key: "VB-1", assignedToMe: true }),
+    t({ key: "VB-2", assignedToMe: false, assignee: { name: "Peja", accountId: "p" } }),
+    t({ key: "VB-3", assignedToMe: false, assignee: { name: "", accountId: "" } }),
+  ];
+
+  it("「別人的」不含未指派 —— 那是還沒人接，不是別人手上", () => {
+    expect(applyView(list, { ...DEFAULT_VIEW, assignee: "others" }).map((x) => x.key))
+      .toEqual(["VB-2"]);
+  });
+
+  it("未指派自己一類", () => {
+    expect(applyView(list, { ...DEFAULT_VIEW, assignee: "unassigned" }).map((x) => x.key))
+      .toEqual(["VB-3"]);
+  });
+
+  it("全部就是全部", () => {
+    expect(applyView(list, { ...DEFAULT_VIEW, assignee: "all" })).toHaveLength(3);
+  });
+
+  it("沒超過上限就原封不動", () => {
+    expect(capForDisplay(list, 10)).toEqual({ shown: list, hidden: 0 });
+  });
+
+  it("超過就切掉並回報剩幾筆", () => {
+    const many = Array.from({ length: DISPLAY_CAP + 7 }, (_, i) => t({ key: `VB-${i}` }));
+    const { shown, hidden } = capForDisplay(many);
+    expect(shown).toHaveLength(DISPLAY_CAP);
+    expect(hidden).toBe(7);
   });
 });

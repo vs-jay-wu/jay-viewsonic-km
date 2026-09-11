@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""抓「我需要注意」的 VB 單（指派給我，或我開的），增量更新。
+"""抓 VB 上**所有未完成的單**（不分指派給誰），增量更新。
 
-範圍刻意比「指派給我」寬一點：**我開的單被別人接走之後，我還是要看得到**
-（Jay 2026-09-11）。所以查 `assignee = currentUser() OR reporter = currentUser()`，
-畫面上再用篩選預設只看指派給我的。
+為什麼不只抓「指派給我」：Jay 要能看任何人的單，而且**不想特地去選人**
+（2026-09-11）。實測 VB 未完成的單共 673 筆（全部 2044 筆），全抓一次只要
+7 次 API 呼叫，之後走增量就只有變動的那幾筆 —— 那就整份放進快照，
+畫面預設只看指派給我的，要看別人的就切篩選或直接搜名字。
 
 跟 `vb-bugs.py` 同一套規則（增量游標、夜間全同步窗口、過了不補），
 **認證與時間處理直接重用那支腳本的函式**，不另外複製一份 —— 複製就會漂移。
@@ -121,38 +122,29 @@ def main() -> None:
     incremental = not (force_full or bootstrapping or due_full)
 
     my_id = me.get("accountId") or ""
-    # 指派給我**或我開的**，還沒完成的
-    relevant = (f"project = {PROJECT} AND statusCategory != Done "
-                f"AND (assignee = currentUser() OR reporter = currentUser())")
+    open_jql = f"project = {PROJECT} AND statusCategory != Done"
     removed = []
 
     if incremental:
         since = vb.parse_time(cursor) - timedelta(minutes=vb.OVERLAP_MINUTES)
-        jql = (f"{relevant} AND updated >= \"{vb.jql_time(since, 8)}\" "
+        # **刻意不帶 statusCategory 條件**：要讓「剛變成 Done」的票也回來，
+        # 否則它會永遠留在表上（vb-bugs.py 同一個處理）。
+        jql = (f"project = {PROJECT} AND updated >= \"{vb.jql_time(since, 8)}\" "
                f"ORDER BY updated ASC")
         fetched = [to_row(i, my_id) for i in search(jql, auth)]
         rows = dict(prev_rows)
         for r in fetched:
-            rows[r["key"]] = r
+            if vb.is_open(r):
+                rows[r["key"]] = r      # 新的或有更新的（含被轉給別人）
+            elif r["key"] in rows:
+                del rows[r["key"]]       # 做完了 → 下表
+                removed.append(r["key"])
 
-        # 增量查詢帶著 assignee／reporter／statusCategory 條件，所以「跟我脫鉤」或
-        # 「做完」的票**不會**出現在結果裡 —— 會一直留在表上。所以反過來問一次
-        # 「手上這批裡哪些還算相關」，沒回來的就移除。
-        #
-        # 刻意問「還相關的」而不是「已經不相關的」：後者要寫否定條件
-        # （`assignee != currentUser()` 在 JQL 裡不包含空值），很容易漏。
-        if rows:
-            keys = ", ".join(sorted(rows))
-            still_jql = f"{relevant} AND key in ({keys})"
-            still = {i["key"] for i in search(still_jql, auth)}
-            for key in [k for k in rows if k not in still]:
-                del rows[key]
-                removed.append(key)
         last_full_out = last_full
     else:
-        jql = f"{relevant} ORDER BY updated ASC"
+        jql = f"{open_jql} ORDER BY updated ASC"
         fetched = [to_row(i, my_id) for i in search(jql, auth)]
-        rows = {r["key"]: r for r in fetched}
+        rows = {r["key"]: r for r in fetched if vb.is_open(r)}
         last_full_out = datetime.now(timezone.utc).isoformat()
 
     issues = sorted(rows.values(), key=lambda r: r.get("updated") or "", reverse=True)

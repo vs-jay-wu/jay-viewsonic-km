@@ -5,7 +5,8 @@ import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import { statusLabel } from "@/lib/jiraStatus";
 import {
-  DEFAULT_VIEW, PRIORITY_ORDER, TICKET_GROUPS, TICKET_SORTS, applyView, groupByProduct,
+  DEFAULT_VIEW, PRIORITY_ORDER, TICKET_GROUPS, TICKET_SORTS, applyView, capForDisplay,
+  groupByProduct,
   groupKeyOf, issueTypeStyle,
   type AssigneeFilter,
   type MyTicketsSnapshot, type TicketSort,
@@ -91,6 +92,8 @@ export default function TicketsPage() {
     () => applyView(snapshot?.issues ?? [], view),
     [snapshot, view]
   );
+  // 快照裡是 VB 全部未完成的單（幾百筆），一次畫完只會拖慢畫面
+  const capped = useMemo(() => capForDisplay(tickets), [tickets]);
 
   /** 多選的過濾條件：點一下加入，再點一下移除 */
   const toggle = (field: "groups" | "priorities", value: string) =>
@@ -118,8 +121,8 @@ export default function TicketsPage() {
           單追蹤
         </h1>
         <p className="mt-1.5 text-sm text-gray-500">
-          VB 上<b className="font-medium text-gray-700">指派給我、或我開的</b>、還沒完成的單
-          （預設只看指派給我的）。
+          VB 上<b className="font-medium text-gray-700">所有</b>未完成的單，預設只看指派給我的
+          —— 要看別人的就切「指派」或直接搜名字，不用挑人。
           點單號到 Jira，點右邊的按鈕直接在 Orca 開（或接續）對應的 Claude session。
         </p>
 
@@ -129,7 +132,7 @@ export default function TicketsPage() {
             <input
               value={view.query}
               onChange={(e) => setView((v) => ({ ...v, query: e.target.value }))}
-              placeholder="搜尋單號、標題、狀態…"
+              placeholder="搜尋單號、標題、狀態、指派人…"
               className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-gray-500"
             />
           </div>
@@ -177,6 +180,7 @@ export default function TicketsPage() {
             {([
               ["mine", "我的"],
               ["others", "別人的"],
+              ["unassigned", "未指派"],
               ["all", "全部"],
             ] as [AssigneeFilter, string][]).map(([key, label]) => (
               <button
@@ -274,7 +278,7 @@ export default function TicketsPage() {
         )}
 
         {/* 依 Jira 的「Project」欄位分群；群內順序由上面選的排序決定 */}
-        {groupByProduct(tickets).map((g) => (
+        {groupByProduct(capped.shown).map((g) => (
         <section key={g.product} className="mt-4">
           <h2 className="flex items-baseline gap-2 px-1 text-xs font-semibold text-gray-700">
             {g.product}
@@ -379,6 +383,12 @@ export default function TicketsPage() {
           </ul>
         </section>
         ))}
+
+        {capped.hidden > 0 && (
+          <p className="mt-3 rounded-xl border border-dashed border-gray-200 px-4 py-3 text-center text-xs text-gray-400">
+            還有 {capped.hidden} 筆沒顯示 —— 用搜尋或篩選收斂（例如打指派人的名字）。
+          </p>
+        )}
       </div>
     </div>
   );

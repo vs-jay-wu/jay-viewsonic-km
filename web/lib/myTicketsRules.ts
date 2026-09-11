@@ -157,8 +157,11 @@ export function sortBy(tickets: MyTicket[], sort: TicketSort): MyTicket[] {
   }
 }
 
-/** 指派給誰的篩選。預設只看我的 —— 別人的單是背景資訊 */
-export type AssigneeFilter = "mine" | "others" | "all";
+/**
+ * 指派給誰的篩選。預設只看我的 —— 快照裡是 VB **所有**未完成的單（673 筆），
+ * 別人的是背景資訊，要看的時候切過去或直接搜名字就好（不必挑人）。
+ */
+export type AssigneeFilter = "mine" | "others" | "unassigned" | "all";
 
 export interface TicketView {
   query: string;
@@ -177,8 +180,11 @@ export const DEFAULT_VIEW: TicketView = {
 /** 過濾＋排序一起做，讓畫面只呼叫一次（也讓這條路徑整段有測試守著） */
 export function applyView(tickets: MyTicket[], view: TicketView): MyTicket[] {
   const filtered = tickets.filter((t) => {
+    const hasAssignee = !!t.assignee?.accountId;
     if (view.assignee === "mine" && !t.assignedToMe) return false;
-    if (view.assignee === "others" && t.assignedToMe) return false;
+    // 「別人的」不含未指派 —— 未指派是「還沒人接」，不是別人手上
+    if (view.assignee === "others" && (t.assignedToMe || !hasAssignee)) return false;
+    if (view.assignee === "unassigned" && hasAssignee) return false;
     if (!matchesTicketQuery(t, view.query)) return false;
     if (view.groups.length) {
       const g = groupKeyOf(t.status);
@@ -248,4 +254,18 @@ export function groupByProduct(tickets: MyTicket[]): TicketGroup[] {
       if (ua !== ub) return ua ? 1 : -1;
       return b.tickets.length - a.tickets.length;
     });
+}
+
+/**
+ * 一次最多畫幾筆。
+ *
+ * 快照裡有 VB 全部未完成的單（實測 673 筆），「全部」直接畫下去會拖慢畫面，
+ * 而且一頁看幾百筆本來也沒意義 —— 超過就提示用搜尋收斂。
+ */
+export const DISPLAY_CAP = 150;
+
+export function capForDisplay<T>(list: T[], cap = DISPLAY_CAP): { shown: T[]; hidden: number } {
+  return list.length <= cap
+    ? { shown: list, hidden: 0 }
+    : { shown: list.slice(0, cap), hidden: list.length - cap };
 }
