@@ -60,7 +60,7 @@ export default function SessionsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [project, setProject] = useState("all");
   const [query, setQuery] = useState("");
-  const [view, setView] = useState<"all" | "stale" | "pinned">("all");
+  const [view, setView] = useState<"all" | "stale">("all");
   const [staleDays, setStaleDays] = useState(STALE_DAYS);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +95,7 @@ export default function SessionsPage() {
     return sessions
       .filter((s) => project === "all" || s.cwd === project)
       .filter((s) =>
-        view === "pinned" ? s.pinned : view === "stale" ? isStale(s, staleDays) : true
+        view === "stale" ? isStale(s, staleDays) : true
       )
       .filter(
         (s) =>
@@ -263,7 +263,6 @@ export default function SessionsPage() {
             {([
               ["all", `全部（${sessions.length}）`],
               ["stale", `久沒用（${stale.length}）`],
-              ["pinned", `pin 住的（${sessions.filter((s) => s.pinned).length}）`],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
