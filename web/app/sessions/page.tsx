@@ -68,6 +68,8 @@ export default function SessionsPage() {
   const [results, setResults] = useState<DeleteResult[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const confirm = useConfirm();
+  /** 剛在 Orca 開過的，按鈕上給個回饋 */
+  const [opened, setOpened] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -212,6 +214,57 @@ export default function SessionsPage() {
     if (openId === s.id) setOpenId(null); // 面板正開著這一筆的話一起收掉
     setBusy(false);
     load();
+  };
+
+  /**
+   * 在 Orca 開啟（resume）這個 session。
+   *
+   * repo 沒註冊時**不自作主張** —— 那會改到 Orca 的設定，回來問過再送一次。
+   */
+  const openInOrca = async (s: SessionInfo, registerRepo = false) => {
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/sessions/${s.id}/open`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ registerRepo }),
+    });
+    const out = await res.json().catch(() => ({}));
+    setBusy(false);
+
+    if (!res.ok) {
+      setError(out.error ?? "開啟失敗");
+      return;
+    }
+
+    switch (out.status) {
+      case "opened":
+        setOpened((p) => ({ ...p, [s.id]: "已在 Orca 開啟" }));
+        break;
+      case "reused":
+        setOpened((p) => ({ ...p, [s.id]: "已切到既有分頁" }));
+        break;
+      case "needs-repo": {
+        const ok = await confirm({
+          title: "這個路徑還沒註冊到 Orca",
+          message: `${out.repoPath}\n要把它加進 Orca（repo add）再開啟嗎？這會改到 Orca 的設定。`,
+          confirmLabel: "註冊並開啟",
+        });
+        if (ok) await openInOrca(s, true);
+        break;
+      }
+      case "external":
+        setError(
+          `已經有一個 claude 正在 resume 這個 session（pid ${out.pid}）——` +
+          `再開一個會有兩份同時寫同一份紀錄，所以沒有開。`
+        );
+        break;
+      case "orca-down":
+        setError("Orca 沒有起來，也叫不動它。手動開一次 Orca 再試。");
+        break;
+      default:
+        setError(out.error ?? "開啟失敗");
+    }
   };
 
   const failed = results?.filter((r) => !r.ok) ?? [];
@@ -422,6 +475,7 @@ export default function SessionsPage() {
                     )}
                     {s.version && <span>v{s.version}</span>}
                     {s.hasSidecar && <span>sidecar {mb(s.sidecarBytes)}</span>}
+                    {opened[s.id] && <span className="text-sky-600">{opened[s.id]}</span>}
                   </div>
                 </button>
 
@@ -429,6 +483,15 @@ export default function SessionsPage() {
                   <div className="text-sm text-gray-700">{mb(s.sizeBytes + s.sidecarBytes)}</div>
                   <div className="text-[11px] text-gray-400">{relTime(s.modifiedAt)}</div>
                 </div>
+
+                <button
+                  onClick={() => openInOrca(s)}
+                  disabled={busy}
+                  title="在 Orca 開啟（claude --resume）"
+                  className="mt-0.5 shrink-0 text-gray-300 hover:text-sky-600 disabled:opacity-40"
+                >
+                  <Icon name="external" size={15} />
+                </button>
 
                 <button
                   onClick={() => removeOne(s)}

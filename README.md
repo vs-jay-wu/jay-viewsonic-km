@@ -36,7 +36,7 @@ ssh -N -L 3000:127.0.0.1:3000 <這台機器>
 | `/vb-bugs` | VB Bug 總覽：未完成的 bug 依產品 × 狀態 × 優先度 | `scripts/vb-bugs.py`（**增量**抓取；全同步只在台北 20:00–07:00 做一次） |
 | `/memory` | 記憶體／swap 用量、執行 memclean、檢視腳本 | `shell/memclean.py`（終端機的 `memclean` 同源） |
 | `/pr-inbox` | PR 巡邏：排程開關、手動觸發、執行紀錄與花費 | `scripts/pr-inbox-watch.sh`（排程本身跑在 web server 裡） |
-| `/sessions` | Claude session 檢視、pin、多選刪除 | `~/.claude/projects`、`data/local-state/session-pins.json` |
+| `/sessions` | Claude session 檢視、pin、刪除、在 Orca 開啟（`claude --resume`） | `~/.claude/projects`、`scripts/orca.sh` |
 
 `data/pr-inbox-runs/` 與 `data/local-state/` 是本機狀態（PR 快照、通知事件、session pin 與
 解析快取都在裡面），兩者都 gitignored。

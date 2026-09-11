@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listChats } from "@/lib/db";
 import { readSnapshot } from "@/lib/myPrs";
 import { classifyError, SOURCE_LABELS, unhealthySources } from "@/lib/health";
+import { orcaPresence } from "@/lib/orca";
 import Icon, { type IconName } from "@/components/Icon";
 
 export const dynamic = "force-dynamic";
@@ -76,6 +77,8 @@ export default async function Home() {
   const myPrs = await readSnapshot().catch(() => null);
   // 連續失敗到門檻的資料來源。偶爾失敗不列 —— 那種警告看久了就會被忽略
   const unhealthy = await unhealthySources().catch(() => []);
+  // 裝了就永久記住，不再偵測；沒裝才每次重測（見 lib/orca.ts）
+  const orca = await orcaPresence().catch(() => null);
   const openPrs = (myPrs?.prs ?? []).filter((p) => p.state === "OPEN");
 
   const chats = listChats() as (ReturnType<typeof listChats>[number] & {
@@ -95,6 +98,22 @@ export default async function Home() {
         <p className="mt-1.5 text-sm text-gray-500">
           本機知識庫的操作面板：Teams 歸檔瀏覽，加上幾個常用的維運工具。
         </p>
+
+        {orca && !orca.installed && (
+          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-5 py-4">
+            <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-red-800">
+              <Icon name="alert" size={16} />
+              找不到 Orca
+              <span className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-normal text-white">
+                需要你處理
+              </span>
+            </div>
+            <div className="mt-1.5 text-xs text-red-700">
+              <code>{orca.appPath}</code> 不存在，session 頁的「在 Orca 開啟」用不了。
+              裝好之後首頁會自己恢復（偵測到有裝就不再重測）。
+            </div>
+          </div>
+        )}
 
         {/* 抓取一直失敗的來源。判準統一在 lib/healthRules.ts，各頁不另寫一套 */}
         {unhealthy.length > 0 && (
