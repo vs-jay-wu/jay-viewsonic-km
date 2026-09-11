@@ -43,6 +43,11 @@ export const SOURCE_LABELS: Record<string, { label: string; href: string; hint: 
     href: "/pr-inbox",
     hint: "同樣走 gh；巡邏連續失敗多半是 gh auth 掉了",
   },
+  "repo-sync": {
+    label: "Repo 同步",
+    href: "/repo-sync",
+    hint: "走 gh 列出 org 的 repo；外接硬碟沒掛不會失敗，所以多半是 gh auth 或網路",
+  },
 };
 
 /**

@@ -2,15 +2,20 @@
 set -euo pipefail
 
 INCLUDE_OFFLOADED=0
+# 「有外接就一起同步，沒外接就跳過」—— 給排程用的軟性版本，見下方的檢查
+OFFLOADED_IF_AVAILABLE=0
 ORG=""
 for arg in "$@"; do
   case "$arg" in
     --include-offloaded|-o)
       INCLUDE_OFFLOADED=1
       ;;
+    --offloaded-if-available|-O)
+      OFFLOADED_IF_AVAILABLE=1
+      ;;
     -*)
       echo "Unknown flag: $arg"
-      echo "Usage: $0 [--include-offloaded|-o] [org-name]"
+      echo "Usage: $0 [--include-offloaded|-o] [--offloaded-if-available|-O] [org-name]"
       exit 1
       ;;
     *)
@@ -44,15 +49,28 @@ if [ -f "$WORKSPACE_JSON" ] && command -v jq >/dev/null 2>&1; then
   EXTERNAL_PATH="$(jq -r --arg org "$ORG" '.orgs[$org].externalPath // empty' "$WORKSPACE_JSON" 2>/dev/null || true)"
 fi
 
-if [ "$INCLUDE_OFFLOADED" -eq 1 ]; then
+# 兩種要求 offloaded 的方式，差別只在「外接不在時要不要當成錯誤」：
+#   --include-offloaded      你明講要含 offloaded → 沒掛硬碟就是錯，停下來讓你去掛
+#   --offloaded-if-available 排程用 → 沒掛硬碟就只同步本機的，照樣算成功
+if [ "$INCLUDE_OFFLOADED" -eq 1 ] || [ "$OFFLOADED_IF_AVAILABLE" -eq 1 ]; then
+  UNAVAILABLE=""
   if [ -z "$EXTERNAL_PATH" ]; then
-    echo "Error: --include-offloaded requires 'externalPath' to be set for $ORG in local.workspace.json"
-    exit 1
+    UNAVAILABLE="'externalPath' is not set for $ORG in local.workspace.json"
+  elif [ ! -d "$EXTERNAL_PATH" ]; then
+    UNAVAILABLE="external path not mounted or missing: $EXTERNAL_PATH"
   fi
-  if [ ! -d "$EXTERNAL_PATH" ]; then
-    echo "Error: external path not mounted or missing: $EXTERNAL_PATH"
-    echo "Please mount the external drive and retry."
-    exit 1
+
+  if [ -n "$UNAVAILABLE" ]; then
+    if [ "$INCLUDE_OFFLOADED" -eq 1 ]; then
+      echo "Error: $UNAVAILABLE"
+      echo "Please mount the external drive and retry (or use --offloaded-if-available to skip them)."
+      exit 1
+    fi
+    echo "Note: $UNAVAILABLE"
+    echo "Note: syncing local repos only; offloaded repos are skipped."
+    INCLUDE_OFFLOADED=0
+  else
+    INCLUDE_OFFLOADED=1
   fi
 fi
 

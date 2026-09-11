@@ -4,17 +4,20 @@
 //   - PR 巡邏（別人的單，會叫 AI）
 //   - 我的 PR（自己的單，只抓狀態與通知）
 //   - VB Bug 總覽（Jira 的 bug 矩陣）
+//   - Repo 同步（夜間把 org 的 repo 全部 pull 一次，不叫 AI）
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
-  const [prInbox, myPrs, vbBugs] = await Promise.all([
+  const [prInbox, myPrs, vbBugs, repoSync] = await Promise.all([
     import("@/lib/prInboxScheduler"),
     import("@/lib/myPrs"),
     import("@/lib/vbBugs"),
+    import("@/lib/repoSync"),
   ]);
   await Promise.all([
     prInbox.initScheduler().catch(() => undefined),
     myPrs.initScheduler().catch(() => undefined),
     vbBugs.initScheduler().catch(() => undefined),
+    repoSync.initScheduler().catch(() => undefined),
   ]);
 }

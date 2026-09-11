@@ -7,7 +7,8 @@ export type IconName =
   | "home" | "cpu" | "refresh" | "layers" | "hash" | "message" | "clipboard"
   | "trash" | "pin" | "pinOff" | "play" | "code" | "check" | "x" | "alert"
   | "clock" | "spinner" | "chevronRight" | "chevronDown" | "external" | "coins"
-  | "search" | "lock" | "gitPr" | "bell";
+  | "search" | "lock" | "gitPr" | "bell" | "repos" | "hardDrive"
+  | "toTop" | "toBottom";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></>,
@@ -35,6 +36,10 @@ const PATHS: Record<IconName, React.ReactNode> = {
   lock: <><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
   gitPr: <><circle cx="6.5" cy="5.5" r="2.5" /><circle cx="6.5" cy="18.5" r="2.5" /><path d="M6.5 8v8" /><circle cx="17.5" cy="18.5" r="2.5" /><path d="M17.5 16V9.5a3 3 0 0 0-3-3h-3.5" /><path d="m13 4 -2 2.5 2 2.5" /></>,
   bell: <><path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6" /><path d="M10.5 20a2 2 0 0 0 3 0" /></>,
+  repos: <><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H18v14H6.5A1.5 1.5 0 0 0 5 18.5v-14Z" /><path d="M5 18.5A1.5 1.5 0 0 0 6.5 20H18v-3" /><path d="M9 7h5" /></>,
+  toTop: <><path d="M4 4h16" /><path d="M12 20V8" /><path d="m6 14 6-6 6 6" /></>,
+  toBottom: <><path d="M4 20h16" /><path d="M12 4v12" /><path d="m6 10 6 6 6-6" /></>,
+  hardDrive: <><rect x="3" y="13" width="18" height="7" rx="2" /><path d="m5.5 13 2.2-7h8.6l2.2 7" /><path d="M7 16.5h.01M10.5 16.5h.01" /></>,
 };
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, "name"> {
