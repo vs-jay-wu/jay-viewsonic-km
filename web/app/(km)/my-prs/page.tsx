@@ -3,12 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon, { type IconName } from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
-import { usePrompt } from "@/components/Prompt";
 import { groupEventsByPr, type MyPrEventLike } from "@/lib/myPrEventRules";
-import {
-  canonicalRepo, defaultSessionTitleForPr, parsePrTicketKey, ticketUrl, workKeyOf,
-} from "@/lib/workItemRules";
-import type { WorkIndex, WorkItem } from "@/lib/workIndexRules";
+import { parsePrTicketKey, ticketUrl } from "@/lib/workItemRules";
+import type { WorkItem } from "@/lib/workIndexRules";
+import { useTicketSession } from "@/lib/useTicketSession";
 
 interface PrReview {
   id: string; author: string; state: string; submittedAt: string; url: string;
@@ -210,9 +208,9 @@ export default function MyPrsPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [intervalMin, setIntervalMin] = useState(10);
-  /** session ↔ PR ↔ ticket 的關聯索引（見 lib/workIndex.ts） */
-  const [workIndex, setWorkIndex] = useState<WorkIndex | null>(null);
-  const ask = usePrompt();
+  // 開／接續這張 PR 的 session —— 跟首頁、單追蹤、VB Bug 總覽共用
+  const { itemForPr, openSessionForPr, busy: sessionBusy,
+          notice: sessionNotice, error: sessionError } = useTicketSession();
 
   const load = useCallback(async () => {
     const res = await fetch("/api/my-prs");
@@ -231,78 +229,6 @@ export default function MyPrsPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    fetch("/api/work-index")
-      .then((r) => r.json())
-      .then((j: WorkIndex) => setWorkIndex(j))
-      .catch(() => undefined);
-  }, []);
-
-  /** 這張 PR 掛在哪個工作項目底下 */
-  const itemOf = useCallback(
-    (pr: MyPr): WorkItem | undefined => {
-      if (!workIndex) return undefined;
-      const key = workKeyOf({
-        ticketKey: parsePrTicketKey(pr),
-        repo: canonicalRepo(pr.repo),
-        prNumber: pr.number,
-      });
-      return key ? workIndex.items.find((i) => i.key === key) : undefined;
-    },
-    [workIndex]
-  );
-
-  /**
-   * 開這張 PR 的 session：已經有就 resume 最近的那個，沒有就問過名稱再開新的。
-   * 預設名稱照 `[km/<別名>] <單號> <描述>` 的慣例產生，讓它下次也連得回來。
-   */
-  const openSessionFor = useCallback(
-    async (pr: MyPr, item?: WorkItem) => {
-      setBusy(true);
-      setError(null);
-      setNotice(null);
-      try {
-        const existing = item?.sessions[0];
-        if (existing) {
-          const res = await fetch(`/api/sessions/${existing.id}/open`, { method: "POST" });
-          const out = await res.json();
-          setNotice(
-            out.status === "opened" || out.status === "reused"
-              ? `已在 Orca 開啟：${existing.title}`
-              : out.status === "external"
-                ? `已經有人在別的地方 resume 這個 session（pid ${out.pid}）`
-                : out.error ?? `Orca 回報：${out.status}`
-          );
-          return;
-        }
-
-        const title = await ask({
-          title: "新 session 的名稱",
-          message: "照 [repo/sub-repo] 單號 描述 的慣例，之後才連得回這張 PR 與單。",
-          defaultValue: defaultSessionTitleForPr(pr),
-          confirmLabel: "建立並開啟",
-        });
-        if (title === null) return;
-
-        const res = await fetch("/api/work/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, open: true }),
-        });
-        const out = await res.json();
-        if (!res.ok) {
-          setError(out.error ?? "建立 session 失敗");
-          return;
-        }
-        setNotice(`已建立並開啟 session：${title}`);
-        fetch("/api/work-index?force=1").then((r) => r.json()).then(setWorkIndex).catch(() => undefined);
-      } finally {
-        setBusy(false);
-      }
-    },
-    [ask]
-  );
 
   // 頁面開著的話跟著 server 的節奏刷新（只讀快照，不會打 GitHub）
   useEffect(() => {
@@ -398,16 +324,16 @@ export default function MyPrsPage() {
           </button>
         </div>
 
-        {error && (
+        {(error || sessionError) && (
           <div className="mt-6 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             <Icon name="alert" size={16} className="mt-0.5" />
-            <span className="whitespace-pre-wrap">{error}</span>
+            <span className="whitespace-pre-wrap">{error ?? sessionError}</span>
           </div>
         )}
-        {notice && (
+        {(notice || sessionNotice) && (
           <div className="mt-6 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
             <Icon name="check" size={16} className="mt-0.5" />
-            {notice}
+            {notice ?? sessionNotice}
           </div>
         )}
         {snapshot?.lastError && (
@@ -576,9 +502,9 @@ export default function MyPrsPage() {
                 <PrRow
                   key={pr.url}
                   pr={pr}
-                  item={itemOf(pr)}
-                  onOpenSession={openSessionFor}
-                  busy={busy}
+                  item={itemForPr(pr)}
+                  onOpenSession={openSessionForPr}
+                  busy={busy || sessionBusy}
                 />
               ))}
             </ul>
