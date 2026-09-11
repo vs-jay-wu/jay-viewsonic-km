@@ -66,3 +66,18 @@ if (!(await confirm({ title: "刪掉這筆？", message: "無法復原。", dang
   的 `should_full_sync`。時區固定台北，不跟機器時區走。
 - 開頁面時可以順手在背景更新，但要有最小間隔，別讓連續重整變成連續打對方 API。
 <!-- END:km-ui-rules -->
+
+## Session 標題就是關聯的依據
+
+Jay 的 session 命名慣例是 `[repo/sub-repo] 單號 描述`（例：`[km/mvbf] VB-1945 字體`）。
+**web 靠它把 session ↔ PR ↔ Jira 單串起來**（`lib/workItemRules.ts` 解析、
+`lib/workIndex.ts` 建索引），所以：
+
+- 解析不到就不連結，**不要硬湊**。這是人維護的東西，一定有不符合規則的。
+- 裸數字（`9208`）補 project 的規則：先比對手上已有的明確 key，同號只有一個
+  候選就用它；同號撞兩個 project 就不猜；都沒有才退回 VB 並**標記成猜的**。
+  UI 一定要讓人看得出那是猜的（後面加問號）——`9904` 實際上是 VSFT 不是 VB。
+  等票全部搬到 VB 之後這層就會自動失效，規則不用改。
+- 要開一個**已命名**的 session：`claude -p "/rename <標題>" --session-id <uuid>`
+  （0 turns、$0，只建檔＋寫 custom-title），再用 Orca resume。
+  Orca 的 `terminal create --title` 會被執行中的程式蓋掉，不能拿來命名。
