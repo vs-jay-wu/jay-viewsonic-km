@@ -11,50 +11,27 @@ const DEFAULT_INTERVAL_SECONDS = 1800; // bug 數不會分鐘級變動，半小�
 
 // ─── 型別（跟 scripts/vb-bugs.py 的輸出對齊）────────────────────────────────
 
-export interface BugIssue {
-  key: string;
-  summary: string;
-  status: string;
-  priority: string;
-  updated: string | null;
-  url: string;
-}
-
-export interface BugCell {
-  count: number;
-  issues: BugIssue[];
-}
-
-export interface BugProduct {
-  name: string;
-  total: number;
-  /** key 是 `${statusGroupKey}|${priorityKey}` */
-  cells: Record<string, BugCell>;
-}
-
-export interface PriorityCol {
-  key: string;
-  label: string;
-  sub: string;
-}
-
-export interface StatusGroup {
-  key: string;
-  label: string;
-  statuses: string[];
-}
+// 矩陣的型別與聚合規則在 vbBugsRules.ts（純函式，有測試）
+export type { BugIssue, BugCell, BugProduct, PriorityCol, StatusGroup } from "@/lib/vbBugsRules";
+import type { BugIssue } from "@/lib/vbBugsRules";
 
 export interface BugSnapshot {
   fetchedAt: string;
   fetchedAs: string;
   project: string;
-  includeDone: boolean;
+  /** full = 全抓；incremental = 只抓 cursor 之後有更新的 */
+  mode: "full" | "incremental";
+  jql: string;
+  /** 下次增量的起點：這批看到的最大 updated */
+  cursor: string;
+  /** 上次全同步的時間。超過 24 小時就會再全抓一次（處理被硬刪／搬走的幽靈票） */
+  lastFullSyncAt: string | null;
+  /** 這一輪實際跟 Jira 要了幾筆（增量時通常是個位數） */
+  fetchedCount: number;
+  /** 這一輪因為變成 Done 而從表上移除的票 */
+  removedKeys: string[];
   issueCount: number;
-  priorities: PriorityCol[];
-  statusGroups: StatusGroup[];
-  products: BugProduct[];
-  /** 分組表沒涵蓋到的狀態；不是空的就代表 VB 加了新狀態，要回去補 */
-  unmappedStatuses: Record<string, number>;
+  issues: BugIssue[];
   lastError?: string | null;
 }
 
@@ -115,7 +92,7 @@ export async function readConfig(): Promise<VbBugsConfig> {
 
 export async function readSnapshot(): Promise<BugSnapshot | null> {
   const s = await readJson<BugSnapshot | null>(SNAPSHOT_FILE, null);
-  return s && Array.isArray(s.products) ? s : null;
+  return s && Array.isArray(s.issues) ? s : null;
 }
 
 export async function setConfig(input: Partial<VbBugsConfig>): Promise<VbBugsConfig> {
@@ -150,13 +127,17 @@ export interface RefreshResult {
   snapshot?: BugSnapshot;
 }
 
-export async function refresh(): Promise<RefreshResult> {
+/**
+ * 抓一次。有既有快照就走增量 —— 全 BU 的單之後都會搬進 VB，票數會長到幾千，
+ * 每半小時全抓一次不划算（5000 筆 ≈ 50 次 API 呼叫 × 48 次/天）。
+ * 腳本自己會判斷：沒有快照、或上次全同步超過 24 小時，就改成全抓。
+ */
+export async function refresh(opts: { full?: boolean } = {}): Promise<RefreshResult> {
   const prev = await readSnapshot();
-  const { stdout, stderr, code } = await run(
-    "python3",
-    [repoPath("scripts/vb-bugs.py")],
-    { timeoutMs: 180_000 }
-  );
+  const args = [repoPath("scripts/vb-bugs.py"), "--state", SNAPSHOT_FILE];
+  if (opts.full) args.push("--full");
+
+  const { stdout, stderr, code } = await run("python3", args, { timeoutMs: 180_000 });
 
   if (code !== 0) {
     const error = (stderr || stdout || `vb-bugs.py exit ${code}`).trim().slice(0, 2000);
@@ -215,12 +196,12 @@ export function schedulerState(): SchedulerState {
   };
 }
 
-export async function runOnce(): Promise<RefreshResult> {
+export async function runOnce(opts: { full?: boolean } = {}): Promise<RefreshResult> {
   const rt = runtime();
   if (rt.running) return { ok: false, error: "上一輪還在抓" };
   rt.running = true;
   try {
-    const res = await refresh();
+    const res = await refresh(opts);
     rt.lastRunAt = new Date().toISOString();
     rt.lastError = res.ok ? null : (res.error ?? "抓取失敗");
     if (rt.timer) {
@@ -268,4 +249,4 @@ export async function ensureTimer(): Promise<void> {
 }
 
 // 純規則放隔壁（客戶端也要用，不能帶到 fs/promises）
-export { sortProducts, UNCATEGORISED } from "@/lib/vbBugsRules";
+export { sortProducts, UNCATEGORISED, buildMatrix, PRIORITIES, STATUS_GROUPS } from "@/lib/vbBugsRules";

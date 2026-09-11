@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
-import { sortProducts } from "@/lib/vbBugsRules";
+import { HIDDEN_BY_DEFAULT, sortProducts } from "@/lib/vbBugsRules";
 
 interface BugIssue {
   key: string; summary: string; status: string;
@@ -14,6 +14,7 @@ interface PriorityCol { key: string; label: string; sub: string }
 interface StatusGroup { key: string; label: string; statuses: string[] }
 interface BugSnapshot {
   fetchedAt: string; fetchedAs: string; project: string; issueCount: number;
+  mode: "full" | "incremental"; lastFullSyncAt: string | null; fetchedCount: number;
   priorities: PriorityCol[]; statusGroups: StatusGroup[]; products: BugProduct[];
   unmappedStatuses: Record<string, number>; lastError?: string | null;
 }
@@ -25,9 +26,6 @@ interface Scheduler {
   timerOn: boolean; fetching: boolean; intervalSeconds: number;
   lastRunAt: string | null; nextRunAt: string | null; lastError: string | null;
 }
-
-/** 預設收起來的那一列（Jay：對我意義不大，但保留功能） */
-const HIDDEN_BY_DEFAULT = "production_ready";
 
 function fmtTime(iso: string | null): string {
   if (!iso) return "—";
@@ -72,10 +70,14 @@ export default function VbBugsPage() {
     load();
   };
 
-  const refreshNow = async () => {
+  const refreshNow = async (full = false) => {
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/vb-bugs/refresh", { method: "POST" });
+    const res = await fetch("/api/vb-bugs/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ full }),
+    });
     if (!res.ok) setError((await res.json().catch(() => ({}))).error ?? "抓取失敗");
     setBusy(false);
     load();
@@ -108,14 +110,24 @@ export default function VbBugsPage() {
               server 定時抓快照，開這頁不會打 Jira。點數字可以直接看是哪幾張票。
             </p>
           </div>
-          <button
-            onClick={refreshNow}
-            disabled={busy}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            <Icon name="refresh" size={15} className={busy || scheduler?.fetching ? "animate-spin" : ""} />
-            立即更新
-          </button>
+          <div className="flex shrink-0 gap-2">
+            <button
+              onClick={() => refreshNow(true)}
+              disabled={busy}
+              title="忽略增量，整份重抓（處理被硬刪或搬走的幽靈票）"
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            >
+              全同步
+            </button>
+            <button
+              onClick={() => refreshNow(false)}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              <Icon name="refresh" size={15} className={busy || scheduler?.fetching ? "animate-spin" : ""} />
+              立即更新
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -136,7 +148,7 @@ export default function VbBugsPage() {
               <Icon name="alert" size={16} className="mt-0.5" />
               <div>
                 有狀態不在分組表裡，這些票沒被算進去 —— 代表 VB 加了新狀態，要回去補
-                <code className="mx-1 text-xs">scripts/vb-bugs.py</code>的
+                <code className="mx-1 text-xs">web/lib/vbBugsRules.ts</code>的
                 <code className="text-xs">STATUS_GROUPS</code>：
                 <div className="mt-1 font-mono text-xs">
                   {Object.entries(snapshot.unmappedStatuses)
@@ -160,9 +172,11 @@ export default function VbBugsPage() {
           </label>
           <span className="text-xs text-gray-400">
             {snapshot
-              ? `${snapshot.issueCount} 張未完成的 bug · 最後抓取 ${fmtTime(snapshot.fetchedAt)}`
+              ? `${snapshot.issueCount} 張未完成的 bug · ${fmtTime(snapshot.fetchedAt)}` +
+                `（${snapshot.mode === "incremental" ? "增量" : "全同步"}，這輪抓了 ${snapshot.fetchedCount} 筆）`
               : "尚無快照"}
             {scheduler?.nextRunAt && ` · 下次 ${fmtTime(scheduler.nextRunAt)}`}
+            {snapshot?.lastFullSyncAt && ` · 上次全同步 ${fmtTime(snapshot.lastFullSyncAt)}`}
           </span>
           {pinned.length > 0 && (
             <span className="ml-auto text-xs text-gray-400">
