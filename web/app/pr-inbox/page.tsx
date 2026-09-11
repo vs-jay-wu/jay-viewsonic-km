@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Icon, { type IconName } from "@/components/Icon";
+import { useConfirm } from "@/components/Confirm";
 
 interface RunPr {
   repo: string; number: number; title: string; url: string;
@@ -80,6 +81,7 @@ export default function PrInboxPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [log, setLog] = useState<{ id: string; log: string } | null>(null);
   const [scope, setScope] = useState<PrScope | null>(null);
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     const res = await fetch("/api/pr-inbox");
@@ -142,8 +144,14 @@ export default function PrInboxPage() {
    */
   const removeRun = async (r: RunRecord) => {
     const involvedAi = r.claude !== null || r.status === "aborted";
-    if (involvedAi && !confirm(`這筆 AI 真的跑過（${fmtCost(r.claude?.costUsd ?? null)}），刪掉就查不回來了。確定？`)) {
-      return;
+    if (involvedAi) {
+      const ok = await confirm({
+        title: "刪掉這筆 AI 執行紀錄？",
+        message: `這輪 AI 真的跑過（${fmtCost(r.claude?.costUsd ?? null)}），花費與當時的判斷刪掉就查不回來了。`,
+        confirmLabel: "刪除",
+        danger: true,
+      });
+      if (!ok) return;
     }
     const id = r.id;
     const res = await fetch(`/api/pr-inbox/runs/${id}`, { method: "DELETE" });

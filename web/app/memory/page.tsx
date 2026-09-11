@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Icon from "@/components/Icon";
+import { useConfirm } from "@/components/Confirm";
 
 interface MemStats {
   totalMB: number; usedMB: number; appMB: number; wiredMB: number;
@@ -80,6 +81,7 @@ export default function MemoryPage() {
   const [gradle, setGradle] = useState(false);
   const [langServer, setLangServer] = useState(false);
 
+  const confirm = useConfirm();
   const [scripts, setScripts] = useState<ScriptFile[] | null>(null);
   const [showScripts, setShowScripts] = useState(false);
 
@@ -101,7 +103,14 @@ export default function MemoryPage() {
   useEffect(() => { load(); }, [load]);
 
   const clean = async () => {
-    if (!confirm(`確定要殺掉這 ${data?.processes.length ?? 0} 個行程嗎？`)) return;
+    const n = data?.processes.length ?? 0;
+    const ok = await confirm({
+      title: `殺掉這 ${n} 個行程？`,
+      message: `可回收約 ${gb(data?.reclaimableMB ?? 0)}。dart mcp-server 之類的會自己重開，Gradle daemon 在 build 中被殺會讓 build 失敗。`,
+      confirmLabel: "清理",
+      danger: true,
+    });
+    if (!ok) return;
     setCleaning(true);
     setError(null);
     const res = await fetch("/api/memory/clean", {

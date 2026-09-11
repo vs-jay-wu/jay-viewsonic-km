@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
+import { useConfirm } from "@/components/Confirm";
 import { isStale, STALE_DAYS } from "@/lib/sessionRules";
 import TranscriptPanel from "@/components/TranscriptPanel";
 
@@ -66,6 +67,7 @@ export default function SessionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<DeleteResult[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -166,7 +168,13 @@ export default function SessionsPage() {
   const removeSelected = async () => {
     const ids = [...selected];
     if (ids.length === 0) return;
-    if (!confirm(`確定刪除 ${ids.length} 個 session？共 ${mb(selectedBytes)}，無法復原。`)) return;
+    const ok = await confirm({
+      title: `刪除 ${ids.length} 個 session？`,
+      message: `共 ${mb(selectedBytes)}，連同 sidecar 目錄一起刪掉，無法復原。`,
+      confirmLabel: "刪除",
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(true);
     setError(null);
     const res = await fetch("/api/sessions/delete", {
@@ -178,6 +186,30 @@ export default function SessionsPage() {
     if (!res.ok) setError(json.error ?? "刪除失敗");
     else setResults(json.results);
     setSelected(new Set());
+    setBusy(false);
+    load();
+  };
+
+  /** 單筆刪除。pin 住的擋在前面，跟批次那條走同一個 API。 */
+  const removeOne = async (s: SessionInfo) => {
+    const ok = await confirm({
+      title: "刪除這個 session？",
+      message: `${s.title}\n${mb(s.sizeBytes + s.sidecarBytes)}，連同 sidecar 目錄一起刪掉，無法復原。`,
+      confirmLabel: "刪除",
+      danger: true,
+    });
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    const res = await fetch("/api/sessions/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [s.id] }),
+    });
+    const json = await res.json();
+    if (!res.ok) setError(json.error ?? "刪除失敗");
+    else setResults(json.results);
+    if (openId === s.id) setOpenId(null); // 面板正開著這一筆的話一起收掉
     setBusy(false);
     load();
   };
@@ -397,6 +429,19 @@ export default function SessionsPage() {
                   <div className="text-sm text-gray-700">{mb(s.sizeBytes + s.sidecarBytes)}</div>
                   <div className="text-[11px] text-gray-400">{relTime(s.modifiedAt)}</div>
                 </div>
+
+                <button
+                  onClick={() => removeOne(s)}
+                  disabled={s.pinned || busy}
+                  title={s.pinned ? "pin 住的不能刪，先取消 pin" : "刪除這個 session"}
+                  className={`mt-0.5 shrink-0 ${
+                    s.pinned
+                      ? "cursor-not-allowed text-gray-200"
+                      : "text-gray-300 hover:text-red-600"
+                  }`}
+                >
+                  <Icon name="trash" size={15} />
+                </button>
               </li>
             ))}
           </ul>
