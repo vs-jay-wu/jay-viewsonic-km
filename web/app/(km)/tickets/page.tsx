@@ -3,14 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
-import { usePrompt } from "@/components/Prompt";
 import {
   DEFAULT_VIEW, PRIORITY_ORDER, TICKET_GROUPS, TICKET_SORTS, applyView, groupByProduct,
   groupKeyOf, issueTypeStyle,
-  type MyTicket, type MyTicketsSnapshot, type TicketSort,
+  type MyTicketsSnapshot, type TicketSort,
 } from "@/lib/myTicketsRules";
-import { canonicalRepo, defaultSessionTitleForTicket } from "@/lib/workItemRules";
-import type { WorkIndex, WorkItem } from "@/lib/workIndexRules";
+import { useTicketSession } from "@/lib/useTicketSession";
 
 interface Config { enabled: boolean; intervalSeconds: number; updatedAt: string }
 interface Scheduler {
@@ -45,13 +43,14 @@ export default function TicketsPage() {
   const [snapshot, setSnapshot] = useState<MyTicketsSnapshot | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
   const [scheduler, setScheduler] = useState<Scheduler | null>(null);
-  const [workIndex, setWorkIndex] = useState<WorkIndex | null>(null);
   const [view, setView] = useState(DEFAULT_VIEW);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const ask = usePrompt();
+  // 開／接續這張單的 session —— 跟 VB Bug 總覽共用同一個 hook
+  const { itemOf, openSessionFor, busy: sessionBusy, notice: sessionNotice,
+          error: sessionError } = useTicketSession();
 
   const load = useCallback(async () => {
     const res = await fetch("/api/my-tickets", { cache: "no-store" });
@@ -62,21 +61,11 @@ export default function TicketsPage() {
     setLoading(false);
   }, []);
 
-  const loadIndex = useCallback(async (force = false) => {
-    const res = await fetch(`/api/work-index${force ? "?force=1" : ""}`);
-    setWorkIndex((await res.json()) as WorkIndex);
-  }, []);
-
-  useEffect(() => { void load(); void loadIndex(); }, [load, loadIndex]);
+  useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     const t = setInterval(() => void load(), 30_000);
     return () => clearInterval(t);
   }, [load]);
-
-  const itemOf = useCallback(
-    (key: string): WorkItem | undefined => workIndex?.items.find((i) => i.key === key),
-    [workIndex]
-  );
 
   const refresh = async (full: boolean) => {
     setBusy(true);
@@ -91,56 +80,6 @@ export default function TicketsPage() {
       const json = await res.json();
       if (!res.ok || !json.ok) setError(json.error ?? "抓取失敗");
       await load();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  /** 開這張單的 session：有就 resume 最近的，沒有就問過名稱再開新的 */
-  const openSessionFor = async (t: MyTicket) => {
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const item = itemOf(t.key);
-      const existing = item?.sessions[0];
-      if (existing) {
-        const res = await fetch(`/api/sessions/${existing.id}/open`, { method: "POST" });
-        const out = await res.json();
-        setNotice(
-          out.status === "opened" || out.status === "reused"
-            ? `已在 Orca 開啟：${existing.title}`
-            : out.status === "external"
-              ? `已經有人在別的地方 resume 這個 session（pid ${out.pid}）`
-              : out.error ?? `Orca 回報：${out.status}`
-        );
-        return;
-      }
-
-      const title = await ask({
-        title: "新 session 的名稱",
-        message: "照 [repo/sub-repo] 單號 描述 的慣例；沒寫 sub-repo 的話之後只會連到這張單。",
-        defaultValue: defaultSessionTitleForTicket({
-          key: t.key,
-          summary: t.summary,
-          repo: item?.prs[0] ? canonicalRepo(item.prs[0].repo) : null,
-        }),
-        confirmLabel: "建立並開啟",
-      });
-      if (title === null) return;
-
-      const res = await fetch("/api/work/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, open: true }),
-      });
-      const out = await res.json();
-      if (!res.ok) {
-        setError(out.error ?? "建立 session 失敗");
-        return;
-      }
-      setNotice(`已建立並開啟 session：${title}`);
-      void loadIndex(true);
     } finally {
       setBusy(false);
     }
@@ -287,9 +226,13 @@ export default function TicketsPage() {
             {scheduler?.nextRunAt && ` · 下次 ${fmtTime(scheduler.nextRunAt)}`}
             {config && !config.enabled && " · 定時抓取已停用"}
           </div>
-          {notice && <div className="mt-1 text-sky-700">{notice}</div>}
-          {(error || snapshot?.lastError) && (
-            <div className="mt-1 text-red-600">{error ?? snapshot?.lastError}</div>
+          {(notice || sessionNotice) && (
+            <div className="mt-1 text-sky-700">{notice ?? sessionNotice}</div>
+          )}
+          {(error || sessionError || snapshot?.lastError) && (
+            <div className="mt-1 text-red-600">
+              {error ?? sessionError ?? snapshot?.lastError}
+            </div>
           )}
         </div>
 
@@ -378,7 +321,7 @@ export default function TicketsPage() {
                 >
                   <button
                     onClick={() => openSessionFor(t)}
-                    disabled={busy}
+                    disabled={busy || sessionBusy}
                     className={`mt-0.5 shrink-0 disabled:opacity-40 ${
                       sessionCount > 0
                         ? "text-sky-500 hover:text-sky-700"

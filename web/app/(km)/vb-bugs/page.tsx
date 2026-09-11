@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
+import Tooltip from "@/components/Tooltip";
+import { useTicketSession } from "@/lib/useTicketSession";
 import { groupOfStatus, HIDDEN_BY_DEFAULT, sortProducts } from "@/lib/vbBugsRules";
 
 interface BugIssue {
@@ -92,6 +94,8 @@ export default function VbBugsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<{ product: string; cell: string } | null>(null);
+  // 「這張單有沒有對應的 session，沒有就開一個」—— 跟「指派給我的單」共用
+  const session = useTicketSession();
   /** server 已經抓到更新的一份，但畫面還是舊的 —— 由使用者按一下才換 */
   const [hasNewer, setHasNewer] = useState(false);
 
@@ -267,6 +271,12 @@ export default function VbBugsPage() {
           )}
         </div>
 
+        {/* 開 session 的結果。固定佔一行，不要讓下面的矩陣上下跳 */}
+        <div className="mt-1 h-4 text-xs">
+          {session.notice && <span className="text-sky-700">{session.notice}</span>}
+          {session.error && <span className="text-red-600">{session.error}</span>}
+        </div>
+
         {/* 矩陣 */}
         {loading ? (
           <p className="mt-8 text-sm text-gray-400">載入中…</p>
@@ -373,11 +383,49 @@ export default function VbBugsPage() {
                           <span className="min-w-0 flex-1 truncate text-sm text-gray-800">
                             {i.summary}
                           </span>
+                          {/* 這張單已經有的 PR（來自 lib/workIndex.ts 的關聯） */}
+                          {session.itemOf(i.key)?.prs.map((pr) => (
+                            <a
+                              key={pr.url}
+                              href={pr.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-gray-200 bg-white px-1.5 py-0.5 text-[11px] leading-none text-gray-600 hover:bg-gray-50"
+                            >
+                              <Icon name="gitPr" size={10} />
+                              {pr.number}
+                            </a>
+                          ))}
                           <span
                             className={`shrink-0 rounded-full border px-2 py-0.5 text-xs ${chipClass(i.status)}`}
                           >
                             {i.status}
                           </span>
+                          {(() => {
+                            const count = session.itemOf(i.key)?.sessions.length ?? 0;
+                            return (
+                              <Tooltip
+                                side="left"
+                                label={
+                                  count > 0
+                                    ? `在 Orca 開這張單的 session（已有 ${count} 個，開最近的那個）`
+                                    : "在 Orca 開一個新的 session 來做這張單（名稱可改）"
+                                }
+                              >
+                                <button
+                                  onClick={() => session.openSessionFor(i)}
+                                  disabled={session.busy}
+                                  className={`shrink-0 disabled:opacity-40 ${
+                                    count > 0
+                                      ? "text-sky-500 hover:text-sky-700"
+                                      : "text-gray-300 hover:text-sky-600"
+                                  }`}
+                                >
+                                  <Icon name={count > 0 ? "external" : "play"} size={14} />
+                                </button>
+                              </Tooltip>
+                            );
+                          })()}
                         </li>
                       ))}
                     </ul>
