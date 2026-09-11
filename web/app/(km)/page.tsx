@@ -48,7 +48,14 @@ const TOOLS: { href: string; icon: IconName; title: string; desc: string }[] = [
 ];
 
 /** 不常用、平常只在背景跑的東西 —— 放頁面最底下，但每一項都點得進去 */
-const OTHERS: { href: string; icon: IconName; title: string; desc: string }[] = [
+/**
+ * `external: true` 的項目是**另一套系統**（目前只有 av-streaming）——
+ * 它掛在同一個 domain 底下，但有自己的 root layout 與設計，
+ * 所以一律開新分頁，不要用 client-side 導覽把人帶離 km 工作台。
+ */
+const OTHERS: {
+  href: string; icon: IconName; title: string; desc: string; external?: boolean;
+}[] = [
   {
     href: "/repo-sync",
     icon: "refresh",
@@ -66,6 +73,13 @@ const OTHERS: { href: string; icon: IconName; title: string; desc: string }[] = 
     icon: "hardDrive",
     title: "搬遷紀錄",
     desc: "本機 ↔ 外接硬碟的每一次搬移：搬了多少、花多久、有沒有失敗",
+  },
+  {
+    href: "/av-streaming",
+    icon: "layers",
+    title: "AV Streaming 筆記",
+    desc: "AirSync / Cast in-out / Recorder 的影音格式、串流與儲存（另一套站，開新分頁）",
+    external: true,
   },
 ];
 
@@ -277,19 +291,37 @@ export default async function Home() {
         <div className="mt-10">
           <h2 className="text-sm font-semibold text-gray-900">其他服務</h2>
           <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200">
-            {OTHERS.map((o) => (
-              <li key={o.href}>
-                <Link
-                  href={o.href}
-                  className="group flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
-                >
-                  <Icon name={o.icon} size={15} className="text-gray-300 group-hover:text-gray-500" />
+            {OTHERS.map((o) => {
+              const inner = (
+                <>
+                  {/* gray-300 在白底上幾乎看不到（Jay 2026-09-11 回報），
+                      拉到 gray-500：跟旁邊的標題文字同一個明度級別 */}
+                  <Icon name={o.icon} size={15} className="text-gray-500 group-hover:text-gray-900" />
                   <span className="text-sm text-gray-800">{o.title}</span>
                   <span className="min-w-0 flex-1 truncate text-xs text-gray-400">{o.desc}</span>
-                  <Icon name="chevronRight" size={14} className="text-gray-300 group-hover:text-gray-600" />
-                </Link>
-              </li>
-            ))}
+                  <Icon
+                    name={o.external ? "external" : "chevronRight"}
+                    size={14}
+                    className="text-gray-400 group-hover:text-gray-700"
+                  />
+                </>
+              );
+              const cls = "group flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors";
+              return (
+                <li key={o.href}>
+                  {o.external ? (
+                    // 另一套系統：用原生 <a> + target，不要用 next/link ——
+                    // 那邊是不同的 root layout，client-side 導覽本來就會整頁重載，
+                    // 而且我們要的是「留在 km 這個分頁、另開一個」
+                    <a href={o.href} target="_blank" rel="noreferrer" className={cls}>
+                      {inner}
+                    </a>
+                  ) : (
+                    <Link href={o.href} className={cls}>{inner}</Link>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
         {/* Teams Archive */}
