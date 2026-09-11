@@ -6,6 +6,10 @@ import { useConfirm } from "@/components/Confirm";
 import Tooltip from "@/components/Tooltip";
 import WorkRefChips from "@/components/WorkRefChips";
 import { parseSessionTitle } from "@/lib/workItemRules";
+import {
+  findItemBySession, prDecisionLabel, prStateStyle,
+} from "@/lib/workIndexRules";
+import { useTicketSession } from "@/lib/useTicketSession";
 import { isStale, STALE_DAYS } from "@/lib/sessionRules";
 import TranscriptPanel from "@/components/TranscriptPanel";
 
@@ -71,6 +75,8 @@ export default function SessionsPage() {
   const [results, setResults] = useState<DeleteResult[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const confirm = useConfirm();
+  // 關聯索引（session ↔ PR ↔ ticket），只用它的資料，不在這頁開 session
+  const { workIndex } = useTicketSession();
   /** 剛在 Orca 開過的，按鈕上給個回饋 */
   const [opened, setOpened] = useState<Record<string, string>>({});
 
@@ -483,8 +489,42 @@ export default function SessionsPage() {
                   </div>
                 </button>
 
-                {/* 標題解析出來的關聯。放在按鈕外面 —— 連結不能巢狀在按鈕裡 */}
-                <WorkRefChips refs={parseSessionTitle(s.title)} />
+                {/* 關聯。放在按鈕外面 —— 連結不能巢狀在按鈕裡。
+                    ticket 由標題解析（猜的會標問號）；PR 用關聯索引裡的真實資料，
+                    所以帶得出狀態。索引有 PR 時就不畫標題解析出來的那顆，免得重複。 */}
+                {(() => {
+                  const item = workIndex
+                    ? findItemBySession(workIndex.items, s.id)
+                    : undefined;
+                  const prs = item?.prs ?? [];
+                  return (
+                    <span className="flex shrink-0 items-center gap-1">
+                      <WorkRefChips refs={parseSessionTitle(s.title)} showPr={prs.length === 0} />
+                      {prs.map((pr) => {
+                        const st = prStateStyle(pr.state);
+                        const decision = prDecisionLabel(pr);
+                        return (
+                          <Tooltip
+                            key={pr.url}
+                            side="left"
+                            label={`${pr.repo}#${pr.number} · ${st.label}${decision ? ` · ${decision}` : ""}\n${pr.title}`}
+                          >
+                            <a
+                              href={pr.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] leading-none ${st.cls}`}
+                            >
+                              <Icon name="gitPr" size={10} />
+                              {pr.number}
+                              <span className="opacity-70">{decision ?? st.label}</span>
+                            </a>
+                          </Tooltip>
+                        );
+                      })}
+                    </span>
+                  );
+                })()}
 
                 <div className="shrink-0 text-right">
                   <div className="text-sm text-gray-700">{mb(s.sizeBytes + s.sidecarBytes)}</div>

@@ -14,11 +14,14 @@ import { canonicalRepo, ticketUrl, type WorkRef } from "@/lib/workItemRules";
 export default function WorkRefChips({
   refs,
   org = "Viewsonic-EDU",
+  showPr = true,
 }: {
   refs: WorkRef;
   org?: string;
+  /** 關聯索引已經有真正的 PR 資料時設 false —— 不要畫兩顆同號的 PR 標籤 */
+  showPr?: boolean;
 }) {
-  if (!refs.ticketKey && refs.prNumber === null) return null;
+  if (!refs.ticketKey && (refs.prNumber === null || !showPr)) return null;
   const repo = canonicalRepo(refs.repo);
 
   return (
@@ -48,7 +51,7 @@ export default function WorkRefChips({
           </a>
         </Tooltip>
       )}
-      {refs.prNumber !== null && repo && (
+      {showPr && refs.prNumber !== null && repo && (
         <Tooltip side="left" label={`到 GitHub 看 ${repo}#${refs.prNumber}`}>
           <a
             href={`https://github.com/${org}/${repo}/pull/${refs.prNumber}`}
