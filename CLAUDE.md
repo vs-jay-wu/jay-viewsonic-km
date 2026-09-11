@@ -15,6 +15,27 @@
 
 ---
 
+# 禁止使用 Dart / Flutter MCP
+
+**不要在任何 repo 啟用 `Flutter-MCP-Server`（`dart mcp-server`），也不要把它加回任何
+`.mcp.json` 或 `enabledMcpjsonServers`。** 2026-09-11 起已從 km、mvbf（`edu-droid-flutter`）、
+`ai-configs/projects/ragdoll-cat/.mcp.json` 全部移除，並列進兩處的 `disabledMcpjsonServers`。
+
+**為什麼**：它會替每個 session 生一隻 `dart mcp-server`，而那隻再生一隻
+`dart language-server`——後者實測會漲到 **800 MB–1.1 GB** 且不縮回。更麻煩的是
+**它們不跟著 session 結束**：2026-09-11 Jay 把所有 Claude 視窗關掉重開之後，
+三組行程的 PID 原封不動還在（合計 2.9 GB），只能手動 kill。
+
+這條**推翻**了 `docs/domains/app-build-performance/dev-process-memory-reclaim.md`
+裡「不從 km/.mcp.json 拿掉 Flutter-MCP-Server、改成事後用 memclean 回收」的舊決定
+——該文自己列的翻案條件已經成立。
+
+**改用什麼**：`fvm dart analyze <檔案>`、`fvm flutter test`、`fvm dart format` 等 CLI
+（見 `mvbf` skill）。要看 widget tree／hot reload 這類真的需要 MCP 的情境，
+先問 Jay，臨時用 `/mcp` 開，用完自己收掉。
+
+---
+
 # Gitmoji 與語言規則
 
 > ⚠️ **以下 commit 格式只適用於本 km repo。** 對專案 repo（`Orgs/Viewsonic-EDU/*`）

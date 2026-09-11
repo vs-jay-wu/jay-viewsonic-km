@@ -32,13 +32,6 @@
       ],
       "env": {}
     },
-    "Flutter-MCP-Server": {
-      "command": "/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs/Viewsonic-EDU/edu-droid-flutter/.fvm/versions/3.41.5/bin/cache/dart-sdk/bin/dart",
-      "args": [
-        "mcp-server"
-      ],
-      "env": {}
-    },
     "POEditor-MCP-Server": {
       "command": "npx",
       "args": [
