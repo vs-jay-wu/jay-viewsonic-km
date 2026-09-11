@@ -136,8 +136,16 @@ export default function PrInboxPage() {
     }
   };
 
-  const removeRun = async (id: string) => {
-    if (!confirm(`刪除 ${id} 的執行紀錄？`)) return;
+  /**
+   * 只有「AI 真的跑過」的那幾筆才問一次 —— 那些有花費與當時的判斷，刪掉查不回來。
+   * 沒待處理、只偵測、被鎖擋掉的那些看過就沒用了，直接刪，不要每次都跳一個框。
+   */
+  const removeRun = async (r: RunRecord) => {
+    const involvedAi = r.claude !== null || r.status === "aborted";
+    if (involvedAi && !confirm(`這筆 AI 真的跑過（${fmtCost(r.claude?.costUsd ?? null)}），刪掉就查不回來了。確定？`)) {
+      return;
+    }
+    const id = r.id;
     const res = await fetch(`/api/pr-inbox/runs/${id}`, { method: "DELETE" });
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
@@ -506,7 +514,7 @@ export default function PrInboxPage() {
                         </span>
                       )}
                       <button
-                        onClick={() => removeRun(r.id)}
+                        onClick={() => removeRun(r)}
                         title="刪除這筆紀錄"
                         className="text-gray-300 hover:text-red-600"
                       >
