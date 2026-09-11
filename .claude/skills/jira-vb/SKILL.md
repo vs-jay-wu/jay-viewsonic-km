@@ -123,6 +123,45 @@ Scale JK `eca8b62a-…`（`- EDU` 後綴是名稱的一部分）。
 
 開單前照樣跑一次 `jira_get_project_issue_types` 與 `jira_get_create_fields`，欄位會變。
 
+### `Project` 欄位的值與 bug 狀態（2026-09-11 實測，242 張未完成的 VB bug）
+
+`customfield_12435` 實際出現過的值，以及各自的量：
+
+```
+110 Manager    59 myViewBoard   22 (未填)    20 AirSync   11 Quiz Tool
+  6 Finch       5 Hub            4 VS Account  3 vLauncher  2 Data-ECP
+```
+
+兩件事值得記：**它是多選**（一張票可能掛兩個產品），而且**約 9% 沒填**——
+做任何以產品分群的統計都要先決定這兩者怎麼處理，不然那 22 張會從報表上消失。
+
+**VB 沒有「平台」維度。** VSFT 的 `Platform` 分得出 mVB Windows / mVB Flutter /
+CS Windows / CS Android，VB 只有一個 `myViewBoard`。想照平台切要另外想辦法。
+
+bug 的狀態（**不要沿用 VSFT 的拼法**，逐字不同）：
+
+| VSFT | VB |
+|---|---|
+| `Open` | **不存在** |
+| `In Progress` | `進行中`（中文） |
+| `STAGE READY (READY FOR QA)` | `STAGE READY(READY FOR QA)`（括號前**沒有空格**） |
+| `PENDING` | `Pending` |
+
+VB 實際查到的全部：`BACKLOG`、`待辦事項`、`READY FOR DEV`、`DISCOVERY/REFINEMENT`、
+`進行中`、`IN CODE REVIEW`、`PR MERGED`、`STAGE READY(READY FOR QA)`、`TRACKING BY QA`、
+`VERIFYING`、`QA REJECT`、`PRODUCTION READY`、`Pending`、`Blocked`。
+
+km web 的「VB Bug 總覽」就是靠這份表分組（`web/lib/vbBugsRules.ts`），
+碰到沒歸類的狀態它會在頁面上示警，不會靜靜吞掉。
+
+### 用 REST API 查 VB（不經 MCP）
+
+`.env` 的 `ATLASSIAN_API_TOKEN` **加** `ATLASSIAN_EMAIL` 兩個都要 ——
+token 不自帶身分，Basic auth 的帳號欄位就是 email。實測 `Bearer <token>` 回 403、
+拿 token 當帳號回 401。**最麻煩的是未認證時 Jira 回「0 筆」而不是 401**，
+看起來像沒資料，所以查詢前先打一次 `/rest/api/3/myself` 驗身分。
+現成的做法見 `scripts/vb-bugs.py`。
+
 ---
 
 ## 開完之後
