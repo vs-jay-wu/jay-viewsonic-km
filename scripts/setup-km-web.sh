@@ -13,6 +13,7 @@
 # 用法：
 #   ./scripts/setup-km-web.sh --install          常駐（dev 模式，預設 port 3000）
 #   ./scripts/setup-km-web.sh --install --port 3100
+#   ./scripts/setup-km-web.sh --install --hostname 0.0.0.0   # 不建議，見下
 #   ./scripts/setup-km-web.sh --status           看載入狀態與 HTTP 是否有回應
 #   ./scripts/setup-km-web.sh --restart          重啟（換 Node 版本、npm rebuild 後用）
 #   ./scripts/setup-km-web.sh --uninstall        取消常駐
@@ -21,6 +22,11 @@
 #
 # 注意：手動 `npm run dev` 與常駐的那份會搶同一個 port。想手動跑就先 --uninstall，
 #       或用 --port 換一個。
+#
+# ⚠️ 預設只聽 127.0.0.1。這個 server 沒有驗證，API 可以刪本機檔案、殺行程、
+#    花錢並以 Jay 的身分送出 PR review —— 綁到 0.0.0.0 等於把這些開放給同網段
+#    的任何人。要遠端用請走 SSH tunnel：
+#      ssh -N -L 3000:127.0.0.1:3000 <這台機器>
 
 set -euo pipefail
 
@@ -34,6 +40,11 @@ ERR_LOG="$LOG_DIR/web.err.log"
 
 ACTION=""
 PORT=3000
+# 只聽 loopback。這個 server 沒有任何驗證，而它的 API 可以刪本機檔案、殺行程、
+# 花錢並以 Jay 的身分對別人的 PR 送出 approve —— 綁 0.0.0.0 等於把這些動作
+# 開放給同網段的任何人（實際驗證過：辦公室網段的 172.21.x.x 打得進來）。
+# 要從別台機器用就開 SSH tunnel，不要改這個預設。
+HOSTNAME_BIND=127.0.0.1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -44,6 +55,7 @@ while [[ $# -gt 0 ]]; do
     --logs)      ACTION=logs ;;
     --print)     ACTION=print ;;
     --port)      PORT="${2:?--port 需要一個 port}"; shift ;;
+    --hostname)  HOSTNAME_BIND="${2:?--hostname 需要一個位址}"; shift ;;
     -h|--help)   sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "未知參數：$1" >&2; exit 2 ;;
   esac
@@ -75,6 +87,8 @@ plist_body() {
     <string>--</string>
     <string>--port</string>
     <string>$PORT</string>
+    <string>--hostname</string>
+    <string>$HOSTNAME_BIND</string>
   </array>
   <key>WorkingDirectory</key><string>$WEB_DIR</string>
   <key>RunAtLoad</key><true/>
@@ -154,7 +168,7 @@ case "$ACTION" in
     launchctl bootstrap "gui/$UID" "$PLIST" 2>/dev/null \
       || launchctl load -w "$PLIST"
     echo "✓ 已設為常駐 $LABEL"
-    echo "  網址：http://localhost:$PORT"
+    echo "  網址：http://localhost:$PORT（只聽 $HOSTNAME_BIND）"
     echo "  log ：$OUT_LOG / $ERR_LOG"
     echo "  狀態：./scripts/setup-km-web.sh --status"
     echo "  取消：./scripts/setup-km-web.sh --uninstall"

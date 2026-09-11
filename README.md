@@ -11,6 +11,14 @@ cd web && npm run dev        # http://localhost:3000
 > `better-sqlite3` 是原生模組。換過 Node 版本後會出現
 > `NODE_MODULE_VERSION` 不合而整站 500，跑 `npm rebuild better-sqlite3` 修好。
 
+**只聽 `127.0.0.1`。** 這個 server 沒有任何驗證，而它的 API 可以刪本機檔案、
+殺行程、花錢並以你的身分對別人的 PR 送出 approve —— 綁 `0.0.0.0` 等於把這些
+開放給同網段的任何人。要從別台機器用請走 SSH tunnel：
+
+```bash
+ssh -N -L 3000:127.0.0.1:3000 <這台機器>
+```
+
 要讓它常駐（登入自動起、掛掉自動重啟）：
 
 ```bash
