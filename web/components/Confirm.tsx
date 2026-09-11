@@ -139,8 +139,8 @@ export default function ConfirmProvider({ children }: { children: React.ReactNod
               </div>
             </div>
 
+            {/* 鍵盤仍然是 Enter 確認、Esc 取消，只是不在畫面上標示 */}
             <div className="mt-5 flex items-center justify-end gap-2">
-              <span className="mr-auto text-xs text-gray-400">Enter 確認 · Esc 取消</span>
               <button
                 data-confirm-cancel="true"
                 onClick={() => close(false)}

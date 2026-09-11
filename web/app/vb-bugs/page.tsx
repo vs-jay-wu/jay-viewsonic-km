@@ -133,7 +133,7 @@ export default function VbBugsPage() {
             <button
               onClick={() => refreshNow(true)}
               disabled={busy}
-              title="忽略增量，整份重抓（處理被硬刪或搬走的幽靈票）"
+              title="忽略增量，整份重抓（處理被硬刪或搬走的幽靈票）。排程只在台北時間 20:00–07:00 自動做一次，過了不補"
               className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
             >
               全同步

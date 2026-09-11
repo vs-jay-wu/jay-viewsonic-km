@@ -51,8 +51,18 @@ PRODUCT_FIELD = "customfield_12435"  # VB 的「Project」欄位（多選）
 UNCATEGORISED = "（未分類）"
 
 PAGE_SIZE = 100
-OVERLAP_MINUTES = 2   # JQL 只到分鐘精度，往回退一點
-FULL_SYNC_HOURS = 24  # 幽靈票的唯一解法
+OVERLAP_MINUTES = 2  # JQL 只到分鐘精度，往回退一點
+
+# 全同步只在夜裡做，而且一晚只做一次。
+#
+# 為什麼不是「每 24 小時」：票數會長到幾千，整份重抓會愈來愈久，不該在白天
+# 你在看的時候卡住。窗口用**台北時間**，不跟機器時區走。
+#
+# **過了窗口就不補**（Jay 2026-09-11）：電腦沒開、server 沒跑而錯過那一晚，
+# 就等下一晚，不要隔天上班時間突然跑一次幾千筆的全抓。
+FULL_SYNC_START_HOUR = 20  # 含
+FULL_SYNC_END_HOUR = 7     # 不含（跨午夜）
+TAIPEI = timezone(timedelta(hours=8))
 
 
 def load_env() -> dict:
@@ -135,6 +145,39 @@ def is_open(row: dict) -> bool:
     return row["statusCategory"] not in ("Done", "完成")
 
 
+def full_sync_window_start(now: datetime):
+    """`now` 落在哪一個夜間窗口裡；不在窗口內回 None。
+
+    窗口是 20:00 → 隔天 07:00，所以凌晨那幾個小時屬於**前一天**開始的窗口。
+    """
+    local = now.astimezone(TAIPEI)
+    if local.hour >= FULL_SYNC_START_HOUR:
+        start_day = local.date()
+    elif local.hour < FULL_SYNC_END_HOUR:
+        start_day = (local - timedelta(days=1)).date()
+    else:
+        return None
+    return datetime.combine(start_day, datetime.min.time(), TAIPEI).replace(
+        hour=FULL_SYNC_START_HOUR)
+
+
+def should_full_sync(now: datetime, last_full: str) -> bool:
+    """這一輪該不該做全同步。
+
+    只在夜間窗口內、且這個窗口還沒做過才做。**不補做** —— 錯過就等下一晚。
+    （沒有任何快照時是另一回事，那是初始化，由呼叫端決定。）
+    """
+    start = full_sync_window_start(now)
+    if start is None:
+        return False
+    if not last_full:
+        return True
+    try:
+        return parse_time(last_full) < start
+    except Exception:
+        return True
+
+
 def parse_time(v: str) -> datetime:
     """Jira 回的是 `2026-09-11T08:44:59.383+0800` —— 偏移量沒有冒號，
     Python 3.9 的 fromisoformat 吃不下（3.11 才支援）。這台跑的就是 3.9。"""
@@ -192,15 +235,11 @@ def main() -> None:
 
     last_full = prev.get("lastFullSyncAt")
     cursor = prev.get("cursor")
-    stale_full = True
-    if last_full:
-        try:
-            age = datetime.now(timezone.utc) - parse_time(last_full)
-            stale_full = age > timedelta(hours=FULL_SYNC_HOURS)
-        except Exception:
-            stale_full = True
 
-    incremental = bool(prev_rows and cursor and not force_full and not stale_full)
+    # 沒有任何快照 → 一定要全抓（那是初始化，不是補做）
+    bootstrapping = not (prev_rows and cursor)
+    due_full = should_full_sync(datetime.now(timezone.utc), last_full or "")
+    incremental = not (force_full or bootstrapping or due_full)
 
     if incremental:
         since = parse_time(cursor) - timedelta(minutes=OVERLAP_MINUTES)
