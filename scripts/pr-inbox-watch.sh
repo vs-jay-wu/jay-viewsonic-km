@@ -145,6 +145,30 @@ LOG_FILE="$RUNS_DIR/$ID.log"
 RECORD_WRITTEN=0
 
 # 寫一筆紀錄。用 jq 組，避免標題裡的引號把 JSON 弄壞。
+# 刪掉這一輪 AI 留下的 session 紀錄。
+#
+# 每叫一次 claude -p 就會在 ~/.claude/projects/ 多一份 jsonl，累積起來只是噪音——
+# 真正要複查的東西已經留在 <id>.json（花費、判定模式）與 <id>.log（AI 原始輸出）。
+# **只在成功時刪**：失敗那次的對話是唯一能看出它卡在哪的東西。
+# 被 pin 住的一律不刪（web 的 pin 是明確的「不要刪我」）。
+remove_session_transcript() {
+  local sid="$1"
+  [[ -n "$sid" && "$sid" != "null" ]] || return 0
+
+  local pins="$REPO_ROOT/data/local-state/session-pins.json"
+  if [[ -f "$pins" ]] && jq -e --arg id "$sid" '.pinned[$id]' "$pins" >/dev/null 2>&1; then
+    echo "· session $sid 被 pin 住，保留"
+    return 0
+  fi
+
+  local removed=0 f
+  for f in "$HOME"/.claude/projects/*/"$sid".jsonl(N); do
+    rm -f "$f" && removed=1
+  done
+  [[ "$removed" -eq 1 ]] && echo "· 已刪掉這輪的 session 紀錄（$sid）"
+  return 0
+}
+
 # $1 status  $2 note  $3 prCount  $4 claude json（可空字串）
 write_record() {
   jq -n \
@@ -334,6 +358,7 @@ rm -f "$CLAUDE_JSON"
 
 if [[ "$CLAUDE_CODE" -eq 0 ]]; then
   write_record handled "已交給 AI 處理 $PR_COUNT 筆（判定模式 $VERDICT_MODE）" "$PR_COUNT" "$CLAUDE_META"
+  remove_session_transcript "$(jq -r '.sessionId // ""' <<< "$CLAUDE_META")"
   echo "✓ 完成（花費 $(jq -r '.costUsd // "?"' <<< "$CLAUDE_META") USD，$(jq -r '.numTurns // "?"' <<< "$CLAUDE_META") turns）"
 else
   write_record failed "claude 離開碼 $CLAUDE_CODE" "$PR_COUNT" "$CLAUDE_META"
