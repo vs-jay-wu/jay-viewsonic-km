@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  canonicalRepo, formatSessionTitle, keyNumber, matchKnownKey,
+  canonicalRepo, defaultSessionTitleForPr, defaultSessionTitleForTicket,
+  formatSessionTitle, keyNumber, matchKnownKey,
   parsePrTicketKey, parseSessionTitle, ticketUrl, workKeyOf,
 } from "@/lib/workItemRules";
 
@@ -173,5 +174,54 @@ describe("canonicalRepo", () => {
   it("認不得就原樣（小寫）", () => {
     expect(canonicalRepo("Some-New-Repo")).toBe("some-new-repo");
     expect(canonicalRepo(null)).toBeNull();
+  });
+});
+
+describe("defaultSessionTitleForPr", () => {
+  it("用口語別名，並去掉標題開頭的票號 bracket（不然單號會出現兩次）", () => {
+    expect(defaultSessionTitleForPr({
+      repo: "Viewsonic-EDU/edu-droid-flutter", number: 237,
+      title: "[User Story VSFT-9941] 工具埋點", headRefName: "Jay/VSFT-9941-tracking",
+    })).toBe("[km/mvbf] VSFT-9941 工具埋點");
+  });
+
+  it("沒有票號就用 PR 編號當關聯", () => {
+    expect(defaultSessionTitleForPr({
+      repo: "Viewsonic-EDU/ragdoll-cat", number: 12, title: "chore: bump deps",
+    })).toBe("[km/cs] PR#12 chore: bump deps");
+  });
+
+  it("認不得的 repo 就用 repo 名", () => {
+    expect(defaultSessionTitleForPr({
+      repo: "Viewsonic-EDU/ocelot", number: 5, title: "fix latex",
+    })).toBe("[km/ocelot] PR#5 fix latex");
+  });
+
+  it("產生的標題吃得回自己的解析", () => {
+    const t = defaultSessionTitleForPr({
+      repo: "Viewsonic-EDU/edu-droid-flutter", number: 237,
+      title: "[Task VB-1945] 字體", headRefName: "Jay/VB-1945",
+    });
+    expect(parseSessionTitle(t)).toMatchObject({ ticketKey: "VB-1945", scope: "km/mvbf" });
+  });
+});
+
+describe("defaultSessionTitleForTicket", () => {
+  it("知道 repo 就用別名", () => {
+    expect(defaultSessionTitleForTicket({
+      key: "VB-2158", summary: "[Droid-100655] [MVBFv3] text size is not absolute",
+      repo: "Viewsonic-EDU/edu-droid-flutter",
+    })).toBe("[km/mvbf] VB-2158 text size is not absolute");
+  });
+
+  it("不知道 repo 就只寫 [km]，**不從 summary 的產品前綴猜**", () => {
+    expect(defaultSessionTitleForTicket({
+      key: "VB-2158", summary: "[MVBFv3] text size is not absolute",
+    })).toBe("[km] VB-2158 text size is not absolute");
+  });
+
+  it("產生的標題吃得回自己的解析", () => {
+    const t = defaultSessionTitleForTicket({ key: "VB-2158", summary: "文字大小" });
+    expect(parseSessionTitle(t)).toMatchObject({ ticketKey: "VB-2158", scope: "km" });
   });
 });

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
 import { useConfirm } from "@/components/Confirm";
 import Tooltip from "@/components/Tooltip";
+import WorkRefChips from "@/components/WorkRefChips";
+import { parseSessionTitle } from "@/lib/workItemRules";
 import { isStale, STALE_DAYS } from "@/lib/sessionRules";
 import TranscriptPanel from "@/components/TranscriptPanel";
 
@@ -480,6 +482,9 @@ export default function SessionsPage() {
                     {opened[s.id] && <span className="text-sky-600">{opened[s.id]}</span>}
                   </div>
                 </button>
+
+                {/* 標題解析出來的關聯。放在按鈕外面 —— 連結不能巢狀在按鈕裡 */}
+                <WorkRefChips refs={parseSessionTitle(s.title)} />
 
                 <div className="shrink-0 text-right">
                   <div className="text-sm text-gray-700">{mb(s.sizeBytes + s.sidecarBytes)}</div>

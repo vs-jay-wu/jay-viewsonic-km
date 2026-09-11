@@ -43,6 +43,11 @@ export const SOURCE_LABELS: Record<string, { label: string; href: string; hint: 
     href: "/pr-inbox",
     hint: "同樣走 gh；巡邏連續失敗多半是 gh auth 掉了",
   },
+  "my-tickets": {
+    label: "Jira（指派給我的單）",
+    href: "/tickets",
+    hint: "跟 VB Bug 總覽走同一組憑證，多半是 ATLASSIAN_API_TOKEN 過期",
+  },
   "repo-sync": {
     label: "Repo 同步",
     href: "/repo-sync",

@@ -1,0 +1,67 @@
+"use client";
+
+import Icon from "@/components/Icon";
+import Tooltip from "@/components/Tooltip";
+import { canonicalRepo, ticketUrl, type WorkRef } from "@/lib/workItemRules";
+
+/**
+ * 把 session 標題解析出來的關聯（ticket／PR）顯示成可點的小標籤。
+ *
+ * **猜出來的 key 要看得出是猜的**（後面加問號、tooltip 講明白）——
+ * 裸數字補 project 有猜錯的實績（`9904` 其實是 VSFT 不是 VB），
+ * 不標的話點下去會開到不存在或不相干的單。
+ */
+export default function WorkRefChips({
+  refs,
+  org = "Viewsonic-EDU",
+}: {
+  refs: WorkRef;
+  org?: string;
+}) {
+  if (!refs.ticketKey && refs.prNumber === null) return null;
+  const repo = canonicalRepo(refs.repo);
+
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      {refs.ticketKey && (
+        <Tooltip
+          side="left"
+          label={
+            refs.ticketGuessed
+              ? `標題只寫了數字，推定是 ${refs.ticketKey}（可能猜錯）`
+              : `到 Jira 看 ${refs.ticketKey}`
+          }
+        >
+          <a
+            href={ticketUrl(refs.ticketKey)}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className={`rounded-full border px-1.5 py-0.5 font-mono text-[11px] leading-none ${
+              refs.ticketGuessed
+                ? "border-gray-200 bg-gray-50 text-gray-500"
+                : "border-sky-200 bg-sky-50 text-sky-700"
+            }`}
+          >
+            {refs.ticketKey}
+            {refs.ticketGuessed && "?"}
+          </a>
+        </Tooltip>
+      )}
+      {refs.prNumber !== null && repo && (
+        <Tooltip side="left" label={`到 GitHub 看 ${repo}#${refs.prNumber}`}>
+          <a
+            href={`https://github.com/${org}/${repo}/pull/${refs.prNumber}`}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[11px] leading-none text-gray-600"
+          >
+            <Icon name="gitPr" size={10} />
+            {refs.prNumber}
+          </a>
+        </Tooltip>
+      )}
+    </span>
+  );
+}

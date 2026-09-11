@@ -15,6 +15,12 @@ const TOOLS: { href: string; icon: IconName; title: string; desc: string }[] = [
     desc: "看目前記憶體／swap，並執行 memclean 清掉殭屍開發行程",
   },
   {
+    href: "/tickets",
+    icon: "clipboard",
+    title: "指派給我的單",
+    desc: "VB 上指派給我、還沒完成的單；點一下就能開對應的 Claude session",
+  },
+  {
     href: "/my-prs",
     icon: "gitPr",
     title: "我的 PR",

@@ -1,0 +1,296 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Icon from "@/components/Icon";
+import Tooltip from "@/components/Tooltip";
+import { usePrompt } from "@/components/Prompt";
+import {
+  TICKET_GROUPS, groupKeyOf, matchesTicketQuery, sortTickets,
+  type MyTicket, type MyTicketsSnapshot,
+} from "@/lib/myTicketsRules";
+import { canonicalRepo, defaultSessionTitleForTicket } from "@/lib/workItemRules";
+import type { WorkIndex, WorkItem } from "@/lib/workIndexRules";
+
+interface Config { enabled: boolean; intervalSeconds: number; updatedAt: string }
+interface Scheduler {
+  timerOn: boolean; fetching: boolean; intervalSeconds: number;
+  lastRunAt: string | null; nextRunAt: string | null; lastError: string | null;
+}
+
+const GROUP_CLS: Record<string, string> = {
+  in_progress: "border-sky-200 bg-sky-50 text-sky-700",
+  verifying: "border-violet-200 bg-violet-50 text-violet-700",
+  todo: "border-gray-200 bg-gray-50 text-gray-600",
+  on_hold: "border-amber-200 bg-amber-50 text-amber-700",
+};
+
+function fmtTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("zh-TW", {
+    month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function relTime(iso: string | null): string {
+  if (!iso) return "—";
+  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (min < 60) return `${Math.max(min, 1)} 分前`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} 小時前`;
+  return `${Math.floor(h / 24)} 天前`;
+}
+
+export default function TicketsPage() {
+  const [snapshot, setSnapshot] = useState<MyTicketsSnapshot | null>(null);
+  const [config, setConfig] = useState<Config | null>(null);
+  const [scheduler, setScheduler] = useState<Scheduler | null>(null);
+  const [workIndex, setWorkIndex] = useState<WorkIndex | null>(null);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const ask = usePrompt();
+
+  const load = useCallback(async () => {
+    const res = await fetch("/api/my-tickets", { cache: "no-store" });
+    const json = await res.json();
+    setSnapshot(json.snapshot);
+    setConfig(json.config);
+    setScheduler(json.scheduler);
+    setLoading(false);
+  }, []);
+
+  const loadIndex = useCallback(async (force = false) => {
+    const res = await fetch(`/api/work-index${force ? "?force=1" : ""}`);
+    setWorkIndex((await res.json()) as WorkIndex);
+  }, []);
+
+  useEffect(() => { void load(); void loadIndex(); }, [load, loadIndex]);
+  useEffect(() => {
+    const t = setInterval(() => void load(), 30_000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const itemOf = useCallback(
+    (key: string): WorkItem | undefined => workIndex?.items.find((i) => i.key === key),
+    [workIndex]
+  );
+
+  const refresh = async (full: boolean) => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/my-tickets/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ full }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) setError(json.error ?? "抓取失敗");
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** 開這張單的 session：有就 resume 最近的，沒有就問過名稱再開新的 */
+  const openSessionFor = async (t: MyTicket) => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const item = itemOf(t.key);
+      const existing = item?.sessions[0];
+      if (existing) {
+        const res = await fetch(`/api/sessions/${existing.id}/open`, { method: "POST" });
+        const out = await res.json();
+        setNotice(
+          out.status === "opened" || out.status === "reused"
+            ? `已在 Orca 開啟：${existing.title}`
+            : out.status === "external"
+              ? `已經有人在別的地方 resume 這個 session（pid ${out.pid}）`
+              : out.error ?? `Orca 回報：${out.status}`
+        );
+        return;
+      }
+
+      const title = await ask({
+        title: "新 session 的名稱",
+        message: "照 [repo/sub-repo] 單號 描述 的慣例；沒寫 sub-repo 的話之後只會連到這張單。",
+        defaultValue: defaultSessionTitleForTicket({
+          key: t.key,
+          summary: t.summary,
+          repo: item?.prs[0] ? canonicalRepo(item.prs[0].repo) : null,
+        }),
+        confirmLabel: "建立並開啟",
+      });
+      if (title === null) return;
+
+      const res = await fetch("/api/work/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, open: true }),
+      });
+      const out = await res.json();
+      if (!res.ok) {
+        setError(out.error ?? "建立 session 失敗");
+        return;
+      }
+      setNotice(`已建立並開啟 session：${title}`);
+      void loadIndex(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const tickets = useMemo(() => {
+    const all = sortTickets(snapshot?.issues ?? []);
+    return all.filter((t) => matchesTicketQuery(t, query));
+  }, [snapshot, query]);
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <div className="max-w-4xl mx-auto px-8 py-10">
+        <h1 className="flex items-center gap-2.5 text-2xl font-semibold text-gray-900">
+          <Icon name="clipboard" size={22} className="text-gray-400" />
+          指派給我的單
+        </h1>
+        <p className="mt-1.5 text-sm text-gray-500">
+          VB 上指派給我、還沒完成的單。點單號到 Jira，點右邊的按鈕直接在 Orca
+          開（或接續）對應的 Claude session。
+        </p>
+
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[16rem]">
+            <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="搜尋單號、標題、狀態…"
+              className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-gray-500"
+            />
+          </div>
+          <Tooltip label="只抓上次之後有更新的（便宜）">
+            <button
+              onClick={() => refresh(false)}
+              disabled={busy}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              立即更新
+            </button>
+          </Tooltip>
+          <Tooltip label="整份重抓。平常不必按 —— 夜裡會自己做一次">
+            <button
+              onClick={() => refresh(true)}
+              disabled={busy}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+            >
+              全同步
+            </button>
+          </Tooltip>
+        </div>
+
+        <div className="mt-2 min-h-[2.5rem] text-xs">
+          <div className="text-gray-400">
+            {snapshot
+              ? `${tickets.length} / ${snapshot.issueCount} 筆 · ${snapshot.fetchedAs} · 最後抓取 ${fmtTime(snapshot.fetchedAt)}（${snapshot.mode === "full" ? "全同步" : "增量"}）`
+              : loading ? "載入中…" : "還沒有資料"}
+            {scheduler?.nextRunAt && ` · 下次 ${fmtTime(scheduler.nextRunAt)}`}
+            {config && !config.enabled && " · 定時抓取已停用"}
+          </div>
+          {notice && <div className="mt-1 text-sky-700">{notice}</div>}
+          {(error || snapshot?.lastError) && (
+            <div className="mt-1 text-red-600">{error ?? snapshot?.lastError}</div>
+          )}
+        </div>
+
+        <ul className="mt-4 divide-y divide-gray-100 rounded-xl border border-gray-200">
+          {tickets.length === 0 && (
+            <li className="px-4 py-8 text-center text-sm text-gray-400">
+              {snapshot ? "沒有符合的單" : "—"}
+            </li>
+          )}
+          {tickets.map((t) => {
+            const item = itemOf(t.key);
+            const groupKey = groupKeyOf(t.status);
+            const group = TICKET_GROUPS.find((g) => g.key === groupKey);
+            const sessionCount = item?.sessions.length ?? 0;
+            return (
+              <li key={t.key} className="flex items-start gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <a
+                      href={t.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-mono text-xs text-sky-700 hover:underline"
+                    >
+                      {t.key}
+                    </a>
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[11px] leading-none ${
+                        GROUP_CLS[groupKey ?? ""] ?? "border-gray-200 bg-white text-gray-500"
+                      }`}
+                      title={group ? `${group.label}／${t.status}` : t.status}
+                    >
+                      {t.status}
+                    </span>
+                    <span className="text-[11px] text-gray-400">{t.issueType}</span>
+                    <span className="text-[11px] text-gray-400">{t.priority}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-gray-800">{t.summary}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-gray-400">
+                    <span>更新 {relTime(t.updated)}</span>
+                    {item?.prs.map((pr) => (
+                      <a
+                        key={pr.url}
+                        href={pr.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 rounded-full border border-gray-200 px-1.5 py-0.5 text-gray-600 hover:bg-gray-50"
+                      >
+                        <Icon name="gitPr" size={10} />
+                        {pr.repo.split("/").pop()}#{pr.number}
+                        {pr.state !== "OPEN" && (
+                          <span className="text-gray-400">{pr.state.toLowerCase()}</span>
+                        )}
+                      </a>
+                    ))}
+                    {sessionCount > 0 && (
+                      <span className="rounded-full border border-gray-200 px-1.5 py-0.5 text-gray-600">
+                        {sessionCount} 個 session
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <Tooltip
+                  side="left"
+                  label={
+                    sessionCount > 0
+                      ? `在 Orca 開這張單的 session（已有 ${sessionCount} 個，開最近的那個）`
+                      : "在 Orca 開一個新的 session 來做這張單（名稱可改）"
+                  }
+                >
+                  <button
+                    onClick={() => openSessionFor(t)}
+                    disabled={busy}
+                    className={`mt-0.5 shrink-0 disabled:opacity-40 ${
+                      sessionCount > 0
+                        ? "text-sky-500 hover:text-sky-700"
+                        : "text-gray-300 hover:text-sky-600"
+                    }`}
+                  >
+                    <Icon name={sessionCount > 0 ? "external" : "play"} size={16} />
+                  </button>
+                </Tooltip>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}

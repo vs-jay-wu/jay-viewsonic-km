@@ -204,3 +204,62 @@ export function canonicalRepo(
   if (!bare) return null;
   return aliases[bare] ?? BUILTIN_REPO_ALIASES[bare] ?? bare;
 }
+
+/** repo 名 → Jay 慣用的口語別名（只有確定的那幾條，其餘原樣用 repo 名） */
+export const REPO_TO_ALIAS: Record<string, string> = Object.fromEntries(
+  Object.entries(BUILTIN_REPO_ALIASES).map(([alias, repo]) => [repo, alias])
+);
+
+/**
+ * 開新 session 時的預設標題：`[km/<別名>] <單號> <描述>`。
+ *
+ * 描述取 PR 標題，但**去掉開頭的票號 bracket**（mvbf 的格式是
+ * `[User Story VSFT-9941] 埋點`，留著會讓標題出現兩次單號）。
+ */
+export function defaultSessionTitleForPr(pr: {
+  repo: string;
+  number: number;
+  title: string;
+  headRefName?: string;
+}): string {
+  const repo = canonicalRepo(pr.repo) ?? pr.repo;
+  const alias = REPO_TO_ALIAS[repo] ?? repo;
+  const ticketKey = parsePrTicketKey(pr);
+  const desc = pr.title
+    .replace(/^\s*(\[[^\]]*\]\s*)+/, "")   // 開頭連續的 bracket 全部去掉
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+  return formatSessionTitle({
+    scope: `km/${alias}`,
+    ticketKey: ticketKey ?? `PR#${pr.number}`,
+    desc,
+  });
+}
+
+/**
+ * 開新 session 做某張單時的預設標題。
+ *
+ * 不知道要在哪個 repo 做的時候就只寫 `[km]` —— **不要猜**。Jira 的 summary
+ * 裡雖然常有 `[MVBFv3]` 這種前綴，但那是產品標記不是 repo，猜錯會讓標題
+ * 從此連到錯的地方（關聯是靠標題建立的）。
+ */
+export function defaultSessionTitleForTicket(input: {
+  key: string;
+  summary: string;
+  /** 已知的 repo（例如這張單已經有 PR 了），沒有就留空 */
+  repo?: string | null;
+}): string {
+  const repo = canonicalRepo(input.repo);
+  const alias = repo ? (REPO_TO_ALIAS[repo] ?? repo) : null;
+  const desc = input.summary
+    .replace(/^\s*(\[[^\]]*\]\s*)+/, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+  return formatSessionTitle({
+    scope: alias ? `km/${alias}` : "km",
+    ticketKey: input.key,
+    desc,
+  });
+}

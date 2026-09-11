@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Icon, { type IconName } from "@/components/Icon";
+import Tooltip from "@/components/Tooltip";
+import { usePrompt } from "@/components/Prompt";
 import { groupEventsByPr, type MyPrEventLike } from "@/lib/myPrEventRules";
+import {
+  canonicalRepo, defaultSessionTitleForPr, parsePrTicketKey, ticketUrl, workKeyOf,
+} from "@/lib/workItemRules";
+import type { WorkIndex, WorkItem } from "@/lib/workIndexRules";
 
 interface PrReview {
   id: string; author: string; state: string; submittedAt: string; url: string;
@@ -101,7 +107,20 @@ function ChecksBadge({ state }: { state: string | null }) {
   return <span className={`text-xs ${m.cls}`}>{m.text}</span>;
 }
 
-function PrRow({ pr }: { pr: MyPr }) {
+function PrRow({
+  pr,
+  item,
+  onOpenSession,
+  busy,
+}: {
+  pr: MyPr;
+  /** 這張 PR 對應的工作項目（有沒有 session 掛在同一張單底下） */
+  item?: WorkItem;
+  onOpenSession?: (pr: MyPr, item?: WorkItem) => void;
+  busy?: boolean;
+}) {
+  const ticketKey = parsePrTicketKey(pr);
+  const sessionCount = item?.sessions.length ?? 0;
   return (
     <li className="px-4 py-3">
       <div className="flex items-start gap-3">
@@ -138,12 +157,44 @@ function PrRow({ pr }: { pr: MyPr }) {
             <span className="text-xs text-gray-400">
               +{pr.additions} −{pr.deletions} · {pr.changedFiles} 檔
             </span>
+            {ticketKey && (
+              <a
+                href={ticketUrl(ticketKey)}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 font-mono text-[11px] leading-none text-sky-700 hover:bg-sky-100"
+              >
+                {ticketKey}
+              </a>
+            )}
           </div>
         </div>
         <div className="shrink-0 text-right text-xs text-gray-400">
           <div>更新 {relTime(pr.updatedAt)}</div>
           {pr.theirLastActivity && <div>有人回 {relTime(pr.theirLastActivity)}</div>}
         </div>
+        {onOpenSession && (
+          <Tooltip
+            side="left"
+            label={
+              sessionCount > 0
+                ? `在 Orca 開這張單的 session（已有 ${sessionCount} 個，開最近的那個）`
+                : "在 Orca 開一個新的 session 來做這張 PR（名稱可改）"
+            }
+          >
+            <button
+              onClick={() => onOpenSession(pr, item)}
+              disabled={busy}
+              className={`mt-0.5 shrink-0 disabled:opacity-40 ${
+                sessionCount > 0
+                  ? "text-sky-500 hover:text-sky-700"
+                  : "text-gray-300 hover:text-sky-600"
+              }`}
+            >
+              <Icon name={sessionCount > 0 ? "external" : "play"} size={15} />
+            </button>
+          </Tooltip>
+        )}
       </div>
     </li>
   );
@@ -159,6 +210,9 @@ export default function MyPrsPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [intervalMin, setIntervalMin] = useState(10);
+  /** session ↔ PR ↔ ticket 的關聯索引（見 lib/workIndex.ts） */
+  const [workIndex, setWorkIndex] = useState<WorkIndex | null>(null);
+  const ask = usePrompt();
 
   const load = useCallback(async () => {
     const res = await fetch("/api/my-prs");
@@ -177,6 +231,78 @@ export default function MyPrsPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    fetch("/api/work-index")
+      .then((r) => r.json())
+      .then((j: WorkIndex) => setWorkIndex(j))
+      .catch(() => undefined);
+  }, []);
+
+  /** 這張 PR 掛在哪個工作項目底下 */
+  const itemOf = useCallback(
+    (pr: MyPr): WorkItem | undefined => {
+      if (!workIndex) return undefined;
+      const key = workKeyOf({
+        ticketKey: parsePrTicketKey(pr),
+        repo: canonicalRepo(pr.repo),
+        prNumber: pr.number,
+      });
+      return key ? workIndex.items.find((i) => i.key === key) : undefined;
+    },
+    [workIndex]
+  );
+
+  /**
+   * 開這張 PR 的 session：已經有就 resume 最近的那個，沒有就問過名稱再開新的。
+   * 預設名稱照 `[km/<別名>] <單號> <描述>` 的慣例產生，讓它下次也連得回來。
+   */
+  const openSessionFor = useCallback(
+    async (pr: MyPr, item?: WorkItem) => {
+      setBusy(true);
+      setError(null);
+      setNotice(null);
+      try {
+        const existing = item?.sessions[0];
+        if (existing) {
+          const res = await fetch(`/api/sessions/${existing.id}/open`, { method: "POST" });
+          const out = await res.json();
+          setNotice(
+            out.status === "opened" || out.status === "reused"
+              ? `已在 Orca 開啟：${existing.title}`
+              : out.status === "external"
+                ? `已經有人在別的地方 resume 這個 session（pid ${out.pid}）`
+                : out.error ?? `Orca 回報：${out.status}`
+          );
+          return;
+        }
+
+        const title = await ask({
+          title: "新 session 的名稱",
+          message: "照 [repo/sub-repo] 單號 描述 的慣例，之後才連得回這張 PR 與單。",
+          defaultValue: defaultSessionTitleForPr(pr),
+          confirmLabel: "建立並開啟",
+        });
+        if (title === null) return;
+
+        const res = await fetch("/api/work/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, open: true }),
+        });
+        const out = await res.json();
+        if (!res.ok) {
+          setError(out.error ?? "建立 session 失敗");
+          return;
+        }
+        setNotice(`已建立並開啟 session：${title}`);
+        fetch("/api/work-index?force=1").then((r) => r.json()).then(setWorkIndex).catch(() => undefined);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [ask]
+  );
 
   // 頁面開著的話跟著 server 的節奏刷新（只讀快照，不會打 GitHub）
   useEffect(() => {
@@ -447,7 +573,13 @@ export default function MyPrsPage() {
           ) : (
             <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200">
               {open.map((pr) => (
-                <PrRow key={pr.url} pr={pr} />
+                <PrRow
+                  key={pr.url}
+                  pr={pr}
+                  item={itemOf(pr)}
+                  onOpenSession={openSessionFor}
+                  busy={busy}
+                />
               ))}
             </ul>
           )}
