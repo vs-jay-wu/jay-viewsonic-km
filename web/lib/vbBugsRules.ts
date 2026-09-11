@@ -66,6 +66,11 @@ const statusToGroup = new Map<string, string>(
 );
 const priorityKeys = new Set(PRIORITIES.map((p) => p.key));
 
+/** 這個狀態屬於哪一組（UI 要靠它決定顏色）。不在分組表裡就回 null。 */
+export function groupOfStatus(status: string): string | null {
+  return statusToGroup.get(status) ?? null;
+}
+
 export function cellKey(groupKey: string, priorityKey: string): string {
   return `${groupKey}|${priorityKey}`;
 }

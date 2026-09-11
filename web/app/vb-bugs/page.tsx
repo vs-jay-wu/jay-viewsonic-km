@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
-import { HIDDEN_BY_DEFAULT, sortProducts } from "@/lib/vbBugsRules";
+import { groupOfStatus, HIDDEN_BY_DEFAULT, sortProducts } from "@/lib/vbBugsRules";
 
 interface BugIssue {
   key: string; summary: string; status: string;
@@ -25,6 +25,56 @@ interface Config {
 interface Scheduler {
   timerOn: boolean; fetching: boolean; intervalSeconds: number;
   lastRunAt: string | null; nextRunAt: string | null; lastError: string | null;
+}
+
+/**
+ * 狀態的顏色。
+ *
+ * **色相跟著分組走**（待處理灰、進行中藍、待驗證紫、完成綠），讓它跟表格的
+ * 列對得起來；**同一組內用深淺區分**，愈接近完成愈深。
+ *
+ * 按分組上色是不夠的 —— 展開的是「同一格」，那一格裡的票**本來就同組**，
+ * 全部同色等於沒區分（第一版就是這樣，Jay 一眼看出來）。
+ *
+ * 兩個例外刻意換色系：`QA REJECT` 與 `Blocked` 是該組裡的**負向**狀態，
+ * 跟旁邊的「正在推進」不是同一回事。
+ */
+const STATUS_CHIP: Record<string, string> = {
+  // 待處理 —— 灰，愈接近可以動工愈深
+  "DISCOVERY/REFINEMENT": "border-slate-200 bg-slate-50 text-slate-500",
+  "BACKLOG": "border-slate-200 bg-slate-100 text-slate-600",
+  "待辦事項": "border-slate-300 bg-slate-100 text-slate-700",
+  "READY FOR DEV": "border-slate-400 bg-slate-200 text-slate-800",
+  // 進行中 —— 藍
+  "進行中": "border-sky-200 bg-sky-50 text-sky-700",
+  "IN CODE REVIEW": "border-sky-300 bg-sky-100 text-sky-800",
+  "PR MERGED": "border-sky-400 bg-sky-200 text-sky-900",
+  // 待驗證 —— 紫；被打回票的另外標紅
+  "STAGE READY(READY FOR QA)": "border-violet-200 bg-violet-50 text-violet-700",
+  "TRACKING BY QA": "border-violet-300 bg-violet-100 text-violet-800",
+  "VERIFYING": "border-violet-300 bg-violet-100 text-violet-800",
+  "QA REJECT": "border-rose-300 bg-rose-50 text-rose-700",
+  // 完成 —— 綠
+  "QA ACCEPTED": "border-emerald-200 bg-emerald-50 text-emerald-700",
+  "PRODUCTION READY": "border-emerald-300 bg-emerald-100 text-emerald-800",
+  // 擱置 —— 琥珀；Blocked 比 Pending 嚴重，標紅
+  "Pending": "border-amber-200 bg-amber-50 text-amber-800",
+  "Blocked": "border-red-300 bg-red-50 text-red-700",
+};
+
+/** 分組的底色，給分組表沒列到的新狀態當退路 */
+const GROUP_FALLBACK: Record<string, string> = {
+  todo: "border-slate-200 bg-slate-100 text-slate-600",
+  in_progress: "border-sky-200 bg-sky-50 text-sky-700",
+  verifying: "border-violet-200 bg-violet-50 text-violet-700",
+  production_ready: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  on_hold: "border-amber-200 bg-amber-50 text-amber-800",
+};
+
+function chipClass(status: string): string {
+  if (STATUS_CHIP[status]) return STATUS_CHIP[status];
+  const g = groupOfStatus(status);
+  return (g && GROUP_FALLBACK[g]) || "border-gray-200 bg-gray-50 text-gray-500";
 }
 
 function fmtTime(iso: string | null): string {
@@ -323,7 +373,11 @@ export default function VbBugsPage() {
                           <span className="min-w-0 flex-1 truncate text-sm text-gray-800">
                             {i.summary}
                           </span>
-                          <span className="shrink-0 text-xs text-gray-400">{i.status}</span>
+                          <span
+                            className={`shrink-0 rounded-full border px-2 py-0.5 text-xs ${chipClass(i.status)}`}
+                          >
+                            {i.status}
+                          </span>
                         </li>
                       ))}
                     </ul>
