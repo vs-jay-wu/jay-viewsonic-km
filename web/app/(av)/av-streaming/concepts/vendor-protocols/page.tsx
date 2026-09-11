@@ -1,6 +1,6 @@
-import { ConceptPage, Section } from '@/components/ConceptPage'
-import { Callout } from '@/components/Prose'
-import { CompareGrid, Steps } from '@/components/diagrams'
+import { ConceptPage, Section } from '@av/components/ConceptPage'
+import { Callout } from '@av/components/Prose'
+import { CompareGrid, Steps } from '@av/components/diagrams'
 
 export default function Page() {
   return (
@@ -74,7 +74,7 @@ export default function Page() {
                 <>
                   這是真正的門檻。Apple 用一套挑戰／回應機制確認對面是「授權的」接收端。
                   沒過這關後面什麼都拿不到。細節見{' '}
-                  <a href="/concepts/drm-auth">裝置認證與 DRM</a>。
+                  <a href="/av-streaming/concepts/drm-auth">裝置認證與 DRM</a>。
                 </>
               ),
             },

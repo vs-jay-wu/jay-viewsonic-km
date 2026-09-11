@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
+import { statusLabel } from "@/lib/jiraStatus";
 import {
   DEFAULT_VIEW, PRIORITY_ORDER, TICKET_GROUPS, TICKET_SORTS, applyView, groupByProduct,
   groupKeyOf, issueTypeStyle,
+  type AssigneeFilter,
   type MyTicketsSnapshot, type TicketSort,
 } from "@/lib/myTicketsRules";
 import { useTicketSession } from "@/lib/useTicketSession";
@@ -113,11 +115,12 @@ export default function TicketsPage() {
       <div className="max-w-4xl mx-auto px-8 py-10">
         <h1 className="flex items-center gap-2.5 text-2xl font-semibold text-gray-900">
           <Icon name="clipboard" size={22} className="text-gray-400" />
-          指派給我的單
+          單追蹤
         </h1>
         <p className="mt-1.5 text-sm text-gray-500">
-          VB 上指派給我、還沒完成的單。點單號到 Jira，點右邊的按鈕直接在 Orca
-          開（或接續）對應的 Claude session。
+          VB 上<b className="font-medium text-gray-700">指派給我、或我開的</b>、還沒完成的單
+          （預設只看指派給我的）。
+          點單號到 Jira，點右邊的按鈕直接在 Orca 開（或接續）對應的 Claude session。
         </p>
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -169,6 +172,32 @@ export default function TicketsPage() {
             ))}
           </div>
 
+          <span className="ml-2 text-gray-400">指派</span>
+          <div className="flex flex-wrap gap-1">
+            {([
+              ["mine", "我的"],
+              ["others", "別人的"],
+              ["all", "全部"],
+            ] as [AssigneeFilter, string][]).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setView((v) => ({ ...v, assignee: key }))}
+                className={`rounded-full border px-2 py-0.5 ${
+                  view.assignee === key
+                    ? "border-gray-900 bg-gray-900 text-white"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {label}{" "}
+                <span className={view.assignee === key ? "text-gray-300" : "text-gray-400"}>
+                  {applyView(snapshot?.issues ?? [], {
+                    ...DEFAULT_VIEW, query: view.query, assignee: key,
+                  }).length}
+                </span>
+              </button>
+            ))}
+          </div>
+
           <span className="ml-2 text-gray-400">狀態</span>
           <div className="flex flex-wrap gap-1">
             {TICKET_GROUPS.map((g) => {
@@ -208,9 +237,11 @@ export default function TicketsPage() {
             })}
           </div>
 
-          {(view.groups.length > 0 || view.priorities.length > 0) && (
+          {(view.groups.length > 0 || view.priorities.length > 0 || view.assignee !== "mine") && (
             <button
-              onClick={() => setView((v) => ({ ...v, groups: [], priorities: [] }))}
+              onClick={() =>
+                setView((v) => ({ ...v, groups: [], priorities: [], assignee: "mine" }))
+              }
               className="text-gray-400 hover:text-gray-700"
             >
               清掉篩選
@@ -273,7 +304,7 @@ export default function TicketsPage() {
                       }`}
                       title={group ? `${group.label}／${t.status}` : t.status}
                     >
-                      {t.status}
+                      {statusLabel(t.status)}
                     </span>
                     <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
                       <Icon
@@ -284,6 +315,17 @@ export default function TicketsPage() {
                       {t.issueType}
                     </span>
                     <span className="text-[11px] text-gray-400">{t.priority}</span>
+                    {/* 指派給誰。別人的單用不同的底色，掃過去就看得出球不在我這裡 */}
+                    <span
+                      className={`rounded-full border px-1.5 py-0.5 text-[11px] leading-none ${
+                        t.assignedToMe
+                          ? "border-gray-200 bg-gray-50 text-gray-500"
+                          : "border-violet-200 bg-violet-50 text-violet-700"
+                      }`}
+                      title={`回報者：${t.reporter?.name || "—"}`}
+                    >
+                      {t.assignee?.name || "未指派"}
+                    </span>
                   </div>
                   <p className="mt-1 text-sm text-gray-800">{t.summary}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-gray-400">

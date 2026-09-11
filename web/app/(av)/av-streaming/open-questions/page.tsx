@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { PageHeader, Prose } from '@/components/Prose'
-import { IconCheck, IconCorrection } from '@/components/icons'
+import { PageHeader, Prose } from '@av/components/Prose'
+import { IconCheck, IconCorrection } from '@av/components/icons'
 
 type Question = {
   q: string
@@ -27,7 +27,7 @@ const RESOLVED: Resolved[] = [
         且有 <code>rtmp/</code> package。走 RTMP（<code>net.ossrs.rtmp.SrsFlvMuxer</code>），
         目標是 <strong>YouTube / Facebook / Workplace / Twitch</strong> —— 外部社群平台，
         不是內部投影。同一份編碼同時寫 MP4 與推 RTMP。
-        詳見 <Link href="/systems/recorder">Recorder / Live</Link>。
+        詳見 <Link href="/av-streaming/systems/recorder">Recorder / Live</Link>。
       </>
     ),
   },
@@ -45,7 +45,7 @@ const RESOLVED: Resolved[] = [
         <code>v0.9.36-windows</code>，分支 <code>Rick/…</code> / <code>eugene/…</code> /{' '}
         <code>stephen/…</code> 帶內部 user story 編號，commit 到 2026-04。
         改動集中在 <strong>Windows Media Foundation 硬體編碼器的速率控制</strong>。
-        詳見 <Link href="/concepts/webrtc">WebRTC</Link>「為什麼要維護 libwebrtc fork」。
+        詳見 <Link href="/av-streaming/concepts/webrtc">WebRTC</Link>「為什麼要維護 libwebrtc fork」。
       </>
     ),
   },
@@ -58,7 +58,7 @@ const RESOLVED: Resolved[] = [
         <code>socket.broadcast.emit()</code> 廣播給所有連線者，cast-control 改成{' '}
         <code>socket.join(room)</code> + <code>io.sockets.to(room).emit()</code>。
         另外加了 <code>socket.role</code> 與 Azure Application Insights 遙測。
-        詳見 <Link href="/systems/mvb-cast">MVB Cast</Link>「兩台信令伺服器的實際分工」。
+        詳見 <Link href="/av-streaming/systems/mvb-cast">MVB Cast</Link>「兩台信令伺服器的實際分工」。
       </>
     ),
   },
@@ -71,7 +71,7 @@ const RESOLVED: Resolved[] = [
         <code>AudioPlaybackCapture</code>），音訊是 96 kbps 單聲道而非 128 kbps。
         另外它不只寫檔，同時推 RTMP。確切參數（GOP 1 秒、bitrate 階梯、
         <code>KEY_REPEAT_PREVIOUS_FRAME_AFTER</code>）見{' '}
-        <Link href="/systems/recorder">Recorder / Live</Link>。
+        <Link href="/av-streaming/systems/recorder">Recorder / Live</Link>。
       </>
     ),
   },
@@ -84,7 +84,7 @@ const RESOLVED: Resolved[] = [
         <code>Scalable-Broadcast.js</code> 的 <code>maxRelayLimitPerUser</code> 預設 2，
         每個 peer 最多再轉給兩個人。客戶端有對應的{' '}
         <code>cast-out-module-scalable.js</code>。這是 mesh 與 SFU 之外的第四種架構，
-        見 <Link href="/concepts/webrtc">WebRTC</Link>「一對多的三種架構」。
+        見 <Link href="/av-streaming/concepts/webrtc">WebRTC</Link>「一對多的三種架構」。
       </>
     ),
   },

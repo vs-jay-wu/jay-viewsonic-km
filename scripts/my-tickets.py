@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""抓「指派給我、還沒完成」的 VB 單，增量更新。
+"""抓「我需要注意」的 VB 單（指派給我，或我開的），增量更新。
+
+範圍刻意比「指派給我」寬一點：**我開的單被別人接走之後，我還是要看得到**
+（Jay 2026-09-11）。所以查 `assignee = currentUser() OR reporter = currentUser()`，
+畫面上再用篩選預設只看指派給我的。
 
 跟 `vb-bugs.py` 同一套規則（增量游標、夜間全同步窗口、過了不補），
 **認證與時間處理直接重用那支腳本的函式**，不另外複製一份 —— 複製就會漂移。
@@ -32,11 +36,22 @@ def _load_vb_bugs():
 vb = _load_vb_bugs()
 
 PROJECT = "VB"
-FIELDS = f"summary,status,priority,updated,issuetype,assignee,{vb.PRODUCT_FIELD}"
+FIELDS = f"summary,status,priority,updated,issuetype,assignee,reporter,{vb.PRODUCT_FIELD}"
 
 
-def to_row(issue: dict) -> dict:
+def person(value) -> dict:
+    """指派人／回報人。accountId 用來判斷「是不是我」，比對名字會踩到同名。"""
+    if not value:
+        return {"name": "", "accountId": ""}
+    return {
+        "name": value.get("displayName") or value.get("emailAddress") or "",
+        "accountId": value.get("accountId") or "",
+    }
+
+
+def to_row(issue: dict, my_account_id: str) -> dict:
     f = issue["fields"]
+    assignee = person(f.get("assignee"))
     return {
         "key": issue["key"],
         "summary": f.get("summary") or "",
@@ -46,6 +61,10 @@ def to_row(issue: dict) -> dict:
         "issueType": (f.get("issuetype") or {}).get("name") or "",
         # VB 的「Project」欄位（多選，取第一個）—— 頁面照它分群
         "product": vb.product_of(f),
+        "assignee": assignee,
+        "reporter": person(f.get("reporter")),
+        # 是不是指派給我的。**用 accountId 比**，不是名字
+        "assignedToMe": bool(assignee["accountId"]) and assignee["accountId"] == my_account_id,
         "updated": f.get("updated"),
         "url": f"{vb.SITE}/browse/{issue['key']}",
     }
@@ -101,35 +120,38 @@ def main() -> None:
     due_full = vb.should_full_sync(datetime.now(timezone.utc), last_full or "")
     incremental = not (force_full or bootstrapping or due_full)
 
-    mine_open = (f"project = {PROJECT} AND assignee = currentUser() "
-                 f"AND statusCategory != Done")
+    my_id = me.get("accountId") or ""
+    # 指派給我**或我開的**，還沒完成的
+    relevant = (f"project = {PROJECT} AND statusCategory != Done "
+                f"AND (assignee = currentUser() OR reporter = currentUser())")
     removed = []
 
     if incremental:
         since = vb.parse_time(cursor) - timedelta(minutes=vb.OVERLAP_MINUTES)
-        jql = (f"{mine_open} AND updated >= \"{vb.jql_time(since, 8)}\" "
+        jql = (f"{relevant} AND updated >= \"{vb.jql_time(since, 8)}\" "
                f"ORDER BY updated ASC")
-        fetched = [to_row(i) for i in search(jql, auth)]
+        fetched = [to_row(i, my_id) for i in search(jql, auth)]
         rows = dict(prev_rows)
         for r in fetched:
             rows[r["key"]] = r
 
-        # 增量查詢帶著 assignee／statusCategory 條件，所以「被轉走」或「做完」的票
-        # **不會**出現在結果裡 —— 會一直留在表上。所以反過來問一次手上這批還在不在。
-        # 這一問的成本跟「我手上的票數」成正比（幾十筆），很便宜。
+        # 增量查詢帶著 assignee／reporter／statusCategory 條件，所以「跟我脫鉤」或
+        # 「做完」的票**不會**出現在結果裡 —— 會一直留在表上。所以反過來問一次
+        # 「手上這批裡哪些還算相關」，沒回來的就移除。
+        #
+        # 刻意問「還相關的」而不是「已經不相關的」：後者要寫否定條件
+        # （`assignee != currentUser()` 在 JQL 裡不包含空值），很容易漏。
         if rows:
             keys = ", ".join(sorted(rows))
-            gone_jql = (f"project = {PROJECT} AND key in ({keys}) "
-                        f"AND (assignee != currentUser() OR assignee is EMPTY "
-                        f"OR statusCategory = Done)")
-            for issue in search(gone_jql, auth):
-                if issue["key"] in rows:
-                    del rows[issue["key"]]
-                    removed.append(issue["key"])
+            still_jql = f"{relevant} AND key in ({keys})"
+            still = {i["key"] for i in search(still_jql, auth)}
+            for key in [k for k in rows if k not in still]:
+                del rows[key]
+                removed.append(key)
         last_full_out = last_full
     else:
-        jql = f"{mine_open} ORDER BY updated ASC"
-        fetched = [to_row(i) for i in search(jql, auth)]
+        jql = f"{relevant} ORDER BY updated ASC"
+        fetched = [to_row(i, my_id) for i in search(jql, auth)]
         rows = {r["key"]: r for r in fetched}
         last_full_out = datetime.now(timezone.utc).isoformat()
 

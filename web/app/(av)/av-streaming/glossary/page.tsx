@@ -1,6 +1,6 @@
-import { Callout, PageHeader, Prose } from '@/components/Prose'
-import { GlossaryList } from '@/components/GlossaryList'
-import { TERMS } from '@/data/glossary'
+import { Callout, PageHeader, Prose } from '@av/components/Prose'
+import { GlossaryList } from '@av/components/GlossaryList'
+import { TERMS } from '@av/data/glossary'
 
 export default function GlossaryPage() {
   const clashes = TERMS.filter((t) => t.clash)

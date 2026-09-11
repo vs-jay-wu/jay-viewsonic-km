@@ -1,8 +1,8 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { CONCEPT_IDS, PIPELINE_STAGES, type ConceptId } from '@/data/types'
-import { CONCEPT_META, STAGE_META } from '@/data/taxonomy'
-import { REPOS } from '@/data/repos'
+import { CONCEPT_IDS, PIPELINE_STAGES, type ConceptId } from '@av/data/types'
+import { CONCEPT_META, STAGE_META } from '@av/data/taxonomy'
+import { REPOS } from '@av/data/repos'
 import { PageHeader, Prose } from './Prose'
 import { StageChips } from './PipelineBar'
 
@@ -72,7 +72,7 @@ export function ConceptPage({ id, children }: { id: ConceptId; children: ReactNo
           {CONCEPT_IDS.filter((c) => c !== id).map((c) => (
             <Link
               key={c}
-              href={`/concepts/${c}`}
+              href={`/av-streaming/concepts/${c}`}
               className="text-slate-400 hover:text-sky-400"
             >
               {CONCEPT_META[c].label}

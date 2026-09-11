@@ -38,15 +38,15 @@ export const PRIORITIES: PriorityCol[] = [
  * `STAGE READY (READY FOR QA)` 在 VB 的括號前沒有空格；`PENDING` 是 `Pending`。
  */
 export const STATUS_GROUPS: StatusGroup[] = [
-  { key: "todo", label: "待處理",
+  { key: "todo", label: "To Do",
     statuses: ["BACKLOG", "待辦事項", "READY FOR DEV", "DISCOVERY/REFINEMENT"] },
-  { key: "in_progress", label: "進行中",
+  { key: "in_progress", label: "In Progress",
     statuses: ["進行中", "IN CODE REVIEW", "PR MERGED"] },
-  { key: "verifying", label: "待驗證",
+  { key: "verifying", label: "In QA",
     statuses: ["STAGE READY(READY FOR QA)", "TRACKING BY QA", "VERIFYING", "QA REJECT"] },
   { key: "production_ready", label: "Production Ready",
     statuses: ["PRODUCTION READY", "QA ACCEPTED"] },
-  { key: "on_hold", label: "擱置",
+  { key: "on_hold", label: "Pending",
     statuses: ["Pending", "Blocked"] },
 ];
 

@@ -1,7 +1,7 @@
-import { ConceptPage, Section } from '@/components/ConceptPage'
-import { Callout } from '@/components/Prose'
-import { CompareGrid } from '@/components/diagrams'
-import { Mermaid } from '@/components/Mermaid'
+import { ConceptPage, Section } from '@av/components/ConceptPage'
+import { Callout } from '@av/components/Prose'
+import { CompareGrid } from '@av/components/diagrams'
+import { Mermaid } from '@av/components/Mermaid'
 
 const THREE_SOURCES = `flowchart LR
   subgraph OS["A · 作業系統 API"]
@@ -74,7 +74,7 @@ export default function Page() {
           這條路各平台的門檻差距極大 —— <strong>只有 Windows 需要寫核心驅動</strong>，
           Android 把同一件事做成公開 API，Linux 內建，macOS 顯示端沒有官方路徑但音訊端有，
           iOS 完全封閉。完整比較見{' '}
-          <a href="/concepts/capture/virtual-devices">虛擬裝置的跨平台現實</a>。
+          <a href="/av-streaming/concepts/capture/virtual-devices">虛擬裝置的跨平台現實</a>。
           下面只講 Windows，因為那是 AirSync 主要投入的地方。
         </blockquote>
         <h3>虛擬顯示器（Indirect Display Driver）</h3>

@@ -1,7 +1,7 @@
-import { ConceptPage, Section } from '@/components/ConceptPage'
-import { Callout } from '@/components/Prose'
-import { CompareGrid, Steps } from '@/components/diagrams'
-import { Mermaid } from '@/components/Mermaid'
+import { ConceptPage, Section } from '@av/components/ConceptPage'
+import { Callout } from '@av/components/Prose'
+import { CompareGrid, Steps } from '@av/components/diagrams'
+import { Mermaid } from '@av/components/Mermaid'
 
 const MDNS = `sequenceDiagram
   participant S as sender（要找裝置）
@@ -100,7 +100,7 @@ export default function Page() {
           所以企業網路要跨網段投影，唯一的解是裝一個{' '}
           <strong>mDNS reflector / Bonjour gateway</strong> ——
           由它在兩個網段之間代為轉述。細節見{' '}
-          <a href="/concepts/transport">傳輸層</a>的白名單那節。
+          <a href="/av-streaming/concepts/transport">傳輸層</a>的白名單那節。
         </p>
 
         <h3>IGMP 是誰在管訂閱</h3>

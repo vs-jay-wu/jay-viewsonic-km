@@ -1,7 +1,7 @@
 import Link from 'next/link'
-import { Callout, PageHeader, Prose } from '@/components/Prose'
-import { CompareGrid, Steps } from '@/components/diagrams'
-import { Mermaid } from '@/components/Mermaid'
+import { Callout, PageHeader, Prose } from '@av/components/Prose'
+import { CompareGrid, Steps } from '@av/components/diagrams'
+import { Mermaid } from '@av/components/Mermaid'
 
 const TWO_CONTROLLERS = `flowchart LR
   BWE["WebRTC BWE<br/>估測可用頻寬"] --> FD["FrameDropper<br/>leaky bucket"]
@@ -211,7 +211,7 @@ export default function WebRtcForkPage() {
         ]}
         verdict={
           <>
-            這條路線很有意思：CBR 是<Link href="/concepts/codecs">教科書給即時串流的答案</Link>，
+            這條路線很有意思：CBR 是<Link href="/av-streaming/concepts/codecs">教科書給即時串流的答案</Link>，
             他們照做了，然後在真實的螢幕內容上發現「畫面經常完全不動」讓 CBR
             的假設失效，於是往回退了半步。
           </>
@@ -242,7 +242,7 @@ export default function WebRtcForkPage() {
         </p>
         <h3>PIR 是什麼，為什麼對投影更好</h3>
         <p>
-          I-frame 的問題是它很大。<Link href="/concepts/containers">封包化那頁</Link>
+          I-frame 的問題是它很大。<Link href="/av-streaming/concepts/containers">封包化那頁</Link>
           講過，一個 I-frame 可能切成 90 個封包，丟一個就整幀報廢；
           而且它會造成 bitrate 的尖峰，剛好是 pacer 佇列積起來的原因。
         </p>

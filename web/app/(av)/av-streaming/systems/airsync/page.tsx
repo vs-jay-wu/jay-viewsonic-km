@@ -1,7 +1,7 @@
-import { Callout, PageHeader, Prose } from '@/components/Prose'
-import { Mermaid } from '@/components/Mermaid'
-import { RepoTable } from '@/components/RepoTable'
-import { REPOS } from '@/data/repos'
+import { Callout, PageHeader, Prose } from '@av/components/Prose'
+import { Mermaid } from '@av/components/Mermaid'
+import { RepoTable } from '@av/components/RepoTable'
+import { REPOS } from '@av/data/repos'
 
 const SENDER_TO_RECEIVER = `sequenceDiagram
   autonumber

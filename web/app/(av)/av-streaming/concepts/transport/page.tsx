@@ -1,7 +1,7 @@
-import { ConceptPage, Section } from '@/components/ConceptPage'
-import { Callout } from '@/components/Prose'
-import { CompareGrid, Steps } from '@/components/diagrams'
-import { Mermaid } from '@/components/Mermaid'
+import { ConceptPage, Section } from '@av/components/ConceptPage'
+import { Callout } from '@av/components/Prose'
+import { CompareGrid, Steps } from '@av/components/diagrams'
+import { Mermaid } from '@av/components/Mermaid'
 
 const HOL = `flowchart TB
   subgraph T["TCP：一條有序的位元流"]
@@ -319,7 +319,7 @@ export default function Page() {
 
       <Section title="五之四、所以裝置本機 SFU 的代價在這裡">
         <p>
-          把這一節接回 <a href="/concepts/webrtc">WebRTC</a>「AirSync 的反直覺選擇」：
+          把這一節接回 <a href="/av-streaming/concepts/webrtc">WebRTC</a>「AirSync 的反直覺選擇」：
           AirSync 把 SFU 跑在大螢幕本機，好處是零雲端成本、最低延遲、資料不出教室。
         </p>
         <p>

@@ -176,17 +176,17 @@ export const SYSTEM_META: Record<
     label: 'AirSync',
     blurb:
       '無線投影產品線。47 個 repo，從 Windows 顯示驅動一路到 Go SFU，技術密度最高。',
-    href: '/systems/airsync',
+    href: '/av-streaming/systems/airsync',
   },
   'mvb-cast': {
     label: 'MVB Cast In/Out',
     blurb: 'myViewBoard 內的投放功能，瀏覽器端 WebRTC + Node 信令。',
-    href: '/systems/mvb-cast',
+    href: '/av-streaming/systems/mvb-cast',
   },
   recorder: {
     label: 'Recorder / Live',
     blurb:
       'Android 螢幕錄影，外加 RTMP 直播到 YouTube / Facebook / Twitch。一份編碼兩個出口。',
-    href: '/systems/recorder',
+    href: '/av-streaming/systems/recorder',
   },
 }

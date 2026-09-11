@@ -3,6 +3,12 @@
 /** 沒填 Project 欄位的歸在這一類（值由 scripts/my-tickets.py 產生，跟 vb-bugs 一致） */
 export const UNCATEGORISED = "（未分類）";
 
+export interface Person {
+  name: string;
+  /** 判斷「是不是我」一律用 accountId，名字會撞 */
+  accountId: string;
+}
+
 export interface MyTicket {
   key: string;
   summary: string;
@@ -12,6 +18,10 @@ export interface MyTicket {
   issueType: string;
   /** VB 的「Project」欄位（多選取第一個）—— 頁面照它分群 */
   product: string;
+  assignee: Person;
+  reporter: Person;
+  /** 指派給我的（由抓取腳本用 accountId 比對後標記） */
+  assignedToMe: boolean;
   updated: string | null;
   url: string;
 }
@@ -33,12 +43,12 @@ export interface MyTicketsSnapshot {
 
 /** 進度分組。用實際查到的 VB 狀態名，跟 vbBugsRules 的分組表對齊 */
 export const TICKET_GROUPS: { key: string; label: string; statuses: string[] }[] = [
-  { key: "in_progress", label: "進行中", statuses: ["進行中", "IN CODE REVIEW", "PR MERGED"] },
-  { key: "verifying", label: "待驗證",
+  { key: "in_progress", label: "In Progress", statuses: ["進行中", "IN CODE REVIEW", "PR MERGED"] },
+  { key: "verifying", label: "In QA",
     statuses: ["STAGE READY(READY FOR QA)", "TRACKING BY QA", "VERIFYING", "QA REJECT"] },
-  { key: "todo", label: "待處理",
+  { key: "todo", label: "To Do",
     statuses: ["READY FOR DEV", "BACKLOG", "待辦事項", "DISCOVERY/REFINEMENT"] },
-  { key: "on_hold", label: "擱置", statuses: ["Pending", "Blocked"] },
+  { key: "on_hold", label: "Pending", statuses: ["Pending", "Blocked"] },
 ];
 
 const ORDER = new Map<string, number>(
@@ -75,9 +85,38 @@ export function priorityIndexOf(priority: string): number {
   return i === -1 ? PRIORITY_ORDER.length : i;
 }
 
-export type TicketSort = "progress" | "updated" | "updatedAsc" | "priority" | "key";
+/**
+ * 「等別人」的狀態 —— 球不在我這裡，往後擺（Jay 2026-09-11：
+ * 我 care 的是需要我注意的，不是我處理完的）。
+ *
+ * `QA REJECT` **不算**等別人：被打回來就是球又回到我這裡。
+ */
+export const WAITING_ON_OTHERS_STATUSES = [
+  "IN CODE REVIEW", "PR MERGED", "STAGE READY(READY FOR QA)",
+  "TRACKING BY QA", "VERIFYING", "PRODUCTION READY", "QA ACCEPTED",
+];
+
+/**
+ * 「需要注意」的排序鍵，數字小的排前面：
+ *
+ *   0  指派給我、球在我這裡
+ *   1  指派給我、擱置（Pending / Blocked）
+ *   2  指派給我、等別人（review／QA／已 merge）
+ *   3+ 指派給別人的，同樣的三段再排一次
+ *
+ * 也就是「指派給誰」是第一維、「球在誰那裡」是第二維。
+ */
+export function attentionRank(t: MyTicket): number {
+  const mine = t.assignedToMe ? 0 : 3;
+  if (WAITING_ON_OTHERS_STATUSES.includes(t.status)) return mine + 2;
+  if (groupKeyOf(t.status) === "on_hold") return mine + 1;
+  return mine;
+}
+
+export type TicketSort = "attention" | "progress" | "updated" | "updatedAsc" | "priority" | "key";
 
 export const TICKET_SORTS: { key: TicketSort; label: string }[] = [
+  { key: "attention", label: "需要注意" },
   { key: "progress", label: "進度分組" },
   { key: "updated", label: "最近更新" },
   { key: "updatedAsc", label: "最久沒動" },
@@ -97,6 +136,9 @@ function keyNum(key: string): number {
 export function sortBy(tickets: MyTicket[], sort: TicketSort): MyTicket[] {
   const list = [...tickets];
   switch (sort) {
+    case "attention":
+      // 同一段裡照最近更新 —— 段內看得出哪張最近有動
+      return list.sort((a, b) => attentionRank(a) - attentionRank(b) || byUpdatedDesc(a, b));
     case "updated":
       return list.sort(byUpdatedDesc);
     case "updatedAsc":
@@ -109,14 +151,19 @@ export function sortBy(tickets: MyTicket[], sort: TicketSort): MyTicket[] {
     case "key":
       return list.sort((a, b) => keyNum(b.key) - keyNum(a.key));
     case "progress":
-    default:
       return sortTickets(list);
+    default:
+      return list.sort((a, b) => attentionRank(a) - attentionRank(b) || byUpdatedDesc(a, b));
   }
 }
+
+/** 指派給誰的篩選。預設只看我的 —— 別人的單是背景資訊 */
+export type AssigneeFilter = "mine" | "others" | "all";
 
 export interface TicketView {
   query: string;
   sort: TicketSort;
+  assignee: AssigneeFilter;
   /** 只看這些進度分組；空集合＝全部 */
   groups: string[];
   /** 只看這些優先度；空集合＝全部 */
@@ -124,12 +171,14 @@ export interface TicketView {
 }
 
 export const DEFAULT_VIEW: TicketView = {
-  query: "", sort: "progress", groups: [], priorities: [],
+  query: "", sort: "attention", assignee: "mine", groups: [], priorities: [],
 };
 
 /** 過濾＋排序一起做，讓畫面只呼叫一次（也讓這條路徑整段有測試守著） */
 export function applyView(tickets: MyTicket[], view: TicketView): MyTicket[] {
   const filtered = tickets.filter((t) => {
+    if (view.assignee === "mine" && !t.assignedToMe) return false;
+    if (view.assignee === "others" && t.assignedToMe) return false;
     if (!matchesTicketQuery(t, view.query)) return false;
     if (view.groups.length) {
       const g = groupKeyOf(t.status);
@@ -145,7 +194,9 @@ export function applyView(tickets: MyTicket[], view: TicketView): MyTicket[] {
 export function matchesTicketQuery(t: MyTicket, query: string): boolean {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (!terms.length) return true;
-  const hay = `${t.key} ${t.summary} ${t.status} ${t.issueType} ${t.priority}`.toLowerCase();
+  const hay = `${t.key} ${t.summary} ${t.status} ${t.issueType} ${t.priority} `
+    .concat(`${t.assignee?.name ?? ""} ${t.reporter?.name ?? ""}`)
+    .toLowerCase();
   return terms.every((x) => hay.includes(x));
 }
 

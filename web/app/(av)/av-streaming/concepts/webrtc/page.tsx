@@ -1,7 +1,7 @@
-import { ConceptPage, Section } from '@/components/ConceptPage'
-import { Callout } from '@/components/Prose'
-import { CompareGrid, Steps } from '@/components/diagrams'
-import { Mermaid } from '@/components/Mermaid'
+import { ConceptPage, Section } from '@av/components/ConceptPage'
+import { Callout } from '@av/components/Prose'
+import { CompareGrid, Steps } from '@av/components/diagrams'
+import { Mermaid } from '@av/components/Mermaid'
 
 const ICE_FLOW = `sequenceDiagram
   participant A as Peer A
@@ -383,7 +383,7 @@ export default function Page() {
           <code>has_trusted_rate_controller</code> 這個旗標是在告訴 WebRTC
           「編碼器自己會控 bitrate，你不要再插手」；<code>PeakConstraintVBR</code>{' '}
           是換一種 MF 的速率控制模式；把 framerate 上限壓到 25 是為了讓編碼器有餘裕。
-          對照 <a href="/concepts/codecs">編解碼器</a>「硬編 vs 軟編」講的可控性問題，
+          對照 <a href="/av-streaming/concepts/codecs">編解碼器</a>「硬編 vs 軟編」講的可控性問題，
           這就是實際被那個問題咬到之後的修法。
         </p>
       </Section>

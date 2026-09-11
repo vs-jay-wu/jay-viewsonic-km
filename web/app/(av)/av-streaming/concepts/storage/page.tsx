@@ -1,6 +1,6 @@
-import { ConceptPage, Section } from '@/components/ConceptPage'
-import { Callout } from '@/components/Prose'
-import { CompareGrid, Steps } from '@/components/diagrams'
+import { ConceptPage, Section } from '@av/components/ConceptPage'
+import { Callout } from '@av/components/Prose'
+import { CompareGrid, Steps } from '@av/components/diagrams'
 
 export default function Page() {
   return (
@@ -67,7 +67,7 @@ export default function Page() {
                 <>
                   拿到螢幕擷取授權，建立 <code>VirtualDisplay</code>，
                   把畫面導進一個 <code>Surface</code>。詳見{' '}
-                  <a href="/concepts/capture">畫面與音訊擷取</a>。
+                  <a href="/av-streaming/concepts/capture">畫面與音訊擷取</a>。
                 </>
               ),
             },
@@ -130,7 +130,7 @@ export default function Page() {
         </ul>
         <p>
           另外它<strong>不只寫檔</strong> —— 同一份編碼同時推 RTMP 直播。
-          完整內容見 <a href="/systems/recorder">Recorder / Live</a>。
+          完整內容見 <a href="/av-streaming/systems/recorder">Recorder / Live</a>。
         </p>
       </Callout>
 
@@ -179,7 +179,7 @@ export default function Page() {
             <strong>fragmented MP4</strong> —— 每隔幾秒寫一個自帶索引的片段
             （<code>moof</code> + <code>mdat</code>）。寫到哪就有效到哪，
             當機只損失最後一個片段。結構細節見{' '}
-            <a href="/concepts/containers">容器與封裝</a>
+            <a href="/av-streaming/concepts/containers">容器與封裝</a>
           </li>
           <li>
             <strong>分段錄檔</strong> —— 關檔開新檔，事後合併。
@@ -271,7 +271,7 @@ export default function Page() {
           而且是所有直播平台二十年來的通用入口。用 WebRTC 反而沒地方推。
         </p>
         <p>
-          完整內容見 <a href="/systems/recorder">Recorder / Live</a>。
+          完整內容見 <a href="/av-streaming/systems/recorder">Recorder / Live</a>。
         </p>
       </Section>
     </ConceptPage>

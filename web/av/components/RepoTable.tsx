@@ -1,7 +1,7 @@
 import Link from 'next/link'
-import { REPO_GROUPS, type Repo, type RepoGroup } from '@/data/types'
-import { GROUP_META, CONCEPT_META } from '@/data/taxonomy'
-import { loadWorkspaceIndex, LOCATION_META } from '@/lib/workspace'
+import { REPO_GROUPS, type Repo, type RepoGroup } from '@av/data/types'
+import { GROUP_META, CONCEPT_META } from '@av/data/taxonomy'
+import { loadWorkspaceIndex, LOCATION_META } from '@av/lib/workspace'
 import { StageChips } from './PipelineBar'
 import { IconStar, IconWarn } from './icons'
 
@@ -109,7 +109,7 @@ function RepoRow({ repo }: { repo: Repo }) {
             {repo.concepts.map((c) => (
               <Link
                 key={c}
-                href={`/concepts/${c}`}
+                href={`/av-streaming/concepts/${c}`}
                 className="text-slate-500 underline decoration-slate-700 underline-offset-2 hover:text-sky-400"
               >
                 {CONCEPT_META[c].label}

@@ -1,9 +1,9 @@
-import { Callout, PageHeader, Prose } from '@/components/Prose'
-import { PipelineBar } from '@/components/PipelineBar'
-import { RepoTable } from '@/components/RepoTable'
-import { CompareGrid } from '@/components/diagrams'
-import { Mermaid } from '@/components/Mermaid'
-import { REPOS } from '@/data/repos'
+import { Callout, PageHeader, Prose } from '@av/components/Prose'
+import { PipelineBar } from '@av/components/PipelineBar'
+import { RepoTable } from '@av/components/RepoTable'
+import { CompareGrid } from '@av/components/diagrams'
+import { Mermaid } from '@av/components/Mermaid'
+import { REPOS } from '@av/data/repos'
 
 const ONE_ENCODE_TWO_SINKS = `flowchart LR
   MP["MediaProjection<br/>+ VirtualDisplay"] --> MC["MediaCodec<br/>H.264 · 30fps · GOP 1s"]

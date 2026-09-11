@@ -18,8 +18,8 @@ const TOOLS: { href: string; icon: IconName; title: string; desc: string }[] = [
   {
     href: "/tickets",
     icon: "clipboard",
-    title: "指派給我的單",
-    desc: "VB 上指派給我、還沒完成的單；點一下就能開對應的 Claude session",
+    title: "單追蹤",
+    desc: "指派給我或我開的 VB 單；點一下就能開對應的 Claude session",
   },
   {
     href: "/my-prs",

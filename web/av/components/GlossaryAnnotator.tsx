@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
-import { buildAliasIndex, type Term } from '@/data/glossary'
-import { CONCEPT_META } from '@/data/taxonomy'
+import { buildAliasIndex, type Term } from '@av/data/glossary'
+import { CONCEPT_META } from '@av/data/taxonomy'
 
 /**
  * 讀到縮寫不用離開頁面。
@@ -229,7 +229,7 @@ function PageGlossary({ terms }: { terms: Term[] }) {
       </h2>
       <p className="mt-1 text-[12px] text-slate-500">
         內文裡有虛線底線的縮寫可以直接滑過或點一下看解釋，不必離開這頁。
-        完整清單見 <Link href="/glossary" className="text-sky-400 hover:text-sky-300">縮寫對照</Link>。
+        完整清單見 <Link href="/av-streaming/glossary" className="text-sky-400 hover:text-sky-300">縮寫對照</Link>。
       </p>
       <dl className="mt-4 grid max-w-3xl gap-x-8 gap-y-2 sm:grid-cols-2">
         {sorted.map((t) => (

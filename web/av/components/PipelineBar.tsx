@@ -1,6 +1,6 @@
 import Link from 'next/link'
-import { PIPELINE_STAGES, type PipelineStage } from '@/data/types'
-import { STAGE_META } from '@/data/taxonomy'
+import { PIPELINE_STAGES, type PipelineStage } from '@av/data/types'
+import { STAGE_META } from '@av/data/taxonomy'
 
 /**
  * 資料路徑總圖。環節與說明都來自 taxonomy.ts 的 STAGE_META，
@@ -30,7 +30,7 @@ export function PipelineBar({ highlight }: { highlight?: PipelineStage[] }) {
                 {meta.concept && (
                   <div className="mt-auto pt-2.5">
                     <Link
-                      href={`/concepts/${meta.concept}`}
+                      href={`/av-streaming/concepts/${meta.concept}`}
                       className="font-mono text-[10px] text-sky-500 hover:text-sky-400"
                     >
                       概念 ↗

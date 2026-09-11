@@ -1,6 +1,6 @@
-import { ConceptPage, Section } from '@/components/ConceptPage'
-import { Callout } from '@/components/Prose'
-import { CompareGrid, GopDiagram } from '@/components/diagrams'
+import { ConceptPage, Section } from '@av/components/ConceptPage'
+import { Callout } from '@av/components/Prose'
+import { CompareGrid, GopDiagram } from '@av/components/diagrams'
 
 export default function Page() {
   return (
@@ -114,7 +114,7 @@ export default function Page() {
           （避免一堆人同時丟包時被 keyframe 洪水打死）。
         </p>
         <p>
-          這個區別在<a href="/concepts/webrtc">一對多架構</a>裡特別有感 ——
+          這個區別在<a href="/av-streaming/concepts/webrtc">一對多架構</a>裡特別有感 ——
           有 SFU 的場合，「新加入者要畫面」是常態事件而不是異常事件。
         </p>
       </Section>
@@ -160,7 +160,7 @@ export default function Page() {
           描述一面靜止的白牆，10 個字很夠；描述一場混戰，1000 個字都不夠。
         </p>
         <p>
-          這也是為什麼 <a href="/concepts/storage">螢幕錄影的 bitrate 需求跟內容關係極大</a>
+          這也是為什麼 <a href="/av-streaming/concepts/storage">螢幕錄影的 bitrate 需求跟內容關係極大</a>
           —— 純簡報幾乎沒有畫面變動，播影片則每一幀都在變。
         </p>
       </Callout>
@@ -228,11 +228,11 @@ export default function Page() {
         <p>
           所以「畫面突然變糊」通常不是編碼器的錯，也不是網路真的斷了 ——
           是<strong>擁塞控制判斷網路變差，主動選擇了糊而不是頓</strong>。
-          這是刻意的取捨。詳見 <a href="/concepts/transport">傳輸層</a>。
+          這是刻意的取捨。詳見 <a href="/av-streaming/concepts/transport">傳輸層</a>。
         </p>
         <p>
           而當<strong>編碼器自己也有一套速率控制</strong>時，兩層就會打架 ——
-          那正是 <a href="/systems/airsync/webrtc-fork">libwebrtc fork</a>{' '}
+          那正是 <a href="/av-streaming/systems/airsync/webrtc-fork">libwebrtc fork</a>{' '}
           那批改動在搏鬥的核心。
         </p>
       </Section>
@@ -394,7 +394,7 @@ export default function Page() {
         <p>
           畫面與聲音是<strong>兩條完全獨立編出來的流</strong>，取樣率也不同
           （視訊 30 fps、音訊 48000 Hz）。要讓它們在播放端對上，靠的是時間戳 ——
-          細節在 <a href="/concepts/containers">容器與封裝</a>。
+          細節在 <a href="/av-streaming/concepts/containers">容器與封裝</a>。
         </p>
         <p>
           值得記住的是<strong>人耳與人眼的容忍度不對稱</strong>：
@@ -439,7 +439,7 @@ export default function Page() {
           </li>
         </ul>
         <p>
-          所以 <a href="/systems/airsync/webrtc-fork">libwebrtc fork</a>{' '}
+          所以 <a href="/av-streaming/systems/airsync/webrtc-fork">libwebrtc fork</a>{' '}
           最早期的 commit 之一就是{' '}
           <strong>
             <code>Disable all audio processing options by default</code>

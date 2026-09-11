@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { repoPath } from '@/lib/repo'
 
 /**
  * repo 在本機是 local 還是外接，是 local.workspace.json 管的動態狀態。
@@ -19,9 +20,15 @@ type WorkspaceOrg = {
 
 const ORG = 'Viewsonic-EDU'
 
-/** docs/domains/av-streaming/src/lib → repo 根 */
-const REPO_ROOT = path.resolve(process.cwd(), '..', '..', '..')
-const CONFIG_PATH = path.join(REPO_ROOT, 'local.workspace.json')
+/**
+ * repo 根目錄。以前這個站是 `docs/domains/av-streaming/` 底下的獨立專案，
+ * 所以往上三層；搬進 km web 之後 cwd 是 `web/`，只要一層。
+ *
+ * 用 `@/lib/repo` 的 `repoPath()` 而不是自己再算一次相對路徑 ——
+ * 兩套系統的 UI 是分開的，但「km repo 根在哪」只該有一個答案，
+ * 各算各的就會在搬家時再壞一次（這次就是這樣壞的）。
+ */
+const CONFIG_PATH = repoPath('local.workspace.json')
 
 function readOrg(): WorkspaceOrg | null {
   try {

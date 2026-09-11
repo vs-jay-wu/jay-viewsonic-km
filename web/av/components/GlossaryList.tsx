@@ -7,8 +7,8 @@ import {
   GLOSSARY_GROUP_LABEL,
   TERMS,
   type GlossaryGroup,
-} from '@/data/glossary'
-import { CONCEPT_META } from '@/data/taxonomy'
+} from '@av/data/glossary'
+import { CONCEPT_META } from '@av/data/taxonomy'
 import { IconWarn } from './icons'
 
 export function GlossaryList() {
@@ -68,7 +68,7 @@ export function GlossaryList() {
                     {t.full && <span className="text-[13px] text-slate-400">{t.full}</span>}
                     {t.concept && (
                       <Link
-                        href={`/concepts/${t.concept}`}
+                        href={`/av-streaming/concepts/${t.concept}`}
                         className="font-mono text-[10px] text-slate-600 hover:text-sky-400"
                       >
                         {CONCEPT_META[t.concept].label} ↗

@@ -3,16 +3,16 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { CONCEPT_IDS } from '@/data/types'
-import { CONCEPT_META, SYSTEM_META } from '@/data/taxonomy'
+import { CONCEPT_IDS } from '@av/data/types'
+import { CONCEPT_META, SYSTEM_META } from '@av/data/taxonomy'
 
 type Item = { href: string; label: string; hint?: string; sub?: true }
 
 /** 深入頁：掛在某個主頁底下，用縮排表示層級。 */
 const DEEP_DIVES: Record<string, Item[]> = {
-  '/systems/airsync': [{ href: '/systems/airsync/webrtc-fork', label: 'libwebrtc fork 改了什麼', sub: true }],
+  '/systems/airsync': [{ href: '/av-streaming/systems/airsync/webrtc-fork', label: 'libwebrtc fork 改了什麼', sub: true }],
   '/concepts/capture': [
-    { href: '/concepts/capture/virtual-devices', label: '虛擬裝置的跨平台現實', sub: true },
+    { href: '/av-streaming/concepts/capture/virtual-devices', label: '虛擬裝置的跨平台現實', sub: true },
   ],
 }
 
@@ -83,7 +83,7 @@ function NavSections({ onNavigate }: { onNavigate: () => void }) {
 
   return (
     <>
-      <Link href="/" onClick={onNavigate} className="block">
+      <Link href="/av-streaming" onClick={onNavigate} className="block">
         <p className="font-mono text-[10px] tracking-widest text-sky-500 uppercase">domain</p>
         <p
           className={`mt-1 text-sm font-semibold ${
@@ -122,12 +122,12 @@ function NavSections({ onNavigate }: { onNavigate: () => void }) {
 
       <div className="mt-6 space-y-0.5 border-t border-slate-800 pt-5">
         <NavLink
-          item={{ href: '/glossary', label: '縮寫對照' }}
+          item={{ href: '/av-streaming/glossary', label: '縮寫對照' }}
           active={isActive('/glossary')}
           onNavigate={onNavigate}
         />
         <NavLink
-          item={{ href: '/open-questions', label: '待釘問題' }}
+          item={{ href: '/av-streaming/open-questions', label: '待釘問題' }}
           active={isActive('/open-questions')}
           onNavigate={onNavigate}
         />
@@ -143,8 +143,8 @@ function useCurrentLabel() {
   const all = [
     ...SYSTEM_ITEMS,
     ...CONCEPT_ITEMS,
-    { href: '/glossary', label: '縮寫對照' },
-    { href: '/open-questions', label: '待釘問題' },
+    { href: '/av-streaming/glossary', label: '縮寫對照' },
+    { href: '/av-streaming/open-questions', label: '待釘問題' },
   ]
   return all.find((i) => i.href === pathname)?.label ?? 'av-streaming'
 }

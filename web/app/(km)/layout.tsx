@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
-import "./globals.css";
+import "@/app/globals.css";
 import Sidebar from "@/components/Sidebar";
 import ConfirmProvider from "@/components/Confirm";
 import PromptProvider from "@/components/Prompt";

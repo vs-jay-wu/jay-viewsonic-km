@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
+import { statusLabel } from "@/lib/jiraStatus";
 import { useTicketSession } from "@/lib/useTicketSession";
 import { groupOfStatus, HIDDEN_BY_DEFAULT, sortProducts } from "@/lib/vbBugsRules";
 
@@ -399,7 +400,7 @@ export default function VbBugsPage() {
                           <span
                             className={`shrink-0 rounded-full border px-2 py-0.5 text-xs ${chipClass(i.status)}`}
                           >
-                            {i.status}
+                            {statusLabel(i.status)}
                           </span>
                           {(() => {
                             const count = session.itemOf(i.key)?.sessions.length ?? 0;

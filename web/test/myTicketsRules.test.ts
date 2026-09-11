@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_VIEW, UNCATEGORISED, applyView, groupByProduct, groupKeyOf, issueTypeStyle,
-  matchesTicketQuery, priorityIndexOf, sortBy, sortTickets, type MyTicket,
+  DEFAULT_VIEW, UNCATEGORISED, applyView, attentionRank, groupByProduct, groupKeyOf,
+  issueTypeStyle, matchesTicketQuery, priorityIndexOf, sortBy, sortTickets,
+  type MyTicket,
 } from "@/lib/myTicketsRules";
 
 // 狀態與 issueType 逐字取自實際抓到的 VB 單
 const t = (o: Partial<MyTicket> & { key: string }): MyTicket => ({
   summary: "某個問題", status: "BACKLOG", statusCategory: "待辦事項",
   priority: "Medium", issueType: "漏洞", product: "myViewBoard",
+  assignee: { name: "Jay Wu", accountId: "me" },
+  reporter: { name: "Jay Wu", accountId: "me" },
+  assignedToMe: true,
   updated: "2026-09-01T00:00:00.000+0800",
   url: `https://viewsonic-vsi.atlassian.net/browse/${o.key}`, ...o,
 });
@@ -143,5 +147,69 @@ describe("issueTypeStyle — 貼近 Jira 的顏色", () => {
   it("漏洞是紅的、任務是藍的", () => {
     expect(issueTypeStyle("漏洞").cls).toContain("red");
     expect(issueTypeStyle("任務").cls).toContain("sky");
+  });
+});
+
+describe("attentionRank — 需要我注意的排前面", () => {
+  const mine = (status: string) => t({ key: "VB-1", status, assignedToMe: true });
+  const theirs = (status: string) =>
+    t({ key: "VB-2", status, assignedToMe: false,
+        assignee: { name: "別人", accountId: "other" } });
+
+  it("球在我這裡的最前面", () => {
+    expect(attentionRank(mine("READY FOR DEV"))).toBe(0);
+    expect(attentionRank(mine("進行中"))).toBe(0);
+  });
+
+  it("QA REJECT 算球回到我這裡，不是等別人", () => {
+    expect(attentionRank(mine("QA REJECT"))).toBe(0);
+  });
+
+  it("擱置排在球在我這裡之後", () => {
+    expect(attentionRank(mine("Pending"))).toBe(1);
+    expect(attentionRank(mine("Blocked"))).toBe(1);
+  });
+
+  it("等 review／QA／已 merged 的往後擺", () => {
+    for (const s of ["IN CODE REVIEW", "PR MERGED", "STAGE READY(READY FOR QA)", "VERIFYING"]) {
+      expect(attentionRank(mine(s)), s).toBe(2);
+    }
+  });
+
+  it("指派給別人的整批再往後", () => {
+    expect(attentionRank(theirs("READY FOR DEV"))).toBe(3);
+    expect(attentionRank(theirs("IN CODE REVIEW"))).toBe(5);
+    // 「別人手上、球在他那裡」仍然排在「我手上、等別人」後面
+    expect(attentionRank(theirs("READY FOR DEV"))).toBeGreaterThan(attentionRank(mine("PR MERGED")));
+  });
+
+  it("預設排序就是這個，同段照最近更新", () => {
+    const list = [
+      t({ key: "VB-A", status: "PR MERGED", updated: "2026-09-10T00:00:00.000+0800" }),
+      t({ key: "VB-B", status: "READY FOR DEV", updated: "2026-09-01T00:00:00.000+0800" }),
+      t({ key: "VB-C", status: "進行中", updated: "2026-09-09T00:00:00.000+0800" }),
+    ];
+    expect(sortBy(list, "attention").map((x) => x.key)).toEqual(["VB-C", "VB-B", "VB-A"]);
+  });
+});
+
+describe("applyView — 指派給誰的篩選", () => {
+  const list = [
+    t({ key: "VB-1", assignedToMe: true }),
+    t({ key: "VB-2", assignedToMe: false, assignee: { name: "別人", accountId: "other" } }),
+  ];
+
+  it("預設只看我的", () => {
+    expect(applyView(list, DEFAULT_VIEW).map((x) => x.key)).toEqual(["VB-1"]);
+  });
+
+  it("可以只看別人的，或全部", () => {
+    expect(applyView(list, { ...DEFAULT_VIEW, assignee: "others" }).map((x) => x.key)).toEqual(["VB-2"]);
+    expect(applyView(list, { ...DEFAULT_VIEW, assignee: "all" })).toHaveLength(2);
+  });
+
+  it("搜尋吃得到指派人的名字", () => {
+    expect(applyView(list, { ...DEFAULT_VIEW, assignee: "all", query: "別人" }).map((x) => x.key))
+      .toEqual(["VB-2"]);
   });
 });

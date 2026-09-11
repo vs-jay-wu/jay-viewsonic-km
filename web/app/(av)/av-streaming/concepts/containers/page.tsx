@@ -1,6 +1,6 @@
-import { ConceptPage, Section } from '@/components/ConceptPage'
-import { Callout } from '@/components/Prose'
-import { BoxDiagram, Steps } from '@/components/diagrams'
+import { ConceptPage, Section } from '@av/components/ConceptPage'
+import { Callout } from '@av/components/Prose'
+import { BoxDiagram, Steps } from '@av/components/diagrams'
 
 export default function Page() {
   return (

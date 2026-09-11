@@ -1,7 +1,7 @@
 import Link from 'next/link'
-import { Callout, PageHeader, Prose } from '@/components/Prose'
-import { CompareGrid, Steps } from '@/components/diagrams'
-import { REPOS } from '@/data/repos'
+import { Callout, PageHeader, Prose } from '@av/components/Prose'
+import { CompareGrid, Steps } from '@av/components/diagrams'
+import { REPOS } from '@av/data/repos'
 
 export default function Page() {
   const winRepos = REPOS.filter(
@@ -25,7 +25,7 @@ export default function Page() {
       <Prose>
         <h2>一、為什麼要「造裝置」而不是「抓畫面」</h2>
         <p>
-          <Link href="/concepts/capture">擷取那頁</Link>講過三條來源路徑。
+          <Link href="/av-streaming/concepts/capture">擷取那頁</Link>講過三條來源路徑。
           虛擬裝置這條的核心優勢有三個：
         </p>
         <ul>
@@ -228,7 +228,7 @@ export default function Page() {
           <strong>兩個平台把同一個問題擋在不同的地方</strong>：Windows 擋在「你能不能造裝置」，
           Android 擋在「造出來能不能看到別人的內容」。這也是為什麼 receiver 的
           IFP flavor 需要 <code>sharedUserId=android.uid.system</code> ——
-          見 <Link href="/systems/airsync">AirSync</Link>「兩個主應用是一對」。
+          見 <Link href="/av-streaming/systems/airsync">AirSync</Link>「兩個主應用是一對」。
         </p>
       </Callout>
 
@@ -342,7 +342,7 @@ export default function Page() {
 
       <nav className="mt-12 border-t border-slate-800 pt-6">
         <p className="text-[13px] text-slate-500">
-          回到 <Link href="/concepts/capture" className="text-sky-400 hover:text-sky-300">
+          回到 <Link href="/av-streaming/concepts/capture" className="text-sky-400 hover:text-sky-300">
             畫面與音訊擷取
           </Link>
         </p>

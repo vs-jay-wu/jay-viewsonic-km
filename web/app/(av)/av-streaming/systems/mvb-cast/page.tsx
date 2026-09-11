@@ -1,6 +1,6 @@
-import { Callout, PageHeader, Prose } from '@/components/Prose'
-import { RepoTable } from '@/components/RepoTable'
-import { REPOS } from '@/data/repos'
+import { Callout, PageHeader, Prose } from '@av/components/Prose'
+import { RepoTable } from '@av/components/RepoTable'
+import { REPOS } from '@av/data/repos'
 
 export default function MvbCastPage() {
   const repos = REPOS.filter((r) => r.system.includes('mvb-cast'))
@@ -85,7 +85,7 @@ export default function MvbCastPage() {
           客戶端有對應的 <code>cast-out-module-scalable.js</code>，所以這條路是真的在用。
           好處是發送端負擔與觀眾數無關、伺服器完全不轉發媒體；
           代價是延遲隨樹深累積，而且中間節點離線會斷掉它下面整棵子樹。
-          細節見 <a href="/concepts/webrtc">WebRTC</a>「一對多的三種架構」。
+          細節見 <a href="/av-streaming/concepts/webrtc">WebRTC</a>「一對多的三種架構」。
         </p>
 
         <h2>三、兩台信令伺服器的實際分工</h2>

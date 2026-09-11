@@ -13,7 +13,7 @@ interface Chat {
 const TOOLS: { href: string; label: string; icon: IconName }[] = [
   { href: "/", label: "首頁", icon: "home" },
   { href: "/memory", label: "記憶體", icon: "cpu" },
-  { href: "/tickets", label: "指派給我的單", icon: "clipboard" },
+  { href: "/tickets", label: "單追蹤", icon: "clipboard" },
   { href: "/my-prs", label: "我的 PR", icon: "gitPr" },
   { href: "/vb-bugs", label: "VB Bug 總覽", icon: "alert" },
   { href: "/pr-inbox", label: "PR 巡邏", icon: "refresh" },

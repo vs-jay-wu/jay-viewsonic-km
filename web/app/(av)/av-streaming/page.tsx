@@ -1,11 +1,11 @@
 import Link from 'next/link'
-import { Callout, PageHeader, Prose } from '@/components/Prose'
-import { PipelineBar } from '@/components/PipelineBar'
-import { Mermaid } from '@/components/Mermaid'
-import { REPOS } from '@/data/repos'
-import { SYSTEM_META } from '@/data/taxonomy'
-import type { SystemId } from '@/data/types'
-import { loadWorkspaceIndex } from '@/lib/workspace'
+import { Callout, PageHeader, Prose } from '@av/components/Prose'
+import { PipelineBar } from '@av/components/PipelineBar'
+import { Mermaid } from '@av/components/Mermaid'
+import { REPOS } from '@av/data/repos'
+import { SYSTEM_META } from '@av/data/taxonomy'
+import type { SystemId } from '@av/data/types'
+import { loadWorkspaceIndex } from '@av/lib/workspace'
 
 const PIPELINE_WEBRTC = `flowchart LR
   S["sender App<br/>display_cast_flutter"]
@@ -97,7 +97,7 @@ export default function Home() {
         </p>
         <p>
           每一格都連到對應的通用概念頁。子系統頁會用同一張圖、只亮它涉及的那幾格 ——
-          例如 <Link href="/systems/recorder">Recorder / Live</Link> 只用到前段加上{' '}
+          例如 <Link href="/av-streaming/systems/recorder">Recorder / Live</Link> 只用到前段加上{' '}
           <code>transport</code>。
         </p>
       </Prose>
@@ -178,7 +178,7 @@ export default function Home() {
             <strong>看可信度標記。</strong>標<code>已讀 code</code>的可以當事實用；
             沒標的是從 README 讀到的；標<code>推論</code>的是從名稱猜的，不要當結論。
             這個區分不是形式 ——{' '}
-            <Link href="/open-questions">已結案的問題</Link>{' '}
+            <Link href="/av-streaming/open-questions">已結案的問題</Link>{' '}
             裡有兩條是查證後<strong>推翻</strong>了原本只看 README 的判斷。
           </li>
           <li>
@@ -188,7 +188,7 @@ export default function Home() {
           </li>
           <li>
             <strong>縮寫看不懂就去查。</strong>
-            <Link href="/glossary">縮寫對照</Link> 收了 70 條，有搜尋框，
+            <Link href="/av-streaming/glossary">縮寫對照</Link> 收了 70 條，有搜尋框，
             而且標出了 DRM、SIP 這類「同一個縮寫在不同領域指完全不同東西」的地雷。
           </li>
         </ul>
@@ -221,7 +221,7 @@ export default function Home() {
           </li>
           <li>
             <strong>還懸著 10 題</strong>，見{' '}
-            <Link href="/open-questions">待釘問題</Link>。最擋路的兩題：
+            <Link href="/av-streaming/open-questions">待釘問題</Link>。最擋路的兩題：
             <code>edu-as-webrtc</code> 的自家 diff 具體怎麼改、
             <code>display-channel</code> 的 direct/tunnel 差異。
           </li>
