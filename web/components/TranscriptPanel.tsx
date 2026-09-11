@@ -293,7 +293,11 @@ export default function TranscriptPanel({
             {range?.hasNewer && " · 顯示開頭"}
           </p>
         </div>
-        <Tooltip label={range?.hasNewer ? "回到最新的一段" : "跳到這個 session 的第一則訊息"}>
+        {/* 這顆在面板的最上緣，泡泡往上會開到畫面外 —— 要往下開 */}
+        <Tooltip
+          side="bottom"
+          label={range?.hasNewer ? "回到最新的一段" : "跳到這個 session 的第一則訊息"}
+        >
           <button
             onClick={() => void (range?.hasNewer ? jumpToEnd() : jumpToStart())}
             disabled={loading || loadingMore}

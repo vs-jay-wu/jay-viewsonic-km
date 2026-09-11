@@ -14,8 +14,12 @@ export default function Tooltip({
 }: {
   label: string;
   children: React.ReactNode;
-  /** 靠右邊的元素用 left，免得泡泡被視窗切掉 */
-  side?: "top" | "left";
+  /**
+   * 泡泡往哪邊開。**貼著視窗邊緣的元素要自己選邊**，不然會被切掉：
+   * 靠右的用 `left`、貼在畫面上緣的用 `bottom`（踩過：面板標題列的按鈕用
+   * 預設的 top，泡泡整個跑到畫面外，Jay 2026-09-11）。
+   */
+  side?: "top" | "bottom" | "left";
 }) {
   return (
     <span className="group/tip relative inline-flex">
@@ -25,7 +29,9 @@ export default function Tooltip({
         className={`pointer-events-none absolute z-50 hidden whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs text-white shadow-lg group-hover/tip:block group-focus-within/tip:block ${
           side === "left"
             ? "right-full top-1/2 mr-2 -translate-y-1/2"
-            : "bottom-full left-1/2 mb-1.5 -translate-x-1/2"
+            : side === "bottom"
+              ? "top-full left-1/2 mt-1.5 -translate-x-1/2"
+              : "bottom-full left-1/2 mb-1.5 -translate-x-1/2"
         }`}
       >
         {label}
