@@ -147,6 +147,19 @@ export async function deleteRun(id: string): Promise<boolean> {
   return deleted;
 }
 
+/**
+ * 可以一鍵清掉的紀錄：**沒有 AI 參與、而且不是失敗**。
+ *
+ * 保留失敗的那些是刻意的 —— 首頁「連續失敗」的判斷是從執行紀錄推導的
+ * （healthRules.healthFromRuns），一起清掉就等於把警訊抹掉。
+ */
+export function clearableRunIds(runs: RunRecord[]): string[] {
+  return runs
+    .filter((r) => !isAiRun(r))
+    .filter((r) => r.status !== "failed" && r.status !== "detect-failed")
+    .map((r) => r.id);
+}
+
 export interface PruneResult {
   deleted: string[];
   keptAi: number;

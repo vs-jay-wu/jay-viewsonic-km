@@ -162,6 +162,38 @@ export default function PrInboxPage() {
     load();
   };
 
+  /**
+   * 一次清掉沒有 AI 參與、也不是失敗的紀錄。
+   * 失敗的刻意留著 —— 首頁「連續失敗」的判斷是從這些紀錄推導的。
+   */
+  const clearRuns = async () => {
+    const clearable = runs.filter(
+      (r) => r.claude === null && r.status !== "aborted"
+        && r.status !== "failed" && r.status !== "detect-failed"
+    ).length;
+    // 兩個類別會重疊（被中斷的那輪同時是失敗、也有 AI 的花費），
+    // 所以用「總數 - 可清的」算保留數，不要把兩個數字相加
+    const kept = runs.length - clearable;
+    if (clearable === 0) return;
+
+    const ok = await confirm({
+      title: `清除 ${clearable} 筆紀錄？`,
+      message:
+        `要清的是沒待處理／只偵測／被鎖擋掉的那些。` +
+        `其餘 ${kept} 筆保留：AI 真的跑過的（有花費與當時的判斷）` +
+        `，以及失敗的（首頁「連續失敗」的判斷要用）。`,
+      confirmLabel: "清除",
+      danger: true,
+    });
+    if (!ok) return;
+
+    setBusy("clear");
+    const res = await fetch("/api/pr-inbox/runs/clear", { method: "POST" });
+    if (!res.ok) setError("清除失敗");
+    setBusy(null);
+    load();
+  };
+
   const openLog = async (id: string) => {
     const res = await fetch(`/api/pr-inbox/runs/${id}/log`);
     const json = await res.json();
@@ -169,6 +201,10 @@ export default function PrInboxPage() {
     else setError(json.error ?? "讀不到 log");
   };
 
+  const clearableCount = runs.filter(
+    (r) => r.claude === null && r.status !== "aborted"
+      && r.status !== "failed" && r.status !== "detect-failed"
+  ).length;
   const totalCost = runs.reduce((n, r) => n + (r.claude?.costUsd ?? 0), 0);
   const aiRuns = runs.filter((r) => r.claude).length;
 
@@ -472,10 +508,22 @@ export default function PrInboxPage() {
         <div className="mt-9">
           <div className="flex items-baseline justify-between">
             <h2 className="text-sm font-semibold text-gray-900">執行紀錄</h2>
-            <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
-              <Icon name="coins" size={13} />
-              {runs.length} 筆 · 其中 {aiRuns} 次叫了 AI · 累計 {fmtCost(totalCost)}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+                <Icon name="coins" size={13} />
+                {runs.length} 筆 · 其中 {aiRuns} 次叫了 AI · 累計 {fmtCost(totalCost)}
+              </span>
+              {clearableCount > 0 && (
+                <button
+                  onClick={clearRuns}
+                  disabled={!!busy}
+                  title="清掉沒有 AI 參與、也不是失敗的那些"
+                  className="rounded-md border border-gray-200 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  清除 {clearableCount} 筆非 AI 紀錄
+                </button>
+              )}
+            </div>
           </div>
           <p className="mt-1 text-xs text-gray-400">
             存在 <code>data/pr-inbox-runs/</code>（gitignored，不進版控）。

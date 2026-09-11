@@ -169,7 +169,7 @@ export default async function Home() {
                   <Icon name={t.icon} size={18} />
                 </span>
                 <div className="min-w-0">
-                  <div className="font-medium text-gray-900 group-hover:underline">
+                  <div className="font-medium text-gray-900">
                     {t.title}
                   </div>
                   <p className="mt-1 text-xs leading-relaxed text-gray-500">{t.desc}</p>
