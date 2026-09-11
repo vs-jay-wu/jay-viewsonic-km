@@ -20,6 +20,14 @@ const TOOLS: { href: string; label: string; icon: IconName }[] = [
   { href: "/sessions", label: "Claude Sessions", icon: "layers" },
 ];
 
+/**
+ * 掛在同一個 domain、但**不是 km 工作台**的站（各自 root layout 與設計，
+ * 見 `app/(av)/layout.tsx`）。一律開新分頁，而且那邊不會有連回來的路。
+ */
+const EXTERNAL_SITES: { href: string; label: string; icon: IconName }[] = [
+  { href: "/av-streaming", label: "AV Streaming 筆記", icon: "cpu" },
+];
+
 export default function Sidebar() {
   const [chats, setChats] = useState<Chat[]>([]);
   const params = useParams();
@@ -53,6 +61,23 @@ export default function Sidebar() {
             <Icon name={t.icon} size={16} className="text-white/60" />
             <span className="truncate flex-1">{t.label}</span>
           </Link>
+        ))}
+
+        <div className="px-4 pt-5 pb-1.5 text-[11px] uppercase tracking-wide text-white/35">
+          另一套站
+        </div>
+        {EXTERNAL_SITES.map((s) => (
+          <a
+            key={s.href}
+            href={s.href}
+            target="_blank"
+            rel="noreferrer"
+            className={`${itemClass(false)} group`}
+          >
+            <Icon name={s.icon} size={16} className="text-white/60" />
+            <span className="truncate flex-1">{s.label}</span>
+            <Icon name="external" size={12} className="text-white/30 group-hover:text-white/60" />
+          </a>
         ))}
 
         <div className="px-4 pt-5 pb-1.5 text-[11px] uppercase tracking-wide text-white/35">

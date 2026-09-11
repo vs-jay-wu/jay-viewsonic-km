@@ -2,37 +2,64 @@
 
 ViewSonic 影音技術（AirSync / MVB Cast in-out / Recorder）的學習筆記。
 
-這個 domain 與 `docs/` 底下其他文件不同 —— 它是一個**獨立的 Next.js + TypeScript 站**，
+這個 domain 與 `docs/` 底下其他文件不同 —— 它是一個 **Next.js + TypeScript 的站**，
 不是 markdown 或靜態 HTML。
+
+> **2026-09-11：原始碼搬到 km web 了。** 這裡只剩這份 README；
+> 站本身跟 km 工作台共用同一個 Next app 與同一份 `node_modules`
+> （原本自己那份 601 MB `node_modules` + 1.1 GB `.next` 是搬家的主因）。
 
 ## 為什麼是 Next app 而不是 md
 
-1. **知識存成 typed data。** repo 地圖、pipeline 環節、概念連結全部在 `src/data/` 裡是有型別的資料，
+1. **知識存成 typed data。** repo 地圖、pipeline 環節、概念連結全部在 `web/av/data/` 裡是有型別的資料，
    分群表、資料路徑圖、概念頁的「哪些 repo 用到」都由同一份資料生成。改一次就同步，
    壞連結是 TS 編譯錯誤而不是點下去 404。
-2. **local / offloaded 狀態是動態查的。** `src/lib/workspace.ts` 在 render 時讀 repo 根的
+2. **local / offloaded 狀態是動態查的。** `web/av/lib/workspace.ts` 在 render 時讀 repo 根的
    `local.workspace.json` 與檔案系統，所以 badge 永遠是當下的真相 —— 這個狀態刻意不寫進內容。
 3. **影音領域吃互動圖。** mermaid 走 npm 套件（不是 CDN，離線可用），特殊圖表手寫 component。
 
 ## 跑起來
 
-```
-npm install
-npm run dev      # http://localhost:3100
-```
+跟 km 工作台是同一個 server，**沒有自己的 npm script、也不用另外 install**：
 
-`npm run build` 可驗證整站與型別。`npm run typecheck` 只跑型別。
+```
+cd web && npm run dev      # http://localhost:3000/av-streaming
+```
 
 > **不要在 dev server 還跑著的時候執行 `npm run build`。**
-> 兩者共用 `.next/`，會讓 dev 端的 client bundle 壞掉 —— 症狀是頁面看起來正常但
+> 兩者共用 `web/.next/`，會讓 dev 端的 client bundle 壞掉 —— 症狀是頁面看起來正常但
 > **完全沒有互動性**（元件沒 hydrate，例如 glossary 的搜尋框打字沒反應），
 > 而且 console 不會報錯，很難察覺。
-> 修法：`pkill -f "next dev"`、`rm -rf .next`、重新 `npm run dev`。
+> 修法：`pkill -f "next dev"`、`rm -rf web/.next`、重新 `npm run dev`。
+> （2026-09-11 搬家時又踩了一次，這條警告是真的。）
+
+## 跟 km 工作台的關係
+
+**同一個 domain、兩套系統。** 靠 Next 的 route group + 多個 root layout 做到：
+
+```
+web/app/
+├── (km)/layout.tsx     ← km 工作台：淺色、有 Sidebar
+└── (av)/layout.tsx     ← 這個站：深色、有自己的 Nav
+```
+
+`app/` 底下**沒有**共用的 `layout.tsx`，所以兩邊各自宣告 `<html>`／`<body>`、
+各自 import 自己的 `globals.css`，樣式完全不互相影響。跨界導覽會整頁重載
+（Next 對多 root layout 的行為），不會出現半套畫面。
+
+規則（`web/test/avStreamingBoundary.test.ts` 會擋）：
+
+- 這邊的內部連結一律帶 `/av-streaming` 前綴
+- **不連回 km** —— 從 km 過來是開新分頁，回去用瀏覽器分頁
+- 不 import km 的 UI 元件；`@/lib/repo` 這種純 server 工具可以
+  （「km repo 根在哪」只該有一個答案）
+
+import 別名是 `@av/*` → `web/av/*`（km 的 `@/*` 指 `web/`，兩者不要混用）。
 
 ## 結構
 
 ```
-src/
+web/av/
 ├── data/                  ← 知識本體（typed）
 │   ├── types.ts           ← PipelineStage / RepoGroup / ConceptId / Repo
 │   ├── taxonomy.ts        ← 各分類的顯示文字與說明
@@ -47,7 +74,11 @@ src/
 │   ├── diagrams.tsx       ← GopDiagram / BoxDiagram / CompareGrid / Steps
 │   ├── PipelineBar.tsx    ← 由 repos.ts 生成的資料路徑圖
 │   └── RepoTable.tsx      ← 由 repos.ts 生成的分群表
-└── app/
+
+web/app/(av)/
+├── layout.tsx             ← 這個站的 root layout（深色、Nav、GlossaryAnnotator）
+├── globals.css            ← 只有這個站會載入
+└── av-streaming/
     ├── page.tsx           ← domain 首頁：資料路徑 + 三條 pipeline
     ├── systems/
     │   ├── airsync/
@@ -67,7 +98,7 @@ Nav 的 `DEEP_DIVES` 對應表決定縮排層級 —— 加新深入頁時要同
 這樣圖表元件內部的 `ul` / `table` 不會被 prose 樣式汙染。加新圖表元件時
 若它的根就是 `ol`/`table`，記得包一層 `div`。
 
-**不用 emoji**：圖示走 `components/icons.tsx` 的 inline SVG（`currentColor`，
+**不用 emoji**：圖示走 `web/av/components/icons.tsx` 的 inline SVG（`currentColor`，
 顏色跟著文字走）。`repos.ts` 的 `notes` 用純文字前綴 `! `（警告）與 `* `（重點），
 由 `RepoTable` 在渲染時換成 SVG —— 資料層保持乾淨可搜尋。
 
