@@ -40,6 +40,22 @@ const TOOLS: { href: string; icon: IconName; title: string; desc: string }[] = [
   },
 ];
 
+/** 不常用、平常只在背景跑的東西 —— 放頁面最底下，但每一項都點得進去 */
+const OTHERS: { href: string; icon: IconName; title: string; desc: string }[] = [
+  {
+    href: "/repo-sync",
+    icon: "refresh",
+    title: "Repo 同步",
+    desc: "每晚自動把 org 的 repo pull 一次；有掛外接就連 offloaded 的一起",
+  },
+  {
+    href: "/repos",
+    icon: "repos",
+    title: "Repos 總覽",
+    desc: "org 底下每個 repo 是做什麼的、別名、技術與依賴",
+  },
+];
+
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("zh-TW", {
@@ -271,6 +287,29 @@ export default async function Home() {
               ))}
             </ul>
           )}
+        </div>
+
+        {/*
+          不常用的東西放最底下，平常不該佔注意力（Jay 2026-09-11）。
+          真的壞掉時會自己往上跑 —— 上面那組健康度警告會列出來。
+        */}
+        <div className="mt-10">
+          <h2 className="text-sm font-semibold text-gray-900">其他服務</h2>
+          <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200">
+            {OTHERS.map((o) => (
+              <li key={o.href}>
+                <Link
+                  href={o.href}
+                  className="group flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                >
+                  <Icon name={o.icon} size={15} className="text-gray-300 group-hover:text-gray-500" />
+                  <span className="text-sm text-gray-800">{o.title}</span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-gray-400">{o.desc}</span>
+                  <Icon name="chevronRight" size={14} className="text-gray-300 group-hover:text-gray-600" />
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </div>
