@@ -33,6 +33,7 @@ ssh -N -L 3000:127.0.0.1:3000 <這台機器>
 | `/` | 首頁：Teams 歸檔概況與工具入口 | `data/teams.db` |
 | `/chat/<id>` | Teams 訊息瀏覽與月摘要 | `/teams-scrape`、`/teams-summarize` |
 | `/my-prs` | 我的 PR：open 與近期 merged 的狀態；有人 review／approve 就通知 | `scripts/my-prs.sh`（server 定時抓，開頁面只讀快照） |
+| `/vb-bugs` | VB Bug 總覽：未完成的 bug 依產品 × 狀態 × 優先度 | `scripts/vb-bugs.py`（server 定時抓，開頁面只讀快照） |
 | `/memory` | 記憶體／swap 用量、執行 memclean、檢視腳本 | `shell/memclean.py`（終端機的 `memclean` 同源） |
 | `/pr-inbox` | PR 巡邏：排程開關、手動觸發、執行紀錄與花費 | `scripts/pr-inbox-watch.sh`（排程本身跑在 web server 裡） |
 | `/sessions` | Claude session 檢視、pin、多選刪除 | `~/.claude/projects`、`data/local-state/session-pins.json` |

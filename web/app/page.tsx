@@ -19,6 +19,12 @@ const TOOLS: { href: string; icon: IconName; title: string; desc: string }[] = [
     desc: "自己開的單現在什麼狀態；有人 review 或 approve 就通知",
   },
   {
+    href: "/vb-bugs",
+    icon: "alert",
+    title: "VB Bug 總覽",
+    desc: "Jira 上未完成的 bug，依產品 × 狀態 × 優先度看一張表",
+  },
+  {
     href: "/pr-inbox",
     icon: "refresh",
     title: "PR 巡邏",
