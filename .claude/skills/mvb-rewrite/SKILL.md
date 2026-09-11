@@ -10,8 +10,8 @@ description: "Use when the user says 狸貓版 / 狸貓版 mvb / 狸貓, or when
 
 | 平台 | repo | 技術棧 | 預設分支 |
 |---|---|---|---|
-| Android | `edu-mvb-android-playground` | Kotlin + Jetpack Compose | `droid-port` |
-| macOS | `edu-mvb-mac-playground` | Swift + SwiftUI（macOS 13+） | `mvb-port` |
+| Android | `edu-mvb-android-playground` | Kotlin + Jetpack Compose | `main` |
+| macOS | `edu-mvb-mac-playground` | Swift + SwiftUI（macOS 13+） | `main` |
 | Windows | `edu-swallow-app`（Swallow） | WinUI 3 / Windows App SDK + .NET 10 | `master` |
 
 大家口語一律講中文「**狸貓版**」，沒有通行的英文代號（`mvb-rewrite` 只是 json/skill 需要 ASCII 的佔位名，別拿去跟人溝通）。
@@ -27,10 +27,14 @@ description: "Use when the user says 狸貓版 / 狸貓版 mvb / 狸貓, or when
 
 ## 動手前的固定動作
 
-1. **確認分支**（三個 repo 的預設分支各不相同，見上表；`master` 只有 Swallow 是對的）：
+1. **確認分支**（見上表；`master` 只有 Swallow 是對的）：
    ```bash
    git -C <repo> branch --show-current
+   git -C <repo> ls-remote --symref origin HEAD   # 遠端現在的預設分支
    ```
+   > 兩個 playground 原本的 `droid-port` / `mvb-port` **已在遠端刪除**，預設分支改成 `main`
+   > （2026-09-10 確認）。本機 checkout 若還停在舊分支，`git pull` 會報
+   > 「no such ref was fetched」而不是自動跟上——先 `git fetch --prune` 再切 `main`。
 2. **讀該 repo 的 `CLAUDE.md`** —— 它自稱「專案憲法」，且**不會跨 repo 自動載入**。
    連同 `.claude/rules/`（各 repo 有自己的 path-scoped rules，例如
    `compose-implementation` / `swiftui-implementation` / `winui-implementation` / `conversion`）。
@@ -42,10 +46,17 @@ description: "Use when the user says 狸貓版 / 狸貓版 mvb / 狸貓, or when
 
 ## Ticket / commit 慣例
 
-- **Jira 用 `MT-` 系列**，不是 mvbf/cs 那條線的票號。
-  **狸貓版是「新單一律開 VB」的唯一例外**——其餘產品線 2026-09-09 起從 `VSFT-` 改開 `VB-`，
-  狸貓版維持 `MT-`（專案負責人 2026-09-09 裁定的工作規則，非查證過的組織政策；
-  依據是 MT 在 2026-09-08 仍有 MT-3048～MT-3059 持續建立）。VB 那邊的開單慣例見 `jira-vb`。
+- **repo 內的實作票用 `MT-` 系列**，不是 mvbf/cs 那條線的票號。MT 至今照常收狸貓版的
+  spec／功能／bug／test-infra 票（2026-09-09 仍有 `MT-3074`/`MT-3076` mac、`MT-3075` windows）。
+  ⏳ **MT 未來會收掉**（2026-09-11 Jay 裁定，最終落點是 VB 一個專案），但那是方向不是
+  現況 —— 在 MT 真的停止收票前照舊，不要自己提前搬。翻案條件與細節見 `jira-vb`。
+- **狸貓版的產品面票開在 `VB-`。** 2026-08-31 起 VB 上就有狸貓版的票，且明寫平台：
+  `VB-1897` Mac Native（Epic）、`VB-1893` App Store Mac 上架、`VB-1793`/`VB-1794` v-next OLF
+  發布驗證、`VB-2061` [mVB Windows 狸貓]／`VB-2063` [mVB Mac] MS SSO、`VB-2001`/`VB-2021`/
+  `VB-2022`/`VB-2027` VS Account 後端契約（引用 `MT-2757`）。
+  **所以「狸貓版一律 MT」是錯的**——分界是層次，不是產品線：
+  別的團隊要知道／要接（產品需求、上架、五端共通故事、後端 API 契約）→ `VB-`；
+  只在三個 playground repo 內完成 → `MT-`。開 VB 單的欄位與標題慣例見 `jira-vb`。
 - 分支：`MT-<n>-<英文 kebab slug>`（例：`MT-2486-renderer-fidelity`）。
 - Commit：**Conventional Commits + 尾綴 MT key**，無 gitmoji、無 mvbf 的 `[Type]`：
   - `feat(canvas): present 換頁跳過隱藏頁 (S3, spec 0298) MT-2496`

@@ -1,21 +1,51 @@
 ---
 name: jira-vb
-description: 在 VB 專案（EDU - Software）開 Jira 單。2026-09-09 起新單開這裡、不再開 VSFT（狸貓版維持 MT-，見 mvb-rewrite）。含欄位清單、Team uuid、標題慣例與查證方式。
+description: 在 VB 專案（EDU - Software）開 Jira 單。2026-09-09 起新單開這裡、不再開 VSFT；狸貓版依層次分流（實作票 MT-、產品面/跨端需求 VB-，見 mvb-rewrite）。含欄位清單、Team uuid、標題慣例與查證方式。
 ---
 
 # 在 VB 開 Jira 單
 
-**新開的 ticket 建在 `VB`（EDU - Software）——狸貓版除外。** `VSFT`（myViewBoard Suite）
-是舊落點，既有的 VSFT 單留在原地不搬。
+**新開的 ticket 建在 `VB`（EDU - Software）。** `VSFT`（myViewBoard Suite）是舊落點，
+既有的 VSFT 單留在原地不搬。
 
 | 範圍 | 開哪裡 |
 |---|---|
 | mvbf / ClassSwift / 學生端 web，以及其餘一切 | **`VB-*`**（取代 `VSFT-*`） |
-| 狸貓版原生重寫線（`edu-mvb-android-playground` / `edu-mvb-mac-playground` / `edu-swallow-app`） | **維持 `MT-*`**，見 `mvb-rewrite` skill |
+| 狸貓版三 repo 的**實作票**（spec、功能、bug、test-infra） | **`MT-*`**，見 `mvb-rewrite` skill |
+| 狸貓版的**產品面／跨端需求／後端契約** | **`VB-*`**（見下） |
 
-> **這條界線是專案負責人 2026-09-09 當場裁定的工作規則，不是查證過的組織政策。** 起因是
-> `mvb-rewrite` skill 記著「狸貓版用 MT-」與新規定打架，而 MT 在 2026-09-08 仍有
-> MT-3048～MT-3059 持續建立。日後若觀察到狸貓版也開 VB，以實際為準並回來改這裡。
+### 狸貓版是分兩層，不是「一律 MT」
+
+2026-09-10 查證（`project = VB AND (summary ~ mac OR native OR 狸貓 …) ORDER BY created ASC`）：
+VB 上確實有狸貓版的票，最早 2026-08-31，全部集中在近兩週：
+
+| 票 | 內容 | 建立 |
+|---|---|---|
+| `VB-1793` / `VB-1794` | [mVB Android] / [mVB Mac] 原生版 v-next OLF 發布與跨平台相容驗證 | 2026-08-31 |
+| `VB-1897` | **Mac Native**（Epic） | 2026-09-01 |
+| `VB-1893` | [App Store] Mac 版上架 | 2026-09-01 |
+| `VB-2001` / `VB-2021` / `VB-2022` / `VB-2027` | VS Account Route B 後端契約，明寫「三平台 native client」、引用 `MT-2757` | 2026-09-07~08 |
+| `VB-2061` / `VB-2063` | [MS SSO] Story 1.5 _ **[mVB Windows 狸貓]** / [mVB Mac] | 2026-09-09 |
+
+同期 MT 照常收狸貓版的實作票（2026-09-09 仍有 `MT-3074`/`MT-3076` mac、`MT-3075` windows），
+所以兩邊不是取代關係，而是**層次分工**：
+
+- **VB** = PM／跨團隊那一層：產品需求、上架、五端共通故事、後端 API 契約。標題用
+  `[mVB Mac]` / `[mVB Windows 狸貓]` 標平台；會反向引用 MT 票號當實作依據。
+- **MT** = 狸貓版 repo 內部執行那一層：spec 編號、實作、bug、port parity、test-infra。
+
+> ### ⏳ MT 與 VSFT 都會收掉（2026-09-11 Jay 裁定）
+>
+> Jay 2026-09-11 說「MT 和 VSFT 未來都會棄用」，最終落點是 VB 一個專案。
+>
+> **但這是方向，不是現況** —— 2026-09-09 MT 仍在收新票（`MT-3074` / `MT-3075` /
+> `MT-3076`）。在實際停用之前照下面的分流做，不要自己提前把實作票搬去 VB。
+>
+> **翻案條件**：`project = MT AND created >= -14d` 查不到新票，就是真的停了，
+> 那時把下面這段分流整個刪掉。
+
+判斷方式：**這件事別的團隊要不要知道／要不要接？** 要 → VB；只在三個 playground repo 內
+完成 → MT。拿不準時看它會不會掛在 VB 的產品 Epic（如 `VB-1897` Mac Native）底下。
 
 > ⚠️ **不要用「既有票的分布」推該開在哪個 project。** 那只反映過去，看不出組織換了落點——
 > 2026-09-09 就是這樣開錯的（用 fishing-cat 的 commit 票號 221/221 都是 VSFT 推導）。

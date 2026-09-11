@@ -270,6 +270,200 @@ headless 一碰就把「第一次啟動」這個一次性事件消耗掉，使�
 
 Dart 側用 Flutter MCP 的 `analyze_files`，比 `flutter analyze` 快。
 
+### 新開的 worktree 要先補 `.fvm`
+
+`.fvm/` 被 gitignore（`.gitignore:17`），所以 `git worktree add` 出來的新工作目錄**沒有它**，
+`make test` / `flutter` 會落到系統版本。`.fvmrc` 有進版控，版本資訊還在，補一次即可：
+
+```bash
+fvm use --skip-setup     # 讀 .fvmrc，建 .fvm/flutter_sdk 符號連結
+```
+
+**徵兆**（實測，VSFT-6704）：
+
+```
+The current Flutter SDK version is 3.27.1.
+Because droid requires Flutter SDK version >=3.41.5, version solving failed.
+```
+
+看到「版本解析失敗」不要去動 `pubspec.yaml` 的版本約束——那是 SDK 選錯了。
+
+⚠️ `fvm use` 會**把 `.fvmrc` 結尾的換行吃掉**，產生一行純雜訊 diff。跑完
+`git checkout -- .fvmrc` 還原，別讓它混進 commit。
+
+### `ifp` flavor 裝不到一般 Android 裝置
+
+`android/app/src/ifp/AndroidManifest.xml` 宣告 `android:sharedUserId="android.uid.system"`，
+那需要平台簽章。裝到一般機器（實測：Pixel Tablet）會是：
+
+```
+INSTALL_FAILED_UID_CHANGED: Package com.viewsonic.droid shared user changed
+from <nothing> to android.uid.system
+```
+
+要在非 IFP 機器上驗畫面，改用 **`edla`**（含 ClassSwift，仍需 `-PclassswiftRepoPath`）
+或 **`open`**（不含 ClassSwift）。查證：`grep -rn sharedUserId android/app/src/*/AndroidManifest.xml`。
+
+---
+
+## vsColors：`*OnPrimary*` 不是「一般的 disabled 色」
+
+`textOnPrimaryDisable` 的語意是「**疊在 primary 按鈕底色上**的 disabled 文字」，
+它跟 `actionButtonBackgroundPrimaryDisable` 成對（唯一既有用途在
+`lib/theme/utils/utils.dart` 的 `ElevatedButtonThemeData.disabledForegroundColor`）。
+
+**light theme 的值是 `#ffffff` 純白**——套到白色 surface 上的選單列，整列會直接消失。
+
+| 用途 | token | light | dark |
+|---|---|---|---|
+| surface 上的一般文字 / 圖示 | `textPrimary` / `iconPrimary` | `#333333` / `#4d4d4d` | `#ffffff` |
+| **surface 上的 disabled** | **`textDisable` / `iconDisable`** | `#c2c2c2` | `#919191` |
+| 疊在 primary 按鈕上的 disabled | `textOnPrimaryDisable` | `#ffffff` | `#919191` |
+
+**判準**：挑 disabled token 時，先看它平常成對的「一般狀態」token 是哪個——
+這一列平時用 `iconPrimary`，disabled 就該用 `iconDisable`，不是名字裡有 Disable 就能用。
+
+**徵兆**：查到某個 disabled token 在 light theme 是純白或純黑，那它幾乎一定是
+「on 某個底色」的 token，不是給 surface 用的。
+
+查證：`grep -n '<token>' lib/theme/colors/vs_light_colors.dart lib/theme/colors/vs_dark_colors.dart`
+再把色票代號拿去 `vs_global_colors.dart` 換成實際色值。
+
+### 由來
+
+VSFT-6704。Jay 指定用 `vsColors.textOnPrimaryDisable`，查證後發現在白底選單上會看不見，
+回報後確認是他記錯，改用 `textDisable` / `iconDisable`。
+
+---
+
+## i18n：POEditor 流程的實務補充
+
+團隊的規範在該 repo 的 `.claude/rules/i18n-conventions.md` 與
+`.claude/skills/poeditor-i18n-workflow/`，**動手前兩份都要讀**。以下只記實際跑過一輪
+（VSFT-6704）才知道的事。
+
+### ⚠️ 兩份團隊文件對「AI 要不要寫 term comment」講反了
+
+| 文件 | 說法 |
+|---|---|
+| `.claude/rules/i18n-conventions.md` | AI **負責**撰寫 comment，英文，末行必須是 `(This comment is AI-generated.)` |
+| `.claude/skills/poeditor-i18n-workflow/SKILL.md` | AI **不負責** comment，由工程團隊在網頁補（可貼圖自動上傳 S3），只有 plural term 例外 |
+
+兩份都由同一筆 commit（`a36a2158b`, 2026-04-09）最後修改，**分不出新舊**。
+
+**這條應該上游到 `edu-droid-flutter` 讓團隊裁定，待與 Jay 確認。** 在那之前：動手前先問，
+或照 `rules/` 那份寫（格式較嚴、有 AI 標記，事後要撤掉只是一次 API call）。
+
+### pipeline 可以直接 dispatch 在自己的分支上
+
+`poeditor-i18n-workflow` skill 寫的是「Azure DevOps 觸發 → merge 回分支」，但 repo 裡有
+對應的 GitHub Actions（`.github/workflows/poeditor.yml`，`workflow_dispatch`），它會
+checkout 觸發時指定的 ref 並把結果 commit 回**同一條分支**：
+
+```bash
+gh workflow run poeditor.yml --ref <你的分支>
+```
+
+bot 會產出 `BOT: Auto Apply POEditor changes`（含 `lib/l10n/*.arb` 與 `lib/generated/`），
+`git pull` 就好，**不需要 merge 回分支**。這樣也天然滿足「非 master 分支不要自己 commit arb」。
+
+### 它跑在 self-hosted runner 上，可能排很久
+
+`runs-on: [self-hosted, macos, team-right]`。實測有一次排隊 30 分鐘以上、job 完全沒開始。
+
+**判斷「是不是我的問題」**：看同一個 pool 上有沒有別人的 run 也卡著。
+
+```bash
+gh run list --limit 10 --json status,name,createdAt
+```
+
+若 GitHub-hosted 的 Unit Test 照常跑完、而 self-hosted 的（Daily Build、POEditor）
+全都卡在 queued，那就是 runner 離線或滿載，跟你的改動無關——等或找人重啟，不要改 workflow。
+
+### `add_comment` 回報 `updated=0` 不代表失敗
+
+`parsed=1, updated=0` 的 `updated` 指的是「覆蓋掉幾筆既有 comment」，新寫入的算 0。
+要確認就直接回查，不要重送：
+
+```bash
+curl -s -X POST https://api.poeditor.com/v2/terms/list \
+  -d api_token=<token> -d id=<project_id>
+```
+
+### term 命名
+
+跟著既有的走：`toast_feature_not_support`、`toast_file_file_not_support` 用的是
+`not_support` 而**不是** `not_supported`。新增前先
+`list_terms(search: ...)` 看鄰居怎麼取。
+
+---
+
+## `/dev-deliver`：Jira transition id 不能照抄
+
+`dev-deliver` 是 **mvbf repo 自己的 command**（`.claude/commands/dev-deliver.md`），
+km 沒有同名 skill。它原本把 Jira 的 transition id 寫死在文件裡：Phase 1 用
+`progressing`(19)、Phase 7 用 `task done`(8)。
+
+**寫死的 id 有兩種壞法，兩種都實際踩過：**
+
+1. **同一專案內，清單依「單子當下的狀態」而變** —— 想要的那條可能還沒出現。
+2. **跨專案時，同一個數字是完全不同的動作** —— 這種最危險，因為它不會失敗，
+   它會成功地做錯事。
+
+### 第 2 種：VB 與 VSFT 的 id 完全對不起來（VB-1945 實測）
+
+| 想做的事 | VSFT | VB |
+|---|---|---|
+| 轉「進行中」 | `progressing` **19** | `progressing` **2** |
+| 轉 IN CODE REVIEW | `task done` **8** | 有一條直接叫 `IN CODE REVIEW` **52** |
+| — | — | `task done` 是 **5** |
+| **19 在這裡是** | progressing | ⚠️ **`Closed`** |
+
+也就是照 command 原文在 VB 專案填 19，**會直接把票關掉**，而且 API 會回報成功。
+
+VB-1945 在「進行中」狀態的完整清單（實查）：
+`become sprint candidate`(3)、`Pending`(18)、`Closed`(19)、`READY FOR DEV`(39)、
+`STAGE READY(READY FOR QA)`(43)、`IN CODE REVIEW`(52)、`PR MERGED`(57)、`TODO`(58)、
+`back to ready for dev`(4)、`task done`(5)
+
+**挑選判準**：優先挑**名稱與目標狀態一致**的那條（VB 的 `IN CODE REVIEW`(52)）；
+沒有同名的才找等價轉換（VSFT 的 `task done`）。**不要猜某個名稱通往哪個狀態。**
+
+### 第 1 種：以 VSFT-6704（issue type：**漏洞**）實測
+
+| 當下狀態 | 可用 transition |
+|---|---|
+| 開放 | CLOSED(2)、OPEN(9)、PENDING(12)、open to ready for QA(4)、**progressing(19)**、Deploy to Stage(13)、Code reviewed(16) |
+| 進行中 | CLOSED(2)、OPEN(9)、PENDING(12)、**task done(8)**、Deploy to Stage(13)、Code reviewed(16) |
+
+也就是在「開放」狀態下 **`task done`(8) 根本不在清單裡**，要先轉成「進行中」它才出現。
+`task done`(8) 轉完的狀態名稱是 **IN CODE REVIEW**（又一個「transition 名稱 ≠ 狀態名稱」
+的例子）。
+
+### 真正的陷阱
+
+在「開放」狀態找不到 id 8 時，清單裡看起來最接近的是 **`Code reviewed`(16)**——
+**不要按**。那條是通往 **PR MERGED** 的，PR 還沒合就按會讓單子跳到錯誤狀態。
+（同一組對照另見 km memory 的 `vsft-bug-workflow-states.md`。）
+
+### 做法
+
+**每個 transition 前都重跑一次 `jira_get_transitions`，用當下查到的 id，
+不要照 command 或任何文件裡的數字硬填。** command 裡的 id 只能當「我要找的是哪一條」
+的提示，不能當輸入值。
+
+VSFT 那張表只驗過 **漏洞**、VB 那張只驗過 **故事**；其他 issue type 的工作流可能再不同，
+一樣重查就好。
+
+### 由來
+
+- **VSFT-6704**（漏洞）走 `dev-deliver`。當時單子在「開放」，Phase 7 的 id 8 查不到，
+  差點誤用 `Code reviewed`(16)。先做 Phase 1 轉「進行中」之後 id 8 才出現。
+- **VB-1945**（故事）走 `dev-deliver`。照 command 填 Phase 1 的 19 會把票關掉 ——
+  現查才發現 VB 的 `progressing` 是 2。已回頭修 mvbf 的 `dev-deliver.md`
+  （PR #268），把寫死的 id 換成「查名稱、用當下的 id」＋這兩個陷阱 ——
+  所以新版 command 已經不會給出可直接填入的數字了。
+
 ---
 
 ## 相關 skill
