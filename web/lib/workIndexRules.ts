@@ -79,3 +79,26 @@ export function prDecisionLabel(pr: IndexedPr): string | null {
   if (pr.reviewDecision === "CHANGES_REQUESTED") return "要求修改";
   return null;
 }
+
+/**
+ * 這個工作項目**已經收尾**了嗎：有 PR，而且沒有任何一個還開著。
+ *
+ * 用途是「哪些 session 可以收掉」（Claude Sessions 頁的篩選）。判準刻意保守：
+ * - **沒有 PR 的一律不算收尾** —— 那可能是還沒送出的調查、或根本沒 PR 的工作，
+ *   把它們算進「可以刪」太危險。
+ * - 有任何一個 PR 還 OPEN 就不算，即使其他的已經 merged（那通常代表還有後續）。
+ */
+export function isSettled(item: WorkItem | undefined): boolean {
+  if (!item || item.prs.length === 0) return false;
+  return item.prs.every((pr) => pr.state !== "OPEN");
+}
+
+/** 給畫面用的一句話：`2 個 PR 都 merged` */
+export function settledSummary(item: WorkItem): string {
+  const merged = item.prs.filter((p) => p.state === "MERGED").length;
+  const closed = item.prs.filter((p) => p.state === "CLOSED").length;
+  const parts: string[] = [];
+  if (merged) parts.push(`${merged} 個 merged`);
+  if (closed) parts.push(`${closed} 個 closed`);
+  return parts.join("、");
+}

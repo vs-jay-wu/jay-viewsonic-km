@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  findItemBySession, prDecisionLabel, prStateStyle, sortWorkItems,
+  findItemBySession, isSettled, prDecisionLabel, prStateStyle, settledSummary, sortWorkItems,
   type IndexedPr, type WorkItem,
 } from "@/lib/workIndexRules";
 
@@ -75,5 +75,32 @@ describe("sortWorkItems", () => {
     const b = item({ key: "B", latestAt: "2026-09-11T00:00:00.000Z" });
     const c = item({ key: "C", latestAt: "2026-09-11T00:00:00.000Z", prs: [pr({ number: 9 })] });
     expect(sortWorkItems([a, b, c]).map((x) => x.key)).toEqual(["C", "B", "A"]);
+  });
+});
+
+describe("isSettled — 判斷「這個工作收尾了沒」", () => {
+  it("所有 PR 都 merged／closed 才算收尾", () => {
+    expect(isSettled(item({ key: "A", prs: [pr({ number: 1, state: "MERGED" })] }))).toBe(true);
+    expect(isSettled(item({ key: "B", prs: [pr({ number: 2, state: "CLOSED" })] }))).toBe(true);
+    expect(isSettled(item({
+      key: "C", prs: [pr({ number: 3, state: "MERGED" }), pr({ number: 4, state: "CLOSED" })],
+    }))).toBe(true);
+  });
+
+  it("**只要有一個還 OPEN 就不算**，即使其他的已經 merged", () => {
+    expect(isSettled(item({
+      key: "D", prs: [pr({ number: 5, state: "MERGED" }), pr({ number: 6, state: "OPEN" })],
+    }))).toBe(false);
+  });
+
+  it("**沒有 PR 的一律不算收尾** —— 那可能是還沒送出的調查，算進「可以刪」太危險", () => {
+    expect(isSettled(item({ key: "E", prs: [] }))).toBe(false);
+    expect(isSettled(undefined)).toBe(false);
+  });
+
+  it("settledSummary 講清楚是 merged 還是 closed", () => {
+    expect(settledSummary(item({
+      key: "F", prs: [pr({ number: 7, state: "MERGED" }), pr({ number: 8, state: "CLOSED" })],
+    }))).toBe("1 個 merged、1 個 closed");
   });
 });

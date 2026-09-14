@@ -7,7 +7,7 @@ import Tooltip from "@/components/Tooltip";
 import WorkRefChips from "@/components/WorkRefChips";
 import { parseSessionTitle } from "@/lib/workItemRules";
 import {
-  findItemBySession, prDecisionLabel, prStateStyle,
+  findItemBySession, isSettled, prDecisionLabel, prStateStyle, settledSummary,
 } from "@/lib/workIndexRules";
 import { useTicketSession } from "@/lib/useTicketSession";
 import { isStale, STALE_DAYS } from "@/lib/sessionRules";
@@ -68,7 +68,7 @@ export default function SessionsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [project, setProject] = useState("all");
   const [query, setQuery] = useState("");
-  const [view, setView] = useState<"all" | "stale">("all");
+  const [view, setView] = useState<"all" | "stale" | "settled">("all");
   const [staleDays, setStaleDays] = useState(STALE_DAYS);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,12 +103,26 @@ export default function SessionsPage() {
   );
   const staleBytes = stale.reduce((n, s) => n + s.sizeBytes + s.sidecarBytes, 0);
 
+  /** 對應的 PR 全部 merged／closed 的 session —— 工作已經收尾，通常可以刪 */
+  const settled = useMemo(
+    () =>
+      workIndex
+        ? sessions.filter((s) => isSettled(findItemBySession(workIndex.items, s.id)))
+        : [],
+    [sessions, workIndex]
+  );
+  const settledBytes = settled.reduce((n, s) => n + s.sizeBytes + s.sidecarBytes, 0);
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return sessions
       .filter((s) => project === "all" || s.cwd === project)
       .filter((s) =>
-        view === "stale" ? isStale(s, staleDays) : true
+        view === "stale"
+          ? isStale(s, staleDays)
+          : view === "settled"
+            ? settled.some((x) => x.id === s.id)
+            : true
       )
       .filter(
         (s) =>
@@ -120,11 +134,14 @@ export default function SessionsPage() {
       )
       .sort((a, b) => {
         // 久沒用那頁把最舊的擺前面：要清的東西從那頭開始看最自然
-        if (view === "stale") return a.modifiedAt < b.modifiedAt ? -1 : 1;
+        if (view === "stale" || view === "settled") {
+          // 要清東西時從最舊的看起最自然
+          return a.modifiedAt < b.modifiedAt ? -1 : 1;
+        }
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
         return a.modifiedAt < b.modifiedAt ? 1 : -1;
       });
-  }, [sessions, project, query, view, staleDays]);
+  }, [sessions, project, query, view, staleDays, settled]);
 
   // 切換分頁時清掉選取：看不到卻還被勾著的東西，按下刪除會一起消失
   useEffect(() => { setSelected(new Set()); }, [view]);
@@ -357,6 +374,7 @@ export default function SessionsPage() {
             {([
               ["all", `全部（${sessions.length}）`],
               ["stale", `久沒用（${stale.length}）`],
+              ["settled", `已收尾（${settled.length}）`],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
@@ -420,6 +438,19 @@ export default function SessionsPage() {
             <span>共 {stale.length} 個、{mb(staleBytes)}</span>
             <span className="text-amber-700/80">
               只是幫你挑出來，不會自動刪；要留的先 pin 起來再全選
+            </span>
+          </div>
+        )}
+
+        {/* 已收尾：對應的 PR 全部 merged／closed。用中性灰底，因為這不是警告 */}
+        {view === "settled" && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-xs text-gray-600">
+            <span className="font-medium text-gray-800">
+              對應的 PR 都已經 merged 或 closed 的 session
+            </span>
+            <span>共 {settled.length} 個、{mb(settledBytes)}</span>
+            <span className="text-gray-500">
+              沒有 PR 的不算在內（可能是還沒送出的調查）；要留的先 pin 起來
             </span>
           </div>
         )}
