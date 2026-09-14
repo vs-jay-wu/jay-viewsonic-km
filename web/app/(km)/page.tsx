@@ -2,6 +2,8 @@ import Link from "next/link";
 import { listChats } from "@/lib/db";
 import { readSnapshot } from "@/lib/myPrs";
 import { classifyError, SOURCE_LABELS, unhealthySources } from "@/lib/health";
+import { readDisks } from "@/lib/disk";
+import { formatGB, isLow, levelOf, WARN_BELOW_PERCENT } from "@/lib/diskRules";
 import { orcaPresence } from "@/lib/orca";
 import Icon, { type IconName } from "@/components/Icon";
 import BuildDirsSection from "@/components/BuildDirsSection";
@@ -34,12 +36,6 @@ const TOOLS: { href: string; icon: IconName; title: string; desc: string }[] = [
     icon: "alert",
     title: "VB Bug 總覽",
     desc: "Jira 上未完成的 bug，依產品 × 狀態 × 優先度看一張表",
-  },
-  {
-    href: "/pr-inbox",
-    icon: "refresh",
-    title: "PR 巡邏",
-    desc: "定期偵測待處理的 PR，必要時才叫 Claude 跑 /handle-pr-inbox",
   },
   {
     href: "/changes",
@@ -77,6 +73,12 @@ const OTHERS: {
     desc: "每晚自動把 org 的 repo pull 一次；有掛外接就連 offloaded 的一起",
   },
   {
+    href: "/pr-inbox",
+    icon: "refresh",
+    title: "PR 巡邏",
+    desc: "定期偵測待處理的 PR，必要時才叫 Claude 跑 /handle-pr-inbox",
+  },
+  {
     href: "/repos",
     icon: "repos",
     title: "Repos 總覽",
@@ -110,6 +112,8 @@ export default async function Home() {
   const myPrs = await readSnapshot().catch(() => null);
   // 連續失敗到門檻的資料來源。偶爾失敗不列 —— 那種警告看久了就會被忽略
   const unhealthy = await unhealthySources().catch(() => []);
+  // 硬碟剩不到 10% 就要講（Jay 2026-09-14）。沒事的時候完全不佔版面
+  const lowDisks = (await readDisks().catch(() => [])).filter(isLow);
   // 裝了就永久記住，不再偵測；沒裝才每次重測（見 lib/orca.ts）
   const orca = await orcaPresence().catch(() => null);
   const openPrs = (myPrs?.prs ?? []).filter((p) => p.state === "OPEN");
@@ -147,6 +151,45 @@ export default async function Home() {
             </div>
           </div>
         )}
+
+        {/* 硬碟快滿。10% 以下是警告（琥珀），5% 以下是要馬上處理（紅） */}
+        {lowDisks.map((d) => {
+          const critical = levelOf(d) === "critical";
+          return (
+            <div
+              key={d.mount}
+              className={`mt-6 rounded-xl border px-5 py-4 ${
+                critical ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"
+              }`}
+            >
+              <div
+                className={`flex flex-wrap items-center gap-2 text-sm font-medium ${
+                  critical ? "text-red-800" : "text-amber-800"
+                }`}
+              >
+                <Icon name="alert" size={16} />
+                {d.label}硬碟快滿了
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-normal ${
+                    critical ? "bg-red-600 text-white" : "bg-amber-200 text-amber-900"
+                  }`}
+                >
+                  剩 {d.freePercent.toFixed(1)}%
+                </span>
+                <span className="font-normal">
+                  {formatGB(d.freeBytes)} / {formatGB(d.totalBytes)} 可用
+                </span>
+              </div>
+              <div className={`mt-1.5 text-xs ${critical ? "text-red-700" : "text-amber-700"}`}>
+                低於 {WARN_BELOW_PERCENT}% 就會出現這則提醒。
+                <Link href="/changes" className="ml-1 underline">
+                  看未提交的改動
+                </Link>
+                ，或用下面的「佔空間的 build 產物」清一輪（<code>{d.mount}</code>）。
+              </div>
+            </div>
+          );
+        })}
 
         {/* 抓取一直失敗的來源。判準統一在 lib/healthRules.ts，各頁不另寫一套 */}
         {unhealthy.length > 0 && (

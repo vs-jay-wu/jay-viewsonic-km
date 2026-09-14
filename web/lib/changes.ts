@@ -127,6 +127,67 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
   return out;
 }
 
+/**
+ * 找出「只改了檔案模式、內容一個字都沒動」的檔。
+ *
+ * 三個訊號合起來才準（前兩版都錯過，原因記在這裡）：
+ *
+ * 1. `git diff --summary` 列出所有 mode change —— 但它**不代表內容沒變**，
+ *    一個檔可以同時改模式又改內容。
+ * 2. `git diff --numstat` 會**連純模式改變也列出來，只是增刪都是 `0`**
+ *    （第一版以為它會省略，結果 maine-coon-cat 的 1239 個 chmod 全被當成真改動）。
+ * 3. 二進位檔在 numstat 是 `-  -`，**看不出有沒有改內容**（第二版因此把 17 個
+ *    只改模式的音效／圖示當成真改動）。這些只能直接比 blob：工作區檔案的
+ *    `git hash-object` 對上 `git ls-tree HEAD` 的 sha，一樣就是純模式。
+ */
+async function modeOnlyPaths(worktree: string, modified: string[]): Promise<Set<string>> {
+  if (!modified.length) return new Set();
+
+  const [summaryRes, numstatRes] = await Promise.all([
+    run("git", ["-C", worktree, "diff", "--summary", "HEAD"], { timeoutMs: 60_000 }),
+    run("git", ["-C", worktree, "diff", "--numstat", "HEAD"], { timeoutMs: 60_000 }),
+  ]);
+
+  const modeChanged = new Set<string>();
+  for (const line of summaryRes.stdout.split("\n")) {
+    const m = /^\s*mode change \d+ => \d+ (.+)$/.exec(line);
+    if (m) modeChanged.add(m[1].trim());
+  }
+  if (!modeChanged.size) return new Set();
+
+  const withContent = new Set<string>();
+  const binary: string[] = [];
+  for (const line of numstatRes.stdout.split("\n")) {
+    const [added, deleted, file] = line.split("\t");
+    if (!file) continue;
+    const rel = file.trim();
+    if (added === "-" && deleted === "-") binary.push(rel);
+    else if (added !== "0" || deleted !== "0") withContent.add(rel);
+  }
+
+  // 二進位檔只能比 blob。只比「有 mode change 的那些」，通常是個位數到幾十個。
+  const candidates = binary.filter((rel) => modeChanged.has(rel));
+  if (candidates.length) {
+    const [hashRes, treeRes] = await Promise.all([
+      run("git", ["-C", worktree, "hash-object", "--", ...candidates], { timeoutMs: 120_000 }),
+      run("git", ["-C", worktree, "ls-tree", "HEAD", "--", ...candidates], { timeoutMs: 60_000 }),
+    ]);
+    const headBlob = new Map<string, string>();
+    for (const line of treeRes.stdout.split("\n")) {
+      const m = /^\d+ blob ([0-9a-f]+)\s+(.+)$/.exec(line);
+      if (m) headBlob.set(m[2].trim().replace(/^"|"$/g, ""), m[1]);
+    }
+    const hashes = hashRes.stdout.split("\n").map((h) => h.trim()).filter(Boolean);
+    candidates.forEach((rel, i) => {
+      const worktreeHash = hashes[i];
+      // 比不出來（hash-object 失敗之類）就當成有內容改動，寧可多顯示不要少顯示
+      if (!worktreeHash || headBlob.get(rel) !== worktreeHash) withContent.add(rel);
+    });
+  }
+
+  return new Set(modified.filter((rel) => modeChanged.has(rel) && !withContent.has(rel)));
+}
+
 async function statusOf(worktree: string): Promise<ChangedFile[]> {
   const { stdout, code } = await run(
     "git",
@@ -135,28 +196,11 @@ async function statusOf(worktree: string): Promise<ChangedFile[]> {
   );
   if (code !== 0) return [];
   const files = parseStatus(stdout);
-  if (!files.some((f) => f.kind === "modified")) return files;
+  const modified = files.filter((f) => f.kind === "modified").map((f) => f.path);
+  if (!modified.length) return files;
 
-  // 找出「真的有內容差異」的檔。
-  //
-  // ⚠️ `git diff --numstat` **也會列出純模式改變的檔**，只是新增／刪除都是 `0`
-  //（一開始以為它會省略，結果 maine-coon-cat 的 1239 個 chmod 全部被當成真改動）。
-  // 所以要看的是前兩欄而不是「有沒有出現」。二進位檔是 `-  -`，那是真的有改。
-  const { stdout: numstat } = await run(
-    "git",
-    ["-C", worktree, "diff", "--numstat", "HEAD"],
-    { timeoutMs: 60_000 }
-  );
-  const withContent = new Set<string>();
-  for (const line of numstat.split("\n")) {
-    const [added, deleted, file] = line.split("\t");
-    if (!file) continue;
-    if (added === "0" && deleted === "0") continue;
-    withContent.add(file.trim());
-  }
-  return files.map((f) =>
-    f.kind === "modified" && !withContent.has(f.path) ? { ...f, modeOnly: true } : f
-  );
+  const modeOnly = await modeOnlyPaths(worktree, modified);
+  return files.map((f) => (modeOnly.has(f.path) ? { ...f, modeOnly: true } : f));
 }
 
 export interface ChangesSnapshot {
