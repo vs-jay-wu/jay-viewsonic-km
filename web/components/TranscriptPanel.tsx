@@ -298,7 +298,7 @@ export default function TranscriptPanel({
 
   return (
     <aside
-      className="fixed inset-y-0 right-0 z-40 flex w-[40rem] max-w-[46vw] flex-col border-l border-gray-200 bg-white shadow-2xl"
+      className="fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-gray-200 bg-white shadow-2xl sm:w-[40rem] sm:max-w-[46vw]"
     >
       <div className="flex items-start gap-3 border-b border-gray-200 px-4 py-3">
         <div className="min-w-0 flex-1">

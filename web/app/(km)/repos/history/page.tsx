@@ -82,7 +82,7 @@ export default function RepoMoveHistoryPage() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-8 py-10">
+      <div className="max-w-4xl mx-auto px-4 py-6 sm:px-8 sm:py-10">
         <Link
           href="/repos"
           className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900"

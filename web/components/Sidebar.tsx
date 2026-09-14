@@ -29,7 +29,11 @@ const EXTERNAL_SITES: { href: string; label: string; icon: IconName }[] = [
   { href: "/av-streaming", label: "AV Streaming 筆記", icon: "cpu" },
 ];
 
-export default function Sidebar() {
+/**
+ * 側邊欄。寬螢幕是固定的一欄；窄螢幕由 `AppShell` 當抽屜用（浮在內容上），
+ * 點任何一個連結就收起來 —— 不然點完還擋著你要看的東西。
+ */
+export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const [chats, setChats] = useState<Chat[]>([]);
   const params = useParams();
   const pathname = usePathname();
@@ -45,7 +49,7 @@ export default function Sidebar() {
     }`;
 
   return (
-    <aside className="w-64 shrink-0 bg-[#2d2d2d] text-white flex flex-col h-full">
+    <aside className="w-64 shrink-0 bg-[#2d2d2d] text-white flex flex-col h-full overflow-hidden">
       <div className="px-4 py-4 border-b border-white/10">
         <h1 className="text-base font-semibold">KM 工作台</h1>
       </div>
@@ -55,6 +59,7 @@ export default function Sidebar() {
           <Link
             key={t.href}
             href={t.href}
+            onClick={onNavigate}
             className={itemClass(
               t.href === "/" ? pathname === "/" : pathname.startsWith(t.href)
             )}
@@ -88,6 +93,7 @@ export default function Sidebar() {
           <Link
             key={chat.id}
             href={`/chat/${chat.id}`}
+            onClick={onNavigate}
             className={itemClass(activeChatId === chat.id)}
           >
             <Icon name="hash" size={14} className="text-white/40" />

@@ -8,7 +8,7 @@ export type IconName =
   | "trash" | "pin" | "pinOff" | "play" | "code" | "check" | "x" | "alert"
   | "clock" | "spinner" | "chevronRight" | "chevronDown" | "external" | "coins"
   | "search" | "lock" | "gitPr" | "bell" | "repos" | "hardDrive"
-  | "toTop" | "toBottom"
+  | "toTop" | "toBottom" | "menu"
   | "bug" | "task" | "story" | "spike" | "ops";
 
 const PATHS: Record<IconName, React.ReactNode> = {
@@ -44,6 +44,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
   story: <><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M9 8h6v8l-3-2.2L9 16V8Z" /></>,
   spike: <><rect x="4" y="4" width="16" height="16" rx="3" /><path d="m13 7-4 6h3l-1 4 4-6h-3l1-4Z" /></>,
   ops: <><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8 15V9M12 15v-3M16 15v-5" /></>,
+  menu: <><path d="M4 7h16M4 12h16M4 17h16" /></>,
   toTop: <><path d="M4 4h16" /><path d="M12 20V8" /><path d="m6 14 6-6 6 6" /></>,
   toBottom: <><path d="M4 20h16" /><path d="M12 4v12" /><path d="m6 10 6 6 6-6" /></>,
   hardDrive: <><rect x="3" y="13" width="18" height="7" rx="2" /><path d="m5.5 13 2.2-7h8.6l2.2 7" /><path d="M7 16.5h.01M10.5 16.5h.01" /></>,

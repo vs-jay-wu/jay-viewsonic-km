@@ -67,7 +67,7 @@ export default function DocsPage() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-8 py-10">
+      <div className="max-w-4xl mx-auto px-4 py-6 sm:px-8 sm:py-10">
         <h1 className="flex items-center gap-2.5 text-2xl font-semibold text-gray-900">
           <Icon name="clipboard" size={22} className="text-gray-400" />
           文件

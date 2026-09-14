@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import "@/app/globals.css";
-import Sidebar from "@/components/Sidebar";
+import AppShell from "@/components/AppShell";
 import ConfirmProvider from "@/components/Confirm";
 import PromptProvider from "@/components/Prompt";
 
@@ -17,12 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${geist.className} h-full antialiased`}>
         <ConfirmProvider>
           <PromptProvider>
-            <div className="flex h-full bg-gray-50">
-              <Sidebar />
-              <main className="flex-1 flex flex-col min-w-0 bg-white overflow-hidden">
-                {children}
-              </main>
-            </div>
+            <AppShell>{children}</AppShell>
           </PromptProvider>
         </ConfirmProvider>
       </body>

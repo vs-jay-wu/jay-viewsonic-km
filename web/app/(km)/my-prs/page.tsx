@@ -303,7 +303,7 @@ export default function MyPrsPage() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-4xl px-8 py-10">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-8 sm:py-10">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">我的 PR</h1>

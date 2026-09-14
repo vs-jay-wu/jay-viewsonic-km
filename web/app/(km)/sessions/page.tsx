@@ -283,7 +283,7 @@ export default function SessionsPage() {
   return (
     <div className="min-h-0 flex-1">
       <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-5xl px-8 py-10">
+      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-8 sm:py-10">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Claude Sessions</h1>

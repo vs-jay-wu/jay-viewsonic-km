@@ -210,7 +210,7 @@ export default function PrInboxPage() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-8 py-10">
+      <div className="max-w-4xl mx-auto px-4 py-6 sm:px-8 sm:py-10">
         <h1 className="text-2xl font-semibold text-gray-900">PR 巡邏</h1>
         <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
           排程只做<strong className="font-medium text-gray-700">偵測</strong>（
