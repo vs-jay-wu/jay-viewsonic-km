@@ -5,6 +5,7 @@ import { classifyError, SOURCE_LABELS, unhealthySources } from "@/lib/health";
 import { orcaPresence } from "@/lib/orca";
 import Icon, { type IconName } from "@/components/Icon";
 import BuildDirsSection from "@/components/BuildDirsSection";
+import QuickNote from "@/components/QuickNote";
 import HomeOpenPrs from "@/components/HomeOpenPrs";
 
 export const dynamic = "force-dynamic";
@@ -200,6 +201,10 @@ export default async function Home() {
             })}
           </div>
         )}
+
+        {/* 快速筆記：健康度警告之下、工具卡之上。
+            警告一定要在最上面（那是要你處理的事），但筆記要一進來就看得到。 */}
+        <QuickNote />
 
         {/* 工具 */}
         <div className="mt-8 grid gap-3 sm:grid-cols-2">
