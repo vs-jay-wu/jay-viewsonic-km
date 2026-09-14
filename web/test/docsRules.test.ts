@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  kindFromName, matchesDocQuery, parseDocHead, scopeOf, sortFiles, sortSets,
+  groupSetsByRepo, kindFromName, matchesDocQuery, parseDocHead, scopeOf, sortFiles, sortSets,
   type DocFile, type DocSet,
 } from "@/lib/docsRules";
 import { resolveDocPath } from "@/lib/docs";
@@ -150,5 +150,39 @@ describe("resolveDocPath — 只能碰 docs/ 底下", () => {
     // 這條是繞路但仍在 docs/ 底下，應該放行
     expect(resolveDocPath(["features", "x", "..", "phet-cc-by-attribution", "index.html"]))
       .toMatch(/\/docs\/features\/phet-cc-by-attribution\/index\.html$/);
+  });
+});
+
+describe("groupSetsByRepo — 依 repo 分群", () => {
+  const mk = (dir: string, repo: string | null, updated: string) =>
+    set({ dir, repo, feature: dir, updated });
+
+  const list = [
+    mk("a", "ragdoll-cat", "2026-09-04"),
+    mk("b", null, "2026-08-21"),
+    mk("c", "edu-droid-flutter", "2026-09-10"),
+    mk("d", "edu-droid-flutter", "2026-08-01"),
+  ];
+
+  it("同一個 repo 併成一群", () => {
+    const groups = groupSetsByRepo(list);
+    expect(groups.map((g) => g.label)).toEqual(["edu-droid-flutter", "ragdoll-cat", "跨產品"]);
+    expect(groups[0].sets.map((s) => s.dir)).toEqual(["c", "d"]);
+  });
+
+  it("群照「群裡最新的更新」由新到舊", () => {
+    expect(groupSetsByRepo(list).map((g) => g.updated))
+      .toEqual(["2026-09-10", "2026-09-04", "2026-08-21"]);
+  });
+
+  it("跨產品是正當分類，不特別往後（它照樣照時間排）", () => {
+    const recent = [mk("x", null, "2026-09-20"), mk("y", "ragdoll-cat", "2026-09-01")];
+    expect(groupSetsByRepo(recent)[0].label).toBe("跨產品");
+  });
+
+  it("pin 的在群內排最前面", () => {
+    const groups = groupSetsByRepo(list, ["d"]);
+    expect(groups.find((g) => g.repo === "edu-droid-flutter")!.sets.map((s) => s.dir))
+      .toEqual(["d", "c"]);
   });
 });

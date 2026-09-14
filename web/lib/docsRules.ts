@@ -165,3 +165,39 @@ export function matchesDocQuery(set: DocSet, query: string): boolean {
   ].join(" ").toLowerCase();
   return terms.every((t) => hay.includes(t));
 }
+
+// ─── 依 repo 分群 ────────────────────────────────────────────────────────────
+
+export interface DocRepoGroup {
+  /** repo 名；跨產品的文件集是 null */
+  repo: string | null;
+  label: string;
+  sets: DocSet[];
+  /** 群裡最新的更新日期，拿來排群 */
+  updated: string | null;
+}
+
+export const CROSS_PRODUCT_LABEL = "跨產品";
+
+/**
+ * 照 repo 分群（Jay 2026-09-14）。
+ *
+ * 群內沿用 `sortSets`（pin 的在前、其餘照最後更新），群本身照「群裡最新的更新」
+ * 由新到舊 —— 最近在動的 repo 排前面。**跨產品那群不特別往後**：它是一種正當的
+ * 分類（`docs/features/`），不是「還沒分類」。
+ */
+export function groupSetsByRepo(sets: DocSet[], pinned: string[] = []): DocRepoGroup[] {
+  const groups = new Map<string, DocRepoGroup>();
+  for (const set of sets) {
+    const key = set.repo ?? "";
+    let g = groups.get(key);
+    if (!g) {
+      g = { repo: set.repo, label: set.repo ?? CROSS_PRODUCT_LABEL, sets: [], updated: null };
+      groups.set(key, g);
+    }
+    g.sets.push(set);
+    if ((set.updated ?? "") > (g.updated ?? "")) g.updated = set.updated;
+  }
+  for (const g of groups.values()) g.sets = sortSets(g.sets, pinned);
+  return [...groups.values()].sort((a, b) => (b.updated ?? "").localeCompare(a.updated ?? ""));
+}

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import {
-  KIND_LABEL, STATUS_STYLE, matchesDocQuery, sortSets,
+  KIND_LABEL, STATUS_STYLE, groupSetsByRepo, matchesDocQuery, sortSets,
   type DocFile, type DocsIndex,
 } from "@/lib/docsRules";
 import { ticketUrl } from "@/lib/workItemRules";
@@ -111,11 +111,24 @@ export default function DocsPage() {
           )}
         </div>
 
-        <ul className="mt-4 divide-y divide-gray-100 rounded-xl border border-gray-200">
-          {data && sets.length === 0 && (
-            <li className="px-4 py-8 text-center text-sm text-gray-400">沒有符合的文件</li>
-          )}
-          {sets.map((s) => {
+        {data && sets.length === 0 && (
+          <p className="mt-4 rounded-xl border border-gray-200 px-4 py-8 text-center text-sm text-gray-400">
+            沒有符合的文件
+          </p>
+        )}
+
+        {/* 依 repo 分群（Jay 2026-09-14）。群內沿用 pin 優先、其餘照最後更新 */}
+        {groupSetsByRepo(sets, data?.pinned ?? []).map((g) => (
+          <section key={g.label} className="mt-4">
+            <h2 className="flex items-baseline gap-2 px-1 text-xs font-semibold text-gray-700">
+              <span className="font-mono">{g.label}</span>
+              <span className="font-normal text-gray-400">{g.sets.length}</span>
+              {g.repo === null && (
+                <span className="font-normal text-gray-300">docs/features/</span>
+              )}
+            </h2>
+            <ul className="mt-1.5 divide-y divide-gray-100 rounded-xl border border-gray-200">
+              {g.sets.map((s) => {
             const pinned = data?.pinned.includes(s.dir) ?? false;
             const open = expanded.has(s.dir);
             const st = STATUS_STYLE[s.status];
@@ -153,7 +166,7 @@ export default function DocsPage() {
                     </div>
 
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-400">
-                      <span className="font-mono">{s.repo ?? "跨產品"}</span>
+                      {/* repo 已經在群標題上，這裡只留 feature 名 */}
                       <span className="font-mono">{s.feature}</span>
                       <button
                         onClick={() =>
@@ -227,8 +240,10 @@ export default function DocsPage() {
                 </div>
               </li>
             );
-          })}
-        </ul>
+              })}
+            </ul>
+          </section>
+        ))}
       </div>
     </div>
   );
