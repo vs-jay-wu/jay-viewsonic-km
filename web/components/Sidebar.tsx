@@ -20,6 +20,7 @@ const TOOLS: { href: string; label: string; icon: IconName }[] = [
   { href: "/changes", label: "未提交的改動", icon: "code" },
   { href: "/docs", label: "文件", icon: "clipboard" },
   { href: "/sessions", label: "Claude Sessions", icon: "layers" },
+  { href: "/settings", label: "設定", icon: "cpu" },
 ];
 
 /**

@@ -255,6 +255,21 @@ export async function scanChanges(): Promise<ChangesSnapshot> {
   };
 }
 
+/**
+ * 這個路徑是不是工作區裡的 git 工作區。
+ *
+ * 給 diff API 用的**輕量**驗證。原本是「重跑一次完整掃描再比對」，但掃描為了
+ * 判斷 modeOnly 多了好幾個 git 呼叫之後，每點一個檔案就要等好幾秒。
+ * 這裡只做兩件事：路徑在工作區根目錄底下、而且那裡真的有 `.git`。
+ */
+export async function isKnownWorktree(candidate: string): Promise<boolean> {
+  const abs = path.resolve(candidate);
+  const { roots } = await workspace();
+  const inside = roots.some((r) => abs === r || abs.startsWith(path.resolve(r) + path.sep));
+  if (!inside) return false;
+  return looksLikeRepo(abs);
+}
+
 // ─── 單一檔案的 diff ─────────────────────────────────────────────────────────
 
 export interface FileDiff {

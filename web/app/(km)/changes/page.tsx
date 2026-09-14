@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import "highlight.js/styles/github.css";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import DiffView from "@/components/DiffView";
+import { hljsHref, type DiffTheme } from "@/lib/uiSettingsRules";
 import {
   KIND_CLS, KIND_LABEL, KIND_TITLE, countByKind,
   type ChangedFile, type DiffLine, type RepoChanges,
@@ -36,12 +36,38 @@ interface DiffPayload {
 export default function ChangesPage() {
   const [data, setData] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showUntracked, setShowUntracked] = useState(false);
   const [showModeOnly, setShowModeOnly] = useState(false);
   const [selected, setSelected] = useState<Selected | null>(null);
   const [diff, setDiff] = useState<DiffPayload | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [diffTheme, setDiffTheme] = useState<DiffTheme>("dark");
+  /** 收起來的 repo 與 worktree（key 用 repo 名／worktree 絕對路徑）。
+   *  存 localStorage —— 純畫面偏好，不值得上 server，但要撐過重新整理 */
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("km.changes.collapsed");
+      if (raw) setCollapsed(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      /* 讀不到就當全部展開 */
+    }
+  }, []);
+
+  const toggleCollapsed = (key: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      try {
+        localStorage.setItem("km.changes.collapsed", JSON.stringify([...next]));
+      } catch {
+        /* 存不了就算了，下次重新整理回到全展開 */
+      }
+      return next;
+    });
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,6 +85,27 @@ export default function ChangesPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  // diff 的配色在 `/settings` 改。樣式表用 <link> 動態換 —— highlight.js 的主題是
+  // 整份全域 CSS，靜態 import 兩份會互相蓋掉，沒辦法在執行期切換
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((s: { diffTheme?: DiffTheme }) => setDiffTheme(s.diffTheme === "light" ? "light" : "dark"))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const id = "hljs-theme";
+    let link = document.getElementById(id) as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement("link");
+      link.id = id;
+      link.rel = "stylesheet";
+      document.head.appendChild(link);
+    }
+    link.href = hljsHref(diffTheme);
+  }, [diffTheme]);
+
   // 切回這個分頁時重掃 —— 你剛在終端改完東西回來看，要看到的是現在的狀態
   useEffect(() => {
     const onFocus = () => {
@@ -73,7 +120,11 @@ export default function ChangesPage() {
     setDiff(null);
     setDiffLoading(true);
     try {
-      const qs = new URLSearchParams({ worktree: sel.worktree, file: sel.file.path });
+      const qs = new URLSearchParams({
+        worktree: sel.worktree,
+        file: sel.file.path,
+        untracked: sel.file.kind === "untracked" ? "1" : "0",
+      });
       const res = await fetch(`/api/changes/diff?${qs}`);
       const json = await res.json();
       setDiff(res.ok ? json : { lines: [], truncated: false, binary: false, error: json.error });
@@ -95,9 +146,9 @@ export default function ChangesPage() {
 
   const repos = useMemo(() => {
     if (!data) return [];
-    // 未追蹤的多半是產物；只改模式的是整個 repo 被 chmod 過。兩種都會把真正的改動洗掉
-    const keep = (f: ChangedFile) =>
-      (showUntracked || f.kind !== "untracked") && (showModeOnly || !f.modeOnly);
+    // 未追蹤的一律顯示（Jay 2026-09-14）。只改模式的才預設藏起來 ——
+    // 那是整個 repo 被 chmod 過的產物，會把真正的改動洗掉
+    const keep = (f: ChangedFile) => showModeOnly || !f.modeOnly;
     return data.repos
       .map((r) => {
         const worktrees = r.worktrees
@@ -106,7 +157,7 @@ export default function ChangesPage() {
         return { ...r, worktrees, total: worktrees.reduce((n, w) => n + w.files.length, 0) };
       })
       .filter((r) => r.total > 0);
-  }, [data, showUntracked, showModeOnly]);
+  }, [data, showModeOnly]);
 
   const totalFiles = repos.reduce((n, r) => n + r.total, 0);
 
@@ -126,16 +177,8 @@ export default function ChangesPage() {
                   (data.skippedOffloaded > 0 ? `（offloaded 的 ${data.skippedOffloaded} 個沒掃）` : "")
                 : ""}
           </span>
-          <label className="ml-auto inline-flex items-center gap-1.5 text-xs text-gray-600">
-            <input
-              type="checkbox"
-              checked={showUntracked}
-              onChange={(e) => setShowUntracked(e.target.checked)}
-            />
-            含未追蹤
-          </label>
           <Tooltip label="只有檔案模式變了（100644 → 100755），內容沒改">
-            <label className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+            <label className="ml-auto inline-flex items-center gap-1.5 text-xs text-gray-600">
               <input
                 type="checkbox"
                 checked={showModeOnly}
@@ -172,29 +215,48 @@ export default function ChangesPage() {
         >
           {!loading && repos.length === 0 && (
             <p className="px-4 py-8 text-center text-sm text-gray-400">
-              沒有未提交的改動{!showUntracked && "（未追蹤的沒算）"}。
+              沒有未提交的改動。
             </p>
           )}
           {repos.map((r) => (
             <div key={r.repo} className="border-b border-gray-100">
               <div className="flex items-center gap-2 bg-gray-50 px-4 py-2">
-                <span className="truncate font-mono text-xs font-medium text-gray-900">{r.repo}</span>
-                <span className="text-[11px] text-gray-400">{r.total}</span>
+                <button
+                  onClick={() => toggleCollapsed(r.repo)}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                >
+                  <Icon
+                    name={collapsed.has(r.repo) ? "chevronRight" : "chevronDown"}
+                    size={13}
+                    className="shrink-0 text-gray-400"
+                  />
+                  <span className="truncate font-mono text-xs font-medium text-gray-900">{r.repo}</span>
+                  <span className="text-[11px] text-gray-400">{r.total}</span>
+                </button>
                 <Tooltip side="left" label="忽略這個 repo（通常是產物或別人的 WIP）">
                   <button
                     onClick={() => toggleIgnore(r.repo)}
-                    className="ml-auto text-gray-300 hover:text-gray-700"
+                    className="shrink-0 text-gray-300 hover:text-gray-700"
                   >
                     <Icon name="x" size={13} />
                   </button>
                 </Tooltip>
               </div>
 
-              {r.worktrees.map((w) => {
+              {!collapsed.has(r.repo) && r.worktrees.map((w) => {
                 const counts = countByKind(w.files);
+                const wOpen = !collapsed.has(w.path);
                 return (
                   <div key={w.path}>
-                    <div className="flex flex-wrap items-center gap-1.5 px-4 py-1.5 text-[11px]">
+                    <button
+                      onClick={() => toggleCollapsed(w.path)}
+                      className="flex w-full flex-wrap items-center gap-1.5 px-4 py-1.5 text-left text-[11px] hover:bg-gray-50"
+                    >
+                      <Icon
+                        name={wOpen ? "chevronDown" : "chevronRight"}
+                        size={11}
+                        className="shrink-0 text-gray-300"
+                      />
                       {!w.isMain && (
                         <span
                           className={`rounded-full border px-1.5 py-0.5 leading-none ${
@@ -225,9 +287,9 @@ export default function ChangesPage() {
                         {counts.untracked > 0 && `U${counts.untracked} `}
                         {counts.conflict > 0 && `C${counts.conflict}`}
                       </span>
-                    </div>
+                    </button>
 
-                    <ul>
+                    <ul className={wOpen ? "" : "hidden"}>
                       {w.files.map((f) => {
                         const on = selected?.worktree === w.path && selected.file.path === f.path;
                         return (
@@ -312,7 +374,12 @@ export default function ChangesPage() {
               ) : diff?.binary ? (
                 <p className="px-4 py-6 text-sm text-gray-400">二進位檔，不顯示內容。</p>
               ) : diff ? (
-                <DiffView lines={diff.lines} file={selected.file.path} truncated={diff.truncated} />
+                <DiffView
+                  lines={diff.lines}
+                  file={selected.file.path}
+                  truncated={diff.truncated}
+                  theme={diffTheme}
+                />
               ) : null}
             </>
           )}

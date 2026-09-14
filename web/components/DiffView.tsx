@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import hljs from "highlight.js/lib/common";
 import { languageOf, type DiffLine } from "@/lib/changesRules";
+import type { DiffTheme } from "@/lib/uiSettingsRules";
 
 /**
  * unified diff 的顯示：行號、+/- 底色、語法上色。
@@ -14,10 +15,18 @@ import { languageOf, type DiffLine } from "@/lib/changesRules";
  * 認不得的副檔名**不上色**，不要硬猜語言（猜錯的上色比沒有上色更難讀）。
  */
 
-const KIND_ROW: Record<string, string> = {
+const ROW_LIGHT: Record<string, string> = {
   add: "bg-emerald-50",
   del: "bg-red-50",
   hunk: "bg-gray-100 text-gray-500 select-none",
+  context: "",
+  meta: "hidden",
+};
+
+const ROW_DARK: Record<string, string> = {
+  add: "bg-emerald-950/60",
+  del: "bg-red-950/60",
+  hunk: "bg-gray-800 text-gray-400 select-none",
   context: "",
   meta: "hidden",
 };
@@ -34,11 +43,16 @@ export default function DiffView({
   lines,
   file,
   truncated,
+  theme = "dark",
 }: {
   lines: DiffLine[];
   file: string;
   truncated?: boolean;
+  /** 配色在設定頁改（`/settings`），預設深色 */
+  theme?: DiffTheme;
 }) {
+  const dark = theme === "dark";
+  const KIND_ROW = dark ? ROW_DARK : ROW_LIGHT;
   const lang = languageOf(file);
 
   const rendered = useMemo(
@@ -76,7 +90,7 @@ export default function DiffView({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className={`overflow-x-auto ${dark ? "bg-[#0d1117]" : "bg-white"}`}>
       <table className="w-full border-collapse font-mono text-[12px] leading-[1.55]">
         <tbody>
           {lines.map((l, i) => {
@@ -84,20 +98,24 @@ export default function DiffView({
             const html = rendered[i];
             return (
               <tr key={i} className={KIND_ROW[l.kind]}>
-                <td className="w-10 select-none px-2 text-right align-top text-gray-300">
+                <td className={`w-10 select-none px-2 text-right align-top ${dark ? "text-gray-600" : "text-gray-300"}`}>
                   {l.oldNo ?? ""}
                 </td>
-                <td className="w-10 select-none px-2 text-right align-top text-gray-300">
+                <td className={`w-10 select-none px-2 text-right align-top ${dark ? "text-gray-600" : "text-gray-300"}`}>
                   {l.newNo ?? ""}
                 </td>
                 <td
                   className={`w-4 select-none pl-1 text-center align-top ${
-                    l.kind === "add" ? "text-emerald-600" : l.kind === "del" ? "text-red-500" : "text-gray-300"
+                    l.kind === "add"
+                      ? "text-emerald-500"
+                      : l.kind === "del"
+                        ? "text-red-400"
+                        : dark ? "text-gray-600" : "text-gray-300"
                   }`}
                 >
                   {KIND_SIGN[l.kind]}
                 </td>
-                <td className="whitespace-pre-wrap break-all px-2 align-top text-gray-800">
+                <td className={`whitespace-pre-wrap break-all px-2 align-top ${dark ? "text-gray-200" : "text-gray-800"}`}>
                   {html ? <span dangerouslySetInnerHTML={{ __html: html }} /> : l.text || " "}
                 </td>
               </tr>
@@ -106,7 +124,7 @@ export default function DiffView({
         </tbody>
       </table>
       {truncated && (
-        <p className="border-t border-gray-200 px-4 py-2 text-xs text-gray-400">
+        <p className={`border-t px-4 py-2 text-xs text-gray-400 ${dark ? "border-gray-800" : "border-gray-200"}`}>
           這個 diff 太大，只顯示前面一段。
         </p>
       )}

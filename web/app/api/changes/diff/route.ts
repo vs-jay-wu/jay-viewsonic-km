@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fileDiff, scanChanges } from "@/lib/changes";
+import { fileDiff, isKnownWorktree } from "@/lib/changes";
 
 export const dynamic = "force-dynamic";
 
 /**
  * 取一個檔案的 diff。
  *
- * **worktree 路徑不吃前端傳來的值就直接用**：先重掃一次，確認那個路徑真的是
- * 掃描結果裡的工作區之一，否則任何路徑都能被拿來跑 `git -C`。
+ * **worktree 路徑不能直接吃前端傳來的值**，否則任何路徑都能被拿去跑 `git -C`。
+ * 驗證是輕量的（在工作區根目錄底下 ＋ 那裡有 `.git`）——原本是重跑一次完整掃描
+ * 再比對，但掃描變重之後每點一個檔案要等好幾秒。檔案本身的路徑逃逸在
+ * `fileDiff` 裡再擋一次。
  */
 export async function GET(req: NextRequest) {
   const worktree = req.nextUrl.searchParams.get("worktree") ?? "";
@@ -16,17 +18,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "要給 worktree 與 file" }, { status: 400 });
   }
 
-  const snapshot = await scanChanges();
-  const known = snapshot.repos.flatMap((r) => r.worktrees).find((w) => w.path === worktree);
-  if (!known) {
+  if (!(await isKnownWorktree(worktree))) {
     return NextResponse.json({ error: "不認得這個工作區" }, { status: 403 });
   }
-  const entry = known.files.find((f) => f.path === file);
-  if (!entry) {
-    return NextResponse.json({ error: "這個工作區沒有這個改動" }, { status: 404 });
-  }
 
-  return NextResponse.json(
-    await fileDiff(worktree, file, { untracked: entry.kind === "untracked" })
-  );
+  // 未追蹤的檔案 `git diff` 看不到，要走 --no-index。前端知道自己點的是哪一種
+  const untracked = req.nextUrl.searchParams.get("untracked") === "1";
+  return NextResponse.json(await fileDiff(worktree, file, { untracked }));
 }
