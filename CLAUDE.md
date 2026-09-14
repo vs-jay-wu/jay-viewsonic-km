@@ -34,6 +34,11 @@
 （見 `mvbf` skill）。要看 widget tree／hot reload 這類真的需要 MCP 的情境，
 先問 Jay，臨時用 `/mcp` 開，用完自己收掉。
 
+> hot reload **不需要** MCP 也不需要 DTD（`flutter run --machine` 的 `app.restart`
+> 就是）。已經查證並設計好，但還沒做：
+> [`docs/ideas/flutter-device-lock-hot-reload.md`](docs/ideas/flutter-device-lock-hot-reload.md)。
+> 那份也說明了為什麼 agent 用 FIFO 做 hot reload 會**第一次成功、之後靜默失敗**。
+
 ---
 
 # Gitmoji 與語言規則
