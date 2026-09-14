@@ -44,17 +44,32 @@ export interface RepoChanges {
   total: number;
 }
 
+/**
+ * 狀態代號照 VS Code 的 Source Control：M／A／D／R／U／C（Jay 2026-09-14）。
+ * 中文字（改／新增／刪除）看起來像說明文字，單字母才一眼認得出是狀態欄。
+ */
 export const KIND_LABEL: Record<ChangeKind, string> = {
-  modified: "改", added: "新增", deleted: "刪除",
-  renamed: "改名", untracked: "未追蹤", conflict: "衝突",
+  modified: "M", added: "A", deleted: "D",
+  renamed: "R", untracked: "U", conflict: "C",
 };
 
+/** 完整說明，給 tooltip 用 */
+export const KIND_TITLE: Record<ChangeKind, string> = {
+  modified: "Modified — 有內容改動",
+  added: "Added — 新增（已 git add）",
+  deleted: "Deleted — 已刪除",
+  renamed: "Renamed — 改名",
+  untracked: "Untracked — 還沒被 git 追蹤",
+  conflict: "Conflict — 合併衝突",
+};
+
+/** 顏色也照 VS Code：M 金、A／U 綠、D 紅、衝突深紅 */
 export const KIND_CLS: Record<ChangeKind, string> = {
   modified: "text-amber-600",
   added: "text-emerald-600",
   deleted: "text-red-600",
   renamed: "text-sky-600",
-  untracked: "text-gray-400",
+  untracked: "text-emerald-500",
   conflict: "text-red-700",
 };
 

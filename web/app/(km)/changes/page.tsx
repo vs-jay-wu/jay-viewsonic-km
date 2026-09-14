@@ -6,7 +6,7 @@ import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import DiffView from "@/components/DiffView";
 import {
-  KIND_CLS, KIND_LABEL, countByKind,
+  KIND_CLS, KIND_LABEL, KIND_TITLE, countByKind,
   type ChangedFile, type DiffLine, type RepoChanges,
 } from "@/lib/changesRules";
 
@@ -16,6 +16,7 @@ interface Snapshot {
   repos: RepoChanges[];
   ignored: string[];
   ignoredChanges: number;
+  skippedOffloaded: number;
 }
 
 interface Selected {
@@ -121,7 +122,8 @@ export default function ChangesPage() {
             {loading
               ? "掃描中…"
               : data
-                ? `${repos.length} 個 repo · ${totalFiles} 個檔案 · 掃了 ${data.scanned} 個工作區`
+                ? `${repos.length} 個 repo · ${totalFiles} 個檔案 · 掃了 ${data.scanned} 個工作區` +
+                  (data.skippedOffloaded > 0 ? `（offloaded 的 ${data.skippedOffloaded} 個沒掃）` : "")
                 : ""}
           </span>
           <label className="ml-auto inline-flex items-center gap-1.5 text-xs text-gray-600">
@@ -215,11 +217,13 @@ export default function ChangesPage() {
                           {w.branch}
                         </span>
                       )}
-                      <span className="text-gray-300">
-                        {counts.modified > 0 && `改 ${counts.modified} `}
-                        {counts.added > 0 && `新 ${counts.added} `}
-                        {counts.deleted > 0 && `刪 ${counts.deleted} `}
-                        {counts.untracked > 0 && `未追蹤 ${counts.untracked}`}
+                      <span className="font-mono text-gray-300">
+                        {counts.modified > 0 && `M${counts.modified} `}
+                        {counts.added > 0 && `A${counts.added} `}
+                        {counts.deleted > 0 && `D${counts.deleted} `}
+                        {counts.renamed > 0 && `R${counts.renamed} `}
+                        {counts.untracked > 0 && `U${counts.untracked} `}
+                        {counts.conflict > 0 && `C${counts.conflict}`}
                       </span>
                     </div>
 
@@ -236,7 +240,10 @@ export default function ChangesPage() {
                                 on ? "bg-sky-50" : ""
                               }`}
                             >
-                              <span className={`w-8 shrink-0 text-[10px] ${KIND_CLS[f.kind]}`}>
+                              <span
+                                className={`w-3 shrink-0 text-center font-mono text-[11px] font-semibold ${KIND_CLS[f.kind]}`}
+                                title={KIND_TITLE[f.kind]}
+                              >
                                 {KIND_LABEL[f.kind]}
                               </span>
                               {/* 目錄截斷、檔名永遠看得到。**不要用 dir="rtl" 截斷**——
@@ -290,7 +297,10 @@ export default function ChangesPage() {
                 <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-900">
                   {selected.file.path}
                 </span>
-                <span className={`shrink-0 text-[11px] ${KIND_CLS[selected.file.kind]}`}>
+                <span
+                  className={`shrink-0 font-mono text-xs font-semibold ${KIND_CLS[selected.file.kind]}`}
+                  title={KIND_TITLE[selected.file.kind]}
+                >
                   {KIND_LABEL[selected.file.kind]}
                 </span>
               </div>

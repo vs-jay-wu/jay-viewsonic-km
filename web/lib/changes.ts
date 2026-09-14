@@ -39,18 +39,39 @@ export async function toggleIgnored(repo: string): Promise<string[]> {
 
 // ─── 找出所有工作區 ──────────────────────────────────────────────────────────
 
-async function workspaceRoots(): Promise<string[]> {
+interface Workspace {
+  /** 掃描的起點（**只有 localPath，不含 externalPath**） */
+  roots: string[];
+  /** 搬到外接硬碟的 repo 名 —— 一律不列（Jay 2026-09-14） */
+  offloaded: Set<string>;
+}
+
+/**
+ * 掃描範圍。
+ *
+ * **刻意只讀 `localPath`，不讀 `externalPath`**：外接上的是 offloaded 的 repo，
+ * 那些東西不在手上做，列出來只是雜訊；而且外接的讀取慢得多，會把整個掃描拖垮。
+ * 另外把 `offloaded` 清單也讀進來當保險 —— 萬一本機留了殘檔（搬移中斷之類），
+ * 名字對得上就不列。實測目前 328 個 offloaded 在本機一個資料夾都沒留。
+ */
+async function workspace(): Promise<Workspace> {
   const raw = await readFile(repoPath("local.workspace.json"), "utf8").catch(() => null);
   const roots = new Set<string>([repoRoot()]); // km 自己也算
+  const offloaded = new Set<string>();
   if (raw) {
     try {
-      const ws = JSON.parse(raw) as { orgs?: Record<string, { localPath?: string }> };
-      for (const o of Object.values(ws.orgs ?? {})) if (o.localPath) roots.add(o.localPath);
+      const ws = JSON.parse(raw) as {
+        orgs?: Record<string, { localPath?: string; offloaded?: string[] }>;
+      };
+      for (const o of Object.values(ws.orgs ?? {})) {
+        if (o.localPath) roots.add(o.localPath);
+        for (const name of o.offloaded ?? []) offloaded.add(name);
+      }
     } catch {
       /* 壞掉就只掃 km */
     }
   }
-  return [...roots];
+  return { roots: [...roots], offloaded };
 }
 
 /** 有沒有 `.git`（**檔案或目錄都算** —— worktree 的 .git 是檔案，用 `-d` 判斷會整批漏掉） */
@@ -146,16 +167,23 @@ export interface ChangesSnapshot {
   ignored: string[];
   /** 被忽略的 repo 底下有幾個改動（只給數字，不列內容） */
   ignoredChanges: number;
+  /** 因為是 offloaded（搬到外接）而跳過的資料夾數 */
+  skippedOffloaded: number;
 }
 
 export async function scanChanges(): Promise<ChangesSnapshot> {
-  const roots = await workspaceRoots();
+  const { roots, offloaded } = await workspace();
   const repoDirs: string[] = [];
+  let skippedOffloaded = 0;
   for (const root of roots) {
     if (await looksLikeRepo(root)) repoDirs.push(root);
     const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
     for (const e of entries) {
       if (!e.isDirectory() || e.name.startsWith(".")) continue;
+      if (offloaded.has(e.name)) {
+        skippedOffloaded++;
+        continue;
+      }
       const dir = path.join(root, e.name);
       if (await looksLikeRepo(dir)) repoDirs.push(dir);
     }
@@ -223,6 +251,7 @@ export async function scanChanges(): Promise<ChangesSnapshot> {
     repos: [...repos.values()].sort((a, b) => b.total - a.total),
     ignored,
     ignoredChanges,
+    skippedOffloaded,
   };
 }
 
