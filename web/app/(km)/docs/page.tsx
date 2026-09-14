@@ -27,6 +27,7 @@ function fmtSize(bytes: number): string {
 export default function DocsPage() {
   const [data, setData] = useState<Payload | null>(null);
   const [query, setQuery] = useState("");
+  const [onlyPinned, setOnlyPinned] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,10 +60,13 @@ export default function DocsPage() {
     }
   };
 
-  const sets = useMemo(
-    () => (data?.sets ?? []).filter((s) => matchesDocQuery(s, query)),
-    [data, query]
-  );
+  const pinnedCount = data?.pinned.length ?? 0;
+  const sets = useMemo(() => {
+    const pinned = new Set(data?.pinned ?? []);
+    return (data?.sets ?? [])
+      .filter((s) => !onlyPinned || pinned.has(s.dir))
+      .filter((s) => matchesDocQuery(s, query));
+  }, [data, query, onlyPinned]);
   const totalFiles = (data?.sets ?? []).reduce((n, s) => n + s.files.length, 0);
 
   return (
@@ -88,6 +92,20 @@ export default function DocsPage() {
               className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-gray-500"
             />
           </div>
+          <Tooltip label={pinnedCount === 0 ? "還沒有 pin 住任何文件集" : "只看 pin 住的"}>
+            <button
+              onClick={() => setOnlyPinned((v) => !v)}
+              disabled={pinnedCount === 0}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs disabled:opacity-40 ${
+                onlyPinned
+                  ? "border-amber-400 bg-amber-50 text-amber-800"
+                  : "border-gray-300 text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              <Icon name="pin" size={13} className={onlyPinned ? "text-amber-500" : "text-gray-400"} />
+              只看 pin（{pinnedCount}）
+            </button>
+          </Tooltip>
           <button
             onClick={() => void load()}
             className="rounded-lg border border-gray-300 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
@@ -102,6 +120,7 @@ export default function DocsPage() {
           ) : data ? (
             <span className="text-gray-400">
               {sets.length} / {data.sets.length} 個文件集 · 共 {totalFiles} 份
+              {onlyPinned && "（只看 pin 住的）"}
               {data.missingEntry > 0 && (
                 <span className="ml-2 text-amber-700">{data.missingEntry} 個沒有 index.html</span>
               )}
@@ -113,7 +132,7 @@ export default function DocsPage() {
 
         {data && sets.length === 0 && (
           <p className="mt-4 rounded-xl border border-gray-200 px-4 py-8 text-center text-sm text-gray-400">
-            沒有符合的文件
+            {onlyPinned ? "pin 住的文件集裡沒有符合搜尋的" : "沒有符合的文件"}
           </p>
         )}
 
