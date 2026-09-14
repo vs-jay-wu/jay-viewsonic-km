@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import DiffView from "@/components/DiffView";
+import ImageDiffView from "@/components/ImageDiffView";
 import { hljsHref, type DiffTheme } from "@/lib/uiSettingsRules";
 import {
-  KIND_CLS, KIND_LABEL, KIND_TITLE, countByKind,
-  type ChangedFile, type DiffLine, type RepoChanges,
+  KIND_CLS, KIND_LABEL, KIND_TITLE, buildTree, countByKind,
+  type ChangedFile, type DiffLine, type RepoChanges, type TreeNode,
 } from "@/lib/changesRules";
+import type { ImageSides } from "@/lib/changes";
 
 interface Snapshot {
   scannedAt: string;
@@ -17,6 +19,18 @@ interface Snapshot {
   ignored: string[];
   ignoredChanges: number;
   skippedOffloaded: number;
+}
+
+type ViewMode = "list" | "tree";
+
+/** 左欄預設寬度（原本的 `lg:w-96`） */
+const DEFAULT_PANE_W = 384;
+const MIN_PANE_W = 220;
+const MAX_PANE_W = 900;
+const WIDE_QUERY = "(min-width: 1024px)";
+
+function clampPaneW(w: number): number {
+  return Math.min(MAX_PANE_W, Math.max(MIN_PANE_W, Math.round(w)));
 }
 
 interface Selected {
@@ -30,10 +44,31 @@ interface DiffPayload {
   lines: DiffLine[];
   truncated: boolean;
   binary: boolean;
+  /** 圖片改走 `ImageDiffView`（2-up／滑桿／洋蔥皮） */
+  image?: ImageSides;
   error?: string;
 }
 
+/**
+ * 雙欄版面（lg 以上）才套自訂寬度 —— 窄螢幕的清單是整頁寬，硬套會變成一條細長條。
+ *
+ * 用 `useSyncExternalStore` 而不是 effect＋setState：後者第一幀一定是 false，
+ * 會先用預設寬度畫一次再跳成使用者的寬度（而且 lint 也會擋 effect 裡同步 setState）。
+ */
+function useWideLayout(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia(WIDE_QUERY);
+      mq.addEventListener("change", cb);
+      return () => mq.removeEventListener("change", cb);
+    },
+    () => window.matchMedia(WIDE_QUERY).matches,
+    () => false // SSR：先當窄螢幕，掛載後立刻校正
+  );
+}
+
 export default function ChangesPage() {
+  const wide = useWideLayout();
   const [data, setData] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [showModeOnly, setShowModeOnly] = useState(false);
@@ -42,18 +77,67 @@ export default function ChangesPage() {
   const [diffLoading, setDiffLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [diffTheme, setDiffTheme] = useState<DiffTheme>("dark");
-  /** 收起來的 repo 與 worktree（key 用 repo 名／worktree 絕對路徑）。
+  /** 收起來的 repo、worktree 與目錄（key 用 repo 名／worktree 絕對路徑／`<worktree>:<目錄>`）。
    *  存 localStorage —— 純畫面偏好，不值得上 server，但要撐過重新整理 */
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  /** 清單要平鋪還是樹狀（VS Code 的 List／Tree） */
+  const [view, setView] = useState<ViewMode>("list");
+  /** 左欄寬度（px）。只在雙欄版面（lg 以上）才套用 */
+  const [paneW, setPaneW] = useState(DEFAULT_PANE_W);
+  const dragging = useRef(false);
+  const paneRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem("km.changes.collapsed");
       if (raw) setCollapsed(new Set(JSON.parse(raw) as string[]));
+      const v = localStorage.getItem("km.changes.view");
+      if (v === "tree" || v === "list") setView(v);
+      const w = Number(localStorage.getItem("km.changes.paneW"));
+      if (Number.isFinite(w) && w > 0) setPaneW(clampPaneW(w));
     } catch {
-      /* 讀不到就當全部展開 */
+      /* 讀不到就用預設值 */
     }
   }, []);
+
+
+  // 拖左欄邊界。監聽掛在 window 上，滑鼠衝出分隔線也不會斷
+  useEffect(() => {
+    const widthAt = (clientX: number) =>
+      clampPaneW(clientX - (paneRef.current?.getBoundingClientRect().left ?? 0));
+    const onMove = (e: PointerEvent) => {
+      if (!dragging.current) return;
+      e.preventDefault();
+      setPaneW(widthAt(e.clientX));
+    };
+    // 存的是**從這個事件重算**的寬度，不是讀 state：拖曳過程沒有等 React 重繪的保證，
+    // 讀 state／ref 會存到上一次的值
+    const onUp = (e: PointerEvent) => {
+      if (!dragging.current) return;
+      dragging.current = false;
+      document.body.style.removeProperty("user-select");
+      try {
+        localStorage.setItem("km.changes.paneW", String(widthAt(e.clientX)));
+      } catch {
+        /* 存不了就算了 */
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, []);
+
+  const switchView = (v: ViewMode) => {
+    setView(v);
+    try {
+      localStorage.setItem("km.changes.view", v);
+    } catch {
+      /* 存不了就算了 */
+    }
+  };
 
   const toggleCollapsed = (key: string) => {
     setCollapsed((prev) => {
@@ -117,6 +201,12 @@ export default function ChangesPage() {
 
   const openFile = async (sel: Selected) => {
     setSelected(sel);
+    // 寫進網址（不進 history —— 每點一個檔案就多一筆上一頁會很難用），
+    // 重新整理才回得到同一個檔案。`replaceState` 不會讓 Next 重新導航
+    const url = new URL(window.location.href);
+    url.searchParams.set("w", sel.worktree);
+    url.searchParams.set("f", sel.file.path);
+    window.history.replaceState(null, "", url);
     setDiff(null);
     setDiffLoading(true);
     try {
@@ -124,6 +214,8 @@ export default function ChangesPage() {
         worktree: sel.worktree,
         file: sel.file.path,
         untracked: sel.file.kind === "untracked" ? "1" : "0",
+        // 改名的檔案，HEAD 那側要用舊路徑才抓得到
+        from: sel.file.from ?? "",
       });
       const res = await fetch(`/api/changes/diff?${qs}`);
       const json = await res.json();
@@ -134,6 +226,28 @@ export default function ChangesPage() {
       setDiffLoading(false);
     }
   };
+
+  // 重新整理之後把網址上的檔案選回來。掃描結果回來才找得到那筆（要它的 kind／from），
+  // 而且只做一次 —— 之後的重掃不該把使用者當下選的檔案蓋掉
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current || !data) return;
+    restored.current = true;
+    const q = new URLSearchParams(window.location.search);
+    const w = q.get("w");
+    const f = q.get("f");
+    if (!w || !f) return;
+    for (const r of data.repos) {
+      for (const wt of r.worktrees) {
+        if (wt.path !== w) continue;
+        const file = wt.files.find((x) => x.path === f);
+        // 找不到就安靜地放掉：那個改動可能已經被 commit 或還原了
+        if (file) void openFile({ worktree: wt.path, worktreeName: wt.name, repo: r.repo, file });
+        return;
+      }
+    }
+    // deps 只有 data：openFile 每次 render 都是新的函式，帶進來會無限重跑
+  }, [data]);
 
   const toggleIgnore = async (repo: string) => {
     await fetch("/api/changes/ignore", {
@@ -160,6 +274,15 @@ export default function ChangesPage() {
   }, [data, showModeOnly]);
 
   const totalFiles = repos.reduce((n, r) => n + r.total, 0);
+
+  // 樹狀檢視時才建樹。拖寬度會一直重 render，沒有 memo 的話每一幀都重建一次
+  const trees = useMemo(() => {
+    const m = new Map<string, TreeNode[]>();
+    if (view === "tree") {
+      for (const r of repos) for (const w of r.worktrees) m.set(w.path, buildTree(w.files));
+    }
+    return m;
+  }, [repos, view]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -209,10 +332,33 @@ export default function ChangesPage() {
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* 清單。選了檔案之後窄螢幕就讓位給 diff */}
         <div
-          className={`min-h-0 overflow-y-auto border-gray-200 lg:w-96 lg:shrink-0 lg:border-r ${
-            selected ? "hidden lg:block" : "flex-1"
+          ref={paneRef}
+          style={wide ? { width: paneW, flex: "0 0 auto" } : undefined}
+          className={`flex min-h-0 flex-col border-gray-200 lg:border-r ${
+            selected ? "hidden lg:flex" : "flex-1"
           }`}
         >
+          {/* 清單自己的工具列。檢視切換是**一顆按鈕直接切**（Jay 2026-09-14）——
+              兩顆分頁按鈕佔掉的寬度跟它帶來的資訊不成比例 */}
+          <div className="flex shrink-0 items-center justify-end border-b border-gray-100 px-2 py-1">
+            <Tooltip side="left" label={view === "tree" ? "改成平鋪：一個檔案一行，看得到完整路徑" : "改成樹狀：照目錄分層，只有一條路的目錄會併成一行"}>
+              <button
+                onClick={() => switchView(view === "tree" ? "list" : "tree")}
+                aria-label={view === "tree" ? "改成平鋪檢視" : "改成樹狀檢視"}
+                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              >
+                {/* 顯示的是**現在的檢視**，跟工具列按鈕的慣例一致 */}
+                <Icon name={view === "tree" ? "tree" : "list"} size={15} />
+              </button>
+            </Tooltip>
+          </div>
+
+          {/* 路徑不截斷，改成可以左右捲（Jay 2026-09-14）——「…」會把最有辨識度的
+              中間段吃掉，而這裡的路徑常常只差中間那一段。
+              `w-max min-w-full`：內容窄時每一列仍撐滿整欄（hover 底色才不會只有半截），
+              內容寬時整塊跟著變寬，捲動時底色跟著延伸 */}
+          <div className="min-h-0 flex-1 overflow-auto">
+          <div className="w-max min-w-full">
           {!loading && repos.length === 0 && (
             <p className="px-4 py-8 text-center text-sm text-gray-400">
               沒有未提交的改動。
@@ -220,17 +366,23 @@ export default function ChangesPage() {
           )}
           {repos.map((r) => (
             <div key={r.repo} className="border-b border-gray-100">
-              <div className="flex items-center gap-2 bg-gray-50 px-4 py-2">
+              {/* 標題跟著一起橫捲（VS Code 也是這樣）。試過 `sticky left-0` 把它釘住，
+                  但一整條灰底停在原地、底下的檔名從它旁邊滑過去，看起來像卡住了
+                  （Jay 2026-09-14 回報）。而且「現在在看哪個檔案」右邊 diff 的標題列
+                  本來就寫著 repo／worktree／完整路徑，釘住並沒有換到資訊 */}
+              <div className="flex w-full items-center gap-2 bg-gray-50 px-4 py-2">
                 <button
                   onClick={() => toggleCollapsed(r.repo)}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  // 不要 `flex-1`：整條列跟著最寬的路徑一起變寬，把 ✕ 推到捲軸的最右邊
+                  // 就點不到了。✕ 直接跟在名字後面，永遠在畫面上
+                  className="flex items-center gap-2 text-left"
                 >
                   <Icon
                     name={collapsed.has(r.repo) ? "chevronRight" : "chevronDown"}
                     size={13}
                     className="shrink-0 text-gray-400"
                   />
-                  <span className="truncate font-mono text-xs font-medium text-gray-900">{r.repo}</span>
+                  <span className="whitespace-nowrap font-mono text-xs font-medium text-gray-900">{r.repo}</span>
                   <span className="text-[11px] text-gray-400">{r.total}</span>
                 </button>
                 <Tooltip side="left" label="忽略這個 repo（通常是產物或別人的 WIP）">
@@ -250,7 +402,7 @@ export default function ChangesPage() {
                   <div key={w.path}>
                     <button
                       onClick={() => toggleCollapsed(w.path)}
-                      className="flex w-full flex-wrap items-center gap-1.5 px-4 py-1.5 text-left text-[11px] hover:bg-gray-50"
+                      className="flex w-full items-center gap-1.5 whitespace-nowrap px-4 py-1.5 text-left text-[11px] hover:bg-gray-50"
                     >
                       <Icon
                         name={wOpen ? "chevronDown" : "chevronRight"}
@@ -273,7 +425,7 @@ export default function ChangesPage() {
                           {w.isSessionBound ? "session worktree" : "worktree"}
                         </span>
                       )}
-                      <span className="truncate text-gray-500">{w.name}</span>
+                      <span className="whitespace-nowrap text-gray-500">{w.name}</span>
                       {w.branch && (
                         <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-gray-600">
                           {w.branch}
@@ -289,52 +441,61 @@ export default function ChangesPage() {
                       </span>
                     </button>
 
-                    <ul className={wOpen ? "" : "hidden"}>
-                      {w.files.map((f) => {
-                        const on = selected?.worktree === w.path && selected.file.path === f.path;
-                        return (
-                          <li key={f.path}>
-                            <button
-                              onClick={() =>
+                    <div className={wOpen ? "" : "hidden"}>
+                      {view === "list"
+                        ? w.files.map((f) => (
+                            <FileRow
+                              key={f.path}
+                              file={f}
+                              label="path"
+                              depth={0}
+                              selected={selected?.worktree === w.path && selected.file.path === f.path}
+                              onOpen={() =>
                                 openFile({ worktree: w.path, worktreeName: w.name, repo: r.repo, file: f })
                               }
-                              className={`flex w-full items-center gap-2 px-4 py-1 text-left text-xs hover:bg-gray-50 ${
-                                on ? "bg-sky-50" : ""
-                              }`}
-                            >
-                              <span
-                                className={`w-3 shrink-0 text-center font-mono text-[11px] font-semibold ${KIND_CLS[f.kind]}`}
-                                title={KIND_TITLE[f.kind]}
-                              >
-                                {KIND_LABEL[f.kind]}
-                              </span>
-                              {/* 目錄截斷、檔名永遠看得到。**不要用 dir="rtl" 截斷**——
-                                  它會把開頭的標點吃掉，`.claude/...` 會顯示成 `claude/...` */}
-                              <span className="flex min-w-0 flex-1 items-baseline font-mono">
-                                <span className="truncate text-gray-400">
-                                  {f.path.includes("/") ? f.path.slice(0, f.path.lastIndexOf("/") + 1) : ""}
-                                </span>
-                                <span className="shrink-0 text-gray-700">
-                                  {f.path.split("/").pop()}
-                                </span>
-                              </span>
-                              {f.modeOnly && (
-                                <span className="shrink-0 text-[10px] text-gray-300">模式</span>
-                              )}
-                              {f.staged && (
-                                <span className="shrink-0 text-[10px] text-emerald-600">staged</span>
-                              )}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
+                            />
+                          ))
+                        : (
+                          <TreeRows
+                            nodes={trees.get(w.path) ?? []}
+                            depth={0}
+                            worktree={w.path}
+                            collapsed={collapsed}
+                            onToggle={toggleCollapsed}
+                            selectedPath={selected?.worktree === w.path ? selected.file.path : null}
+                            onOpen={(f) =>
+                              openFile({ worktree: w.path, worktreeName: w.name, repo: r.repo, file: f })
+                            }
+                          />
+                        )}
+                    </div>
                   </div>
                 );
               })}
             </div>
           ))}
+          </div>
+          </div>
         </div>
+
+        {/* 拖這裡改左欄寬度。窄螢幕是上下排版，沒有這條 */}
+        <div
+          onPointerDown={(e) => {
+            e.preventDefault();
+            dragging.current = true;
+            document.body.style.userSelect = "none";
+          }}
+          onDoubleClick={() => {
+            setPaneW(DEFAULT_PANE_W);
+            try {
+              localStorage.setItem("km.changes.paneW", String(DEFAULT_PANE_W));
+            } catch {
+              /* 存不了就算了 */
+            }
+          }}
+          title="拖曳改寬度（雙擊回預設）"
+          className="hidden w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-sky-300 active:bg-sky-400 lg:block"
+        />
 
         {/* diff */}
         <div className={`min-h-0 flex-1 overflow-y-auto ${selected ? "" : "hidden lg:block"}`}>
@@ -371,6 +532,28 @@ export default function ChangesPage() {
                 <p className="px-4 py-6 text-sm text-gray-400">讀取中…</p>
               ) : diff?.error ? (
                 <p className="px-4 py-6 text-sm text-red-600">{diff.error}</p>
+              ) : diff?.image ? (
+                <ImageDiffView
+                  // 換檔案就重建，狀態（尺寸、滑桿位置）跟著歸零
+                  key={`${selected.worktree}:${selected.file.path}`}
+                  worktree={selected.worktree}
+                  file={selected.file.path}
+                  oldPath={diff.image.oldPath}
+                  oldBytes={diff.image.oldBytes}
+                  newBytes={diff.image.newBytes}
+                  theme={diffTheme}
+                  // SVG 是文字檔，所以還有原始碼可以看
+                  source={
+                    diff.binary ? undefined : (
+                      <DiffView
+                        lines={diff.lines}
+                        file={selected.file.path}
+                        truncated={diff.truncated}
+                        theme={diffTheme}
+                      />
+                    )
+                  }
+                />
               ) : diff?.binary ? (
                 <p className="px-4 py-6 text-sm text-gray-400">二進位檔，不顯示內容。</p>
               ) : diff ? (
@@ -386,5 +569,119 @@ export default function ChangesPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * 一個檔案一行。平鋪（`label="path"`）顯示完整路徑，樹狀（`label="name"`）只顯示檔名。
+ *
+ * **不截斷**：路徑一律 `whitespace-nowrap`，寬度交給外層的水平捲動
+ * （Jay 2026-09-14：「不要做縮略變成『…』」）。
+ */
+function FileRow({
+  file,
+  label,
+  depth,
+  selected,
+  onOpen,
+}: {
+  file: ChangedFile;
+  label: "path" | "name";
+  depth: number;
+  selected: boolean;
+  onOpen: () => void;
+}) {
+  const dir = file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/") + 1) : "";
+  const name = file.path.split("/").pop();
+  return (
+    <button
+      onClick={onOpen}
+      style={{ paddingLeft: 16 + depth * 14 }}
+      className={`flex w-full items-center gap-2 whitespace-nowrap py-1 pr-4 text-left text-xs hover:bg-gray-50 ${
+        selected ? "bg-sky-50" : ""
+      }`}
+    >
+      <span
+        className={`w-3 shrink-0 text-center font-mono text-[11px] font-semibold ${KIND_CLS[file.kind]}`}
+        title={KIND_TITLE[file.kind]}
+      >
+        {KIND_LABEL[file.kind]}
+      </span>
+      <span className="font-mono">
+        {/* 目錄淡、檔名深 —— 一串同目錄的檔案裡，眼睛要抓的是右邊那一段。
+            **不要用 dir="rtl" 截斷**：它會把開頭的標點吃掉，`.claude/…` 會變成 `claude/…` */}
+        {label === "path" && dir && <span className="text-gray-400">{dir}</span>}
+        <span className="text-gray-700">{name}</span>
+      </span>
+      {file.modeOnly && <span className="shrink-0 text-[10px] text-gray-300">模式</span>}
+      {file.staged && <span className="shrink-0 text-[10px] text-emerald-600">staged</span>}
+    </button>
+  );
+}
+
+/** 樹狀檢視的一層。目錄可以收合，狀態跟 repo／worktree 共用同一份 `collapsed` */
+function TreeRows({
+  nodes,
+  depth,
+  worktree,
+  collapsed,
+  onToggle,
+  selectedPath,
+  onOpen,
+}: {
+  nodes: TreeNode[];
+  depth: number;
+  worktree: string;
+  collapsed: Set<string>;
+  onToggle: (key: string) => void;
+  selectedPath: string | null;
+  onOpen: (f: ChangedFile) => void;
+}) {
+  return (
+    <>
+      {nodes.map((n) => {
+        if (n.file) {
+          return (
+            <FileRow
+              key={n.path}
+              file={n.file}
+              label="name"
+              depth={depth}
+              selected={selectedPath === n.path}
+              onOpen={() => onOpen(n.file!)}
+            />
+          );
+        }
+        const key = `${worktree}:${n.path}`;
+        const open = !collapsed.has(key);
+        return (
+          <div key={n.path}>
+            <button
+              onClick={() => onToggle(key)}
+              style={{ paddingLeft: 16 + depth * 14 }}
+              className="flex w-full items-center gap-1.5 whitespace-nowrap py-1 pr-4 text-left text-xs hover:bg-gray-50"
+            >
+              <Icon
+                name={open ? "chevronDown" : "chevronRight"}
+                size={12}
+                className="shrink-0 text-gray-400"
+              />
+              <span className="font-mono text-gray-500">{n.name}</span>
+            </button>
+            {open && (
+              <TreeRows
+                nodes={n.children}
+                depth={depth + 1}
+                worktree={worktree}
+                collapsed={collapsed}
+                onToggle={onToggle}
+                selectedPath={selectedPath}
+                onOpen={onOpen}
+              />
+            )}
+          </div>
+        );
+      })}
+    </>
   );
 }

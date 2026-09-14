@@ -24,5 +24,7 @@ export async function GET(req: NextRequest) {
 
   // 未追蹤的檔案 `git diff` 看不到，要走 --no-index。前端知道自己點的是哪一種
   const untracked = req.nextUrl.searchParams.get("untracked") === "1";
-  return NextResponse.json(await fileDiff(worktree, file, { untracked }));
+  // 改名的檔案，舊版在 HEAD 裡是另一個路徑（圖片要拿它才抓得到「改名前那張」）
+  const oldPath = req.nextUrl.searchParams.get("from") || undefined;
+  return NextResponse.json(await fileDiff(worktree, file, { untracked, oldPath }));
 }

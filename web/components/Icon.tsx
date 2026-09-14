@@ -8,7 +8,7 @@ export type IconName =
   | "trash" | "pin" | "pinOff" | "play" | "code" | "check" | "x" | "alert"
   | "clock" | "spinner" | "chevronRight" | "chevronDown" | "external" | "coins"
   | "search" | "lock" | "gitPr" | "bell" | "repos" | "hardDrive"
-  | "toTop" | "toBottom" | "menu"
+  | "toTop" | "toBottom" | "menu" | "list" | "tree"
   | "bug" | "task" | "story" | "spike" | "ops";
 
 const PATHS: Record<IconName, React.ReactNode> = {
@@ -26,6 +26,10 @@ const PATHS: Record<IconName, React.ReactNode> = {
   code: <><path d="m9 8-5 4 5 4M15 8l5 4-5 4" /></>,
   check: <><path d="m4 13 5 5L20 6" /></>,
   x: <><path d="M5 5l14 14M19 5 5 19" /></>,
+  // 平鋪：每一列一樣長，最左邊是項目符號
+  list: <><path d="M8 6h13M8 12h13M8 18h13" /><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" /></>,
+  // 樹狀：左邊一根主幹，往右長出分支
+  tree: <><path d="M21 6h-9M21 12h-6M21 18h-6" /><path d="M4 4v11a3 3 0 0 0 3 3h2" /><path d="M4 9h5" /></>,
   alert: <><path d="M12 3 2 20h20L12 3Z" /><path d="M12 9v5M12 17.5v.5" /></>,
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></>,
   spinner: <><path d="M12 3a9 9 0 1 0 9 9" /></>,

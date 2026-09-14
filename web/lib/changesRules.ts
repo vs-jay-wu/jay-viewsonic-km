@@ -211,3 +211,97 @@ export function languageOf(path: string): string | null {
   const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
   return LANG[ext] ?? null;
 }
+
+// ─── 圖片 ────────────────────────────────────────────────────────────────────
+
+/**
+ * 副檔名 → MIME。認得的才會走「看圖」那條路（2-up／滑桿／洋蔥皮）。
+ *
+ * **不在這張表裡的一律當一般檔案**：猜錯 MIME 會讓 `<img>` 什麼都畫不出來，
+ * 比顯示「二進位檔」還糟（看起來像壞掉）。
+ */
+const IMAGE_MIME: Record<string, string> = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+  webp: "image/webp", avif: "image/avif", bmp: "image/bmp", ico: "image/x-icon",
+  svg: "image/svg+xml",
+};
+
+export function imageMimeOf(filePath: string): string | null {
+  const name = filePath.split("/").pop() ?? "";
+  const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
+  return IMAGE_MIME[ext] ?? null;
+}
+
+/**
+ * 兩張都在才比得起來；只有一張的（新增／刪除）直接顯示那一張。
+ *
+ * 「有沒有這一側」是**用 git／檔案系統實際問出來的**（`lib/changes.ts` 的
+ * `imageSides`），不從 status 的代號推 —— 代號是掃描當下的，點開來已經可能不一樣了。
+ */
+export type ImageCompareMode = "two-up" | "swipe" | "onion";
+
+export function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// ─── 樹狀檢視 ────────────────────────────────────────────────────────────────
+
+export interface TreeNode {
+  /** 這一層顯示的名字（壓縮過的目錄會是 `a/b/c`） */
+  name: string;
+  /** 完整相對路徑，也當 React key 與收合狀態的 key */
+  path: string;
+  /** 有值就是檔案（葉節點） */
+  file?: ChangedFile;
+  children: TreeNode[];
+}
+
+function sortNodes(nodes: TreeNode[]): void {
+  nodes.sort((a, b) => {
+    const aDir = !a.file;
+    const bDir = !b.file;
+    if (aDir !== bDir) return aDir ? -1 : 1; // 目錄在前，跟 VS Code 一樣
+    return a.name.localeCompare(b.name);
+  });
+  for (const n of nodes) sortNodes(n.children);
+}
+
+/**
+ * 只有一個子目錄的目錄壓成一行（`a` → `a/b` → `a/b/c` 顯示成 `a/b/c`）。
+ *
+ * VS Code 的 compact folders，對 gradle 那種 `build/intermediates/…/debug/` 的深路徑
+ * 差別很大 —— 不壓縮的話光是點開就要點七八層，而中間每層都只有一條路。
+ */
+function compact(nodes: TreeNode[]): TreeNode[] {
+  return nodes.map((n) => {
+    let cur = n;
+    while (!cur.file && cur.children.length === 1 && !cur.children[0].file) {
+      const only = cur.children[0];
+      cur = { name: `${cur.name}/${only.name}`, path: only.path, children: only.children };
+    }
+    return { ...cur, children: compact(cur.children) };
+  });
+}
+
+/** 一串檔案 → 樹。目錄在前、同層照字母排，單一子目錄的鏈會被壓成一行 */
+export function buildTree(files: ChangedFile[]): TreeNode[] {
+  const root: TreeNode = { name: "", path: "", children: [] };
+  for (const f of files) {
+    const parts = f.path.split("/");
+    let cur = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const p = parts.slice(0, i + 1).join("/");
+      let next = cur.children.find((c) => !c.file && c.path === p);
+      if (!next) {
+        next = { name: parts[i], path: p, children: [] };
+        cur.children.push(next);
+      }
+      cur = next;
+    }
+    cur.children.push({ name: parts[parts.length - 1], path: f.path, file: f, children: [] });
+  }
+  sortNodes(root.children);
+  return compact(root.children);
+}

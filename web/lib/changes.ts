@@ -1,8 +1,9 @@
+import { spawn } from "child_process";
 import { readdir, readFile, mkdir, stat, writeFile } from "fs/promises";
 import path from "path";
 import { repoPath, repoRoot, run } from "@/lib/repo";
 import {
-  parseDiff, parseStatus,
+  imageMimeOf, parseDiff, parseStatus,
   type ChangedFile, type DiffLine, type RepoChanges, type WorktreeChanges,
 } from "@/lib/changesRules";
 
@@ -302,19 +303,58 @@ export async function scanChanges(): Promise<ChangesSnapshot> {
 /**
  * 這個路徑是不是工作區裡的 git 工作區。
  *
- * 給 diff API 用的**輕量**驗證。原本是「重跑一次完整掃描再比對」，但掃描為了
+ * 給 diff／blob API 用的**輕量**驗證。原本是「重跑一次完整掃描再比對」，但掃描為了
  * 判斷 modeOnly 多了好幾個 git 呼叫之後，每點一個檔案就要等好幾秒。
- * 這裡只做兩件事：路徑在工作區根目錄底下、而且那裡真的有 `.git`。
+ *
+ * 兩條都算數：
+ *
+ * 1. **路徑就在工作區根目錄底下**，而且那裡真的有 `.git`。
+ * 2. **linked worktree 放在工作區外面，但 gitdir 指回工作區裡的 repo**。
+ *    `git worktree add` 的目錄可以在任何地方 —— 實際踩到的是
+ *    `~/.mvb-worktrees/poc-desktop-mode`（主 repo 在 `Orgs/…/edu-mvb-mac-playground`）：
+ *    掃描列得出來（它是從主 repo 的 `git worktree list` 來的），但點下去 403
+ *    「不認得這個工作區」。判斷的依據是 gitdir，不是路徑長相。
  */
 export async function isKnownWorktree(candidate: string): Promise<boolean> {
   const abs = path.resolve(candidate);
   const { roots } = await workspace();
-  const inside = roots.some((r) => abs === r || abs.startsWith(path.resolve(r) + path.sep));
-  if (!inside) return false;
-  return looksLikeRepo(abs);
+  const inRoots = (p: string) =>
+    roots.some((r) => p === path.resolve(r) || p.startsWith(path.resolve(r) + path.sep));
+
+  if (inRoots(abs)) return looksLikeRepo(abs);
+
+  const main = await mainRepoOfLinkedWorktree(abs);
+  return main !== null && inRoots(main);
+}
+
+/**
+ * linked worktree 的主 repo 路徑；不是 linked worktree 就回 null。
+ *
+ * worktree 的 `.git` 是**檔案**，內容是
+ * `gitdir: <主 repo>/.git/worktrees/<名字>`。
+ */
+async function mainRepoOfLinkedWorktree(dir: string): Promise<string | null> {
+  const raw = await readFile(path.join(dir, ".git"), "utf8").catch(() => null);
+  const m = raw && /^gitdir:\s*(.+)$/m.exec(raw.trim());
+  if (!m) return null;
+  const gitdir = path.resolve(dir, m[1].trim());
+  const marker = `${path.sep}.git${path.sep}worktrees${path.sep}`;
+  const at = gitdir.indexOf(marker);
+  if (at === -1) return null;
+  return gitdir.slice(0, at);
 }
 
 // ─── 單一檔案的 diff ─────────────────────────────────────────────────────────
+
+export interface ImageSides {
+  mime: string;
+  /** HEAD 裡那張的位元組數；沒有舊版（新增／未追蹤）就是 null */
+  oldBytes: number | null;
+  /** 工作區那張的位元組數；已刪除就是 null */
+  newBytes: number | null;
+  /** 舊版在 HEAD 裡的路徑（改名時跟現在的不一樣） */
+  oldPath: string;
+}
 
 export interface FileDiff {
   worktree: string;
@@ -323,8 +363,13 @@ export interface FileDiff {
   /** 超過上限被截斷 */
   truncated: boolean;
   binary: boolean;
+  /** 是圖片才有 —— 前端改用 2-up／滑桿／洋蔥皮比對，不畫 unified diff */
+  image?: ImageSides;
   error?: string;
 }
+
+/** 單張圖的上限。超過就不給看（瀏覽器也扛不住，而且那多半是誤放的產物） */
+export const IMAGE_MAX_BYTES = 25 * 1024 * 1024;
 
 /**
  * 取一個檔案的 diff。
@@ -336,7 +381,7 @@ export interface FileDiff {
 export async function fileDiff(
   worktree: string,
   file: string,
-  opts: { untracked?: boolean } = {}
+  opts: { untracked?: boolean; oldPath?: string } = {}
 ): Promise<FileDiff> {
   const abs = path.resolve(worktree, file);
   if (abs !== worktree && !abs.startsWith(worktree + path.sep)) {
@@ -357,8 +402,9 @@ export async function fileDiff(
       error: stderr.trim().slice(0, 300),
     };
   }
+  const image = await imageSides(worktree, abs, file, opts.oldPath ?? file);
   if (/^Binary files /m.test(stdout) || stdout.includes(NUL)) {
-    return { worktree, file, lines: [], truncated: false, binary: true };
+    return { worktree, file, lines: [], truncated: false, binary: true, image };
   }
   const truncated = stdout.length > DIFF_MAX_BYTES;
   return {
@@ -367,5 +413,76 @@ export async function fileDiff(
     lines: parseDiff(truncated ? stdout.slice(0, DIFF_MAX_BYTES) : stdout),
     truncated,
     binary: false,
+    image,
   };
+}
+
+/**
+ * 圖片兩側的大小。**不在這裡讀內容**，只問大小 —— 內容由 `/api/changes/blob`
+ * 直接串給 `<img>`，不必經過 JSON（base64 會胖三分之一，而且大圖會塞爆回應）。
+ *
+ * SVG 是文字檔，所以 `binary` 會是 false、unified diff 也讀得到 —— 兩種都給，
+ * 前端多一個「原始碼」分頁。
+ */
+async function imageSides(
+  worktree: string,
+  abs: string,
+  file: string,
+  oldPath: string
+): Promise<ImageSides | undefined> {
+  const mime = imageMimeOf(file);
+  if (!mime) return undefined;
+  const newBytes = await stat(abs).then((s) => s.size, () => null);
+  // `cat-file -s` 只讀 object header，不會把整個 blob 解出來
+  const r = await run("git", ["-C", worktree, "cat-file", "-s", `HEAD:${oldPath}`]);
+  const oldBytes = r.code === 0 && /^\d+$/.test(r.stdout.trim()) ? Number(r.stdout.trim()) : null;
+  if (oldBytes === null && newBytes === null) return undefined;
+  return { mime, oldBytes, newBytes, oldPath };
+}
+
+/**
+ * 讀出圖片的位元組，給 `/api/changes/blob` 直接串給瀏覽器。
+ *
+ * `side: "old"` 走 `git cat-file blob HEAD:<path>`（改名時 path 是舊的那個），
+ * `"new"` 直接讀工作區的檔。路徑逃逸在這裡擋（呼叫端另外驗 worktree）。
+ */
+export async function readImageBlob(
+  worktree: string,
+  file: string,
+  side: "old" | "new"
+): Promise<{ data: Buffer; mime: string } | { error: string; status: number }> {
+  const mime = imageMimeOf(file);
+  if (!mime) return { error: "不是認得的圖片格式", status: 400 };
+  const abs = path.resolve(worktree, file);
+  if (!abs.startsWith(worktree + path.sep)) return { error: "路徑不在這個工作區底下", status: 403 };
+
+  if (side === "new") {
+    const st = await stat(abs).catch(() => null);
+    if (!st) return { error: "工作區沒有這個檔案", status: 404 };
+    if (st.size > IMAGE_MAX_BYTES) return { error: "圖片太大，不顯示", status: 413 };
+    return { data: await readFile(abs), mime };
+  }
+
+  const size = await run("git", ["-C", worktree, "cat-file", "-s", `HEAD:${file}`]);
+  if (size.code !== 0) return { error: "HEAD 裡沒有這個檔案", status: 404 };
+  if (Number(size.stdout.trim()) > IMAGE_MAX_BYTES) return { error: "圖片太大，不顯示", status: 413 };
+  const data = await runBinary("git", ["-C", worktree, "cat-file", "blob", `HEAD:${file}`]);
+  if (!data) return { error: "讀不到 HEAD 裡的版本", status: 404 };
+  return { data, mime };
+}
+
+/** `lib/repo.ts` 的 `run` 回字串，圖片不能那樣讀（會被當 UTF-8 毀掉），所以自己收 Buffer */
+function runBinary(cmd: string, args: string[]): Promise<Buffer | null> {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args);
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    child.stdout.on("data", (c: Buffer) => {
+      bytes += c.length;
+      if (bytes > IMAGE_MAX_BYTES) child.kill();
+      else chunks.push(c);
+    });
+    child.on("error", () => resolve(null));
+    child.on("close", (code) => resolve(code === 0 && bytes <= IMAGE_MAX_BYTES ? Buffer.concat(chunks) : null));
+  });
 }

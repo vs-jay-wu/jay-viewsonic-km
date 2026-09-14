@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  countByKind, diffStat, languageOf, parseDiff, parseStatus, parseStatusLine,
+  buildTree, countByKind, diffStat, formatBytes, imageMimeOf,
+  languageOf, parseDiff, parseStatus, parseStatusLine,
+  type ChangedFile,
 } from "@/lib/changesRules";
 
 describe("parseStatusLine — 前兩個字元是固定欄位，不能用空白切", () => {
@@ -119,5 +121,65 @@ describe("languageOf — 認不得就不上色，不要猜", () => {
 
   it.each(["notes.unknownext", "LICENSE", "a.xyz"])("%s → null", (p) => {
     expect(languageOf(p)).toBeNull();
+  });
+});
+
+describe("imageMimeOf — 只認表上的副檔名", () => {
+  it("認得常見的圖片", () => {
+    expect(imageMimeOf("a/b/logo.png")).toBe("image/png");
+    expect(imageMimeOf("shot.JPG")).toBe("image/jpeg");
+    expect(imageMimeOf("icon.svg")).toBe("image/svg+xml");
+  });
+
+  it("不是圖片就回 null（猜錯 MIME 會讓 <img> 整個空白）", () => {
+    expect(imageMimeOf("lib/changes.ts")).toBeNull();
+    expect(imageMimeOf("Dockerfile")).toBeNull();
+    expect(imageMimeOf("a.png.bak")).toBeNull();
+    expect(imageMimeOf("png")).toBeNull();
+  });
+});
+
+describe("formatBytes", () => {
+  it("分三段", () => {
+    expect(formatBytes(512)).toBe("512 B");
+    expect(formatBytes(2048)).toBe("2.0 KB");
+    expect(formatBytes(5 * 1024 * 1024)).toBe("5.0 MB");
+  });
+});
+
+describe("buildTree", () => {
+  const f = (path: string): ChangedFile => ({ path, kind: "modified", staged: false });
+
+  it("照目錄分層，目錄排在檔案前面", () => {
+    const t = buildTree([f("z.txt"), f("src/a.ts"), f("src/b.ts")]);
+    expect(t.map((n) => n.name)).toEqual(["src", "z.txt"]);
+    expect(t[0].children.map((n) => n.name)).toEqual(["a.ts", "b.ts"]);
+    expect(t[0].file).toBeUndefined();
+    expect(t[1].file?.path).toBe("z.txt");
+  });
+
+  it("只有一條路的目錄鏈壓成一行（VS Code 的 compact folders）", () => {
+    const t = buildTree([f("app/build/intermediates/debug/x.bin")]);
+    expect(t.map((n) => n.name)).toEqual(["app/build/intermediates/debug"]);
+    expect(t[0].path).toBe("app/build/intermediates/debug");
+    expect(t[0].children.map((n) => n.name)).toEqual(["x.bin"]);
+  });
+
+  it("分岔的地方就不壓縮", () => {
+    const t = buildTree([f("a/b/x.ts"), f("a/c/y.ts")]);
+    expect(t.map((n) => n.name)).toEqual(["a"]);
+    expect(t[0].children.map((n) => n.name)).toEqual(["b", "c"]);
+  });
+
+  it("目錄底下同時有檔案和子目錄時不壓縮", () => {
+    const t = buildTree([f("a/b/x.ts"), f("a/y.ts")]);
+    expect(t[0].name).toBe("a");
+    expect(t[0].children.map((n) => n.name)).toEqual(["b", "y.ts"]);
+  });
+
+  it("path 是完整路徑（收合狀態靠它當 key）", () => {
+    const t = buildTree([f("a/b/x.ts")]);
+    expect(t[0].path).toBe("a/b");
+    expect(t[0].children[0].path).toBe("a/b/x.ts");
   });
 });
