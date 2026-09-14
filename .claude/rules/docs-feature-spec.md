@@ -65,7 +65,13 @@ km web 的「文件」頁靠它索引（`web/lib/docsRules.ts`，有測試）。
 
 - **狀態不要只寫在 `<h1>` 的裝飾字裡**（「開發中」「已被取代」）——那是給人看的，
   機器讀不到；`km-doc-status` 才是索引與排序的依據。兩邊要一致。
-- `<html lang="zh-Hant">`；樣式放同資料夾的 `assets/style.css`。
+- `<html lang="zh-Hant">`。
+- **樣式與 mermaid 初始化是全 docs 共用的一份**：`docs/assets/style.css`、
+  `docs/assets/mermaid-init.js`，各文件用**相對路徑**指過去
+  （`../../assets/style.css`、深一點的是 `../../../../../assets/style.css`）。
+  用相對路徑而不是 `/docs-view/...` 這種絕對路徑，是為了讓 `file://` 直接
+  雙擊打開也成立。**不要再在各 feature 資料夾放副本**——2026-09-14 收斂前有
+  8 份 style.css、已經漂移成 2 個版本（4 份 mermaid-init.js 則還一致）。
 
 ## Confluence Clone 規則
 

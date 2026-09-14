@@ -1,3 +1,7 @@
+/* km 文件的共用樣式 —— 唯一來源。
+   各文件用相對路徑指到這裡（`../../assets/style.css` 之類），
+   file:// 直接打開與 web 的 /docs-view 兩種開法都成立。
+   慣例見 .claude/rules/docs-feature-spec.md。 */
 :root {
   --c-bg: #fafafa;
   --c-fg: #1a1a1a;
@@ -96,4 +100,12 @@ ul.compact li { margin: 2px 0; }
   .layout { grid-template-columns: 1fr; }
   nav.toc { position: static; max-height: none; border-right: none; border-bottom: 1px solid var(--c-border); }
   .grid2 { grid-template-columns: 1fr; }
+}
+
+/* 共用補充 class（原本只存在於 quiz-tool-flow-v2 與 desktop-annotation-mode 的副本裡，
+   2026-09-14 收斂成一份時併進來） */
+.badge-info { background: var(--c-accent-bg); color: var(--c-accent); }
+p.note, .note {
+  font-size: 13px; color: var(--c-muted);
+  border-left: 3px solid var(--c-border); padding-left: 12px; margin-left: 0;
 }
