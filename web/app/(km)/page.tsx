@@ -42,6 +42,12 @@ const TOOLS: { href: string; icon: IconName; title: string; desc: string }[] = [
     desc: "定期偵測待處理的 PR，必要時才叫 Claude 跑 /handle-pr-inbox",
   },
   {
+    href: "/changes",
+    icon: "code",
+    title: "未提交的改動",
+    desc: "跨所有 repo 與 worktree 的未提交改動；直接看 diff，不用開 VS Code",
+  },
+  {
     href: "/docs",
     icon: "clipboard",
     title: "文件",
