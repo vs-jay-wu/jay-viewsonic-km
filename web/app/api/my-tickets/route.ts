@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  ensureTimer, readConfig, readSnapshot, refreshInBackground, schedulerState,
+  ensureTimer, readConfig, readPins, readSnapshot, refreshInBackground, schedulerState,
 } from "@/lib/myTickets";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   await ensureTimer();
   refreshInBackground();
-  const [snapshot, config] = await Promise.all([readSnapshot(), readConfig()]);
-  return NextResponse.json({ snapshot, config, scheduler: schedulerState() });
+  const [snapshot, config, pinned] = await Promise.all([
+    readSnapshot(), readConfig(), readPins(),
+  ]);
+  return NextResponse.json({ snapshot, config, pinned, scheduler: schedulerState() });
 }

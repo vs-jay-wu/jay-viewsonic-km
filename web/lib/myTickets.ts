@@ -14,6 +14,7 @@ export type { MyTicket, MyTicketsSnapshot };
 const STATE_DIR = "data/local-state";
 const SNAPSHOT_FILE = repoPath(STATE_DIR, "my-tickets.json");
 const CONFIG_FILE = repoPath(STATE_DIR, "my-tickets-config.json");
+const PINS_FILE = repoPath(STATE_DIR, "ticket-pins.json");
 
 const MIN_INTERVAL_SECONDS = 300;
 const DEFAULT_INTERVAL_SECONDS = 1800;
@@ -75,6 +76,20 @@ export async function setConfig(input: Partial<MyTicketsConfig>): Promise<MyTick
 export async function readSnapshot(): Promise<MyTicketsSnapshot | null> {
   const s = await readJson<MyTicketsSnapshot | null>(SNAPSHOT_FILE, null);
   return s && Array.isArray(s.issues) ? s : null;
+}
+
+// ─── pin（跟 sessions／文件同一套：一個 json、順序＝加入的順序）────────────
+
+export async function readPins(): Promise<string[]> {
+  const d = await readJson<{ pinned?: string[] }>(PINS_FILE, {});
+  return Array.isArray(d.pinned) ? d.pinned : [];
+}
+
+export async function togglePin(key: string): Promise<string[]> {
+  const pinned = await readPins();
+  const next = pinned.includes(key) ? pinned.filter((k) => k !== key) : [...pinned, key];
+  await writeJson(PINS_FILE, { pinned: next });
+  return next;
 }
 
 export interface RefreshResult {

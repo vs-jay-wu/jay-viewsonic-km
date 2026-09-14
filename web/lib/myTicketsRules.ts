@@ -269,3 +269,32 @@ export function capForDisplay<T>(list: T[], cap = DISPLAY_CAP): { shown: T[]; hi
     ? { shown: list, hidden: 0 }
     : { shown: list.slice(0, cap), hidden: list.length - cap };
 }
+
+// ─── pin ─────────────────────────────────────────────────────────────────────
+
+export interface PinnedSplit {
+  /** pin 住的（照 pin 的順序） */
+  pinned: MyTicket[];
+  /** 其餘的，交給 applyView 處理 */
+  rest: MyTicket[];
+}
+
+/**
+ * 把 pin 住的抽出來獨立一區。
+ *
+ * **pin 的不受指派／狀態／優先度篩選影響**（只吃搜尋字串）——
+ * 你會 pin 一張單就是因為要一直看到它，若它被「只看我的」篩掉就失去意義了
+ * （常見情況正是：pin 一張指派給別人、但你在等的單）。
+ */
+export function splitPinned(
+  tickets: MyTicket[],
+  pinnedKeys: string[],
+  query = ""
+): PinnedSplit {
+  const order = new Map(pinnedKeys.map((k, i) => [k, i] as const));
+  const pinned = tickets
+    .filter((t) => order.has(t.key) && matchesTicketQuery(t, query))
+    .sort((a, b) => (order.get(a.key) ?? 0) - (order.get(b.key) ?? 0));
+  const rest = tickets.filter((t) => !order.has(t.key));
+  return { pinned, rest };
+}

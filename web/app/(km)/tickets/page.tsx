@@ -6,10 +6,10 @@ import Tooltip from "@/components/Tooltip";
 import { statusLabel } from "@/lib/jiraStatus";
 import {
   DEFAULT_VIEW, PRIORITY_ORDER, TICKET_GROUPS, TICKET_SORTS, applyView, capForDisplay,
-  groupByProduct,
+  groupByProduct, splitPinned,
   groupKeyOf, issueTypeStyle,
   type AssigneeFilter,
-  type MyTicketsSnapshot, type TicketSort,
+  type MyTicket, type MyTicketsSnapshot, type TicketSort,
 } from "@/lib/myTicketsRules";
 import { useTicketSession } from "@/lib/useTicketSession";
 
@@ -47,6 +47,7 @@ export default function TicketsPage() {
   const [config, setConfig] = useState<Config | null>(null);
   const [scheduler, setScheduler] = useState<Scheduler | null>(null);
   const [view, setView] = useState(DEFAULT_VIEW);
+  const [pinnedKeys, setPinnedKeys] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -61,6 +62,7 @@ export default function TicketsPage() {
     setSnapshot(json.snapshot);
     setConfig(json.config);
     setScheduler(json.scheduler);
+    setPinnedKeys(Array.isArray(json.pinned) ? json.pinned : []);
     setLoading(false);
   }, []);
 
@@ -69,6 +71,16 @@ export default function TicketsPage() {
     const t = setInterval(() => void load(), 30_000);
     return () => clearInterval(t);
   }, [load]);
+
+  const togglePin = async (key: string) => {
+    const res = await fetch("/api/my-tickets/pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key }),
+    });
+    const json = await res.json();
+    if (Array.isArray(json.pinned)) setPinnedKeys(json.pinned);
+  };
 
   const refresh = async (full: boolean) => {
     setBusy(true);
@@ -88,10 +100,13 @@ export default function TicketsPage() {
     }
   };
 
-  const tickets = useMemo(
-    () => applyView(snapshot?.issues ?? [], view),
-    [snapshot, view]
+  // pin 的獨立一區，**不受指派／狀態／優先度篩選影響**（只吃搜尋字串）——
+  // 你 pin 一張單就是要一直看到它，被「只看我的」篩掉就沒意義了
+  const { pinned: pinnedTickets, rest } = useMemo(
+    () => splitPinned(snapshot?.issues ?? [], pinnedKeys, view.query),
+    [snapshot, pinnedKeys, view.query]
   );
+  const tickets = useMemo(() => applyView(rest, view), [rest, view]);
   // 快照裡是 VB 全部未完成的單（幾百筆），一次畫完只會拖慢畫面
   const capped = useMemo(() => capForDisplay(tickets), [tickets]);
 
@@ -107,11 +122,118 @@ export default function TicketsPage() {
   /** 這個分組／優先度現在有幾筆（只吃搜尋字串，不吃其他過濾，
    *  否則選了一個之後其他的數字會全部變 0，看不出還有什麼可選） */
   const countIn = (field: "groups" | "priorities", value: string) =>
-    applyView(snapshot?.issues ?? [], {
-      ...DEFAULT_VIEW,
-      query: view.query,
-      [field]: [value],
-    }).length;
+    applyView(rest, { ...DEFAULT_VIEW, query: view.query, [field]: [value] }).length;
+
+  /** 一列。pin 區與各產品分群共用同一個 renderer —— 兩份一定會漂移。 */
+  const renderRow = (t: MyTicket) => {
+
+          const item = itemOf(t.key);
+          const groupKey = groupKeyOf(t.status);
+          const group = TICKET_GROUPS.find((g) => g.key === groupKey);
+          const sessionCount = item?.sessions.length ?? 0;
+          return (
+            <li key={t.key} className="flex items-start gap-3 px-4 py-3">
+              <Tooltip label={pinnedKeys.includes(t.key) ? "取消 pin" : "pin 住（獨立一區，不受篩選影響）"}>
+                <button
+                  onClick={() => togglePin(t.key)}
+                  className={`mt-0.5 shrink-0 ${
+                    pinnedKeys.includes(t.key)
+                      ? "text-amber-500"
+                      : "text-gray-300 hover:text-amber-500"
+                  }`}
+                >
+                  <Icon name="pin" size={15} />
+                </button>
+              </Tooltip>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <a
+                    href={t.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-xs text-sky-700 hover:underline"
+                  >
+                    {t.key}
+                  </a>
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[11px] leading-none ${
+                      GROUP_CLS[groupKey ?? ""] ?? "border-gray-200 bg-white text-gray-500"
+                    }`}
+                    title={group ? `${group.label}／${t.status}` : t.status}
+                  >
+                    {statusLabel(t.status)}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
+                    <Icon
+                      name={issueTypeStyle(t.issueType).icon}
+                      size={13}
+                      className={issueTypeStyle(t.issueType).cls}
+                    />
+                    {t.issueType}
+                  </span>
+                  <span className="text-[11px] text-gray-400">{t.priority}</span>
+                  {/* 指派給誰。別人的單用不同的底色，掃過去就看得出球不在我這裡 */}
+                  <span
+                    className={`rounded-full border px-1.5 py-0.5 text-[11px] leading-none ${
+                      t.assignedToMe
+                        ? "border-gray-200 bg-gray-50 text-gray-500"
+                        : "border-violet-200 bg-violet-50 text-violet-700"
+                    }`}
+                    title={`回報者：${t.reporter?.name || "—"}`}
+                  >
+                    {t.assignee?.name || "未指派"}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-gray-800">{t.summary}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-gray-400">
+                  <span>更新 {relTime(t.updated)}</span>
+                  {item?.prs.map((pr) => (
+                    <a
+                      key={pr.url}
+                      href={pr.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 rounded-full border border-gray-200 px-1.5 py-0.5 text-gray-600 hover:bg-gray-50"
+                    >
+                      <Icon name="gitPr" size={10} />
+                      {pr.repo.split("/").pop()}#{pr.number}
+                      {pr.state !== "OPEN" && (
+                        <span className="text-gray-400">{pr.state.toLowerCase()}</span>
+                      )}
+                    </a>
+                  ))}
+                  {sessionCount > 0 && (
+                    <span className="rounded-full border border-gray-200 px-1.5 py-0.5 text-gray-600">
+                      {sessionCount} 個 session
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <Tooltip
+                side="left"
+                label={
+                  sessionCount > 0
+                    ? `在 Orca 開這張單的 session（已有 ${sessionCount} 個，開最近的那個）`
+                    : "在 Orca 開一個新的 session 來做這張單（名稱可改）"
+                }
+              >
+                <button
+                  onClick={() => openSessionFor(t)}
+                  disabled={busy || sessionBusy}
+                  className={`mt-0.5 shrink-0 disabled:opacity-40 ${
+                    sessionCount > 0
+                      ? "text-sky-500 hover:text-sky-700"
+                      : "text-gray-300 hover:text-sky-600"
+                  }`}
+                >
+                  <Icon name={sessionCount > 0 ? "external" : "play"} size={16} />
+                </button>
+              </Tooltip>
+            </li>
+          );
+  };
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -194,9 +316,7 @@ export default function TicketsPage() {
               >
                 {label}{" "}
                 <span className={view.assignee === key ? "text-gray-300" : "text-gray-400"}>
-                  {applyView(snapshot?.issues ?? [], {
-                    ...DEFAULT_VIEW, query: view.query, assignee: key,
-                  }).length}
+                  {applyView(rest, { ...DEFAULT_VIEW, query: view.query, assignee: key }).length}
                 </span>
               </button>
             ))}
@@ -277,6 +397,20 @@ export default function TicketsPage() {
           </p>
         )}
 
+        {pinnedTickets.length > 0 && (
+          <section className="mt-4">
+            <h2 className="flex items-baseline gap-2 px-1 text-xs font-semibold text-gray-700">
+              <Icon name="pin" size={13} className="text-amber-500" />
+              已 pin
+              <span className="font-normal text-gray-400">{pinnedTickets.length}</span>
+              <span className="font-normal text-gray-300">· 不受篩選影響</span>
+            </h2>
+            <ul className="mt-1.5 divide-y divide-gray-100 rounded-xl border border-gray-200">
+              {pinnedTickets.map(renderRow)}
+            </ul>
+          </section>
+        )}
+
         {/* 依 Jira 的「Project」欄位分群；群內順序由上面選的排序決定 */}
         {groupByProduct(capped.shown).map((g) => (
         <section key={g.product} className="mt-4">
@@ -285,101 +419,7 @@ export default function TicketsPage() {
             <span className="font-normal text-gray-400">{g.tickets.length}</span>
           </h2>
           <ul className="mt-1.5 divide-y divide-gray-100 rounded-xl border border-gray-200">
-          {g.tickets.map((t) => {
-            const item = itemOf(t.key);
-            const groupKey = groupKeyOf(t.status);
-            const group = TICKET_GROUPS.find((g) => g.key === groupKey);
-            const sessionCount = item?.sessions.length ?? 0;
-            return (
-              <li key={t.key} className="flex items-start gap-3 px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <a
-                      href={t.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-mono text-xs text-sky-700 hover:underline"
-                    >
-                      {t.key}
-                    </a>
-                    <span
-                      className={`rounded-full border px-2 py-0.5 text-[11px] leading-none ${
-                        GROUP_CLS[groupKey ?? ""] ?? "border-gray-200 bg-white text-gray-500"
-                      }`}
-                      title={group ? `${group.label}／${t.status}` : t.status}
-                    >
-                      {statusLabel(t.status)}
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
-                      <Icon
-                        name={issueTypeStyle(t.issueType).icon}
-                        size={13}
-                        className={issueTypeStyle(t.issueType).cls}
-                      />
-                      {t.issueType}
-                    </span>
-                    <span className="text-[11px] text-gray-400">{t.priority}</span>
-                    {/* 指派給誰。別人的單用不同的底色，掃過去就看得出球不在我這裡 */}
-                    <span
-                      className={`rounded-full border px-1.5 py-0.5 text-[11px] leading-none ${
-                        t.assignedToMe
-                          ? "border-gray-200 bg-gray-50 text-gray-500"
-                          : "border-violet-200 bg-violet-50 text-violet-700"
-                      }`}
-                      title={`回報者：${t.reporter?.name || "—"}`}
-                    >
-                      {t.assignee?.name || "未指派"}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-sm text-gray-800">{t.summary}</p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-gray-400">
-                    <span>更新 {relTime(t.updated)}</span>
-                    {item?.prs.map((pr) => (
-                      <a
-                        key={pr.url}
-                        href={pr.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-full border border-gray-200 px-1.5 py-0.5 text-gray-600 hover:bg-gray-50"
-                      >
-                        <Icon name="gitPr" size={10} />
-                        {pr.repo.split("/").pop()}#{pr.number}
-                        {pr.state !== "OPEN" && (
-                          <span className="text-gray-400">{pr.state.toLowerCase()}</span>
-                        )}
-                      </a>
-                    ))}
-                    {sessionCount > 0 && (
-                      <span className="rounded-full border border-gray-200 px-1.5 py-0.5 text-gray-600">
-                        {sessionCount} 個 session
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <Tooltip
-                  side="left"
-                  label={
-                    sessionCount > 0
-                      ? `在 Orca 開這張單的 session（已有 ${sessionCount} 個，開最近的那個）`
-                      : "在 Orca 開一個新的 session 來做這張單（名稱可改）"
-                  }
-                >
-                  <button
-                    onClick={() => openSessionFor(t)}
-                    disabled={busy || sessionBusy}
-                    className={`mt-0.5 shrink-0 disabled:opacity-40 ${
-                      sessionCount > 0
-                        ? "text-sky-500 hover:text-sky-700"
-                        : "text-gray-300 hover:text-sky-600"
-                    }`}
-                  >
-                    <Icon name={sessionCount > 0 ? "external" : "play"} size={16} />
-                  </button>
-                </Tooltip>
-              </li>
-            );
-          })}
+          {g.tickets.map(renderRow)}
           </ul>
         </section>
         ))}

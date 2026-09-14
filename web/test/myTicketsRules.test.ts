@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_VIEW, DISPLAY_CAP, UNCATEGORISED, applyView, attentionRank, capForDisplay,
   groupByProduct, groupKeyOf,
-  issueTypeStyle, matchesTicketQuery, priorityIndexOf, sortBy, sortTickets,
+  issueTypeStyle, matchesTicketQuery, priorityIndexOf, sortBy, sortTickets, splitPinned,
   type MyTicket,
 } from "@/lib/myTicketsRules";
 
@@ -245,5 +245,40 @@ describe("未指派與顯示上限", () => {
     const { shown, hidden } = capForDisplay(many);
     expect(shown).toHaveLength(DISPLAY_CAP);
     expect(hidden).toBe(7);
+  });
+});
+
+describe("splitPinned — pin 的獨立一區", () => {
+  const list = [
+    t({ key: "VB-1", assignedToMe: true, summary: "我的單" }),
+    t({ key: "VB-2", assignedToMe: false, assignee: { name: "Peja", accountId: "p" }, summary: "別人的單" }),
+    t({ key: "VB-3", assignedToMe: true, summary: "另一張" }),
+  ];
+
+  it("照 pin 的順序排，不是照單號或時間", () => {
+    expect(splitPinned(list, ["VB-3", "VB-1"]).pinned.map((x) => x.key)).toEqual(["VB-3", "VB-1"]);
+  });
+
+  it("pin 的會從 rest 拿掉，不會重複出現", () => {
+    const { pinned, rest } = splitPinned(list, ["VB-2"]);
+    expect(pinned.map((x) => x.key)).toEqual(["VB-2"]);
+    expect(rest.map((x) => x.key)).toEqual(["VB-1", "VB-3"]);
+  });
+
+  it("**不受指派篩選影響** —— pin 一張別人的單，切「只看我的」時它照樣在", () => {
+    const { pinned, rest } = splitPinned(list, ["VB-2"]);
+    expect(pinned.map((x) => x.key)).toEqual(["VB-2"]);
+    // rest 才輪到篩選處理
+    expect(applyView(rest, DEFAULT_VIEW).map((x) => x.key)).toEqual(["VB-1", "VB-3"]);
+  });
+
+  it("但仍然吃搜尋字串 —— 不然搜尋結果會被 pin 的洗版", () => {
+    expect(splitPinned(list, ["VB-2"], "別人").pinned.map((x) => x.key)).toEqual(["VB-2"]);
+    expect(splitPinned(list, ["VB-2"], "另一張").pinned).toEqual([]);
+  });
+
+  it("pin 了不存在的單號不會炸", () => {
+    expect(splitPinned(list, ["VB-999"]).pinned).toEqual([]);
+    expect(splitPinned([], ["VB-1"]).pinned).toEqual([]);
   });
 });
