@@ -14,12 +14,6 @@ export const dynamic = "force-dynamic";
 
 const TOOLS: { href: string; icon: IconName; title: string; desc: string }[] = [
   {
-    href: "/memory",
-    icon: "cpu",
-    title: "記憶體狀況",
-    desc: "看目前記憶體／swap，並執行 memclean 清掉殭屍開發行程",
-  },
-  {
     href: "/tickets",
     icon: "clipboard",
     title: "單追蹤",
@@ -71,6 +65,12 @@ const OTHERS: {
     icon: "refresh",
     title: "Repo 同步",
     desc: "每晚自動把 org 的 repo pull 一次；有掛外接就連 offloaded 的一起",
+  },
+  {
+    href: "/memory",
+    icon: "cpu",
+    title: "記憶體狀況",
+    desc: "看目前記憶體／swap，並執行 memclean 清掉殭屍開發行程",
   },
   {
     href: "/pr-inbox",
