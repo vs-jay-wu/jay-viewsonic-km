@@ -12,11 +12,29 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/*
+ * **這個 app 是固定淺色的**，所以刻意不跟系統深色模式走。
+ *
+ * 原本這裡留著 Next.js 範本的 `prefers-color-scheme: dark` 覆寫，把 --foreground
+ * 換成近白色。但畫面上每個卡片／清單都是明確畫白底的，於是在深色模式下
+ * **所有沒指定文字顏色的元素（input、textarea…）會繼承近白色文字畫在白底上**，
+ * 等於看不見（Jay 2026-09-14 回報搜尋框打字後看不到）。
+ *
+ * `color-scheme: light` 是另一半：沒有它，瀏覽器原生控制項（checkbox、select、
+ * 捲軸）在深色模式下仍會用深色樣式，跟周圍的白底對不起來。
+ *
+ * 要做深色模式的話是整套換（含所有 bg-white／text-gray-*），不是把這段加回來。
+ */
+:root {
+  color-scheme: light;
+}
+
+/* 表單元素預設是 `color: inherit`，很容易在某處繼承到淡色。明確釘成 gray-900，
+   各元件要別的顏色再自己蓋掉。 */
+input,
+textarea,
+select {
+  color: #111827;
 }
 
 /* Tailwind v4 的 placeholder 預設是 currentColor 半透明，對比太低看不清楚
