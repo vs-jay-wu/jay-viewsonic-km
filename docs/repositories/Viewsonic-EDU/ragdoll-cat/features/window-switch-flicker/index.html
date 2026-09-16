@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>CS 切換浮動視窗會「閃一下」— 調查與修正紀錄</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="km-doc-kind" content="findings">
+<meta name="km-doc-status" content="active">
+<link rel="stylesheet" href="../../../../../assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#meta">📌 基準</a></li>
+      <li><a href="#tldr">0. 一句話</a></li>
+      <li><a href="#refuted">1. 被推翻的假說</a></li>
+      <li><a href="#found">2. 找到成因的那一步</a></li>
+      <li><a href="#spike">3. 另一條路：單一 overlay window</a></li>
+      <li><a href="#now">4. 現在停在哪</a></li>
+      <li><a href="#delivery">5. 交付狀態</a></li>
+    </ul>
+  </nav>
+  <main>
+
+<h1>CS 切換浮動視窗會「閃一下」— 調查與修正紀錄</h1>
+
+<h2 id="meta">📌 基準</h2>
+
+<table>
+<thead><tr><th>項目</th><th>值</th></tr></thead>
+<tbody>
+<tr><td>期間</td><td>2026-09-14 ～ 2026-09-16</td></tr>
+<tr><td>Repo</td><td><code>Orgs/Viewsonic-EDU/ragdoll-cat</code></td></tr>
+<tr><td>分支</td><td><code>jay/window-switch-flicker-probe</code>（已 push，<strong>刻意沒開 PR</strong>）</td></tr>
+<tr><td>Commit</td><td><code>96cd5a2c6</code> — <code>fix[NO-TICKET]: capture the hoist placeholder with the hardware renderer so it keeps its shadow</code></td></tr>
+</tbody>
+</table>
+
+<blockquote>
+平台限制、修法細節、重新量測的 SOP 已經寫進<strong>團隊 repo</strong>：
+<code>ragdoll-cat/docs/window-framework.md</code>（同一個 commit）。
+<strong>那份是 source of truth，這份不重複它</strong> —— 這裡記的是「怎麼查到的、什麼被推翻了、
+現在停在哪」，也就是不適合放進團隊 repo 的過程與決策。
+</blockquote>
+
+<h2 id="tldr">0. 一句話</h2>
+
+<p>換窗的前擋圖是用<strong>軟體 <code>Canvas</code></strong> 截的，而軟體 canvas <strong>畫不出 <code>elevation</code> 陰影</strong>；
+視窗在換窗那 49–107 ms 內整個掉陰影與輪廓，再突然長回來。改成硬體算繪截圖後，
+Pixel Tablet 上完全不閃，IFP92 大幅改善，<strong>IFP34 仍然 100% 會閃且尚未診斷</strong>。</p>
+
+<h2 id="refuted">1. 被推翻的假說（這段比結論有用）</h2>
+
+<p>按提出順序，每一條都是當時「看起來很合理」的判斷：</p>
+
+<table>
+<thead><tr><th>#</th><th>假說</th><th>怎麼死的</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong>交棒太早</strong>：<code>awaitVisible()</code> 只等到 layout，舊窗被拆時新窗第一幀還沒 commit，中間有空白幀</td><td>實測三次，<code>frame_commit</code> 每次都在 <code>old_window_removed</code> <strong>之前</strong> 1 ms。沒有空窗期</td></tr>
+<tr><td>2</td><td><strong>尺寸不一致</strong>：bitmap 用 <code>floatingView.width</code>、新窗用 <code>getCurrentSize()</code></td><td>實測 <code>bitmap=2085x1190 floatingView=2085x1190 currentSize=2085x1190</code>，三者相同</td></tr>
+<tr><td>3</td><td><strong>density 造成擋圖縮放</strong></td><td>該機 <code>wm density</code> 320、無 override，排除</td></tr>
+<tr><td>4</td><td><strong>SurfaceView / TextureView 截不進圖</strong></td><td>全 repo 零個</td></tr>
+<tr><td>5</td><td>reviewer 提的：<strong>overlay 是軟體算繪</strong>，所以「硬體截圖＝跟真實視窗一致」這個歸因有問題</td><td><code>dumpsys</code> 顯示實際 flags 有 <code>HARDWARE_ACCELERATED</code>（框架自動補的）。反而是 repo 既有 8 處註解的前提是錯的</td></tr>
+</tbody>
+</table>
+
+<p><strong>共同教訓</strong>：前四條都是<strong>讀碼推論</strong>，全錯；真正的成因是靠<strong>裝置上的畫素比對</strong>找到的。
+第 5 條則是差點被既有註解帶偏 —— 那 8 處註解寫「no FLAG_HARDWARE_ACCELERATED」，
+程式碼裡確實搜不到那個字串，但 runtime 的 flags 不是這樣。
+<strong>不要從「程式碼裡有沒有這個字串」反推行為。</strong></p>
+
+<h2 id="found">2. 找到成因的那一步</h2>
+
+<p>做了一個可用 adb 開關的 hold：讓換窗流程停在「畫面上只剩前擋圖」15 秒，
+期間截圖，恢復後在同一位置再截一張，逐像素比對視窗左緣。</p>
+
+<pre><code>x    擋圖(軟體)  真內容
+124     255       249
+136     255       226
+142     255       206     ← 平的 255 = 陰影完全不存在</code></pre>
+
+<p>改成 <code>RenderNode</code> + <code>HardwareRenderer</code> 之後，同一個位置擋圖與真內容最大差 <strong>6 階</strong>。</p>
+
+<h2 id="spike">3. 另一條路：單一 overlay window ＋ 真 z-index（spike 後放棄）</h2>
+
+<p>Jay 問「只改 z-index 技術上可不可行」，做了完整 spike。<strong>結論：公開 API 做不到。</strong></p>
+
+<p>兩道平台牆（實測，細節在團隊 repo 的文件裡）：</p>
+
+<ol>
+<li><code>InternalInsetsInfo.touchableRegion</code> 在真機上<strong>反射也拿不到</strong>（<code>NoSuchFieldException</code>，
+而 <code>addOnComputeInternalInsetsListener</code> / <code>setTouchableInsets</code> 都拿得到）→ 可觸控區縮不成子視窗的聯集</li>
+<li>繞道用 <code>FLAG_NOT_TOUCHABLE</code> 讓觸控穿透 → <strong>系統把該視窗壓到 <code>alpha=0.8</code></strong>，
+而且 app 明確設 <code>alpha = 1.0f</code> 會被覆寫（用一個 300×300 的對照視窗證實，與尺寸無關）</li>
+</ol>
+
+<p>形成封閉循環：要穿透就得不可觸控 → 不可觸控就被降透明度 → 要不降透明度就得可觸控 →
+可觸控就吃掉視窗之間的觸控 → 要兩者兼得就需要那個拿不到的欄位。</p>
+
+<p><strong>但 spike 也證實了視覺面完全達標</strong>：<code>bringToFront()</code> 換 z-order 只要 <strong>16–24 ms</strong>
+（現行做法 49–107 ms），全程不需要截圖、陰影不掉。所以這條路不是「不好」，是「被平台擋住」。</p>
+
+<p>翻案條件寫在 → <a href="../../../../../ideas/cs-window-single-host-zindex.md"><code>docs/ideas/cs-window-single-host-zindex.md</code></a></p>
+
+<h2 id="now">4. 現在停在哪</h2>
+
+<table>
+<thead><tr><th>機器</th><th>換窗閃爍</th><th>備註</th></tr></thead>
+<tbody>
+<tr><td>Pixel Tablet（<code>tangorpro</code>，serial <code>3629105H804NHC</code>）</td><td><strong>完全不閃</strong></td><td>開發機，非出貨機型</td></tr>
+<tr><td>IFP92</td><td>仍會閃，<strong>機率大幅降低</strong></td><td></td></tr>
+<tr><td>IFP34</td><td><strong>100% 會閃</strong></td><td>尚未診斷</td></tr>
+</tbody>
+</table>
+
+<p><strong>決定（2026-09-16）：先不再投入</strong>，等產品端認為 IFP34 不可接受再回來處理。
+理由與翻案條件 → <a href="../../../../../ideas/cs-window-hoist-ifp34-flicker.md"><code>docs/ideas/cs-window-hoist-ifp34-flicker.md</code></a></p>
+
+<h2 id="delivery">5. 交付狀態</h2>
+
+<ul>
+<li>已 push，<strong>沒有開 PR</strong>（Jay 指示）</li>
+<li>送 PR 時需掛 <code>skip-test-gate</code> label —— Type C 要求 androidTest，但陰影是 GPU 行為、
+JVM 驗不到；理由已寫進 <code>ragdoll-cat/docs/testing-strategy/features/window-hoist-snapshot.md</code></li>
+<li><code>testStagDebugUnitTest</code> 2134 綠、<code>verifyRoborazziStagDebug</code> 綠、無孤兒 golden</li>
+</ul>
+
+<h3>給測試用的 APK（2026-09-16 當時在隨身碟 <code>Dillon8G_2</code>）</h3>
+
+<table>
+<thead><tr><th>檔名</th><th>flavor</th><th>類型</th><th>含主執行緒優化</th></tr></thead>
+<tbody>
+<tr><td><code>cs-window-flicker-fix_edla-debug_2026-09-14.apk</code></td><td>edla</td><td>debug</td><td>✗</td></tr>
+<tr><td><code>cs-window-flicker-fix_edla-RELEASE_2026-09-14.apk</code></td><td>edla</td><td>release</td><td>✓</td></tr>
+<tr><td><code>cs-window-flicker-fix_ifp-RELEASE_2026-09-16.apk</code></td><td>ifp</td><td>release</td><td>✓</td></tr>
+</tbody>
+</table>
+
+<blockquote>
+隨身碟內容會變動，這張表只記「當時做了哪三包、差在哪」。要重建就從 commit <code>96cd5a2c6</code>
+跑 <code>./gradlew :app:assembleIfpRelease -PclassswiftRepoPath=&lt;cs checkout&gt;</code>（在 mvbf 的
+<code>android/</code> 底下）。
+</blockquote>
+
+  </main>
+</div>
+</body>
+</html>
