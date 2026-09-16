@@ -530,6 +530,18 @@ export default function SessionsPage() {
                   const prs = item?.prs ?? [];
                   return (
                     <span className="flex shrink-0 items-center gap-1">
+                      {/* 有掛到工作項目才給「這條線的改動」——那頁是靠 key 查的，
+                          沒掛上的 session 點進去只會看到錯誤訊息 */}
+                      {item && (
+                        <Tooltip side="left" label={`看這條線總共改了什麼（跨 repo，commit ＋ 還沒 commit 的）`}>
+                          <a
+                            href={`/work?key=${encodeURIComponent(item.key)}`}
+                            className="inline-flex items-center rounded-full border border-gray-200 px-1.5 py-0.5 text-[11px] leading-none text-gray-500 hover:bg-gray-50 hover:text-gray-800"
+                          >
+                            <Icon name="layers" size={10} />
+                          </a>
+                        </Tooltip>
+                      )}
                       <WorkRefChips refs={parseSessionTitle(s.title)} showPr={prs.length === 0} />
                       {prs.map((pr) => {
                         const st = prStateStyle(pr.state);

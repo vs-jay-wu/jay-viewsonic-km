@@ -13,6 +13,8 @@ export interface IndexedPr {
   repo: string;
   number: number;
   title: string;
+  /** PR 的來源分支 —— 「這條線包含哪些 worktree」要靠它精確比對，不能拿標題猜 */
+  headRefName: string;
   url: string;
   state: "OPEN" | "MERGED" | "CLOSED";
   updatedAt: string;

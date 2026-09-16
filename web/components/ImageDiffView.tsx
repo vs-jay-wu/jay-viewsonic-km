@@ -42,6 +42,8 @@ export default function ImageDiffView({
   worktree,
   file,
   oldPath,
+  oldRev = "HEAD",
+  newRev = null,
   oldBytes,
   newBytes,
   theme = "dark",
@@ -51,6 +53,10 @@ export default function ImageDiffView({
   file: string;
   /** 改名時 HEAD 裡的路徑跟現在不同 */
   oldPath: string;
+  /** 舊側要取哪個版本。看整條線時是 merge-base、看單一 commit 時是 `<sha>^` */
+  oldRev?: string;
+  /** 新側要取哪個版本；null／不給＝工作區現在的檔案 */
+  newRev?: string | null;
   oldBytes: number | null;
   newBytes: number | null;
   theme?: DiffTheme;
@@ -76,16 +82,16 @@ export default function ImageDiffView({
   const urlOld = useMemo(
     () =>
       `/api/changes/blob?${new URLSearchParams({
-        worktree, file: oldPath, side: "old", v: String(oldBytes ?? 0),
+        worktree, file: oldPath, side: "old", rev: oldRev, v: String(oldBytes ?? 0),
       })}`,
-    [worktree, oldPath, oldBytes]
+    [worktree, oldPath, oldRev, oldBytes]
   );
   const urlNew = useMemo(
     () =>
       `/api/changes/blob?${new URLSearchParams({
-        worktree, file, side: "new", v: String(newBytes ?? 0),
+        worktree, file, side: "new", rev: newRev ?? "", v: String(newBytes ?? 0),
       })}`,
-    [worktree, file, newBytes]
+    [worktree, file, newRev, newBytes]
   );
 
   // deps 要帶 effMode：疊圖的容器只在滑桿／洋蔥皮模式存在，掛在 2-up 時 ref 是 null，
@@ -203,7 +209,7 @@ export default function ImageDiffView({
         <div className="flex flex-wrap gap-4 px-4 py-4">
           {hasOld && (
             <Side
-              title="舊（HEAD）"
+              title={`舊（${revLabel(oldRev)}）`}
               tone="del"
               dark={dark}
               src={urlOld}
@@ -213,7 +219,7 @@ export default function ImageDiffView({
           )}
           {hasNew && (
             <Side
-              title="新（工作區）"
+              title={`新（${newRev ? revLabel(newRev) : "工作區"}）`}
               tone="add"
               dark={dark}
               src={urlNew}
@@ -312,6 +318,16 @@ export default function ImageDiffView({
       )}
     </div>
   );
+}
+
+/**
+ * revision 給人看的樣子。sha 只留前 8 碼（`abc12345^` 也要處理），
+ * 分支名原樣顯示 —— **標籤一定要跟實際比較的版本一致**，
+ * 整體檢視的舊側是 merge-base 不是 HEAD，寫死「HEAD」會騙人。
+ */
+function revLabel(rev: string): string {
+  const m = /^([0-9a-f]{7,40})(\^*)$/.exec(rev);
+  return m ? m[1].slice(0, 8) + m[2] : rev;
 }
 
 function Meta({ dim, bytes }: { dim: Dim | null; bytes: number | null }) {

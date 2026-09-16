@@ -5,6 +5,7 @@ import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import DiffView from "@/components/DiffView";
 import ImageDiffView from "@/components/ImageDiffView";
+import { FileRow, TreeRows, ViewToggle, useFileView } from "@/components/FileList";
 import { hljsHref, type DiffTheme } from "@/lib/uiSettingsRules";
 import {
   KIND_CLS, KIND_LABEL, KIND_TITLE, buildTree, countByKind,
@@ -20,8 +21,6 @@ interface Snapshot {
   ignoredChanges: number;
   skippedOffloaded: number;
 }
-
-type ViewMode = "list" | "tree";
 
 /** 左欄預設寬度（原本的 `lg:w-96`） */
 const DEFAULT_PANE_W = 384;
@@ -80,8 +79,8 @@ export default function ChangesPage() {
   /** 收起來的 repo、worktree 與目錄（key 用 repo 名／worktree 絕對路徑／`<worktree>:<目錄>`）。
    *  存 localStorage —— 純畫面偏好，不值得上 server，但要撐過重新整理 */
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  /** 清單要平鋪還是樹狀（VS Code 的 List／Tree） */
-  const [view, setView] = useState<ViewMode>("list");
+  /** 清單要平鋪還是樹狀（VS Code 的 List／Tree）。跟「這條線的改動」共用同一個偏好 */
+  const [view, switchView] = useFileView();
   /** 左欄寬度（px）。只在雙欄版面（lg 以上）才套用 */
   const [paneW, setPaneW] = useState(DEFAULT_PANE_W);
   const dragging = useRef(false);
@@ -91,8 +90,6 @@ export default function ChangesPage() {
     try {
       const raw = localStorage.getItem("km.changes.collapsed");
       if (raw) setCollapsed(new Set(JSON.parse(raw) as string[]));
-      const v = localStorage.getItem("km.changes.view");
-      if (v === "tree" || v === "list") setView(v);
       const w = Number(localStorage.getItem("km.changes.paneW"));
       if (Number.isFinite(w) && w > 0) setPaneW(clampPaneW(w));
     } catch {
@@ -129,15 +126,6 @@ export default function ChangesPage() {
       window.removeEventListener("pointerup", onUp);
     };
   }, []);
-
-  const switchView = (v: ViewMode) => {
-    setView(v);
-    try {
-      localStorage.setItem("km.changes.view", v);
-    } catch {
-      /* 存不了就算了 */
-    }
-  };
 
   const toggleCollapsed = (key: string) => {
     setCollapsed((prev) => {
@@ -341,16 +329,7 @@ export default function ChangesPage() {
           {/* 清單自己的工具列。檢視切換是**一顆按鈕直接切**（Jay 2026-09-14）——
               兩顆分頁按鈕佔掉的寬度跟它帶來的資訊不成比例 */}
           <div className="flex shrink-0 items-center justify-end border-b border-gray-100 px-2 py-1">
-            <Tooltip side="left" label={view === "tree" ? "改成平鋪：一個檔案一行，看得到完整路徑" : "改成樹狀：照目錄分層，只有一條路的目錄會併成一行"}>
-              <button
-                onClick={() => switchView(view === "tree" ? "list" : "tree")}
-                aria-label={view === "tree" ? "改成平鋪檢視" : "改成樹狀檢視"}
-                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-              >
-                {/* 顯示的是**現在的檢視**，跟工具列按鈕的慣例一致 */}
-                <Icon name={view === "tree" ? "tree" : "list"} size={15} />
-              </button>
-            </Tooltip>
+            <ViewToggle view={view} onChange={switchView} />
           </div>
 
           {/* 路徑不截斷，改成可以左右捲（Jay 2026-09-14）——「…」會把最有辨識度的
@@ -448,24 +427,24 @@ export default function ChangesPage() {
                               key={f.path}
                               file={f}
                               label="path"
-                              depth={0}
                               selected={selected?.worktree === w.path && selected.file.path === f.path}
                               onOpen={() =>
                                 openFile({ worktree: w.path, worktreeName: w.name, repo: r.repo, file: f })
                               }
+                              trailing={<FileBadges file={f} />}
                             />
                           ))
                         : (
                           <TreeRows
                             nodes={trees.get(w.path) ?? []}
-                            depth={0}
-                            worktree={w.path}
+                            keyPrefix={w.path}
                             collapsed={collapsed}
                             onToggle={toggleCollapsed}
                             selectedPath={selected?.worktree === w.path ? selected.file.path : null}
                             onOpen={(f) =>
                               openFile({ worktree: w.path, worktreeName: w.name, repo: r.repo, file: f })
                             }
+                            extras={(f) => ({ trailing: <FileBadges file={f} /> })}
                           />
                         )}
                     </div>
@@ -572,116 +551,12 @@ export default function ChangesPage() {
   );
 }
 
-/**
- * 一個檔案一行。平鋪（`label="path"`）顯示完整路徑，樹狀（`label="name"`）只顯示檔名。
- *
- * **不截斷**：路徑一律 `whitespace-nowrap`，寬度交給外層的水平捲動
- * （Jay 2026-09-14：「不要做縮略變成『…』」）。
- */
-function FileRow({
-  file,
-  label,
-  depth,
-  selected,
-  onOpen,
-}: {
-  file: ChangedFile;
-  label: "path" | "name";
-  depth: number;
-  selected: boolean;
-  onOpen: () => void;
-}) {
-  const dir = file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/") + 1) : "";
-  const name = file.path.split("/").pop();
-  return (
-    <button
-      onClick={onOpen}
-      style={{ paddingLeft: 16 + depth * 14 }}
-      className={`flex w-full items-center gap-2 whitespace-nowrap py-1 pr-4 text-left text-xs hover:bg-gray-50 ${
-        selected ? "bg-sky-50" : ""
-      }`}
-    >
-      <span
-        className={`w-3 shrink-0 text-center font-mono text-[11px] font-semibold ${KIND_CLS[file.kind]}`}
-        title={KIND_TITLE[file.kind]}
-      >
-        {KIND_LABEL[file.kind]}
-      </span>
-      <span className="font-mono">
-        {/* 目錄淡、檔名深 —— 一串同目錄的檔案裡，眼睛要抓的是右邊那一段。
-            **不要用 dir="rtl" 截斷**：它會把開頭的標點吃掉，`.claude/…` 會變成 `claude/…` */}
-        {label === "path" && dir && <span className="text-gray-400">{dir}</span>}
-        <span className="text-gray-700">{name}</span>
-      </span>
-      {file.modeOnly && <span className="shrink-0 text-[10px] text-gray-300">模式</span>}
-      {file.staged && <span className="shrink-0 text-[10px] text-emerald-600">staged</span>}
-    </button>
-  );
-}
-
-/** 樹狀檢視的一層。目錄可以收合，狀態跟 repo／worktree 共用同一份 `collapsed` */
-function TreeRows({
-  nodes,
-  depth,
-  worktree,
-  collapsed,
-  onToggle,
-  selectedPath,
-  onOpen,
-}: {
-  nodes: TreeNode[];
-  depth: number;
-  worktree: string;
-  collapsed: Set<string>;
-  onToggle: (key: string) => void;
-  selectedPath: string | null;
-  onOpen: (f: ChangedFile) => void;
-}) {
+/** 只有這一頁要的兩個小標：只改模式、已 git add */
+function FileBadges({ file }: { file: ChangedFile }) {
   return (
     <>
-      {nodes.map((n) => {
-        if (n.file) {
-          return (
-            <FileRow
-              key={n.path}
-              file={n.file}
-              label="name"
-              depth={depth}
-              selected={selectedPath === n.path}
-              onOpen={() => onOpen(n.file!)}
-            />
-          );
-        }
-        const key = `${worktree}:${n.path}`;
-        const open = !collapsed.has(key);
-        return (
-          <div key={n.path}>
-            <button
-              onClick={() => onToggle(key)}
-              style={{ paddingLeft: 16 + depth * 14 }}
-              className="flex w-full items-center gap-1.5 whitespace-nowrap py-1 pr-4 text-left text-xs hover:bg-gray-50"
-            >
-              <Icon
-                name={open ? "chevronDown" : "chevronRight"}
-                size={12}
-                className="shrink-0 text-gray-400"
-              />
-              <span className="font-mono text-gray-500">{n.name}</span>
-            </button>
-            {open && (
-              <TreeRows
-                nodes={n.children}
-                depth={depth + 1}
-                worktree={worktree}
-                collapsed={collapsed}
-                onToggle={onToggle}
-                selectedPath={selectedPath}
-                onOpen={onOpen}
-              />
-            )}
-          </div>
-        );
-      })}
+      {file.modeOnly && <span className="shrink-0 text-[10px] text-gray-300">模式</span>}
+      {file.staged && <span className="shrink-0 text-[10px] text-emerald-600">staged</span>}
     </>
   );
 }

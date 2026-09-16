@@ -248,17 +248,17 @@ export function formatBytes(n: number): string {
 
 // ─── 樹狀檢視 ────────────────────────────────────────────────────────────────
 
-export interface TreeNode {
+export interface TreeNode<T extends { path: string } = ChangedFile> {
   /** 這一層顯示的名字（壓縮過的目錄會是 `a/b/c`） */
   name: string;
   /** 完整相對路徑，也當 React key 與收合狀態的 key */
   path: string;
-  /** 有值就是檔案（葉節點） */
-  file?: ChangedFile;
-  children: TreeNode[];
+  /** 有值就是檔案（葉節點）。泛型是為了讓「這條線的改動」帶著自己的欄位（C／W）進來 */
+  file?: T;
+  children: TreeNode<T>[];
 }
 
-function sortNodes(nodes: TreeNode[]): void {
+function sortNodes<T extends { path: string }>(nodes: TreeNode<T>[]): void {
   nodes.sort((a, b) => {
     const aDir = !a.file;
     const bDir = !b.file;
@@ -274,7 +274,7 @@ function sortNodes(nodes: TreeNode[]): void {
  * VS Code 的 compact folders，對 gradle 那種 `build/intermediates/…/debug/` 的深路徑
  * 差別很大 —— 不壓縮的話光是點開就要點七八層，而中間每層都只有一條路。
  */
-function compact(nodes: TreeNode[]): TreeNode[] {
+function compact<T extends { path: string }>(nodes: TreeNode<T>[]): TreeNode<T>[] {
   return nodes.map((n) => {
     let cur = n;
     while (!cur.file && cur.children.length === 1 && !cur.children[0].file) {
@@ -286,8 +286,8 @@ function compact(nodes: TreeNode[]): TreeNode[] {
 }
 
 /** 一串檔案 → 樹。目錄在前、同層照字母排，單一子目錄的鏈會被壓成一行 */
-export function buildTree(files: ChangedFile[]): TreeNode[] {
-  const root: TreeNode = { name: "", path: "", children: [] };
+export function buildTree<T extends { path: string }>(files: T[]): TreeNode<T>[] {
+  const root: TreeNode<T> = { name: "", path: "", children: [] };
   for (const f of files) {
     const parts = f.path.split("/");
     let cur = root;

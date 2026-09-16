@@ -211,6 +211,18 @@ export default function TicketsPage() {
                 </div>
               </div>
 
+              {/* 有掛到工作項目才有「這條線的改動」可看（那頁靠 key 查） */}
+              {item && (
+                <Tooltip side="left" label="這條線總共改了什麼（跨 repo，commit ＋ 還沒 commit 的）">
+                  <a
+                    href={`/work?key=${encodeURIComponent(item.key)}`}
+                    className="mt-0.5 shrink-0 text-gray-300 hover:text-gray-700"
+                  >
+                    <Icon name="layers" size={16} />
+                  </a>
+                </Tooltip>
+              )}
+
               <Tooltip
                 side="left"
                 label={

@@ -95,6 +95,7 @@ async function build(): Promise<WorkIndex> {
     const it = take(key, ticketKey, false);
     const entry: IndexedPr = {
       repo: pr.repo, number: pr.number, title: pr.title, url: pr.url,
+      headRefName: pr.headRefName,
       state: pr.state, updatedAt: pr.updatedAt, reviewDecision: pr.reviewDecision,
     };
     it.prs.push(entry);

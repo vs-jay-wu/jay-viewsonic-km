@@ -26,5 +26,8 @@ export async function GET(req: NextRequest) {
   const untracked = req.nextUrl.searchParams.get("untracked") === "1";
   // 改名的檔案，舊版在 HEAD 裡是另一個路徑（圖片要拿它才抓得到「改名前那張」）
   const oldPath = req.nextUrl.searchParams.get("from") || undefined;
-  return NextResponse.json(await fileDiff(worktree, file, { untracked, oldPath }));
+  // 看整條線時：base = merge-base（base → 工作區），sha = 單一 commit
+  const base = req.nextUrl.searchParams.get("base") || undefined;
+  const sha = req.nextUrl.searchParams.get("sha") || undefined;
+  return NextResponse.json(await fileDiff(worktree, file, { untracked, oldPath, base, sha }));
 }

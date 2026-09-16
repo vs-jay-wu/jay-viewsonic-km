@@ -8,7 +8,8 @@ const pr = (o: Partial<IndexedPr> & { number: number }): IndexedPr => ({
   repo: "Viewsonic-EDU/edu-droid-flutter",
   title: "[Task VB-1945] 字體",
   url: `https://github.com/Viewsonic-EDU/edu-droid-flutter/pull/${o.number}`,
-  state: "OPEN", updatedAt: "2026-09-11T00:00:00.000Z", reviewDecision: null, ...o,
+  headRefName: "Jay/VB-1945", state: "OPEN", updatedAt: "2026-09-11T00:00:00.000Z",
+  reviewDecision: null, ...o,
 });
 
 const item = (o: Partial<WorkItem> & { key: string }): WorkItem => ({

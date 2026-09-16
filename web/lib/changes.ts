@@ -40,7 +40,7 @@ export async function toggleIgnored(repo: string): Promise<string[]> {
 
 // ─── 找出所有工作區 ──────────────────────────────────────────────────────────
 
-interface Workspace {
+export interface Workspace {
   /** 掃描的起點（**只有 localPath，不含 externalPath**） */
   roots: string[];
   /** 搬到外接硬碟的 repo 名 —— 一律不列（Jay 2026-09-14） */
@@ -55,7 +55,7 @@ interface Workspace {
  * 另外把 `offloaded` 清單也讀進來當保險 —— 萬一本機留了殘檔（搬移中斷之類），
  * 名字對得上就不列。實測目前 328 個 offloaded 在本機一個資料夾都沒留。
  */
-async function workspace(): Promise<Workspace> {
+export async function workspace(): Promise<Workspace> {
   const raw = await readFile(repoPath("local.workspace.json"), "utf8").catch(() => null);
   const roots = new Set<string>([repoRoot()]); // km 自己也算
   const offloaded = new Set<string>();
@@ -80,7 +80,7 @@ async function looksLikeRepo(dir: string): Promise<boolean> {
   return stat(path.join(dir, ".git")).then(() => true, () => false);
 }
 
-interface WorktreeInfo {
+export interface WorktreeInfo {
   path: string;
   branch: string | null;
 }
@@ -93,7 +93,7 @@ interface WorktreeInfo {
  * 頂層掃描根本看不到。實測 mvbf 有 9 個 worktree，其中 4 個有未提交改動，
  * 而那 4 個在只掃資料夾的版本裡一個都沒出現。
  */
-async function worktreesOf(dir: string): Promise<WorktreeInfo[]> {
+export async function worktreesOf(dir: string): Promise<WorktreeInfo[]> {
   const { stdout, code } = await run("git", ["-C", dir, "worktree", "list", "--porcelain"], {
     timeoutMs: 20_000,
   });
@@ -114,7 +114,7 @@ async function worktreesOf(dir: string): Promise<WorktreeInfo[]> {
   return out.length ? out : [{ path: dir, branch: null }];
 }
 
-async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
+export async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let i = 0;
   await Promise.all(
@@ -189,7 +189,7 @@ async function modeOnlyPaths(worktree: string, modified: string[]): Promise<Set<
   return new Set(modified.filter((rel) => modeChanged.has(rel) && !withContent.has(rel)));
 }
 
-async function statusOf(worktree: string): Promise<ChangedFile[]> {
+export async function statusOf(worktree: string): Promise<ChangedFile[]> {
   const { stdout, code } = await run(
     "git",
     ["-C", worktree, "status", "--porcelain=v1", "--untracked-files=all"],
@@ -354,6 +354,10 @@ export interface ImageSides {
   newBytes: number | null;
   /** 舊版在 HEAD 裡的路徑（改名時跟現在的不一樣） */
   oldPath: string;
+  /** 舊版要從哪個 revision 取（看整條線時是 merge-base；看單一 commit 時是 `<sha>^`） */
+  oldRev: string;
+  /** 新版要從哪個 revision 取；null＝工作區現在的檔案 */
+  newRev: string | null;
 }
 
 export interface FileDiff {
@@ -381,7 +385,7 @@ export const IMAGE_MAX_BYTES = 25 * 1024 * 1024;
 export async function fileDiff(
   worktree: string,
   file: string,
-  opts: { untracked?: boolean; oldPath?: string } = {}
+  opts: { untracked?: boolean; oldPath?: string; base?: string; sha?: string } = {}
 ): Promise<FileDiff> {
   const abs = path.resolve(worktree, file);
   if (abs !== worktree && !abs.startsWith(worktree + path.sep)) {
@@ -391,9 +395,16 @@ export async function fileDiff(
     };
   }
 
-  const args = opts.untracked
-    ? ["-C", worktree, "diff", "--no-index", "--no-color", "--", "/dev/null", file]
-    : ["-C", worktree, "diff", "HEAD", "--no-color", "--", file];
+  // 四種來源：
+  //   sha       單一 commit 動到這個檔案的部分（`git show`）
+  //   base      base → **工作區** 的整體差異（commit 過的與還沒 commit 的一起算）
+  //   untracked 還沒被 git 追蹤的，`git diff` 看不到，要跟 /dev/null 比
+  //   （預設）  HEAD → 工作區，也就是「未提交的改動」那頁在看的東西
+  const args = opts.sha
+    ? ["-C", worktree, "show", "--no-color", "--format=", opts.sha, "--", file]
+    : opts.untracked
+      ? ["-C", worktree, "diff", "--no-index", "--no-color", "--", "/dev/null", file]
+      : ["-C", worktree, "diff", opts.base ?? "HEAD", "--no-color", "--", file];
   const { stdout, stderr, code } = await run("git", args, { timeoutMs: 30_000 });
   // `--no-index` 有差異時回 1，那是正常的
   if (code !== 0 && code !== 1 && !stdout) {
@@ -402,7 +413,16 @@ export async function fileDiff(
       error: stderr.trim().slice(0, 300),
     };
   }
-  const image = await imageSides(worktree, abs, file, opts.oldPath ?? file);
+  // 看單一 commit 時，兩側都要從 git 取：舊＝`<sha>^`、新＝`<sha>`。
+  // 只換舊側是錯的 —— 新側若讀工作區，看到的會是「現在」而不是那個 commit 當時
+  const image = await imageSides(
+    worktree,
+    abs,
+    file,
+    opts.oldPath ?? file,
+    opts.sha ? `${opts.sha}^` : opts.base ?? "HEAD",
+    opts.sha ?? null
+  );
   if (/^Binary files /m.test(stdout) || stdout.includes(NUL)) {
     return { worktree, file, lines: [], truncated: false, binary: true, image };
   }
@@ -428,16 +448,25 @@ async function imageSides(
   worktree: string,
   abs: string,
   file: string,
-  oldPath: string
+  oldPath: string,
+  rev: string,
+  newRev: string | null
 ): Promise<ImageSides | undefined> {
   const mime = imageMimeOf(file);
   if (!mime) return undefined;
-  const newBytes = await stat(abs).then((s) => s.size, () => null);
+  const newBytes = newRev
+    ? await gitBlobSize(worktree, newRev, file)
+    : await stat(abs).then((s) => s.size, () => null);
   // `cat-file -s` 只讀 object header，不會把整個 blob 解出來
-  const r = await run("git", ["-C", worktree, "cat-file", "-s", `HEAD:${oldPath}`]);
-  const oldBytes = r.code === 0 && /^\d+$/.test(r.stdout.trim()) ? Number(r.stdout.trim()) : null;
+  const oldBytes = await gitBlobSize(worktree, rev, oldPath);
   if (oldBytes === null && newBytes === null) return undefined;
-  return { mime, oldBytes, newBytes, oldPath };
+  return { mime, oldBytes, newBytes, oldPath, oldRev: rev, newRev };
+}
+
+/** `cat-file -s` 只讀 object header，不會把整個 blob 解出來。不存在就回 null */
+async function gitBlobSize(worktree: string, rev: string, file: string): Promise<number | null> {
+  const r = await run("git", ["-C", worktree, "cat-file", "-s", `${rev}:${file}`]);
+  return r.code === 0 && /^\d+$/.test(r.stdout.trim()) ? Number(r.stdout.trim()) : null;
 }
 
 /**
@@ -449,25 +478,30 @@ async function imageSides(
 export async function readImageBlob(
   worktree: string,
   file: string,
-  side: "old" | "new"
+  side: "old" | "new",
+  /**
+   * 要拿哪個版本。舊側預設 HEAD（看整條線時是 merge-base）；
+   * **新側空字串＝讀工作區現在的檔案**，給了 revision 就從 git 取（看單一 commit 時）
+   */
+  rev = "HEAD"
 ): Promise<{ data: Buffer; mime: string } | { error: string; status: number }> {
   const mime = imageMimeOf(file);
   if (!mime) return { error: "不是認得的圖片格式", status: 400 };
   const abs = path.resolve(worktree, file);
   if (!abs.startsWith(worktree + path.sep)) return { error: "路徑不在這個工作區底下", status: 403 };
 
-  if (side === "new") {
+  if (side === "new" && (!rev || rev === "HEAD")) {
     const st = await stat(abs).catch(() => null);
     if (!st) return { error: "工作區沒有這個檔案", status: 404 };
     if (st.size > IMAGE_MAX_BYTES) return { error: "圖片太大，不顯示", status: 413 };
     return { data: await readFile(abs), mime };
   }
 
-  const size = await run("git", ["-C", worktree, "cat-file", "-s", `HEAD:${file}`]);
-  if (size.code !== 0) return { error: "HEAD 裡沒有這個檔案", status: 404 };
+  const size = await run("git", ["-C", worktree, "cat-file", "-s", `${rev}:${file}`]);
+  if (size.code !== 0) return { error: `${rev} 裡沒有這個檔案`, status: 404 };
   if (Number(size.stdout.trim()) > IMAGE_MAX_BYTES) return { error: "圖片太大，不顯示", status: 413 };
-  const data = await runBinary("git", ["-C", worktree, "cat-file", "blob", `HEAD:${file}`]);
-  if (!data) return { error: "讀不到 HEAD 裡的版本", status: 404 };
+  const data = await runBinary("git", ["-C", worktree, "cat-file", "blob", `${rev}:${file}`]);
+  if (!data) return { error: `讀不到 ${rev} 的版本`, status: 404 };
   return { data, mime };
 }
 

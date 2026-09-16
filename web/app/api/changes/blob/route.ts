@@ -23,7 +23,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "不認得這個工作區" }, { status: 403 });
   }
 
-  const r = await readImageBlob(worktree, file, side);
+  // 舊側取哪個版本：看整條線時是 merge-base，不是 HEAD
+  const rev = q.get("rev") || "HEAD";
+  const r = await readImageBlob(worktree, file, side, rev);
   if ("error" in r) return NextResponse.json({ error: r.error }, { status: r.status });
 
   return new NextResponse(new Uint8Array(r.data), {
