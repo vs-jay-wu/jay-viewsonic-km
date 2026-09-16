@@ -46,21 +46,21 @@ description: "Use when the user says 狸貓版 / 狸貓版 mvb / 狸貓, or when
 
 ## Ticket / commit 慣例
 
-- **repo 內的實作票用 `MT-` 系列**，不是 mvbf/cs 那條線的票號。MT 至今照常收狸貓版的
-  spec／功能／bug／test-infra 票（2026-09-09 仍有 `MT-3074`/`MT-3076` mac、`MT-3075` windows）。
-  ⏳ **MT 未來會收掉**（2026-09-11 Jay 裁定，最終落點是 VB 一個專案），但那是方向不是
-  現況 —— 在 MT 真的停止收票前照舊，不要自己提前搬。翻案條件與細節見 `jira-vb`。
-- **狸貓版的產品面票開在 `VB-`。** 2026-08-31 起 VB 上就有狸貓版的票，且明寫平台：
-  `VB-1897` Mac Native（Epic）、`VB-1893` App Store Mac 上架、`VB-1793`/`VB-1794` v-next OLF
-  發布驗證、`VB-2061` [mVB Windows 狸貓]／`VB-2063` [mVB Mac] MS SSO、`VB-2001`/`VB-2021`/
-  `VB-2022`/`VB-2027` VS Account 後端契約（引用 `MT-2757`）。
-  **所以「狸貓版一律 MT」是錯的**——分界是層次，不是產品線：
-  別的團隊要知道／要接（產品需求、上架、五端共通故事、後端 API 契約）→ `VB-`；
-  只在三個 playground repo 內完成 → `MT-`。開 VB 單的欄位與標題慣例見 `jira-vb`。
-- 分支：`MT-<n>-<英文 kebab slug>`（例：`MT-2486-renderer-fidelity`）。
-- Commit：**Conventional Commits + 尾綴 MT key**，無 gitmoji、無 mvbf 的 `[Type]`：
-  - `feat(canvas): present 換頁跳過隱藏頁 (S3, spec 0298) MT-2496`
+- **新單一律開 `VB`；`MT` 已停用**（2026-09-16 Jay 裁定，近期完成轉換）——
+  產品面與 repo 內的實作票都是，實作票掛在對應的產品單底下（例：`VB-2247` 桌面標註模式）。
+  欄位與標題慣例見 `jira-vb`。
+  > 轉換期仍會看到新的 MT 票（2026-09-16 當天還有 `MT-3209`～`MT-3218`，含 `mac`／`windows`）——
+  > 那是尚未轉換完的殘留，**自己不要跟著開**。既有 MT 單留在原地不搬。
+- 既有票的分布（歷史）：狸貓版曾經是「實作 MT／產品面 VB」兩層，
+  所以 `VB-1897` Mac Native、`VB-1893` App Store 上架、`VB-1793`/`VB-1794` v-next OLF
+  與一大批 `MT-` 實作票會並存。**讀既有票時要知道這件事，但不要再照著開新單。**
+- 分支與 commit 的票號**跟著你手上那張票走**（現在通常是 `VB-<n>`）：
+  分支 `<KEY>-<英文 kebab slug>`、commit 用 **Conventional Commits + 尾綴票號**，
+  無 gitmoji、無 mvbf 的 `[Type]`：
+  - `feat(canvas): present 換頁跳過隱藏頁 (S3, spec 0298) MT-2496`（既有票的樣子）
   - `fix: OLF renderer fidelity for imported decks MT-2486 (#276)`
+  > **未查證**：該 repo 的 AI flow／工具是否把票號格式寫死成 `MT-`。第一次用 VB key 開分支前，
+  > 先看該 repo 的 `CLAUDE.md` 與 `.claude/` 有沒有硬性的 `MT-` 檢查。
   - 送 commit 前照 `cross-repo-workflow.md` §3：先看該 repo 既有 `git log`，別套 km 的 gitmoji。
 - 每張票對應 `specs/NNNN-*.md`，spec 編號用該 repo 的取號工具原子取得（別手動挑號）。
 

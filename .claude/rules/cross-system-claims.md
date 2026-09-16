@@ -19,9 +19,13 @@
 | VSFT-9961 把 repo 名寫在標題文字 → VB 也這樣寫 | VB 用**第二層 bracket**（`[Canvas][Flutter]`），全形冒號 45 張裡零出現 | `project = VB AND created >= -45d`，看 summary |
 | VSFT 有 `Scrum Team` 下拉欄 → VB 也有 | VB 是 `Team`（Atlassian Team，**吃 uuid**），而且**有預設值會自動帶入別的隊** | `jira_get_create_fields` |
 | edu-participant-web 的 plan doc 說「與 ocelot `(?<!\\)\$` 對齊」→ 抄進 fishing-cat 的註解與 KB | 那條正則屬於 **Word 匯出的消費端**，而且**有一樣的 bug**；ocelot 沒有任何地方轉義 `$` | `grep -rn 'regex_latex' app/` 看它在哪個模組、誰呼叫 |
-| 使用者說「所有 ticket 開 VB」→ 照抄「所有」 | 狸貓版仍在用 `MT-`（前一天還在建票） | 查 MT 專案最近有沒有新票 |
+| 使用者說「所有 ticket 開 VB」→ 照抄「所有」 | **當時**狸貓版仍在用 `MT-`（前一天還在建票） | 查 MT 專案最近有沒有新票 |
 | mvbf 的 `.mcp.json` 有 `Flutter-MCP-Server` → 在 km 跑出來的那隻也是它來的 | km 自己有一份 `.mcp.json`（mvbf 那份的複製），行程 cwd 全在 km | `lsof -a -p <pid> -d cwd -Fn` 看行程實際掛在哪 |
 | 「`~/.gradle` 的優先序高於專案 gradle.properties」寫進註解 | 沒實測過。而且本次三個 key 專案根本沒設，優先序**根本不適用** | 先 `grep` 確認有沒有衝突，沒衝突就別提優先序 |
+
+> ⏱️ **後續（2026-09-16）**：MT 已停用，「所有 ticket 開 VB」現在是對的。
+> 但第一列那次仍然是錯的——**錯在沒查證就照抄，不在結論本身**。同一句話在不同時間點
+> 真假會翻轉，這正是要查證而不是照抄的理由。
 
 **做法**：要寫「與 X 一致／依據 X」之前，先回答兩個問題——
 
