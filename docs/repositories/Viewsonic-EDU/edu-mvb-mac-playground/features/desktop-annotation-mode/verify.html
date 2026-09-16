@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Desktop Mode POC — 人工驗證清單</title>
+<meta name="km-doc-kind" content="verify">
+<meta name="km-doc-status" content="active">
+<meta name="km-doc-tickets" content="VB-2247">
+<link rel="stylesheet" href="../../../../../assets/style.css" />
+<style>
+  .vbar {
+    position: sticky; top: 0; z-index: 50; background: #fff;
+    border-bottom: 1px solid var(--c-border); padding: 12px 0 10px; margin-bottom: 18px;
+  }
+  .vbar-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .progress { flex: 1; min-width: 200px; height: 10px; background: #eee; border-radius: 5px; overflow: hidden; }
+  .progress > i { display: block; height: 100%; width: 0; background: var(--c-reuse); transition: width .2s; }
+  .counts { font-size: 13px; color: var(--c-muted); white-space: nowrap; }
+  .counts b { color: var(--c-fg); font-size: 15px; }
+  button {
+    font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 6px;
+    border: 1px solid var(--c-border); background: #fff; cursor: pointer;
+  }
+  button:hover { background: #f5f5f5; }
+  button.danger { border-color: #fca5a5; color: var(--c-new); }
+  button.danger:hover { background: #fef2f2; }
+  .filters { display: flex; gap: 6px; }
+  .filters button.on { background: var(--c-accent-bg); border-color: var(--c-accent); color: var(--c-accent); }
+
+  .case { border: 1px solid var(--c-border); border-radius: 8px; margin: 0 0 10px; background: #fff; }
+  .case > summary {
+    padding: 10px 14px; cursor: pointer; display: flex; gap: 10px; align-items: flex-start;
+    list-style: none; font-size: 14px;
+  }
+  .case > summary::-webkit-details-marker { display: none; }
+  .case input[type=checkbox] { margin-top: 3px; width: 17px; height: 17px; flex: none; cursor: pointer; }
+  .case .ttl { flex: 1; }
+  .case .ac { font-size: 11px; color: var(--c-muted); border: 1px solid var(--c-border);
+              border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+  .case[data-done="1"] { background: #f6fdf8; border-color: #bbf7d0; }
+  .case[data-done="1"] .ttl { color: var(--c-muted); text-decoration: line-through; }
+  .case .body { padding: 0 14px 12px 41px; font-size: 13.5px; border-top: 1px solid #f0f0f0; margin-top: 4px; padding-top: 10px; }
+  .case .body ol, .case .body ul { margin: 4px 0 0; padding-left: 20px; }
+  .case .body li { margin: 2px 0; }
+  .case .expect { border-left: 3px solid var(--c-reuse); padding-left: 10px; background: #f0fdf4; padding-top: 6px; padding-bottom: 6px; margin-top: 8px; }
+  .case .trap { border-left: 3px solid var(--c-partial); padding-left: 10px; background: #fff7ed; padding-top: 6px; padding-bottom: 6px; margin-top: 8px; }
+  .sec-head { display: flex; align-items: baseline; gap: 10px; margin: 26px 0 10px; }
+  .sec-head h2 { margin: 0; border: 0; padding: 0; }
+  .sec-head .sc { font-size: 12px; color: var(--c-muted); }
+  .setup { background: var(--c-code-bg); border-radius: 8px; padding: 12px 16px; font-size: 13.5px; }
+  .setup pre { margin: 6px 0; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>驗證區塊</h2>
+    <ul>
+      <li><a href="#setup">環境準備</a></li>
+      <li><a href="#sa">A. 核心流程</a></li>
+      <li><a href="#sb">B. 快捷鍵</a></li>
+      <li><a href="#sc">C. 擷取三式</a></li>
+      <li><a href="#sd">D. 多螢幕</a></li>
+      <li><a href="#se">E. Space / 全螢幕</a></li>
+      <li><a href="#sf">F. 效能與手感</a></li>
+    </ul>
+    <p style="margin-top:18px">
+      <a href="index.html">📘 總覽</a><br />
+      <a href="README.md">📄 README</a>
+    </p>
+  </nav>
+
+  <main>
+    <h1>人工驗證清單</h1>
+    <div class="meta">
+      Desktop Mode POC &middot; 需求單 <a href="https://viewsonic-vsi.atlassian.net/browse/VB-2247"><strong>VB-2247</strong></a> &middot; 自動化驗得到的（三螢幕鋪滿、擷取鏈、進入耗時）已經驗過並記在
+      <a href="index.html#measured">總覽 §4</a>；<strong>這頁只列需要人手操作的部分</strong>。
+      勾選狀態存在瀏覽器 localStorage（僅這台機器、這個瀏覽器）。
+    </div>
+
+    <div class="vbar">
+      <div class="vbar-row">
+        <div class="progress"><i id="bar"></i></div>
+        <span class="counts"><b id="done">0</b> / <span id="total">0</span> 已驗</span>
+        <div class="filters">
+          <button data-f="all" class="on">全部</button>
+          <button data-f="todo">未驗</button>
+          <button data-f="done">已驗</button>
+        </div>
+        <button id="expand">全部展開</button>
+        <button id="collapse">全部收合</button>
+        <button id="reset" class="danger">清空所有勾選</button>
+      </div>
+    </div>
+
+    <div class="setup" id="setup">
+      <strong>環境準備</strong>
+      <pre><code>open -n ~/.mvb-dd/poc-desktop-mode/Build/Products/Debug/myViewBoard.app</code></pre>
+      進入點：<strong>主工具列最右邊那顆「螢幕」圖示</strong>。
+      <p style="margin:8px 0 0">
+        擷取那一區（§C）需要「螢幕錄製」權限；沒授權時原型會跳系統設定並顯示提示，
+        授權後<strong>要重開 app</strong>。
+      </p>
+    </div>
+
+    <div class="sec-head" id="sa"><h2>A. 核心流程</h2><span class="sc">最重要的一區</span></div>
+
+    <details class="case" data-id="a1">
+      <summary><input type="checkbox" /><span class="ttl">進入模式：工具列出現在滑鼠所在螢幕的底部中央</span><span class="ac">A1</span></summary>
+      <div class="body">
+        <ol><li>把滑鼠放在某一個螢幕上，點主工具列的「螢幕」鈕。</li></ol>
+        <div class="expect"><strong>期望：</strong>白板主視窗消失，桌面照舊，浮動工具列出現在<strong>滑鼠所在的那個螢幕</strong>底部中央。</div>
+      </div>
+    </details>
+
+    <details class="case" data-id="a2">
+      <summary><input type="checkbox" /><span class="ttl">五支工具各畫一筆</span><span class="ac">A2</span></summary>
+      <div class="body">
+        <ul>
+          <li><strong>標記筆</strong>：不透明實線。</li>
+          <li><strong>螢光筆</strong>：半透明、疊在內容上仍看得見底下的東西。</li>
+          <li><strong>雷射筆</strong>：畫的時候筆頭有光暈；<strong>放開後約 0.5 秒，線從「筆頭那端」開始消失</strong>（不是整條一起淡出）。</li>
+          <li><strong>橡皮擦</strong>：碰到就<strong>整筆刪掉</strong>，不是刮掉一小段。游標處有一個圈。</li>
+          <li><strong>游標</strong>：見 A3。</li>
+        </ul>
+        <div class="trap"><strong>陷阱：</strong>雷射筆是「從頭開始擦」（對齊 Sparrow <code>SmoothEraseFromHead</code>）。如果看到的是整條同時變淡，那就是做錯了。</div>
+      </div>
+    </details>
+
+    <details class="case" data-id="a3">
+      <summary><input type="checkbox" /><span class="ttl">游標工具：桌面能正常操作，而筆跡還留在畫面上</span><span class="ac">A3 · 新增行為</span></summary>
+      <div class="body">
+        <ol>
+          <li>先用標記筆畫幾筆。</li>
+          <li>切到「游標」工具。</li>
+          <li>去點 Dock、拖動別的視窗、按其他 app 的按鈕。</li>
+        </ol>
+        <div class="expect"><strong>期望：</strong>底下的桌面完全可以操作，<strong>而剛才畫的筆跡仍然浮在上面</strong>。</div>
+        <div class="trap"><strong>這是 Windows 版沒有的行為</strong>，要決定要不要保留 —— 是這次最值得跟 PM 討論的一點。</div>
+      </div>
+    </details>
+
+    <details class="case" data-id="a4">
+      <summary><input type="checkbox" /><span class="ttl">調色盤：換色 / 粗細 / 透明度，且每支筆各自記住</span><span class="ac">A4</span></summary>
+      <div class="body">
+        <ol>
+          <li>選標記筆 → 調成藍色、很粗。</li>
+          <li>切到螢光筆 → 調成綠色。</li>
+          <li><strong>切回標記筆</strong>。</li>
+        </ol>
+        <div class="expect"><strong>期望：</strong>標記筆回到「藍色、很粗」，不是繼承螢光筆的綠色。（對齊 Sparrow 的三組獨立 <code>InkAttributes</code>）</div>
+      </div>
+    </details>
+
+    <details class="case" data-id="a5">
+      <summary><input type="checkbox" /><span class="ttl">Undo / Redo / 清除全部</span><span class="ac">A5</span></summary>
+      <div class="body">
+        <ol><li>畫三筆 → Undo 兩次 → Redo 一次 → 清除全部。</li>
+          <li>再 Undo 一次。</li></ol>
+        <div class="expect"><strong>期望：</strong>「清除全部」可以被 Undo 救回來；雷射筆的筆劃<strong>不該</strong>出現在 undo 歷史裡。</div>
+      </div>
+    </details>
+
+    <details class="case" data-id="a6">
+      <summary><input type="checkbox" /><span class="ttl">回白板：白板恢復、筆跡清空</span><span class="ac">A6</span></summary>
+      <div class="body">
+        <ol><li>畫幾筆後按工具列最右的「回白板」。</li><li>再進一次桌面模式。</li></ol>
+        <div class="expect"><strong>期望：</strong>白板視窗回來且內容完好；再進去時是乾淨的（對齊 Sparrow：它的 DesktopMode 程序關掉筆跡就沒了）。</div>
+        <div class="trap">若你覺得「筆跡應該留著下次再回來」，那是產品決策，記下來 —— 目前刻意對齊舊版。</div>
+      </div>
+    </details>
+
+    <details class="case" data-id="a7">
+      <summary><input type="checkbox" /><span class="ttl">底下正在播的影片會不會被打斷</span><span class="ac">A7 · 需要決策</span></summary>
+      <div class="body">
+        <ol>
+          <li><strong>別的 app 的影片</strong>：用 Safari／QuickTime 播一段影片 → 進入桌面標註模式 → 看它有沒有繼續播。</li>
+          <li><strong>白板自己的影片</strong>：在白板頁面放一個 YouTube widget／影片物件並播放 → 進入桌面標註模式 → 回白板看它是否還在播、播到哪。</li>
+          <li>再用「不隱藏白板」的模式比一次：
+            <pre><code>open -n --env MVB_POC_KEEP_BOARD=1 \
+  ~/.mvb-dd/poc-desktop-mode/Build/Products/Debug/myViewBoard.app</code></pre>
+          </li>
+        </ol>
+        <div class="expect">
+          <strong>預期：</strong>別的 app 的影片<strong>會繼續播</strong>（我們只是疊一個視窗上去，從不跟它溝通；
+          失去鍵盤焦點不會使播放停止）。
+        </div>
+        <div class="trap">
+          <strong>白板自己的影片有風險。</strong>進入模式時主視窗被 <code>orderOut</code>，視窗變成 occluded，
+          macOS 會節流被遮蔽視窗的計時器與媒體（WebKit 尤其明顯）。
+          <strong>這是我的設計選擇造成的，不是平台限制</strong> —— <code>MVB_POC_KEEP_BOARD=1</code> 可改成不隱藏白板。
+          請比較兩種，決定要哪一種行為。
+          <br />另外：DRM 內容（FairPlay／HDCP）覆蓋沒問題，但<strong>擷取時會變黑</strong>，那是系統保護，不該繞。
+        </div>
+      </div>
+    </details>
+
+    <div class="sec-head" id="sb"><h2>B. 快捷鍵</h2><span class="sc">app 在前景時</span></div>
+
+    <details class="case" data-id="b1">
+      <summary><input type="checkbox" /><span class="ttl"><code>1</code>–<code>5</code> 切工具</span><span class="ac">B1</span></summary>
+      <div class="body">
+        <div class="expect">1 游標 · 2 標記筆 · 3 螢光筆 · 4 雷射筆 · 5 橡皮擦。</div>
+      </div>
+    </details>
+
+    <details class="case" data-id="b2">
+      <summary><input type="checkbox" /><span class="ttl"><code>⌘Z</code> / <code>⇧⌘Z</code> / <code>⌘⌫</code> / <code>Esc</code></span><span class="ac">B2</span></summary>
+      <div class="body">
+        <div class="expect">復原 / 重做 / 清除全部 / 離開模式。</div>
+      </div>
+    </details>
+
+    <details class="case" data-id="b3">
+      <summary><input type="checkbox" /><span class="ttl">⚠️ 穿透模式下快捷鍵會失效 —— 確認你能接受</span><span class="ac">B3 · 需要決策</span></summary>
+      <div class="body">
+        <ol>
+          <li>切到游標工具。</li>
+          <li>去點一下別的 app（例如 Finder）。</li>
+          <li>按 <code>Esc</code>。</li>
+        </ol>
+        <div class="expect"><strong>預期會沒反應</strong>：鍵盤事件已經歸那個 app 了。這時只能用工具列的「回白板」鈕離開。</div>
+        <div class="trap">
+          <strong>這是 macOS 與 Windows 的真實差異，不是 bug。</strong>
+          Sparrow 的標註層一直霸佔輸入所以沒有這問題。
+          要解只能上全域快捷鍵（需要輔助使用權限，對 MAS 上架不利）——<strong>請確認可接受，或決定要不要付那個代價。</strong>
+        </div>
+      </div>
+    </details>
+
+    <div class="sec-head" id="sc"><h2>C. 擷取三式</h2><span class="sc">需要螢幕錄製權限</span></div>
+
+    <details class="case" data-id="c1">
+      <summary><input type="checkbox" /><span class="ttl">整個螢幕 → 落到白板目前頁</span><span class="ac">C1</span></summary>
+      <div class="body">
+        <ol><li>畫幾筆 → 工具列相機鈕 → 「整個螢幕」。</li><li>回白板看目前頁。</li></ol>
+        <div class="expect"><strong>期望：</strong>圖已經放在白板上；<strong>標註有入鏡、工具列沒入鏡</strong>。</div>
+      </div>
+    </details>
+
+    <details class="case" data-id="c2">
+      <summary><input type="checkbox" /><span class="ttl">矩形選取</span><span class="ac">C2</span></summary>
+      <div class="body">
+        <ol><li>相機鈕 → 「矩形選取」→ 拖出一塊 → 放開。</li><li>中途按 <code>Esc</code> 試一次取消。</li></ol>
+        <div class="expect"><strong>期望：</strong>只有框內的內容被擷取；Esc 能取消且不會留下半途的遮罩。</div>
+      </div>
+    </details>
+
+    <details class="case" data-id="c3">
+      <summary><input type="checkbox" /><span class="ttl">自由形狀 —— 遮罩要照著你畫的形狀切</span><span class="ac">C3</span></summary>
+      <div class="body">
+        <ol><li>相機鈕 → 「自由形狀」→ 畫一個明顯不規則的圈。</li></ol>
+        <div class="expect"><strong>期望：</strong>放到白板上的圖是<strong>照著你畫的輪廓</strong>切的（外面透明），不是切成一個方形。</div>
+      </div>
+    </details>
+
+    <details class="case" data-id="c4">
+      <summary><input type="checkbox" /><span class="ttl">權限被拒時的行為</span><span class="ac">C4</span></summary>
+      <div class="body">
+        <ol><li>（可選）在系統設定把 myViewBoard 的螢幕錄製關掉後重開 app，再試擷取。</li></ol>
+        <div class="expect"><strong>期望：</strong>工具列上出現提示文字要求授權，不是無聲失敗、也不是當掉。</div>
+      </div>
+    </details>
+
+    <div class="sec-head" id="sd"><h2>D. 多螢幕</h2><span class="sc">你有三台，正好</span></div>
+
+    <details class="case" data-id="d1">
+      <summary><input type="checkbox" /><span class="ttl">三個螢幕都能畫（含「換螢幕的第一筆」）</span><span class="ac">D1</span></summary>
+      <div class="body">
+        <ol>
+          <li>三個螢幕各畫一筆。</li>
+          <li>在 A 螢幕畫完<strong>直接</strong>到 B 螢幕畫（不要先點工具列）——這條路徑以前會吃掉一筆。</li>
+          <li>跨螢幕拖一筆過去，線要連續。</li>
+        </ol>
+        <div class="trap">
+          舊行為：只有持有焦點的那一層收得到筆畫，其他螢幕的第一下被 AppKit 當成「activate」吃掉
+          （已用 <code>acceptsFirstMouse</code> 修）。若某螢幕仍完全畫不了，先確認
+          <strong>那個螢幕上是不是有別的 app 在 native 全螢幕</strong>（見 §E2）。
+        </div>
+      </div>
+    </details>
+
+    <details class="case" data-id="d2">
+      <summary><input type="checkbox" /><span class="ttl">工具列：拖到別台螢幕、靠邊吸附成直式、再拖回來</span><span class="ac">D2</span></summary>
+      <div class="body">
+        <ol><li>抓工具列最左邊的握把（≡）拖動。</li><li>拖到螢幕左／右邊緣放開。</li><li>再拖回中間。</li></ol>
+        <div class="expect"><strong>期望：</strong>靠邊會貼齊並轉成直排（對齊 Sparrow 的 <code>ProcessDocking</code>）；拖回中間變回橫排。</div>
+        <div class="trap">拖曳曾經有「越拖越快、飛出螢幕」的 bug（<code>DragGesture.translation</code> 是累積值），已修 —— 請確認拖起來是 1:1 跟手。</div>
+      </div>
+    </details>
+
+    <details class="case" data-id="d3">
+      <summary><input type="checkbox" /><span class="ttl">改顯示器排列後，筆跡要黏在原本的位置</span><span class="ac">D3</span></summary>
+      <div class="body">
+        <ol><li>在兩個螢幕上各畫幾筆。</li><li>系統設定 → 顯示器 → 把兩台的相對位置對調。</li></ol>
+        <div class="expect"><strong>期望：</strong>筆跡仍在原本畫的那個螢幕的那個位置（筆跡存的是全域座標）。</div>
+      </div>
+    </details>
+
+    <div class="sec-head" id="se"><h2>E. Space / 全螢幕</h2><span class="sc">macOS 最容易翻船的地方</span></div>
+
+    <details class="case" data-id="e1">
+      <summary><input type="checkbox" /><span class="ttl">切到另一個 Space，標註層還在嗎</span><span class="ac">E1</span></summary>
+      <div class="body">
+        <ol><li>進入模式並畫幾筆。</li><li><code>⌃→</code> 切到另一個 Space。</li></ol>
+        <div class="expect"><strong>期望：</strong>標註層與工具列跟著過去（<code>.canJoinAllSpaces</code> + <code>.stationary</code>）。</div>
+      </div>
+    </details>
+
+    <details class="case" data-id="e2">
+      <summary><input type="checkbox" /><span class="ttl">⛔️ 別的 app 進 native 全螢幕 → 蓋不上去（已實測，做不到）</span><span class="ac">E2 · 已有結論</span></summary>
+      <div class="body">
+        <p>
+          <strong>這項已經驗過了，答案是做不到。</strong>實測（三螢幕，主顯示器上跑著 native 全螢幕的 app）：
+          三層 overlay 都建立成功，但該螢幕那層 <code>onscreen=false</code>、
+          <strong>一次 <code>mouseDown</code> 都沒收到</strong>；把 window level 拉到
+          <code>CGShieldingWindowLevel()</code> 也一樣。詳見
+          <a href="index.html#fullscreen-limit">總覽 §5.1</a>。
+        </p>
+        <div class="trap">
+          <strong>剩下的是對照實驗，麻煩你做：</strong>把那個 app <strong>退出全螢幕</strong>
+          （同一個螢幕、視窗最大化就好），再試同一個螢幕能不能畫。
+          <ul>
+            <li>能畫 → 結論確立：限制來自「別人的全螢幕 Space」。</li>
+            <li>仍不能畫 → 另有原因，要重查（請把診斷檔給我）。</li>
+          </ul>
+        </div>
+        <div class="expect">
+          我們<strong>自己的白板</strong>進全螢幕則不受影響，標註層蓋得上去（已修正並驗過）。
+        </div>
+      </div>
+    </details>
+
+    <details class="case" data-id="e3">
+      <summary><input type="checkbox" /><span class="ttl">Mission Control 打開時的樣子</span><span class="ac">E3</span></summary>
+      <div class="body">
+        <div class="expect">不預期有正確答案，看一下會不會出現奇怪的殘影或把 Mission Control 蓋住。</div>
+      </div>
+    </details>
+
+    <div class="sec-head" id="sf"><h2>F. 效能與手感</h2></div>
+
+    <details class="case" data-id="f1">
+      <summary><input type="checkbox" /><span class="ttl">進入／離開還會不會轉圈</span><span class="ac">F1</span></summary>
+      <div class="body">
+        <p>
+          先前回報「進入卡 2~5 秒、游標轉圈」；量測顯示進入路徑只花 73~86 ms、12 秒內零停頓
+          （<a href="index.html#measured">總覽 §4.3</a>）。
+          <strong>2026-09-11 回報仍偶發，但無法穩定重現</strong>——兩邊都是事實，尚未對上
+          （<a href="index.html#slow-entry">§5.2</a>）。
+        </p>
+        <ol>
+          <li>若再遇到，記下當時是「剛開 app」還是「已經用一陣子」。</li>
+          <li>用停頓偵測抓一次：
+            <pre><code>open -n --env MVB_POC_DESKTOP_MODE=1 \
+  --env MVB_POC_HITCH=~/Library/Containers/ViewSonic.myViewBoard/Data/hitch.txt \
+  ~/.mvb-dd/poc-desktop-mode/Build/Products/Debug/myViewBoard.app
+# 12 秒後：
+cat ~/Library/Containers/ViewSonic.myViewBoard/Data/hitch.txt</code></pre>
+          </li>
+        </ol>
+      </div>
+    </details>
+
+    <details class="case" data-id="f2">
+      <summary><input type="checkbox" /><span class="ttl">畫 50 筆以上會不會鈍</span><span class="ac">F2</span></summary>
+      <div class="body">
+        <div class="expect"><strong>期望：</strong>仍然跟手。</div>
+        <div class="trap">
+          原型是 <code>NSBezierPath</code> 逐筆重畫 + 局部重繪止血。真的鈍了不是意外，
+          正式做要換 CAShapeLayer／Metal（<a href="index.html#plan">總覽 §6</a> 第 6 片）。
+        </div>
+      </div>
+    </details>
+
+  </main>
+</div>
+
+<script>
+(function () {
+  var KEY = 'mac-desktop-mode-poc-verify-v1';
+  var cases = Array.prototype.slice.call(document.querySelectorAll('.case'));
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { state = {}; }
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* 私密視窗等：忽略 */ }
+  }
+  var filter = 'all';
+  function applyFilter() {
+    cases.forEach(function (c) {
+      var on = c.dataset.done === '1';
+      c.hidden = (filter === 'todo' && on) || (filter === 'done' && !on);
+    });
+  }
+  function paint() {
+    var done = 0;
+    cases.forEach(function (c) {
+      var on = !!state[c.dataset.id];
+      c.dataset.done = on ? '1' : '0';
+      c.querySelector('input[type=checkbox]').checked = on;
+      if (on) done++;
+    });
+    document.getElementById('done').textContent = done;
+    document.getElementById('total').textContent = cases.length;
+    document.getElementById('bar').style.width = cases.length ? (done / cases.length * 100) + '%' : '0';
+    applyFilter();
+  }
+
+  cases.forEach(function (c) {
+    var box = c.querySelector('input[type=checkbox]');
+    box.addEventListener('click', function (e) { e.stopPropagation(); });
+    box.addEventListener('change', function () {
+      state[c.dataset.id] = box.checked;
+      if (!box.checked) delete state[c.dataset.id];
+      save(); paint();
+    });
+  });
+
+  document.querySelectorAll('.filters button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      filter = b.dataset.f;
+      document.querySelectorAll('.filters button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      applyFilter();
+    });
+  });
+  document.getElementById('expand').addEventListener('click', function () {
+    cases.forEach(function (c) { c.open = true; });
+  });
+  document.getElementById('collapse').addEventListener('click', function () {
+    cases.forEach(function (c) { c.open = false; });
+  });
+  document.getElementById('reset').addEventListener('click', function () {
+    var n = Object.keys(state).length;
+    if (!n) { alert('目前沒有任何勾選。'); return; }
+    if (!confirm('清空全部 ' + n + ' 項勾選？此動作無法復原。')) return;
+    state = {};
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    paint();
+  });
+
+  paint();
+})();
+</script>
+</body>
+</html>

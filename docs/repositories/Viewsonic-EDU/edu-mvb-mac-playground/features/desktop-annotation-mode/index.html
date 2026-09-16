@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Desktop Mode on macOS — 可行性總覽</title>
+<meta name="km-doc-kind" content="overview">
+<meta name="km-doc-status" content="active">
+<meta name="km-doc-tickets" content="VB-2247">
+<link rel="stylesheet" href="../../../../../assets/style.css" />
+<style>
+  .verdict {
+    border: 1px solid #bbf7d0; background: #f0fdf4; border-radius: 10px;
+    padding: 18px 22px; margin: 18px 0 26px;
+  }
+  .verdict h2 { margin: 0 0 8px; border: 0; padding: 0; font-size: 18px; }
+  .verdict p { margin: 6px 0 0; }
+  .kv { display: grid; grid-template-columns: 150px 1fr; gap: 4px 14px; font-size: 13.5px; }
+  .kv dt { color: var(--c-muted); }
+  .kv dd { margin: 0; }
+  .measure { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; }
+  td.num { text-align: right; font-family: "SF Mono", Menlo, Consolas, monospace; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#verdict">0. 結論</a></li>
+      <li><a href="#sparrow">1. 舊版是怎麼做的</a></li>
+      <li><a href="#features">2. 功能盤點</a></li>
+      <li><a href="#decisions">3. macOS 的四個關鍵決策</a>
+        <ul>
+          <li><a href="#d1" class="sub">3.1 視窗層級</a></li>
+          <li><a href="#d2" class="sub">3.2 點擊穿透</a></li>
+          <li><a href="#d3" class="sub">3.3 誰入鏡</a></li>
+          <li><a href="#d4" class="sub">3.4 座標系</a></li>
+        </ul>
+      </li>
+      <li><a href="#measured">4. 實測數據</a></li>
+      <li><a href="#risks">5. 風險與未決</a>
+        <ul>
+          <li><a href="#fullscreen-limit" class="sub">5.1 全螢幕蓋不上去（實測）</a></li>
+          <li><a href="#slow-entry" class="sub">5.2 偶發的進入很久</a></li>
+          <li><a href="#traps" class="sub">5.5 踩到的 macOS 陷阱</a></li>
+        </ul>
+      </li>
+      <li><a href="#plan">6. 正式做的話怎麼切</a></li>
+      <li><a href="#proto">7. 原型檔案地圖</a></li>
+    </ul>
+    <p style="margin-top:18px">
+      <a href="verify.html">✅ 人工驗證清單</a><br />
+      <a href="README.md">📄 README</a>
+    </p>
+  </nav>
+
+  <main>
+    <h1>Desktop Mode（桌面標註模式）on macOS <span class="badge badge-info">POC · VB-2247</span></h1>
+    <div class="meta">
+      狸貓版 mac <code>edu-mvb-mac-playground</code> &middot; POC 2026-09-10 &middot; 提出者 Jay &middot;
+      需求單 <a href="https://viewsonic-vsi.atlassian.net/browse/VB-2247"><strong>VB-2247</strong></a>（2026-09-16 開立，掛在 <code>VB-1897</code> Mac Native 底下）&middot;
+      原型在本機 worktree <code>~/.mvb-worktrees/poc-desktop-mode</code>（未 commit）
+    </div>
+    <div class="doc-nav">
+      <a href="index.html" class="active">📘 總覽</a>
+      <a href="verify.html">✅ 人工驗證清單</a>
+    </div>
+
+    <div class="verdict" id="verdict">
+      <h2>結論：可行，而且比 Windows 那側簡單</h2>
+      <p>
+        全部功能都在 <strong>App Sandbox 內</strong>做得到，<strong>不需要新增任何 entitlement</strong>；
+        現行 <code>myViewBoard.entitlements</code> 原封不動就能跑。
+        唯一需要使用者授權的是「螢幕錄製」，而那<strong>只在擷取畫面時</strong>用到——單純標註不需要任何權限。
+      </p>
+      <p>
+        已經做出可執行原型並實測：三個顯示器同時鋪滿標註層、可以畫、擷取的圖裡
+        <strong>標註有入鏡、工具列沒入鏡</strong>。
+      </p>
+    </div>
+
+    <h2 id="sparrow">1. 舊版（Sparrow）是怎麼做的</h2>
+
+    <p>
+      Windows 出貨線的桌面標註模式是 <code>Sparrow.DesktopMode</code> ——
+      一個<strong>獨立的 WPF 程序</strong>，跟主程式之間隔著 Named Pipe 與一個 helper 程序。
+    </p>
+
+    <table>
+      <tr><th>來源</th><th>內容</th></tr>
+      <tr>
+        <td><code>edu-sparrow-app</code><br /><code>docs/sparrow-feature-map.md:67</code></td>
+        <td>「<code>Sparrow.DesktopMode</code> / WPF / .NET FW / <strong>桌面標註模式</strong>（透明全螢幕標註層）」</td>
+      </tr>
+      <tr>
+        <td>同上 <code>:499</code></td>
+        <td>「Desktop 模式同對話跨<strong>三程序</strong>（UWP ⇄ Bridge ⇄ DesktopMode），AppService + Named Pipes，Bridge 中繼。」</td>
+      </tr>
+      <tr>
+        <td>同上 <code>:539</code></td>
+        <td>「<code>Sparrow.Bridge</code> 是 Win32 helper 程序，讓沙箱化 UWP AppContainer 做 UWP 做不到的事」</td>
+      </tr>
+    </table>
+
+    <div class="callout ok">
+      <strong>這個三程序架構是 UWP AppContainer 的限制逼出來的，不是功能需求。</strong>
+      macOS 沒有這個限制：標註層就是本 app 的另一個 <code>NSWindow</code>，
+      共用同一份 app 狀態，<strong>整層 IPC 直接消失</strong>——
+      跟 spec 0222 把 ClassSwift 的跨程序視窗機制原生化時，得到的是同一個結論。
+    </div>
+
+    <p class="note">
+      連帶消失的東西：<code>ClassSwiftActions</code> / <code>DesktopModeIpcActionNames</code> 那組
+      action enum 與兩側 event-processor switch、<code>syncState</code> 鏡射、
+      Bridge pipe 的 5 秒 connect timeout、以及「DesktopMode 不可重新引入 heartbeat tracker」這類
+      為了多程序而生的規矩。
+    </p>
+
+    <h2 id="features">2. 功能盤點</h2>
+
+    <h3>舊版有的，原型都做了</h3>
+
+    <table>
+      <tr><th>Sparrow 的功能</th><th>來源（控制項／類別）</th><th>原型</th></tr>
+      <tr><td>標記筆 / 螢光筆 / 雷射筆 / 橡皮擦</td><td><code>DrawingTypes.{Mark,HighLighter,Laser,Eraser}</code></td><td><span class="badge badge-ok">已做</span></td></tr>
+      <tr><td>雷射筆畫完自己消失</td><td><code>DrawingManager.SmoothEraseFromHead(500ms)</code>——從<strong>筆頭</strong>開始擦</td><td><span class="badge badge-ok">已做</span></td></tr>
+      <tr><td>橡皮擦刪<strong>整筆</strong>（不是刮除）</td><td><code>DrawingManager.PerformEraserAction</code></td><td><span class="badge badge-ok">已做</span></td></tr>
+      <tr><td>清除全部 / Undo / Redo</td><td><code>ClearAll</code> / <code>Undo</code> / <code>Redo</code></td><td><span class="badge badge-ok">已做</span></td></tr>
+      <tr><td>顏色捷徑列 + 粗細 + 透明度</td><td><code>ColorsShortcutBorder</code> + <code>BrushPropertiesDialog</code></td><td><span class="badge badge-ok">已做</span></td></tr>
+      <tr><td><strong>每支筆各自記住</strong>自己的顏色粗細</td><td>三組獨立的 <code>InkAttributes</code>（Mark／HighLighter／LaserPen）</td><td><span class="badge badge-ok">已做</span></td></tr>
+      <tr><td>擷取：整個螢幕 / 矩形 / 自由形狀</td><td><code>EntireCapture</code> / <code>RectCapture</code> / <code>FreehandCapture</code></td><td><span class="badge badge-ok">已做</span></td></tr>
+      <tr><td>工具列拖曳 + 靠邊吸附成直式</td><td><code>ProcessDocking</code>、<code>StickyLeft/RightMainToolBar</code></td><td><span class="badge badge-ok">已做</span></td></tr>
+      <tr><td>回白板</td><td><code>BackToCanvas</code></td><td><span class="badge badge-ok">已做</span></td></tr>
+      <tr><td>ClassSwift 整合（toggle / Quiz / QuizCollection…）</td><td><code>ClassSwiftFunctionsPanel</code> 等</td><td><span class="badge badge-na">刻意不做</span></td></tr>
+    </table>
+
+    <p class="note">
+      ClassSwift 那塊排除的理由：mac 的 CS 已經是 in-proc（spec 0222），
+      Sparrow 那套 CS 整合有一半是 IPC 中繼的產物。要不要在桌面模式裡開 CS 是**獨立的產品問題**，
+      不該綁在「桌面標註可不可行」這個問題上。
+    </p>
+
+    <h3>原型加的（Sparrow 沒有，但 macOS 該有）</h3>
+
+    <div class="story-card">
+      <strong>游標工具＝點擊穿透</strong>
+      <div class="quote">Windows 版沒有這個概念：要碰桌面就得離開模式。</div>
+      整層 <code>ignoresMouseEvents = true</code>，<strong>標註留在畫面上、底下的桌面照常操作</strong>。
+      在 macOS 上「整個畫面被凍住」很不自然，這是最值得跟 PM 討論的一個新增行為。
+    </div>
+
+    <ul class="compact">
+      <li><strong>多螢幕</strong>：每個顯示器一層 overlay；筆跡存<strong>全域座標</strong>，重新排列顯示器不會跑位。</li>
+      <li><strong>跨 Space / 全螢幕 App</strong>：<code>.canJoinAllSpaces</code> + <code>.fullScreenAuxiliary</code> + <code>.stationary</code>。</li>
+      <li><strong>鍵盤</strong>：<code>1</code>–<code>5</code> 切工具、<code>⌘Z</code> / <code>⇧⌘Z</code>、<code>⌘⌫</code> 清除、<code>Esc</code> 離開。</li>
+      <li><strong>擷取結果直接落到白板目前頁</strong>，走既有的 <code>CanvasModel.placeImage</code>，不另存檔案。</li>
+    </ul>
+
+    <h3>視覺：舊版的圖 + 白板的 chrome + 白板的色票</h3>
+
+    <p>三個來源刻意分開，各自取最忠實的那一份：</p>
+
+    <table>
+      <tr><th>層面</th><th>來源</th><th>細節</th></tr>
+      <tr>
+        <td><strong>圖示</strong></td>
+        <td>Sparrow 桌面模式自己的資產</td>
+        <td>
+          從 <code>Sparrow.DesktopMode/Assets</code> 匯入為 <code>ic_dm_*</code>：
+          Pen／Highlighter／LaserPen／Eraser／ClearAll（theme-invariant）、
+          ScreenCapture 三式與 UndoRedo 四態（Light／Dark 雙外觀）、
+          回白板用 <code>myViewBoard.png</code>。
+          主工具列的入口鈕用 <code>Sparrow.Shared/…/MainToolbarIcons/DesktopMode.png</code>。
+          游標工具是 mac 新增的，借白板的 <code>ic_hand</code>。
+        </td>
+      </tr>
+      <tr>
+        <td><strong>chrome</strong></td>
+        <td>本 app 的工具列語彙</td>
+        <td>
+          <code>floatingSurface()</code>（浮動工具列同款白底／16 圓角／border／陰影）、
+          <code>toolbarChrome()</code> + <code>ToolbarChromeButtonStyle</code>（hover／press／selected）、
+          主工具列的分隔線幾何、<code>ic_drag_bar</code> 握把。
+        </td>
+      </tr>
+      <tr>
+        <td><strong>筆色</strong></td>
+        <td>白板自己的色票</td>
+        <td>
+          標記筆＝25 色共用網格（<code>Palette.all</code>），螢光筆／雷射筆＝固定 5 色
+          （<code>Palette.highlighterColors</code>）——與白板的筆對話框同一套切法。
+          預設值也對齊：標記筆黑 @6、螢光筆／雷射筆 #F2F26D @24。色票用 <code>VSColorSwatch</code> 渲染。
+        </td>
+      </tr>
+    </table>
+
+    <div class="callout warn">
+      <strong>待確認：入口鈕的圖示在 mac 上可能被讀成 Windows 標誌。</strong>
+      Sparrow 的 Desktop Mode 圖示是一個藍色四格視窗；忠於舊版沒問題，但 mac 使用者看到四格
+      很容易聯想到 Windows。若要換，方向是「螢幕 + 筆」這類語意更直接的圖。
+    </div>
+
+    <p class="note">
+      POC 第一版用 SF Symbols + material 底，看起來像另一個 app。那是取捨不是限制——
+      換成上面這套的成本很小（圖示是現成的、chrome 與色票都是 app 內既有元件）。
+    </p>
+
+    <h2 id="decisions">3. macOS 的四個關鍵決策</h2>
+
+    <h3 id="d1">3.1 視窗層級：<code>.screenSaver</code></h3>
+    <p>
+      畫在所有一般視窗、Dock 與選單列之上。<strong>這不是新賭注</strong>——
+      repo 內既有的螢幕擷取區域選取遮罩 (<code>ScreenCaptureService</code>) 用的就是同一個層級，
+      已經在出貨線上驗過。工具列再高一層（<code>+1</code>），選取遮罩 <code>+2</code>。
+    </p>
+
+    <h3 id="d2">3.2 點擊穿透：per-tool 切換</h3>
+    <p>
+      <code>ignoresMouseEvents</code> 跟著工具走：畫筆時吃事件，游標工具時整層放行。
+      這是「標註不必霸佔整台電腦」的關鍵，也是唯一一個 Sparrow 沒有的互動語意。
+    </p>
+
+    <h3 id="d3">3.3 誰入鏡：<code>sharingType</code></h3>
+    <table>
+      <tr><th>視窗</th><th>設定</th><th>為什麼</th></tr>
+      <tr><td>標註層</td><td><code>.readOnly</code></td><td>擷取畫面時<strong>要</strong>把標註一起拍進去</td></tr>
+      <tr><td>工具列</td><td><code>.none</code></td><td>chrome 不該出現在教材截圖裡</td></tr>
+      <tr><td>選取遮罩（矩形／自由）</td><td><code>.none</code></td><td>遮罩的暗底與框線不該入鏡</td></tr>
+    </table>
+    <p class="note">
+      副作用（實作時踩過）：<code>sharingType = .none</code> 的視窗<strong>用任何截圖工具都拍不到</strong>，
+      所以「工具列到底有沒有畫出來」沒辦法用截圖驗證，只能靠 <code>CGWindowList</code> 查它的 frame。
+      原型留了一個 <code>MVB_POC_TOOLBAR_CAPTURABLE=1</code> 的自測開關把它暫時放回鏡頭裡。
+    </p>
+
+    <h3 id="d4">3.4 座標系：筆跡存全域座標</h3>
+    <p>
+      每一筆的點都存 <strong>global AppKit 螢幕座標</strong>，不是視窗本地座標。
+      這讓「顯示器重新排列」「解析度改變」「跨螢幕連續畫一筆」都不需要特別處理，
+      也讓橡皮擦的命中測試與各層的局部重繪可以共用同一組數字。
+    </p>
+
+    <h2 id="measured">4. 實測數據</h2>
+
+    <h3>4.1 三個顯示器同時鋪滿</h3>
+    <p><code>CGWindowList</code> 在原型執行中的實測（本機三螢幕：5K + 5K + Retina）：</p>
+    <pre class="measure">name=mvb.desktopmode.chrome layer=1001 onscreen=true  bounds=455x46
+name=                       layer=1000 onscreen=true  bounds=2560x1440   ← 顯示器 1
+name=                       layer=1000 onscreen=true  bounds=2560x1440   ← 顯示器 2
+name=                       layer=1000 onscreen=true  bounds=1800x1169   ← 顯示器 3</pre>
+
+    <h3>4.2 擷取鏈（自動化自測）</h3>
+    <p>
+      原型內建一個自測：自動畫一條標記筆正弦曲線＋一條螢光筆橫線，然後擷取整個螢幕並寫檔。
+      產出的圖同時證明了三件事：
+    </p>
+    <ul class="compact">
+      <li>✅ <strong>標註有入鏡</strong>（紅色曲線、黃色半透明橫線都在）</li>
+      <li>✅ <strong>工具列沒入鏡</strong>（當時它就在畫面上）</li>
+      <li>✅ <strong>拍得到其他 app 的真實畫面</strong> → <code>SCScreenshotManager</code> 在 App Sandbox 內可用，不需要新 entitlement</li>
+    </ul>
+
+    <h3>4.3 進入模式的耗時</h3>
+    <p>
+      使用者第一次試用時回報「進入要 2~5 秒、游標轉圈，看起來像當機」。
+      加上分段計時與主執行緒停頓偵測後，量到的是：
+    </p>
+    <table>
+      <tr><th>階段</th><th>耗時</th><th>做了什麼</th></tr>
+      <tr><td>hideMainWindows</td><td class="num">33 ms</td><td>把白板主視窗 orderOut</td></tr>
+      <tr><td>overlay[0..2]</td><td class="num">3~5 ms 各</td><td>三個全螢幕標註層</td></tr>
+      <tr><td>toolbarInit</td><td class="num">20~31 ms</td><td>SwiftUI 工具列建構 + 首次 layout</td></tr>
+      <tr><td>activate</td><td class="num">0.5~8 ms</td><td><code>NSApp.activate</code></td></tr>
+      <tr><td><strong>TOTAL</strong></td><td class="num"><strong>73~86 ms</strong></td><td></td></tr>
+      <tr><td>mainThreadFree</td><td class="num">83~109 ms</td><td>主執行緒重新空閒</td></tr>
+      <tr><td>停頓偵測</td><td class="num">0</td><td>進入後 12 秒內沒有任何 &gt;150 ms 的主執行緒停頓</td></tr>
+    </table>
+    <div class="callout warn">
+      <strong>那 2~5 秒不是桌面模式的進入路徑造成的。</strong>
+      在「app 剛啟動 1.5 秒」與「完全就緒 30 秒後」兩種狀態各量過，數字一致。
+      可能的來源是 Debug build 自己的啟動成本（Sentry + olfparser dylib + MQTT 連線）
+      或當下的 Space 切換。<strong>再遇到時用 <code>MVB_POC_HITCH=&lt;檔案&gt;</code> 啟動就能把停頓抓下來。</strong>
+    </div>
+
+    <h3>4.4 繪製效能</h3>
+    <p>量測期間順手改掉的兩件事（原型初版沒有）：</p>
+    <ul class="compact">
+      <li><strong>標註層改 layer-backed</strong>（<code>wantsLayer</code> + <code>.onSetNeedsDisplay</code>）——
+        一個 5K 全螢幕層走 CPU backing store 約 59 MB，三個就是 177 MB，改由 GPU 合成。</li>
+      <li><strong>局部重繪</strong>——畫線只失效「這一小段」的矩形、只重繪筆跡經過的那個顯示器；
+        橡皮擦游標圈也只失效圈的範圍。原本是每次滑鼠移動都重畫三個 5K 全層。</li>
+    </ul>
+
+    <h2 id="risks">5. 風險與未決</h2>
+
+    <table>
+      <tr><th>項目</th><th>說明</th><th>誰能解</th></tr>
+      <tr>
+        <td><strong>Esc / 快捷鍵在穿透模式下會失效</strong></td>
+        <td>游標模式下使用者點了別的 app，鍵盤事件就歸那個 app。工具列的「回白板」鈕是唯一保證可用的出口。
+            <strong>這是與 Windows 的真實行為差異，PM 需要知道並接受。</strong></td>
+        <td>PM 決策</td>
+      </tr>
+      <tr>
+        <td>別的 App 進 <strong>native 全螢幕</strong>（自己一個 Space）</td>
+        <td>
+          <span class="badge badge-err">已實測 · 做不到</span>
+          標註層<strong>進不去別的 app 的全螢幕 Space</strong>。這是產品層級的限制，見下面 §5.1。
+        </td>
+        <td>PM 決策（要不要接受）</td>
+      </tr>
+      <tr>
+        <td><strong>Mac App Store 審核</strong></td>
+        <td>螢幕錄製權限 + <code>.screenSaver</code> 層級的全螢幕覆蓋窗，在 MAS 審核上比 Developer ID 敏感
+            （上架線是 <code>VB-1893</code> / <code>MT-1184</code>）。功能本身合規，但要有被問的心理準備。</td>
+        <td>上架負責人</td>
+      </tr>
+      <tr>
+        <td>觸控 / IFP 筆</td>
+        <td>原型只走滑鼠事件，沒接 <code>IFPContact</code> 那條線。IFP 上要用的話這是必補的一塊。</td>
+        <td>正式實作</td>
+      </tr>
+      <tr>
+        <td><strong>底下正在播的影片</strong></td>
+        <td>
+          <strong>別的 app 的影片會繼續播</strong>——標註層只是疊上去的視窗，我們從不跟它溝通，
+          它頂多失去鍵盤焦點，而失焦不會使播放停止。<br />
+          <strong>白板自己的影片（canvas 上的 YouTube widget／影片物件）有風險</strong>：
+          進入模式時主視窗被 <code>orderOut</code> → 視窗變成 occluded，macOS 會節流被遮蔽視窗的
+          計時器與媒體（WebKit 尤其明顯），可能因此暫停或掉格。<strong>這不是平台限制，是可選的設計</strong>——
+          原型加了 <code>MVB_POC_KEEP_BOARD=1</code> 可改成不隱藏白板、只把標註層蓋上去。<br />
+          另外：DRM 內容（FairPlay／HDCP）覆蓋沒問題，但<strong>擷取時會變黑</strong>，那是系統保護，不繞。
+        </td>
+        <td>PM 決策 + 驗證（<a href="verify.html">verify</a> §A7）</td>
+      </tr>
+      <tr>
+        <td>標註的生命週期</td>
+        <td>目前離開模式就清空（對齊 Sparrow：它的 DesktopMode 程序關掉就沒了）。
+            要不要能「留著下次再回來」「存成白板一頁」是產品問題。</td>
+        <td>PM 決策</td>
+      </tr>
+    </table>
+
+    <h3 id="fullscreen-limit">5.1 別的 App 全螢幕時，標註層蓋不上去（實測結論）</h3>
+
+    <div class="callout new">
+      <strong>老師把簡報／影片開成 native 全螢幕（綠燈那種，自己一個 Space）時，那個螢幕無法標註。</strong>
+      這是 macOS 的行為，不是我們的 bug，也沒有公開 API 可以繞過。
+    </div>
+
+    <p><strong>證據等級：實測。</strong>三螢幕環境，主顯示器上跑著一個 native 全螢幕的 app：</p>
+
+    <table>
+      <tr><th>觀察</th><th>結果</th></tr>
+      <tr>
+        <td>三層 overlay 都有建立</td>
+        <td><code>overlay display=3 frame={{0,0},{2560,1440}} visible=true</code>（三層都 <code>visible=true</code>）</td>
+      </tr>
+      <tr>
+        <td>實際收到筆畫的是哪一層</td>
+        <td>只有 <code>display=1</code> 與 <code>display=2</code> 有 <code>mouseDown</code>；<strong>display=3 一次都沒有</strong></td>
+      </tr>
+      <tr>
+        <td>display 3 那層在系統眼中的狀態</td>
+        <td><code>CGWindowList</code>：<code>layer=1000 onscreen=false</code>（另外兩層 <code>onscreen=true</code>）</td>
+      </tr>
+      <tr>
+        <td>同一螢幕上蓋著什麼</td>
+        <td><code>Orca layer=0 frame=(0,0,2560,1440)</code> — 一個佔滿該螢幕的 native 全螢幕視窗</td>
+      </tr>
+      <tr>
+        <td>把 window level 拉到 <code>CGShieldingWindowLevel()</code>（2147483628，screen-capture shield 用的層級）</td>
+        <td><strong>沒有用</strong>：該層仍是 <code>onscreen=false</code>。<span class="badge badge-warn">層級不是問題</span></td>
+      </tr>
+    </table>
+
+    <p>
+      <code>.fullScreenAuxiliary</code> 只讓視窗跟<strong>自己 app 的</strong>全螢幕視窗共存；
+      別的 app 的全螢幕 Space，第三方視窗加不進去。<strong>我們自己的白板進全螢幕則沒問題</strong>
+      （標註層照樣蓋得上去）——差別就在「誰擁有那個 Space」。
+    </p>
+
+    <p><strong>對產品的意義</strong>（要讓 PM 知道）：</p>
+    <ul class="compact">
+      <li>老師要在簡報上標註，簡報請用<strong>最大化視窗</strong>而不是全螢幕。</li>
+      <li>Windows 版沒有這個限制（Sparrow 的標註層直接擁有桌面），所以這是<strong>跨平台的行為差異</strong>，不是 mac 版沒做完。</li>
+      <li>市面上的 macOS 標註工具同樣受這條限制，不是我們的實作選擇造成的。</li>
+    </ul>
+
+    <p class="note">
+      <strong>還沒做的對照實驗</strong>：把那個 app 退出全螢幕（保持同一個螢幕、同一個位置），
+      再試同一層能不能畫。能畫 → 結論確立；仍不能畫 → 另有原因，要重查。
+    </p>
+
+    <h3 id="slow-entry">5.2 偶發的「進入很久」（未重現）</h3>
+
+    <p>
+      使用者回報進入桌面模式偶爾會卡住、游標轉圈，但<strong>無法穩定重現</strong>；
+      而每一次量測（分段計時 + 主執行緒停頓偵測）都顯示進入路徑只花 73~86 ms、12 秒內零停頓（§4.3）。
+      <strong>兩邊都是事實，目前無法對上。</strong>
+    </p>
+    <p class="note">
+      下次遇到時請用 <code>MVB_POC_HITCH=&lt;檔案&gt;</code> 啟動，它會把進入後 12 秒內
+      &gt;150 ms 的主執行緒停頓寫出來；若那時檔案仍是「no stall」，就表示卡的不是主執行緒
+      （方向轉去看 window server / Space 切換 / Debug build 的啟動成本）。
+    </p>
+
+    <h2 id="traps">5.5 實作時踩到的 macOS 陷阱</h2>
+
+    <p>都是實際發生過、而且症狀會誤導人的：</p>
+
+    <table>
+      <tr><th>症狀</th><th>真正的原因</th><th>做法</th></tr>
+      <tr>
+        <td><strong>某個螢幕畫不了</strong>（其他螢幕正常）</td>
+        <td>一個顯示器一層 overlay，但只有一層是 key window。AppKit 預設把「點非 key window 的第一下」吃掉當作 activate，<strong>不送進 view</strong></td>
+        <td>view 覆寫 <code>acceptsFirstMouse(for:)</code> 回 <code>true</code></td>
+      </tr>
+      <tr>
+        <td><strong>拖工具列會抖</strong>、越拖越飄</td>
+        <td>用 SwiftUI <code>DragGesture</code> 的 translation 搬 <code>NSWindow</code>：那個座標系<strong>跟著視窗一起移動</strong>，每幀都在對上一幀剛移動過的基準重新量測</td>
+        <td>改用 AppKit <code>window.performDrag(with:)</code>（拖標題列那條路），它會在放開時才返回，正好接吸附</td>
+      </tr>
+      <tr>
+        <td>浮動工具列有<strong>黑色直角外框</strong></td>
+        <td>視窗陰影是照 <strong>window 的矩形</strong>畫的，內容是圓角的透明面板 → 陰影露在圓角外</td>
+        <td><code>hasShadow = false</code>，陰影交給內容自己畫（<code>floatingSurface()</code>）</td>
+      </tr>
+      <tr>
+        <td>進入模式後<strong>整個螢幕全黑、退不出全螢幕</strong></td>
+        <td>對一個處於 native 全螢幕的視窗呼叫 <code>orderOut</code>：它的 Space 還活著但空無一物，綠燈也沒了</td>
+        <td>全螢幕視窗<strong>絕不 orderOut</strong>；讓標註層蓋上去即可</td>
+      </tr>
+      <tr>
+        <td>popover／面板浮在標註層上</td>
+        <td>popover 是<strong>自己的 window</strong>，主視窗 <code>orderOut</code> 帶不走它</td>
+        <td>走各面板自己的 dismiss 路徑（狀態才會同步），殘留的再 <code>orderOut</code>，且只掃 panel/popover</td>
+      </tr>
+      <tr>
+        <td>自測 hook 重複執行、模式被重入</td>
+        <td>SwiftUI 的 <code>onAppear</code> 對同一個 view <strong>會觸發不只一次</strong></td>
+        <td>用一次性旗標把 hook 鎖住</td>
+      </tr>
+      <tr>
+        <td>環境變數傳不進去；直接跑 binary 連視窗都開不出來</td>
+        <td><code>open</code> 啟動的 app 由 launchd 派生，<strong>不繼承 shell 環境</strong>；而沙箱 app 直接從終端執行會起不了視窗</td>
+        <td>一律 <code>open -n --env KEY=VALUE …</code></td>
+      </tr>
+      <tr>
+        <td>診斷檔寫不出來，<strong>而且沒有任何錯誤</strong></td>
+        <td>沙箱只能寫自己的容器；寫 <code>/tmp</code> 被擋掉且 <code>try?</code> 吞掉錯誤</td>
+        <td>寫 <code>~/Library/Containers/ViewSonic.myViewBoard/Data/</code> 底下</td>
+      </tr>
+      <tr>
+        <td>截圖裡<strong>永遠看不到工具列</strong>，無法確認它有沒有畫出來</td>
+        <td>我們刻意把工具列設成 <code>sharingType = .none</code>（不入鏡），螢幕擷取工具也就拍不到</td>
+        <td>留一個開關（<code>MVB_POC_TOOLBAR_CAPTURABLE=1</code>）能暫時放回鏡頭；或改用 <code>CGWindowList</code> 查它的 frame</td>
+      </tr>
+    </table>
+
+    <h2 id="plan">6. 正式做的話怎麼切</h2>
+
+    <p>原型是丟棄式的，正式做建議這樣切（每片都能獨立驗）：</p>
+
+    <ol>
+      <li><strong>骨架</strong>：進入／離開、單螢幕標註層、標記筆、回白板。這片就能回答「手感對不對」。</li>
+      <li><strong>工具組</strong>：螢光筆／雷射筆／橡皮擦／清除／Undo-Redo + 每支筆的 brush 狀態。</li>
+      <li><strong>工具列</strong>：VSDS 化（原型用的是 SF Symbols 佔位）、拖曳吸附、tooltip、i18n。</li>
+      <li><strong>穿透與多螢幕</strong>：游標工具、每螢幕一層、顯示器熱插拔。</li>
+      <li><strong>擷取</strong>：三式 + 落到白板；權限被拒的引導文案。</li>
+      <li><strong>渲染</strong>：換掉 <code>NSBezierPath</code> 逐筆重畫，改 CAShapeLayer／Metal（原型的局部重繪只是止血）。</li>
+    </ol>
+
+    <p class="note">
+      需求單已開：<a href="https://viewsonic-vsi.atlassian.net/browse/VB-2247"><strong>VB-2247</strong></a>（掛在 <code>VB-1897</code> Mac Native 底下），
+      內含範圍、需要 PM 決策的三件事與驗收條件。
+      上面這六片的實作票<strong>也開在 VB</strong> 並連回 VB-2247
+      ——2026-09-16 起新單一律開 VB，不再開 <code>MT-</code>。
+    </p>
+
+    <h2 id="proto">7. 原型檔案地圖</h2>
+
+    <dl class="kv">
+      <dt>worktree</dt><dd><code>~/.mvb-worktrees/poc-desktop-mode</code>（本機分支 <code>poc/desktop-mode</code>，off <code>main</code>）</dd>
+      <dt>狀態</dt><dd><strong>未 commit、未推遠端</strong>；需求單 <a href="https://viewsonic-vsi.atlassian.net/browse/VB-2247">VB-2247</a></dd>
+      <dt>build</dt><dd><code>~/.mvb-dd/poc-desktop-mode/Build/Products/Debug/myViewBoard.app</code></dd>
+    </dl>
+
+    <table>
+      <tr><th>檔案</th><th>行數</th><th>內容</th></tr>
+      <tr><td><code>myViewBoard/DesktopMode/DesktopModeModel.swift</code></td><td class="num">195</td><td>工具列舉、筆劃模型、每支筆的 brush、調色盤</td></tr>
+      <tr><td><code>myViewBoard/DesktopMode/DesktopModeController.swift</code></td><td class="num">392</td><td>進入／離開、視窗生命週期、筆劃儲存、undo/redo、雷射淡出、快捷鍵、計時與停頓偵測</td></tr>
+      <tr><td><code>myViewBoard/DesktopMode/DesktopOverlayWindow.swift</code></td><td class="num">178</td><td>標註層視窗 + 繪製 view（含局部重繪）</td></tr>
+      <tr><td><code>myViewBoard/DesktopMode/DesktopToolbarWindow.swift</code></td><td class="num">107</td><td>浮動工具列視窗、吸附、尺寸量測</td></tr>
+      <tr><td><code>myViewBoard/DesktopMode/DesktopToolbarView.swift</code></td><td class="num">275</td><td>工具列 SwiftUI + brush popover</td></tr>
+      <tr><td><code>myViewBoard/DesktopMode/DesktopCapture.swift</code></td><td class="num">310</td><td>擷取三式、選取遮罩、自測</td></tr>
+      <tr><td><code>myViewBoard/Toolbar/MainToolbarView.swift</code></td><td class="num">+31</td><td><strong>唯一改動的既有檔</strong>：多一顆入口鈕與自測 hook</td></tr>
+    </table>
+
+    <h3>自測用的環境變數</h3>
+    <p>正常使用不要設。<code>open --env</code> 是唯一能把環境變數傳進去的方式——
+       直接執行 binary 會讓沙箱 app 起不了視窗（實作時踩過）。</p>
+    <pre><code>open -n --env MVB_POC_DESKTOP_MODE=1 \
+        --env MVB_POC_TIMING=~/Library/Containers/ViewSonic.myViewBoard/Data/t.txt \
+        ~/.mvb-dd/poc-desktop-mode/Build/Products/Debug/myViewBoard.app</code></pre>
+    <table>
+      <tr><th>變數</th><th>作用</th></tr>
+      <tr><td><code>MVB_POC_DESKTOP_MODE=1</code></td><td>啟動後自動進入桌面模式</td></tr>
+      <tr><td><code>MVB_POC_DESKTOP_DELAY=&lt;秒&gt;</code></td><td>自動進入的延遲（預設 1.5；設大一點才量得到「app 完全就緒」的狀態）</td></tr>
+      <tr><td><code>MVB_POC_TOOLBAR_CAPTURABLE=1</code></td><td>讓工具列可被螢幕擷取（否則截圖永遠拍不到它）</td></tr>
+      <tr><td><code>MVB_POC_SELFTEST=&lt;路徑&gt;</code></td><td>自動畫兩筆 + 擷取全螢幕並寫檔</td></tr>
+      <tr><td><code>MVB_POC_TIMING=&lt;路徑&gt;</code></td><td>寫出進入模式的分段耗時</td></tr>
+      <tr><td><code>MVB_POC_HITCH=&lt;路徑&gt;</code></td><td>進入後監測 12 秒，把 &gt;150 ms 的主執行緒停頓寫出來</td></tr>
+    </table>
+    <p class="note">
+      寫檔路徑必須在 app 的沙箱容器內：<code>~/Library/Containers/ViewSonic.myViewBoard/Data/</code>。
+      寫到 <code>/tmp</code> 會被沙箱擋掉而且<strong>不會有錯誤訊息</strong>（實作時踩過）。
+    </p>
+  </main>
+</div>
+</body>
+</html>
