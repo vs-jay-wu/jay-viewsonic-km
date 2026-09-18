@@ -46,6 +46,9 @@ RUNS_DIR="$REPO_ROOT/data/pr-inbox-runs"
 LOCK_DIR="$RUNS_DIR/.lock"
 WS="$REPO_ROOT/local.workspace.json"
 WATCH_CONFIG="$REPO_ROOT/data/local-state/pr-inbox-watch.json"
+# 已經交給 AI 處理過的 PR：key 是 `<owner/repo>#<number>`，值是當時的「狀態指紋」
+# （head sha ＋ 對方最後動作時間）。指紋沒變就不再重送 —— 見下面的 BATCH 那段。
+HANDLED_FILE="$REPO_ROOT/data/local-state/pr-inbox-handled.json"
 
 TRIGGER="scheduled"
 DETECT_ONLY=false
@@ -192,7 +195,7 @@ write_record() {
 # 被 kill（或 Ctrl-C）時也要留下紀錄，否則事後查不出「那輪跑去哪了」。
 on_signal() {
   [[ "$RECORD_WRITTEN" -eq 0 ]] && write_record aborted "被中斷（收到訊號）" "${PR_COUNT:-0}"
-  rm -rf "$LOCK_DIR"
+  on_exit
   exit 143
 }
 
@@ -234,7 +237,13 @@ fi
 echo $$ > "$LOCK_DIR/pid"
 echo "$STARTED_AT" > "$LOCK_DIR/startedAt"
 echo "$ID" > "$LOCK_DIR/runId"
-trap 'rm -rf "$LOCK_DIR"' EXIT
+# ⚠️ **只能有一個 EXIT trap**：再寫一個 `trap ... EXIT` 會把這個整個蓋掉，
+# 鎖就永遠留著、之後每輪都被「上一輪還在跑」擋住。要加東西就加進這個函式。
+on_exit() {
+  rm -rf "$LOCK_DIR"
+  rm -f "$RUNS_DIR/$ID.fresh.json" "$RUNS_DIR/$ID.batch.json"   # 這一輪的暫存
+}
+trap on_exit EXIT
 trap on_signal INT TERM
 
 # ─── 偵測（不用 AI）─────────────────────────────────────────────────────────
@@ -266,6 +275,45 @@ if $DETECT_ONLY; then
   write_record detected "只偵測（--detect-only），未啟動 AI" "$PR_COUNT"
   exit 0
 fi
+
+# ─── 過濾掉「處理過而且狀態沒變」的 ─────────────────────────────────────────
+#
+# 沒有這一層時，同一批 PR 會每 5 分鐘重新交給 AI 一次：清單超過 3 筆時 AI 只處理
+# 前 3 筆，其餘留到下一輪，而下一輪又從頭開始。實際發生過三輪都是同一批 7 筆，
+# 其中一輪 21 turns／$1.08 什麼都沒做（Jay 2026-09-17 發現）。
+#
+# 「狀態指紋」＝ head sha ＋ 對方最後動作時間。**兩者都要**：
+# 只看 head sha 的話，對方新留言（沒有新 commit）就不會被重新列入。
+[[ -f "$HANDLED_FILE" ]] || echo '{}' > "$HANDLED_FILE"
+# 這兩個是暫存，收尾由 on_exit 一律刪掉（原本只在成功那條路徑刪，
+# 失敗／被中斷就會留一堆 —— 實測累積了 22 組混在紀錄目錄裡）
+FRESH_FILE="$RUNS_DIR/$ID.fresh.json"
+BATCH_FILE="$RUNS_DIR/$ID.batch.json"
+jq --slurpfile h "$HANDLED_FILE" '
+  ($h[0] // {}) as $done
+  | map(. + {_key: "\(.repo)#\(.number)",
+             _fp: "\(.headSha // "?")|\(.theirLastActivity // "?")"})
+  | map(select($done[._key].fingerprint != ._fp))
+' "$PRS_FILE" > "$FRESH_FILE"
+FRESH_COUNT="$(jq 'length' "$FRESH_FILE")"
+
+if [[ "$FRESH_COUNT" -eq 0 ]]; then
+  echo "✓ $PR_COUNT 筆都處理過了（狀態沒變），不啟動 AI"
+  # **不能用 `clean`**：那個狀態在畫面上是「沒待處理」，但這裡明明有 N 筆待處理、
+  # 只是都處理過了。同一個狀態掛兩種意思，看到的人會以為紀錄壞掉
+  # （Jay 2026-09-18 回報「狀態沒有待處理，但寫著三筆」）。
+  write_record already-handled "$PR_COUNT 筆都處理過了（狀態沒變），未啟動 AI" "$PR_COUNT"
+  exit 0
+fi
+
+# 這一輪只處理前 N 筆（偵測腳本已照優先度排序），而且**明確指定是哪幾筆** ——
+# 交給 AI 自己挑的話，事後無從得知該把哪幾筆記成已處理。
+BATCH_MAX=3
+jq --argjson n "$BATCH_MAX" '.[0:$n]' "$FRESH_FILE" > "$BATCH_FILE"
+BATCH_COUNT="$(jq 'length' "$BATCH_FILE")"
+BATCH_LIST="$(jq -r '.[] | "  - \(.repo)#\(.number)  [\(.priority)]  \(.title)"' "$BATCH_FILE")"
+echo "  這一輪處理 $BATCH_COUNT 筆（新的共 $FRESH_COUNT 筆）"
+echo "$BATCH_LIST"
 
 # ─── 處理（啟動 AI）────────────────────────────────────────────────────────
 
@@ -322,7 +370,13 @@ esac
 # 這段是給非互動環境的補充規則：沒有人可以回答問題，所以不要問；
 # 同時把 command 本身「不自動做」的事再釘一次。
 EXTRA="你在排程（非互動）環境中執行，stdin 沒有人 —— 不要提問，也不要等待確認。
-清單超過 3 筆時，自行挑優先度最高的 3 筆處理，其餘在最後列成「未處理」清單。
+**這一輪就是要把事情做完**，實測過兩種會空轉的回答，兩種都不行：
+  - 「我等 watcher 觸發」「下一輪再處理」 —— 沒有下一輪會幫你做，下一輪是從頭開始。
+  - 「已經丟到背景子代理，等結果回來」 —— `claude -p` 一回傳，背景工作就跟著沒了。
+    要開子代理可以，但**必須在這個 session 裡等到它們回來、把結果寫進回報**。
+
+這一輪**只處理下面這幾筆**（已經由排程挑好，其餘的下一輪會處理，不要碰）：
+$BATCH_LIST
 
 $VERDICT_RULE
 
@@ -357,7 +411,17 @@ CLAUDE_META="$(jq -n --argjson code "$CLAUDE_CODE" --slurpfile r "$CLAUDE_JSON" 
 rm -f "$CLAUDE_JSON"
 
 if [[ "$CLAUDE_CODE" -eq 0 ]]; then
-  write_record handled "已交給 AI 處理 $PR_COUNT 筆（判定模式 $VERDICT_MODE）" "$PR_COUNT" "$CLAUDE_META"
+  # 記下這一批的指紋；順便清掉已經不在待處理清單上的（PR 關了／合併了）
+  NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  jq --slurpfile old "$HANDLED_FILE" --slurpfile all "$PRS_FILE" \
+     --arg now "$NOW" --arg runId "$ID" '
+    ([ $all[0][] | "\(.repo)#\(.number)" ] | map({(.): true}) | add // {}) as $alive
+    | (($old[0] // {}) | with_entries(select($alive[.key]))) as $kept
+    | reduce .[] as $p ($kept;
+        .[$p._key] = {fingerprint: $p._fp, handledAt: $now, runId: $runId,
+                      title: $p.title, url: $p.url})
+  ' "$BATCH_FILE" > "$HANDLED_FILE.tmp" && mv "$HANDLED_FILE.tmp" "$HANDLED_FILE"
+  write_record handled "已交給 AI 處理 $BATCH_COUNT 筆（待處理共 $PR_COUNT，判定模式 $VERDICT_MODE）" "$PR_COUNT" "$CLAUDE_META"
   remove_session_transcript "$(jq -r '.sessionId // ""' <<< "$CLAUDE_META")"
   echo "✓ 完成（花費 $(jq -r '.costUsd // "?"' <<< "$CLAUDE_META") USD，$(jq -r '.numTurns // "?"' <<< "$CLAUDE_META") turns）"
 else

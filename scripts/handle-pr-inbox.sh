@@ -8,7 +8,7 @@
 # 範圍不是「org 底下所有 repo」（那會掃到上百筆不干我的 PR），而是兩個來源的聯集：
 #
 # (A) 我負責的 repo 底下**所有**開著的 PR —— 不需要被指派，我就該看
-# (B) GitHub 認定與我有關的關係（涵蓋我負責清單以外的 repo）：
+# (B) GitHub 認定與我有關的關係 —— **不受 repo 清單限制**（`mentions` 除外，太吵）：
 #   review-requested:@me   被指派 review（含透過 team 指派）
 #   reviewed-by:@me        我 review 過（review 完 GitHub 會拿掉指派，只能靠這條追）
 #   mentions:@me           有人 @ 我
@@ -108,6 +108,10 @@ query($q: String!, $n: Int!) {
         repository { nameWithOwner }
         author { login }
         reviewDecision
+        headRefOid
+        reviewRequests(first: 20) {
+          nodes { requestedReviewer { ... on User { login } ... on Team { slug } } }
+        }
         commits(last: 1) { nodes { commit { committedDate } } }
         reviews(last: 50) { nodes { author { login } state submittedAt } }
         comments(last: 50) { nodes { author { login } createdAt } }
@@ -158,7 +162,7 @@ if [[ ${#REPO_QUALS[@]} -gt 0 ]]; then
   fetch "is:open is:pr ${REPO_QUALS[*]}" "repo"
 fi
 
-# (B) 與我有關的關係（可能落在負責清單以外的 repo；下面的 repo 過濾會再收斂）
+# (B) 與我有關的關係（落在負責清單以外的 repo 也照樣列，見下面的過濾）
 for rel in "${RELATIONS[@]}"; do
   fetch "is:open is:pr ${rel}:${ME}" "$rel"
 done
@@ -170,10 +174,20 @@ jq -s --arg me "$ME" --argjson includeMine "$INCLUDE_MINE" --argjson includeDraf
   def ts: if . == null then 0 else (. | fromdateiso8601) end;
   def days($t): if $t == 0 then null else (((now - $t) / 86400) | floor) end;
 
-  # 只留我負責的 repo（清單為空 = 不過濾）；可寫 "repo" 或 "owner/repo"
+  # repo 清單只用來收斂「(B) 關係」裡最吵的那一種（mentions）。
+  #
+  # **被指派 review／被指派 assignee／我 review 過的，不管在哪個 repo 都要留**：
+  # 那是 GitHub 自己認定「這件事找的是你」，清單不該蓋過它。
+  # 原本的寫法把過濾套在所有結果上，於是 fishing-cat#580（06:54 個別指派給 Jay、
+  # 06:57 他自己手動 approve）從來沒被偵測到 —— 同一時間還有三筆同樣情況的
+  # （edu-as-virtual-audio-cable#1、edu-mvb-api-core#308、edu-mvb-auth-oidc#39）
+  # 也一直看不到（Jay 2026-09-17 發現）。檔頭原本就寫「(B) 涵蓋負責清單以外的 repo」，
+  # 是實作沒跟上。
   ( $repoFilter | map(ascii_downcase) ) as $only
+  | ["review-requested", "assignee", "reviewed-by", "author"] as $strong
   | map(select(
       ($only | length) == 0
+      or ( [ .relation ] | any(. as $r | $strong | index($r) != null) )
       or ( (.repository.nameWithOwner | ascii_downcase) as $full
            | ($full | split("/") | last) as $short
            | ($only | index($full)) != null or ($only | index($short)) != null )
@@ -203,6 +217,10 @@ jq -s --arg me "$ME" --argjson includeMine "$INCLUDE_MINE" --argjson includeDraf
            | .comments.nodes[0]
            | select(. != null) ] ) as $openThreads
 
+      # 「這個 review 請求是點名我，還是丟給我的隊？」——兩者的意思差很多，見下面的優先度
+      | ([ $p.reviewRequests.nodes[]?.requestedReviewer.login // empty ]) as $reqUsers
+      | ([ $p.reviewRequests.nodes[]?.requestedReviewer.slug // empty ]) as $reqTeams
+      | (($reqUsers | index($me)) != null) as $requestedMe
       | ($p.commits.nodes[0].commit.committedDate | ts) as $lastCommit
       | ([$said, $lastCommit] | max) as $theirs
 
@@ -211,6 +229,11 @@ jq -s --arg me "$ME" --argjson includeMine "$INCLUDE_MINE" --argjson includeDraf
           number: $p.number,
           title: $p.title,
           url: $p.url,
+          # 排程用它判斷「這一筆跟上次是不是同一個狀態」（scripts/pr-inbox-watch.sh）
+          headSha: ($p.headRefOid // null),
+          # review 請求是**點名我**還是**丟給我的隊**
+          requestedMe: $requestedMe,
+          requestedTeams: $reqTeams,
           author: $author,
           isDraft: $p.isDraft,
           reviewDecision: ($p.reviewDecision // "REVIEW_REQUIRED"),
@@ -247,7 +270,16 @@ jq -s --arg me "$ME" --argjson includeMine "$INCLUDE_MINE" --argjson includeDraf
         # 被指派 review 但還沒 review 過
         elif ($r._mine == 0) then
           if ($r.relations | index("review-requested")) then
-            $r + {action: true, priority: "中", reason: "被指派 review，我還沒 review 過"}
+            # **點名我 ≠ 丟給我的隊**（Jay 2026-09-17 指出）：
+            # 個人被指派時只有我能消掉那個請求，球明確在我這裡 → 高；
+            # team 被指派時隊上任何人 review 都算數，我不一定要動 → 中。
+            (if $r.requestedMe then
+               $r + {action: true, priority: "高",
+                     reason: "**點名我** review，我還沒 review 過"}
+             else
+               $r + {action: true, priority: "中",
+                     reason: ("指派給 " + (($r.requestedTeams // []) | join("／")) + " 隊，隊上還沒人 review")}
+             end)
           elif ($r.relations | index("repo")) then
             $r + {action: true, priority: "中",
                   reason: "我負責的 repo，我還沒 review 過（沒被指派，但仍該看）"}
@@ -259,9 +291,19 @@ jq -s --arg me "$ME" --argjson includeMine "$INCLUDE_MINE" --argjson includeDraf
         # review 過了：看之後有沒有新東西
         elif ($r._theirs > $r._mine) then
           $r + {action: true, priority: "高", reason: "我上次動作後有新 commit／新留言"}
+        # 我已經回應過（留言或 review），對方之後沒再動 → **球在對方**，不是待處理。
+        #
+        # 這裡原本把「review 請求還掛著」當成待處理，於是那種 PR 會**永遠**留在清單上：
+        # GitHub 只有在**送出 review**（approve／request changes）時才會消掉請求，
+        # 而巡邏的判定規則本來就允許「沒把握就只留言、不 approve」——留言不消請求。
+        # 結果就是 AI 每輪去處理、處理完了、清單卻一筆都不會少
+        # （Jay 2026-09-18：「有需要處理的那就去處理啊？」——它有，只是消不掉）。
+        #
+        # 真的需要我再動的情況已經被上面那條 `_theirs > _mine` 接走了。
         elif ($r.relations | index("review-requested")) then
-          $r + {action: true, priority: "低",
-                reason: "無新活動，但 review 仍掛在我名下（可能被重新指派）"}
+          $r + {action: false,
+                reason: ("我已回應（" + (if $r._theirs > 0 then "對方最後動作 " + ($r._theirs | todateiso8601) else "對方還沒動過" end)
+                         + "），review 請求仍掛著但球在對方；我送出 review 判定才會消掉")}
         else
           $r + {action: false, reason: "自我上次動作後無新活動"}
         end

@@ -40,6 +40,8 @@ const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
 
 const STATUS: Record<string, { label: string; icon: IconName; cls: string }> = {
   clean:           { label: "沒待處理", icon: "check",   cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  // 有待處理、但指紋跟上次一樣（head sha ＋ 對方最後動作時間都沒動）→ 不重送 AI
+  "already-handled": { label: "都處理過了", icon: "check", cls: "bg-gray-50 text-gray-600 border-gray-200" },
   detected:        { label: "只偵測",   icon: "search",  cls: "bg-sky-50 text-sky-700 border-sky-200" },
   handled:         { label: "AI 已處理", icon: "play",    cls: "bg-indigo-50 text-indigo-700 border-indigo-200" },
   skipped:         { label: "跳過（鎖住）", icon: "lock", cls: "bg-gray-50 text-gray-600 border-gray-200" },
