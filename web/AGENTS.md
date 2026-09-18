@@ -69,11 +69,17 @@ if (!(await confirm({ title: "刪掉這筆？", message: "無法復原。", dang
 
 ## Session 標題就是關聯的依據
 
-Jay 的 session 命名慣例是 `[repo/sub-repo] 單號 描述`（例：`[km/mvbf] VB-1945 字體`）。
+Jay 的 session 命名慣例是 `[km…] 單號 描述`：開頭的方括號以 `km` 起頭即可，
+**子 repo 是選填**（`[km] VB-2267 描述` 與 `[km/mvbf] VB-1945 字體` 都合法）。
+web 幫你開 session 時**知道 repo 就會填成 `[km/<別名>]`**（不知道就只給 `[km]`），
+但那是「盡量多給一點資訊」，**不是要求** —— 解析與關聯都不能假設那一格有東西。
 **web 靠它把 session ↔ PR ↔ Jira 單串起來**（`lib/workItemRules.ts` 解析、
 `lib/workIndex.ts` 建索引），所以：
 
 - 解析不到就不連結，**不要硬湊**。這是人維護的東西，一定有不符合規則的。
+- **不要拿 `[km/x]` 的 `x` 當「改動在哪個 repo」的答案**：它是選填的，很多標題只有
+  `[km]`。要找改動去看分支名與 PR（`lib/workChanges.ts` 掃全工作區找分支名含票號的
+  worktree，就是為了這件事）。
 - 裸數字（`9208`）補 project 的規則：先比對手上已有的明確 key，同號只有一個
   候選就用它；同號撞兩個 project 就不猜；都沒有才退回 VB 並**標記成猜的**。
   UI 一定要讓人看得出那是猜的（後面加問號）——`9904` 實際上是 VSFT 不是 VB。

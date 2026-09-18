@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import { readdir, readFile, mkdir, stat, writeFile } from "fs/promises";
 import path from "path";
 import { repoPath, repoRoot, run } from "@/lib/repo";
+import { isSensitivePath } from "@/lib/codeBrowseRules";
 import {
   imageMimeOf, parseDiff, parseStatus,
   type ChangedFile, type DiffLine, type RepoChanges, type WorktreeChanges,
@@ -216,12 +217,18 @@ export interface ChangesSnapshot {
   skippedOffloaded: number;
 }
 
-export async function scanChanges(): Promise<ChangesSnapshot> {
+/**
+ * 工作區裡所有的 repo 目錄（不含 offloaded 的）。
+ *
+ * 「未提交的改動」與「Repo 檢視」共用同一份範圍定義 —— 兩邊各掃各的話，
+ * 一邊看得到、另一邊看不到某個 repo，會很難解釋。
+ */
+export async function listRepoDirs(): Promise<{ dirs: string[]; skippedOffloaded: number }> {
   const { roots, offloaded } = await workspace();
-  const repoDirs: string[] = [];
+  const dirs: string[] = [];
   let skippedOffloaded = 0;
   for (const root of roots) {
-    if (await looksLikeRepo(root)) repoDirs.push(root);
+    if (await looksLikeRepo(root)) dirs.push(root);
     const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
     for (const e of entries) {
       if (!e.isDirectory() || e.name.startsWith(".")) continue;
@@ -230,9 +237,14 @@ export async function scanChanges(): Promise<ChangesSnapshot> {
         continue;
       }
       const dir = path.join(root, e.name);
-      if (await looksLikeRepo(dir)) repoDirs.push(dir);
+      if (await looksLikeRepo(dir)) dirs.push(dir);
     }
   }
+  return { dirs, skippedOffloaded };
+}
+
+export async function scanChanges(): Promise<ChangesSnapshot> {
+  const { dirs: repoDirs, skippedOffloaded } = await listRepoDirs();
 
   const groups = await mapLimit(repoDirs, CONCURRENCY, async (dir) => ({
     dir,
@@ -519,4 +531,53 @@ function runBinary(cmd: string, args: string[]): Promise<Buffer | null> {
     child.on("error", () => resolve(null));
     child.on("close", (code) => resolve(code === 0 && bytes <= IMAGE_MAX_BYTES ? Buffer.concat(chunks) : null));
   });
+}
+
+// ─── 讀檔案的某一段（diff 的「展開更多上下文」用） ───────────────────────────
+
+export interface FileLines {
+  /** 這一段的內容，一行一個元素 */
+  lines: string[];
+  from: number;
+  to: number;
+  /** 整份檔案共幾行 —— 前端靠它知道「已經到檔尾了」 */
+  total: number;
+}
+
+/**
+ * 讀一個檔案的第 from..to 行（1-based，含頭含尾）。
+ *
+ * `rev` 空字串＝讀工作區現在的檔案，否則 `git show <rev>:<path>`。
+ * **機敏檔案在這裡也要擋**：diff 本來就不會帶它們的內容進來，但展開是另一條
+ * 讀取路徑，漏掉就等於開了一個後門（sensitive-files.md）。
+ */
+export async function readFileLines(
+  worktree: string,
+  file: string,
+  rev: string,
+  range: { from: number; to: number | null }
+): Promise<FileLines | { error: string }> {
+  const abs = path.resolve(worktree, file);
+  if (!abs.startsWith(worktree + path.sep)) return { error: "路徑不在這個工作區底下" };
+  if (isSensitivePath(file)) return { error: "機敏檔案，不顯示內容" };
+
+  let text: string;
+  if (rev) {
+    const r = await run("git", ["-C", worktree, "show", `${rev}:${file}`], { timeoutMs: 30_000 });
+    if (r.code !== 0) return { error: r.stderr.trim().slice(0, 200) || "讀不到這個版本" };
+    text = r.stdout;
+  } else {
+    const buf = await readFile(abs).catch(() => null);
+    if (!buf) return { error: "讀不到這個檔案" };
+    if (buf.subarray(0, 8192).includes(0)) return { error: "二進位檔" };
+    text = buf.toString("utf8");
+  }
+
+  // `git show` 與檔案讀出來都會有結尾換行，split 之後最後那個空字串不是一行
+  const all = text.split("\n");
+  if (all.length && all[all.length - 1] === "") all.pop();
+
+  const from = Math.max(1, range.from);
+  const to = Math.min(all.length, range.to ?? all.length);
+  return { lines: from > to ? [] : all.slice(from - 1, to), from, to, total: all.length };
 }

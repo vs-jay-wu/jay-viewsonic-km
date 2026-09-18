@@ -4,6 +4,7 @@ import "@/app/globals.css";
 import AppShell from "@/components/AppShell";
 import ConfirmProvider from "@/components/Confirm";
 import PromptProvider from "@/components/Prompt";
+import ToastProvider from "@/components/Toast";
 
 const geist = Geist({ subsets: ["latin"] });
 
@@ -17,7 +18,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${geist.className} h-full antialiased`}>
         <ConfirmProvider>
           <PromptProvider>
-            <AppShell>{children}</AppShell>
+            <ToastProvider>
+              <AppShell>{children}</AppShell>
+            </ToastProvider>
           </PromptProvider>
         </ConfirmProvider>
       </body>

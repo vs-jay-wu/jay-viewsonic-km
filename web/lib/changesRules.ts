@@ -305,3 +305,130 @@ export function buildTree<T extends { path: string }>(files: T[]): TreeNode<T>[]
   sortNodes(root.children);
   return compact(root.children);
 }
+
+// ─── diff 的「展開更多上下文」 ────────────────────────────────────────────────
+
+/**
+ * diff 裡沒顯示出來的那一段（GitHub 上是 `⋯` 那一條）。
+ *
+ * 行號一律用**新檔**那一側：context 行兩邊都有，而使用者讀的是改完的樣子。
+ * 整份檔案都被刪掉時沒有新側，那就不給展開（`contextGaps` 會回空陣列）。
+ */
+export interface ContextGap {
+  /** 插在 `lines` 的第幾個位置之前 */
+  atIndex: number;
+  /** 缺的是新檔的第幾行到第幾行（1-based，含頭含尾） */
+  from: number;
+  /** null ＝ 一路到檔尾（總行數要問後端才知道） */
+  to: number | null;
+}
+
+/** 一次展開幾行（GitHub 也是 20） */
+export const EXPAND_STEP = 20;
+
+/**
+ * 算出哪些地方可以展開。
+ *
+ * 做法是走一遍 `lines`，記住「上一次看到的新檔行號」，碰到 hunk 標頭時比對
+ * 下一段的起始行號 —— 中間差的就是沒顯示的那一段。
+ */
+export function contextGaps(lines: DiffLine[]): ContextGap[] {
+  const gaps: ContextGap[] = [];
+  let lastNew = 0;
+  let sawNew = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (l.kind !== "hunk") {
+      if (l.newNo !== null) {
+        lastNew = l.newNo;
+        sawNew = true;
+      }
+      continue;
+    }
+    // hunk 標頭後面第一個有新行號的，就是這一段的起點
+    let start: number | null = null;
+    for (let j = i + 1; j < lines.length; j++) {
+      if (lines[j].kind === "hunk") break;
+      if (lines[j].newNo !== null) {
+        start = lines[j].newNo;
+        break;
+      }
+    }
+    if (start !== null && start > lastNew + 1) {
+      gaps.push({ atIndex: i, from: lastNew + 1, to: start - 1 });
+    }
+  }
+
+  // 檔尾：不知道總行數，所以 to 給 null，由後端夾住
+  if (sawNew) gaps.push({ atIndex: lines.length, from: lastNew + 1, to: null });
+  return gaps;
+}
+
+/**
+ * 這一格要抓哪幾行。
+ *
+ * `up` ＝ 把**下面那段的上方**補出來（往上長），`down` ＝ 把**上面那段的下方**補出來。
+ * 兩者都一次 20 行；缺口本來就不到 20 行時一次補完。
+ */
+export function expandStep(
+  gap: ContextGap,
+  direction: "up" | "down" | "all"
+): { from: number; to: number | null } {
+  if (gap.to === null) {
+    // 檔尾那一格只能往下長
+    return { from: gap.from, to: gap.from + EXPAND_STEP - 1 };
+  }
+  const size = gap.to - gap.from + 1;
+  if (direction === "all" || size <= EXPAND_STEP) return { from: gap.from, to: gap.to };
+  return direction === "up"
+    ? { from: Math.max(gap.from, gap.to - EXPAND_STEP + 1), to: gap.to }
+    : { from: gap.from, to: gap.from + EXPAND_STEP - 1 };
+}
+
+/** 一個缺口攤開之後的片段：補到的行，或還沒補的那一段 */
+export type GapPiece =
+  | { kind: "line"; no: number }
+  | { kind: "gap"; from: number; to: number | null };
+
+/**
+ * 把一個缺口按「已經補到哪些行」拆成片段。
+ *
+ * **不能只從缺口開頭往後走**：往上展開時補到的是缺口**末端**那 20 行，
+ * 從開頭走會在第一行就停住，補進來的內容一列都畫不出來
+ * （2026-09-18 實測：按「往上展開」列數完全沒變）。所以要走完整段，
+ * 連續補到的畫成行、連續沒補到的合併成一條可以再按的缺口。
+ */
+export function splitGap(
+  gap: ContextGap,
+  has: (lineNo: number) => boolean,
+  total: number | null
+): GapPiece[] {
+  const out: GapPiece[] = [];
+  const end = gap.to ?? total;
+
+  if (end === null) {
+    // 檔尾而且還不知道總行數：只畫得出從 from 開始連續補到的那幾行
+    let n = gap.from;
+    while (has(n)) out.push({ kind: "line", no: n++ });
+    out.push({ kind: "gap", from: n, to: null });
+    return out;
+  }
+
+  let n = gap.from;
+  while (n <= end) {
+    if (has(n)) {
+      out.push({ kind: "line", no: n++ });
+      continue;
+    }
+    let m = n;
+    while (m <= end && !has(m)) m++;
+    out.push({ kind: "gap", from: n, to: m - 1 });
+    n = m;
+  }
+  // 檔尾那一格補完之後就不該再有按鈕
+  if (gap.to === null && total !== null && n > total) {
+    return out.filter((p) => p.kind !== "gap");
+  }
+  return out;
+}

@@ -480,6 +480,18 @@ function WorkChangesView() {
                   file={selected.file.path}
                   truncated={diff.truncated}
                   theme={diffTheme}
+                  loadLines={
+                    selected.file.kind === "untracked"
+                      ? undefined
+                      : (from, to) =>
+                          fetchDiffLines(
+                            selected.branch.worktree,
+                            selected.file.path,
+                            selected.sha ?? "",
+                            from,
+                            to
+                          )
+                  }
                 />
               ) : null}
             </>
@@ -488,4 +500,24 @@ function WorkChangesView() {
       </div>
     </div>
   );
+}
+
+/**
+ * 給 DiffView 抓「展開更多上下文」用的那幾行。
+ *
+ * rev 決定讀哪一版的新側：看單一 commit 是那個 sha，其餘（HEAD→工作區、
+ * base→工作區）都是工作區現在的檔案，所以是空字串。
+ */
+async function fetchDiffLines(
+  worktree: string,
+  file: string,
+  rev: string,
+  from: number,
+  to: number | null
+): Promise<{ lines: string[]; total: number } | null> {
+  const qs = new URLSearchParams({ worktree, file, rev, from: String(from) });
+  if (to !== null) qs.set("to", String(to));
+  const res = await fetch(`/api/changes/lines?${qs}`);
+  if (!res.ok) return null;
+  return (await res.json()) as { lines: string[]; total: number };
 }

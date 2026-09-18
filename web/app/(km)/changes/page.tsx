@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import DiffView from "@/components/DiffView";
 import ImageDiffView from "@/components/ImageDiffView";
 import { FileRow, TreeRows, ViewToggle, useFileView } from "@/components/FileList";
+import { DragHandle, useDragWidth, useWideLayout } from "@/components/Split";
 import { hljsHref, type DiffTheme } from "@/lib/uiSettingsRules";
 import {
   KIND_CLS, KIND_LABEL, KIND_TITLE, buildTree, countByKind,
@@ -26,11 +27,6 @@ interface Snapshot {
 const DEFAULT_PANE_W = 384;
 const MIN_PANE_W = 220;
 const MAX_PANE_W = 900;
-const WIDE_QUERY = "(min-width: 1024px)";
-
-function clampPaneW(w: number): number {
-  return Math.min(MAX_PANE_W, Math.max(MIN_PANE_W, Math.round(w)));
-}
 
 interface Selected {
   worktree: string;
@@ -48,24 +44,6 @@ interface DiffPayload {
   error?: string;
 }
 
-/**
- * 雙欄版面（lg 以上）才套自訂寬度 —— 窄螢幕的清單是整頁寬，硬套會變成一條細長條。
- *
- * 用 `useSyncExternalStore` 而不是 effect＋setState：後者第一幀一定是 false，
- * 會先用預設寬度畫一次再跳成使用者的寬度（而且 lint 也會擋 effect 裡同步 setState）。
- */
-function useWideLayout(): boolean {
-  return useSyncExternalStore(
-    (cb) => {
-      const mq = window.matchMedia(WIDE_QUERY);
-      mq.addEventListener("change", cb);
-      return () => mq.removeEventListener("change", cb);
-    },
-    () => window.matchMedia(WIDE_QUERY).matches,
-    () => false // SSR：先當窄螢幕，掛載後立刻校正
-  );
-}
-
 export default function ChangesPage() {
   const wide = useWideLayout();
   const [data, setData] = useState<Snapshot | null>(null);
@@ -81,51 +59,25 @@ export default function ChangesPage() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   /** 清單要平鋪還是樹狀（VS Code 的 List／Tree）。跟「這條線的改動」共用同一個偏好 */
   const [view, switchView] = useFileView();
-  /** 左欄寬度（px）。只在雙欄版面（lg 以上）才套用 */
-  const [paneW, setPaneW] = useState(DEFAULT_PANE_W);
-  const dragging = useRef(false);
   const paneRef = useRef<HTMLDivElement>(null);
+  /** 左欄寬度。拖的是左欄，寬度就是「滑鼠 − 左緣」 */
+  const listPane = useDragWidth({
+    storageKey: "km.changes.paneW",
+    defaultWidth: DEFAULT_PANE_W,
+    min: MIN_PANE_W,
+    max: MAX_PANE_W,
+    measure: (clientX) => clientX - (paneRef.current?.getBoundingClientRect().left ?? 0),
+  });
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem("km.changes.collapsed");
       if (raw) setCollapsed(new Set(JSON.parse(raw) as string[]));
-      const w = Number(localStorage.getItem("km.changes.paneW"));
-      if (Number.isFinite(w) && w > 0) setPaneW(clampPaneW(w));
     } catch {
       /* 讀不到就用預設值 */
     }
   }, []);
 
-
-  // 拖左欄邊界。監聽掛在 window 上，滑鼠衝出分隔線也不會斷
-  useEffect(() => {
-    const widthAt = (clientX: number) =>
-      clampPaneW(clientX - (paneRef.current?.getBoundingClientRect().left ?? 0));
-    const onMove = (e: PointerEvent) => {
-      if (!dragging.current) return;
-      e.preventDefault();
-      setPaneW(widthAt(e.clientX));
-    };
-    // 存的是**從這個事件重算**的寬度，不是讀 state：拖曳過程沒有等 React 重繪的保證，
-    // 讀 state／ref 會存到上一次的值
-    const onUp = (e: PointerEvent) => {
-      if (!dragging.current) return;
-      dragging.current = false;
-      document.body.style.removeProperty("user-select");
-      try {
-        localStorage.setItem("km.changes.paneW", String(widthAt(e.clientX)));
-      } catch {
-        /* 存不了就算了 */
-      }
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-  }, []);
 
   const toggleCollapsed = (key: string) => {
     setCollapsed((prev) => {
@@ -321,7 +273,7 @@ export default function ChangesPage() {
         {/* 清單。選了檔案之後窄螢幕就讓位給 diff */}
         <div
           ref={paneRef}
-          style={wide ? { width: paneW, flex: "0 0 auto" } : undefined}
+          style={wide ? { width: listPane.width, flex: "0 0 auto" } : undefined}
           className={`flex min-h-0 flex-col border-gray-200 lg:border-r ${
             selected ? "hidden lg:flex" : "flex-1"
           }`}
@@ -457,24 +409,8 @@ export default function ChangesPage() {
           </div>
         </div>
 
-        {/* 拖這裡改左欄寬度。窄螢幕是上下排版，沒有這條 */}
-        <div
-          onPointerDown={(e) => {
-            e.preventDefault();
-            dragging.current = true;
-            document.body.style.userSelect = "none";
-          }}
-          onDoubleClick={() => {
-            setPaneW(DEFAULT_PANE_W);
-            try {
-              localStorage.setItem("km.changes.paneW", String(DEFAULT_PANE_W));
-            } catch {
-              /* 存不了就算了 */
-            }
-          }}
-          title="拖曳改寬度（雙擊回預設）"
-          className="hidden w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-sky-300 active:bg-sky-400 lg:block"
-        />
+        {/* 拖這裡改左欄寬度 */}
+        <DragHandle handleProps={listPane.handleProps} />
 
         {/* diff */}
         <div className={`min-h-0 flex-1 overflow-y-auto ${selected ? "" : "hidden lg:block"}`}>
@@ -541,6 +477,12 @@ export default function ChangesPage() {
                   file={selected.file.path}
                   truncated={diff.truncated}
                   theme={diffTheme}
+                  // 未追蹤的檔案整份都是新的，沒有「更多上下文」可言
+                  loadLines={
+                    selected.file.kind === "untracked"
+                      ? undefined
+                      : (from, to) => fetchDiffLines(selected.worktree, selected.file.path, "", from, to)
+                  }
                 />
               ) : null}
             </>
@@ -559,4 +501,24 @@ function FileBadges({ file }: { file: ChangedFile }) {
       {file.staged && <span className="shrink-0 text-[10px] text-emerald-600">staged</span>}
     </>
   );
+}
+
+/**
+ * 給 DiffView 抓「展開更多上下文」用的那幾行。
+ *
+ * rev 決定讀哪一版的新側：看單一 commit 是那個 sha，其餘（HEAD→工作區、
+ * base→工作區）都是工作區現在的檔案，所以是空字串。
+ */
+async function fetchDiffLines(
+  worktree: string,
+  file: string,
+  rev: string,
+  from: number,
+  to: number | null
+): Promise<{ lines: string[]; total: number } | null> {
+  const qs = new URLSearchParams({ worktree, file, rev, from: String(from) });
+  if (to !== null) qs.set("to", String(to));
+  const res = await fetch(`/api/changes/lines?${qs}`);
+  if (!res.ok) return null;
+  return (await res.json()) as { lines: string[]; total: number };
 }

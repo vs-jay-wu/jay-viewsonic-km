@@ -16,6 +16,8 @@ const TOOLS: { href: string; label: string; icon: IconName }[] = [
   { href: "/my-prs", label: "我的 PR", icon: "gitPr" },
   { href: "/vb-bugs", label: "VB Bug 總覽", icon: "alert" },
   { href: "/changes", label: "未提交的改動", icon: "code" },
+  { href: "/git", label: "Repo 檢視", icon: "repos" },
+  { href: "/code", label: "程式碼", icon: "code" },
   { href: "/docs", label: "文件", icon: "clipboard" },
   { href: "/sessions", label: "Claude Sessions", icon: "layers" },
   { href: "/settings", label: "設定", icon: "cpu" },

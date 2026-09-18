@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildTree, countByKind, diffStat, formatBytes, imageMimeOf,
+  buildTree, contextGaps, countByKind, diffStat, expandStep, formatBytes, imageMimeOf, splitGap,
   languageOf, parseDiff, parseStatus, parseStatusLine,
-  type ChangedFile,
+  type ChangedFile, type DiffLine,
 } from "@/lib/changesRules";
 
 describe("parseStatusLine — 前兩個字元是固定欄位，不能用空白切", () => {
@@ -181,5 +181,103 @@ describe("buildTree", () => {
     const t = buildTree([f("a/b/x.ts")]);
     expect(t[0].path).toBe("a/b");
     expect(t[0].children[0].path).toBe("a/b/x.ts");
+  });
+});
+
+describe("contextGaps — diff 裡沒顯示的那幾段", () => {
+  const d = (kind: DiffLine["kind"], oldNo: number | null, newNo: number | null): DiffLine =>
+    ({ kind, text: "", oldNo, newNo });
+
+  it("兩個 hunk 之間、以及第一個 hunk 之前的缺口都算得出來", () => {
+    // hunk @@ 10..12 @@，然後 hunk @@ 50..51 @@
+    const lines: DiffLine[] = [
+      d("hunk", null, null),
+      d("context", 10, 10), d("add", null, 11), d("context", 11, 12),
+      d("hunk", null, null),
+      d("context", 49, 50), d("context", 50, 51),
+    ];
+    expect(contextGaps(lines)).toEqual([
+      { atIndex: 0, from: 1, to: 9 },    // 檔頭到第一個 hunk
+      { atIndex: 4, from: 13, to: 49 },  // 兩個 hunk 之間
+      { atIndex: 7, from: 52, to: null },// 最後一段到檔尾
+    ]);
+  });
+
+  it("hunk 從第 1 行開始時，前面沒有缺口", () => {
+    const lines: DiffLine[] = [d("hunk", null, null), d("context", 1, 1)];
+    expect(contextGaps(lines)).toEqual([{ atIndex: 2, from: 2, to: null }]);
+  });
+
+  it("整份被刪掉（沒有新側）就不給展開", () => {
+    const lines: DiffLine[] = [d("hunk", null, null), d("del", 1, null), d("del", 2, null)];
+    expect(contextGaps(lines)).toEqual([]);
+  });
+});
+
+describe("expandStep", () => {
+  it("缺口不到 20 行就一次補完", () => {
+    expect(expandStep({ atIndex: 0, from: 5, to: 12 }, "up")).toEqual({ from: 5, to: 12 });
+  });
+
+  it("往上長＝貼著下面那段補；往下長＝貼著上面那段補", () => {
+    const gap = { atIndex: 0, from: 1, to: 100 };
+    expect(expandStep(gap, "up")).toEqual({ from: 81, to: 100 });
+    expect(expandStep(gap, "down")).toEqual({ from: 1, to: 20 });
+    expect(expandStep(gap, "all")).toEqual({ from: 1, to: 100 });
+  });
+
+  it("檔尾那一格不知道總行數，只能往下要一段", () => {
+    expect(expandStep({ atIndex: 9, from: 52, to: null }, "down")).toEqual({ from: 52, to: 71 });
+  });
+});
+
+describe("splitGap — 補到的行可能在缺口的任何位置", () => {
+  const has = (...ns: number[]) => (n: number) => ns.includes(n);
+
+  it("往上展開：補在缺口末端也要畫得出來（踩過的 bug）", () => {
+    // 缺口 1–10，補到的是 8、9、10
+    expect(splitGap({ atIndex: 0, from: 1, to: 10 }, has(8, 9, 10), null)).toEqual([
+      { kind: "gap", from: 1, to: 7 },
+      { kind: "line", no: 8 },
+      { kind: "line", no: 9 },
+      { kind: "line", no: 10 },
+    ]);
+  });
+
+  it("往下展開：補在開頭", () => {
+    expect(splitGap({ atIndex: 0, from: 1, to: 5 }, has(1, 2), null)).toEqual([
+      { kind: "line", no: 1 },
+      { kind: "line", no: 2 },
+      { kind: "gap", from: 3, to: 5 },
+    ]);
+  });
+
+  it("兩頭都補過、中間還缺一段", () => {
+    expect(splitGap({ atIndex: 0, from: 1, to: 6 }, has(1, 6), null)).toEqual([
+      { kind: "line", no: 1 },
+      { kind: "gap", from: 2, to: 5 },
+      { kind: "line", no: 6 },
+    ]);
+  });
+
+  it("補滿了就不再留按鈕", () => {
+    expect(splitGap({ atIndex: 0, from: 1, to: 3 }, has(1, 2, 3), null)).toEqual([
+      { kind: "line", no: 1 }, { kind: "line", no: 2 }, { kind: "line", no: 3 },
+    ]);
+  });
+
+  it("檔尾（不知道總行數）：補到的畫出來，後面還留一條", () => {
+    expect(splitGap({ atIndex: 9, from: 5, to: null }, has(5, 6), null)).toEqual([
+      { kind: "line", no: 5 },
+      { kind: "line", no: 6 },
+      { kind: "gap", from: 7, to: null },
+    ]);
+  });
+
+  it("檔尾補到底之後按鈕消失", () => {
+    expect(splitGap({ atIndex: 9, from: 5, to: null }, has(5, 6), 6)).toEqual([
+      { kind: "line", no: 5 },
+      { kind: "line", no: 6 },
+    ]);
   });
 });

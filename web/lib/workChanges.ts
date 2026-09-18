@@ -1,7 +1,7 @@
 import { readFile, mkdir, stat, writeFile } from "fs/promises";
 import path from "path";
 import { repoPath, run } from "@/lib/repo";
-import { mapLimit, statusOf, workspace, worktreesOf } from "@/lib/changes";
+import { listRepoDirs, mapLimit, statusOf, workspace, worktreesOf } from "@/lib/changes";
 import { getWorkIndex } from "@/lib/workIndex";
 import { canonicalRepo, parseSessionTitle } from "@/lib/workItemRules";
 import type { WorkItem } from "@/lib/workIndexRules";
@@ -169,20 +169,49 @@ export async function workChanges(key: string): Promise<WorkChanges | { error: s
 
   // 候選：候選 repo 的每個 worktree ＋ 手動加入的路徑
   const candidates: { repo: string; worktree: string; branch: string | null }[] = [];
+  const seen = new Set<string>();
+  const add = (repo: string, worktree: string, branch: string | null) => {
+    const key = path.resolve(worktree);
+    if (seen.has(key)) return;
+    seen.add(key);
+    candidates.push({ repo, worktree, branch });
+  };
   for (const [repo, dir] of paths) {
-    for (const w of await worktreesOf(dir)) candidates.push({ repo, worktree: w.path, branch: w.branch });
+    for (const w of await worktreesOf(dir)) add(repo, w.path, w.branch);
+  }
+
+  /*
+   * **再掃一次全工作區，找分支名含票號的 worktree。**
+   *
+   * 只靠 session 標題與 PR 推 repo 是不夠的，而且**不是因為標題寫錯**：
+   * 標題的子 repo 本來就是選填（`[km] VB-2267 …` 完全合法），所以那一格
+   * 常常只有 `km`，根本沒有指出工作在哪個 repo。VB-2267 就是這樣 —— 實際工作在
+   * `edu-droid-flutter-vb-2267`（分支 `Jay/VB-2267-white-logo-dark-theme`），
+   * 舊的判準一個分支都找不到（Jay 2026-09-17 回報）。
+   *
+   * **分支名才是 git 裡的事實**，標題是人／agent 當下打的字 —— 關聯要建在前者上。
+   *
+   * 成本：每個 repo 一次 `git worktree list`（「未提交的改動」本來就在做同樣的事，
+   * 129 個 repo 約一秒）。只有這條線有票號時才做。
+   */
+  if (item.ticketKey) {
+    const { dirs } = await listRepoDirs();
+    const extra = await mapLimit(dirs, CONCURRENCY, async (dir) => {
+      const wts = await worktreesOf(dir);
+      const repo = path.basename(wts[0]?.path ?? dir);
+      return wts
+        .filter((w) => branchMatchesTicket(w.branch, item.ticketKey))
+        .map((w) => ({ repo, worktree: w.path, branch: w.branch }));
+    });
+    for (const list of extra) for (const c of list) add(c.repo, c.worktree, c.branch);
   }
   for (const w of manual) {
-    if (candidates.some((c) => c.worktree === w)) continue;
+    if (seen.has(path.resolve(w))) continue;
     const wts = await worktreesOf(w).catch(() => []);
     const self = wts.find((x) => path.resolve(x.path) === path.resolve(w));
     // repo 名要取**主 worktree** 的目錄名，不是這個路徑的 —— linked worktree 可以
     // 叫任何名字（`~/.mvb-worktrees/poc-desktop-mode` 的 repo 其實是 edu-mvb-mac-playground）
-    candidates.push({
-      repo: path.basename(wts[0]?.path ?? w),
-      worktree: w,
-      branch: self?.branch ?? null,
-    });
+    add(path.basename(wts[0]?.path ?? w), w, self?.branch ?? null);
   }
 
   // 收不收進來：分支名含票號／是這條線 PR 的 repo 主分支／手動加入／commit 帶 trailer

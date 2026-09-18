@@ -29,9 +29,13 @@ export interface WorkRef {
   ticketGuessed: boolean;
   /** `PR#237` 這種寫法解析出來的編號（無單的工作用這個關聯） */
   prNumber: number | null;
-  /** `[km/mvbf]` 裡的完整內容 */
+  /** `[km/mvbf]` 裡的完整內容；只有 `[km]` 時就是 `km` */
   scope: string | null;
-  /** scope 的最後一段，通常就是 repo 別名 */
+  /**
+   * scope 的最後一段。**這只是線索，不是「工作在哪個 repo」的答案** ——
+   * 子 repo 是選填的（`[km] VB-2267 …` 完全合法），所以它常常就是 `km`。
+   * 要知道改動在哪，去看分支名／PR（`lib/workChanges.ts` 就是這樣找的）。
+   */
   repo: string | null;
   /** 去掉 key／PR 之後剩下的描述 */
   desc: string;

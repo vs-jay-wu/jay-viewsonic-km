@@ -1,0 +1,408 @@
+"use client";
+
+import { useState } from "react";
+import Icon from "@/components/Icon";
+import Tooltip from "@/components/Tooltip";
+import { FileRow, TreeRows, type ViewMode } from "@/components/FileList";
+import { buildTree, type ChangedFile } from "@/lib/changesRules";
+import { laneColor, type Commit, type Graph, type GraphRow } from "@/lib/gitViewRules";
+
+/**
+ * commit 歷史 ＋ 左邊的 graph。
+ *
+ * 一列一個 commit，graph 用 SVG 畫在同一列裡（不是整張大圖），這樣 hover、展開、
+ * 捲動都跟一般清單一樣，不必自己算捲動位置。走線的計算在 `lib/gitViewRules.ts`
+ * 的 `layoutGraph`（有測試），這裡只負責畫。
+ *
+ * 兩個踩過的坑（Jay 2026-09-16 對照 VS Code 回報）：
+ *
+ * 1. **列高一定要釘死**。原本讓內容決定高度、SVG 固定 26px，於是每一列的線
+ *    上下都留一截空白，整條線看起來是虛線。分支標籤會把列撐高，落差更明顯。
+ * 2. **展開的區塊也要把線接下去**。VS Code 展開檔案清單時左邊的線是連續的；
+ *    只畫在 commit 那一列的話，一展開線就斷一大段。
+ */
+
+/** 一列的高度（px）。**釘死**，不讓內容決定 —— 見檔頭第 1 點 */
+const ROW_H = 26;
+const LANE_W = 14;
+const DOT_R = 3.5;
+
+const x = (lane: number) => lane * LANE_W + LANE_W / 2;
+
+/**
+ * 一段線的顏色取「比較右邊的那條 lane」。
+ *
+ * 往右開出去＝新分支，用新 lane 的顏色；往左收回去＝那條分支結束，用它自己的顏色。
+ * 一條規則同時涵蓋兩種，而且**同一條分支從頭到尾都是同一個顏色**（眼睛才追得下去）。
+ */
+const linkColor = (from: number, to: number) => laneColor(Math.max(from, to));
+
+export default function CommitGraph({
+  commits,
+  graph,
+  openSha,
+  info,
+  onToggle,
+  onOpenFile,
+  view,
+  collapsedDirs,
+  onToggleDir,
+  openFile,
+  flashSha,
+  wip,
+}: {
+  commits: Commit[];
+  graph: Graph;
+  openSha: string | null;
+  info: Record<string, { message: string; files: ChangedFile[] }>;
+  onToggle: (sha: string) => void;
+  onOpenFile: (sha: string | null, file: ChangedFile) => void;
+  /** 展開後的檔案清單要平鋪還是樹狀（跟其他頁共用同一個偏好） */
+  view: ViewMode;
+  collapsedDirs: Set<string>;
+  onToggleDir: (key: string) => void;
+  openFile: { sha: string | null; path: string } | null;
+  /** 剛跳過去的那一列，短暫highlight —— 不然在一百多列裡看不出停在哪 */
+  flashSha?: string | null;
+  /** 未提交的改動。畫在最上面一列，圓圈是虛線（照 VS Code） */
+  wip?: {
+    files: ChangedFile[];
+    open: boolean;
+    onToggle: () => void;
+  };
+}) {
+  const width = Math.max(1, graph.width) * LANE_W;
+  // WIP 那一列要畫在 HEAD 所在的 lane 上，並連到下面第一列
+  const wipLane = graph.rows[0]?.lane ?? 0;
+  const hasWip = !!wip && wip.files.length > 0;
+
+  return (
+    <ul>
+      {hasWip && wip && (
+        <li>
+          <button
+            onClick={wip.onToggle}
+            style={{ height: ROW_H }}
+            className={`flex w-full items-center gap-2 overflow-hidden text-left hover:bg-gray-50 ${
+              wip.open ? "bg-sky-50" : ""
+            }`}
+          >
+            <svg width={width} height={ROW_H} className="shrink-0" aria-hidden>
+              {/* 往下接到第一個 commit */}
+              <line
+                x1={x(wipLane)}
+                y1={ROW_H / 2}
+                x2={x(wipLane)}
+                y2={ROW_H}
+                stroke={laneColor(wipLane)}
+                strokeWidth={1.5}
+              />
+              {/* 虛線圓圈＝還沒進版控 */}
+              <circle
+                cx={x(wipLane)}
+                cy={ROW_H / 2}
+                r={DOT_R + 0.5}
+                fill="#fff"
+                stroke={laneColor(wipLane)}
+                strokeWidth={1.5}
+                strokeDasharray="2 2"
+              />
+            </svg>
+            <span className="flex min-w-0 flex-1 items-center gap-2 pr-3 text-xs">
+              <span className="shrink-0 rounded-full border border-dashed border-gray-300 px-1.5 font-mono text-[10px] leading-[14px] text-gray-500">
+                未提交
+              </span>
+              <span className="min-w-0 flex-1 truncate text-gray-700">
+                {wip.files.length} 個檔案還沒 commit
+              </span>
+            </span>
+          </button>
+
+          {wip.open && (
+            <ExpandedFiles
+              width={width}
+              lanes={[wipLane]}
+              files={wip.files}
+              keyPrefix="wip"
+              view={view}
+              collapsedDirs={collapsedDirs}
+              onToggleDir={onToggleDir}
+              openPath={openFile && openFile.sha === null ? openFile.path : null}
+              onOpenFile={(f) => onOpenFile(null, f)}
+            />
+          )}
+        </li>
+      )}
+      {commits.map((c, i) => {
+        const row = graph.rows[i];
+        const open = openSha === c.sha;
+        /*
+         * 第一列的上半格。
+         *
+         * `layoutGraph` 不知道有「未提交」那一列，所以第一個 commit 的 `up` 是空的
+         * （沒有任何 lane 在等它）。上面畫了未提交那一列時，這半格要自己補，
+         * 否則虛線圓圈與第一個 commit 之間會缺半列（Jay 2026-09-17 回報）。
+         */
+        const joinWip = i === 0 && hasWip && row;
+        return (
+          <li key={c.sha} data-sha={c.sha}>
+            <button
+              onClick={() => onToggle(c.sha)}
+              style={{ height: ROW_H }}
+              className={`flex w-full items-center gap-2 overflow-hidden text-left transition-colors hover:bg-gray-50 ${
+                flashSha === c.sha ? "bg-amber-100" : open ? "bg-sky-50" : ""
+              }`}
+            >
+              <svg width={width} height={ROW_H} className="shrink-0" aria-hidden>
+                {joinWip && (
+                  <line
+                    x1={x(row.lane)}
+                    y1={0}
+                    x2={x(row.lane)}
+                    y2={ROW_H / 2}
+                    stroke={laneColor(row.lane)}
+                    strokeWidth={1.5}
+                  />
+                )}
+                {row?.up.map((l, k) => (
+                  <path
+                    key={`u${k}`}
+                    d={`M ${x(l.from)} 0 C ${x(l.from)} ${ROW_H / 4}, ${x(l.to)} ${ROW_H / 4}, ${x(l.to)} ${ROW_H / 2}`}
+                    stroke={linkColor(l.from, l.to)}
+                    strokeWidth={1.5}
+                    fill="none"
+                  />
+                ))}
+                {row?.down.map((l, k) => (
+                  <path
+                    key={`d${k}`}
+                    d={`M ${x(l.from)} ${ROW_H / 2} C ${x(l.from)} ${(ROW_H * 3) / 4}, ${x(l.to)} ${(ROW_H * 3) / 4}, ${x(l.to)} ${ROW_H}`}
+                    stroke={linkColor(l.from, l.to)}
+                    strokeWidth={1.5}
+                    fill="none"
+                  />
+                ))}
+                {row && (
+                  <circle
+                    cx={x(row.lane)}
+                    cy={ROW_H / 2}
+                    r={c.parents.length > 1 ? DOT_R + 1 : DOT_R}
+                    fill={c.parents.length > 1 ? "#fff" : laneColor(row.lane)}
+                    stroke={laneColor(row.lane)}
+                    strokeWidth={1.5}
+                  />
+                )}
+              </svg>
+
+              <span className="flex min-w-0 flex-1 items-center gap-2 pr-3 text-xs">
+                {c.refs.map((r) => (
+                  <span
+                    key={r.name}
+                    className={`shrink-0 rounded-full border px-1.5 font-mono text-[10px] leading-[14px] ${
+                      r.kind === "head"
+                        ? "border-sky-300 bg-sky-50 text-sky-700"
+                        : r.kind === "remote"
+                          ? "border-gray-200 bg-gray-50 text-gray-500"
+                          : r.kind === "tag"
+                            ? "border-amber-200 bg-amber-50 text-amber-700"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    }`}
+                  >
+                    {r.kind === "head" && "HEAD → "}
+                    {r.name}
+                  </span>
+                ))}
+                <span className="min-w-0 flex-1 truncate text-gray-800">{c.subject}</span>
+                <span className="shrink-0 font-mono text-[11px] text-gray-300">{c.shortSha}</span>
+                <span className="w-16 shrink-0 truncate text-right text-[11px] text-gray-400">
+                  {c.author}
+                </span>
+                <span className="w-20 shrink-0 text-right text-[11px] text-gray-400">
+                  {c.date.slice(0, 10)}
+                </span>
+              </span>
+            </button>
+
+            {open && (
+              <Expanded
+                commit={c}
+                row={row}
+                width={width}
+                info={info[c.sha]}
+                onOpenFile={(f) => onOpenFile(c.sha, f)}
+                view={view}
+                collapsedDirs={collapsedDirs}
+                onToggleDir={onToggleDir}
+                openPath={openFile?.sha === c.sha ? openFile.path : null}
+              />
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** 展開的內容：**檔案清單**（照 VS Code 的預設），訊息全文要按才看得到 */
+function Expanded({
+  commit,
+  row,
+  width,
+  info,
+  onOpenFile,
+  view,
+  collapsedDirs,
+  onToggleDir,
+  openPath,
+}: {
+  commit: Commit;
+  row: GraphRow | undefined;
+  width: number;
+  info?: { message: string; files: ChangedFile[] };
+  onOpenFile: (f: ChangedFile) => void;
+  view: ViewMode;
+  collapsedDirs: Set<string>;
+  onToggleDir: (key: string) => void;
+  openPath: string | null;
+}) {
+  const [showMessage, setShowMessage] = useState(false);
+  // 訊息只有 subject 那一行時，再給一顆「訊息」按鈕只會讓人白按一次
+  const hasBody = !!info && info.message.trim() !== commit.subject.trim();
+
+  if (!info) {
+    return (
+      <ExpandedFiles width={width} lanes={(row?.down ?? []).map((l) => l.to)} files={[]} keyPrefix={commit.sha}
+        view={view} collapsedDirs={collapsedDirs} onToggleDir={onToggleDir} openPath={null}
+        onOpenFile={onOpenFile} header={<span className="text-[11px] text-gray-400">讀取中…</span>} />
+    );
+  }
+
+  return (
+    <ExpandedFiles
+      width={width}
+      lanes={(row?.down ?? []).map((l) => l.to)}
+      files={info.files}
+      keyPrefix={commit.sha}
+      view={view}
+      collapsedDirs={collapsedDirs}
+      onToggleDir={onToggleDir}
+      openPath={openPath}
+      onOpenFile={onOpenFile}
+      header={
+        <>
+          <div className="flex items-center gap-2 text-[11px] text-gray-400">
+            <span>{info.files.length} 個檔案</span>
+            {hasBody && (
+              <button
+                onClick={() => setShowMessage((v) => !v)}
+                className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-1.5 py-px text-gray-600 hover:bg-gray-50"
+              >
+                <Icon name={showMessage ? "chevronDown" : "chevronRight"} size={10} />
+                訊息
+              </button>
+            )}
+            <span className="font-mono text-gray-300">{commit.sha}</span>
+          </div>
+          {showMessage && (
+            <pre className="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap rounded border border-gray-200 bg-white px-2 py-1.5 font-mono text-[11px] leading-relaxed text-gray-700">
+              {info.message}
+            </pre>
+          )}
+        </>
+      }
+    />
+  );
+}
+
+/**
+ * 展開區塊：左邊把 graph 的線接下去，右邊是檔案清單。
+ *
+ * commit 與「未提交的改動」共用同一個 —— 兩種展開看起來要一樣，
+ * 各寫一份會在縮排、狀態字母、樹狀切換上慢慢長歪。
+ */
+function ExpandedFiles({
+  width,
+  lanes,
+  files,
+  keyPrefix,
+  view,
+  collapsedDirs,
+  onToggleDir,
+  openPath,
+  onOpenFile,
+  header,
+}: {
+  width: number;
+  /** 這一段要往下延續的 lane */
+  lanes: number[];
+  files: ChangedFile[];
+  keyPrefix: string;
+  view: ViewMode;
+  collapsedDirs: Set<string>;
+  onToggleDir: (key: string) => void;
+  openPath: string | null;
+  onOpenFile: (f: ChangedFile) => void;
+  header?: React.ReactNode;
+}) {
+  return (
+    <div className="relative flex bg-gray-50">
+      {/* 展開區塊裡把線接下去。`preserveAspectRatio="none"` ＋ 直線，
+          高度隨內容拉長也不會變形（曲線才會） */}
+      <svg
+        width={width}
+        className="absolute inset-y-0 left-0"
+        height="100%"
+        viewBox={`0 0 ${width} 10`}
+        preserveAspectRatio="none"
+        aria-hidden
+      >
+        {lanes.map((lane, k) => (
+          <line
+            key={k}
+            x1={x(lane)}
+            y1={0}
+            x2={x(lane)}
+            y2={10}
+            stroke={laneColor(lane)}
+            strokeWidth={1.5}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+      </svg>
+
+      <div style={{ width }} className="shrink-0" />
+      <div className="min-w-0 flex-1 border-y border-gray-100 py-1.5 pr-3">
+        {header}
+        <div className="-ml-4 mt-1">
+          {view === "list" ? (
+            files.map((f) => (
+              <FileRow
+                key={f.path}
+                file={f}
+                label="path"
+                selected={openPath === f.path}
+                onOpen={() => onOpenFile(f)}
+                trailing={
+                  f.from ? (
+                    <Tooltip label={`從 ${f.from} 改名`}>
+                      <span className="shrink-0 text-[10px] text-sky-600">R</span>
+                    </Tooltip>
+                  ) : undefined
+                }
+              />
+            ))
+          ) : (
+            <TreeRows
+              nodes={buildTree(files)}
+              keyPrefix={keyPrefix}
+              collapsed={collapsedDirs}
+              onToggle={onToggleDir}
+              selectedPath={openPath}
+              onOpen={onOpenFile}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
