@@ -70,6 +70,34 @@ IPC 契約在 `docs/mvb-ipc-spec.md`，對面是 mvbf（見 [[mvbf]] skill）。
 
 改動 `app/src/main/res/navigation/nav_graph.xml` 的分支之間切換後，fusion build 會噴：
 
+### 差異不只在 build 與登入 —— 執行期行為也不同
+
+**別把一邊量到的結論套到另一邊**（2026-09-17 我在同一天犯了三次，見 km rules
+`cross-system-claims.md` §1）。已查證的差異：
+
+| 行為 | 獨立 app | fusion |
+|---|---|---|
+| 靠 `onDestroy` 收尾的清理 | `quitApp()` 最後 `killProcess`，process 死 → 一切歸零 | **process 不死**，而且 MVB 的 `bindService(BIND_AUTO_CREATE)` binding 一直活著 → `stopService()` **不會** destroy service、`onDestroy()` 不執行 → 寫在那裡的清理全都不跑 |
+| 前景服務的通知何時消失 | 隨 process 死亡消失 | 啟用後留到 process 結束（上一列的後果之一：`stopForeground(STOP_FOREGROUND_REMOVE)` 在 `onDestroy` 裡）。VB-2291 在處理 |
+| 浮窗何時收起 | CS 自己沒有生命週期判斷 → 不收 | 由 **mvbf 的 Dart 層**送 `MvbVisibility(all_hide / all_show)` 決定（`classswift_bloc.dart`）。改這類行為要去 mvbf 找，不是 CS |
+| Kotlin `object` 的狀態 | killProcess 歸零 | 留到下個 session（`stopKoin()` 碰不到 classloader 層） |
+
+**最容易踩的通則**：fusion 下**任何依賴「process 會死」或「service 會被 destroy」的設計都不成立**。
+看到 `onDestroy` / `killProcess` / `object` 裡的狀態，先問「fusion 走得到嗎」。
+
+證據：`ClassSwiftFusionQuitBridge.kt` 的類別註解（mvbf 端）寫明「融合後 process 不死、
+binder 永遠不會斷（真機實測 2026-08-03）」；`ClassSwiftService.kt` 的 `onStartCommand`
+註解寫明有 bound client 時 `stopServiceTokenLocked` 不會清 `fgRequired`。
+`object` 那列見 km `docs/repositories/Viewsonic-EDU/edu-droid-flutter/features/classswift-embedded-apk/findings.html`（R19）。
+
+查證指令（判斷服務現在到底是什麼狀態，比看畫面可靠）：
+
+```bash
+adb shell dumpsys activity services com.viewsonic.droid | grep -A45 'ServiceRecord{.*ClassSwiftService'
+# isForeground / types=0x…（0x200=remoteMessaging、0x20=mediaProjection）
+# startRequested（stopService 有沒有被呼叫過）/ Bindings: 底下的 IntentBindRecord
+```
+
 ```
 e: .../build/classswift/generated/source/navigation-args/.../XxxFragmentDirections.kt
    Unresolved reference 'action_to_xxx'

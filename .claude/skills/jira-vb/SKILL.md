@@ -184,3 +184,21 @@ token 不自帶身分，Basic auth 的帳號欄位就是 email。實測 `Bearer 
 2. 有相關單就建連結（`jira_create_issue_link`，`Relates`）。
 3. **VSFT 沒有刪除權限**——開錯專案時只能留作廢留言＋轉 CLOSED，並記得清掉舊單的 issue link
    與其他地方（PR 描述、其他單的留言）的引用。
+### 附件路徑必須在 km repo 底下
+
+`jira_update_issue` 的 `attachments` 會拒絕 km repo 以外的路徑：
+
+```
+Path traversal detected: /tmp/... resolves outside /Users/jay.wj.wu/ProjectsWork_GitHub/jay-viewsonic-km
+```
+
+（2026-09-17 實測，VB-2294 傳截圖。）**scratchpad 在 `/tmp` 底下，所以不能直接傳。**
+做法：在 km 裡開暫存目錄（例 `.tmp-jira-attach/`）→ 複製過去 → 傳 → 刪掉 →
+`git status --porcelain` 確認沒殘留。
+
+檔名會**原樣**出現在 Jira，所以複製時就取有意義的名字
+（`recents-overlay-covers-recents.png`，不是 `shot2.png`），
+並在描述裡用 `{{檔名}}` 指過去。
+
+---
+
