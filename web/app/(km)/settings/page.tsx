@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Icon from "@/components/Icon";
-import { DEFAULT_UI_SETTINGS, type DiffTheme, type UiSettings } from "@/lib/uiSettingsRules";
+import {
+  DEFAULT_UI_SETTINGS, REVIEW_ENGINES, type DiffTheme, type UiSettings,
+} from "@/lib/uiSettingsRules";
 
 /**
- * 設定。目前只有一項（Jay 2026-09-14：先維持一項就好）。
+ * 設定。
  *
  * 設定存在 server（`data/local-state/ui-settings.json`）而不是 localStorage：
  * 這個 app 的其他設定（PR 巡邏、VB Bug 抓取）都在 server，換瀏覽器或從手機開
@@ -24,14 +26,14 @@ export default function SettingsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const save = async (diffTheme: DiffTheme) => {
+  const save = async (patch: Partial<UiSettings>) => {
     setBusy(true);
-    setSettings((s) => ({ ...s, diffTheme })); // 先動畫面，不要等往返
+    setSettings((s) => ({ ...s, ...patch })); // 先動畫面，不要等往返
     try {
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ diffTheme }),
+        body: JSON.stringify(patch),
       });
       if (res.ok) setSettings((await res.json()) as UiSettings);
     } finally {
@@ -53,6 +55,37 @@ export default function SettingsPage() {
         <div className="mt-6 rounded-xl border border-gray-200 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
+              <div className="text-sm font-medium text-gray-900">
+                <code className="font-mono">/review-local</code> 用哪個引擎
+              </div>
+              <p className="mt-0.5 max-w-xl text-xs text-gray-500">
+                commit／push 之前的交叉驗證要交給誰跑。<b className="text-gray-700">兩邊的輸出格式一模一樣</b>
+                （同一份 schema），所以舊的紀錄照樣讀得懂；差別只在 codex 沒有金額可回報。
+                在終端機打 <code className="font-mono">/review-local</code> 也會讀這裡的設定。
+              </p>
+            </div>
+            <div className="flex gap-1">
+              {REVIEW_ENGINES.map((e) => (
+                <button
+                  key={e}
+                  onClick={() => save({ reviewEngine: e })}
+                  disabled={busy || !loaded}
+                  className={`rounded-lg border px-3 py-1.5 font-mono text-xs disabled:opacity-50 ${
+                    settings.reviewEngine === e
+                      ? "border-gray-900 bg-gray-900 text-white"
+                      : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-gray-200 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
               <div className="text-sm font-medium text-gray-900">看 diff 的配色</div>
               <p className="mt-0.5 text-xs text-gray-500">
                 「未提交的改動」頁的程式碼區塊要用深色還是淺色。
@@ -62,7 +95,7 @@ export default function SettingsPage() {
               {(["dark", "light"] as DiffTheme[]).map((t) => (
                 <button
                   key={t}
-                  onClick={() => save(t)}
+                  onClick={() => save({ diffTheme: t })}
                   disabled={busy || !loaded}
                   className={`rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50 ${
                     settings.diffTheme === t

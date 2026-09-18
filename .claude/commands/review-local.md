@@ -7,6 +7,19 @@
 腳本 `scripts/review-local.sh` 負責**抓資料**，並丟給一個拋棄式子程序去**讀 diff**，
 你負責**驗證它的結論並回報**。
 
+### 引擎：codex（預設）或 claude
+
+`--engine codex|claude`；不給就讀 web 設定頁存的值（`data/local-state/ui-settings.json`
+的 `reviewEngine`），還是沒有就用 **codex**。
+
+**兩邊的 JSON 輸出一模一樣**（同一份 schema、同一組欄位），舊紀錄照樣讀得懂；
+差別只有兩個欄位：`engine` 標明是誰跑的、`costUsd` 在 codex 是 `null`
+（codex CLI 沒有金額回報，也沒有 `--max-budget-usd` 這種上限）。
+
+兩邊的「不能寫入」都是實測過的，不是靠設定寫著就算：
+codex 用 `-s read-only`（實測要求它寫檔會拿到 operation not permitted，檔案沒被建立），
+claude 用 `--restricted --tools "Read,Grep,Glob"`。
+
 跟 `/handle-pr-inbox` 用同一套切法（`--restricted --tools "Read,Grep,Glob"`，
 Bash / Edit / Write 根本不存在、session 不落地），差別在：
 
@@ -38,6 +51,7 @@ untracked 新檔會用 `git diff --no-index` 產合成 diff 納入，**不會**�
 - `/review-local mvbf` / `/review-local edu-droid-flutter` → 指名 repo
 - `/review-local --branch` → push 前看整條分支
 - `/review-local --staged` → 只驗即將 commit 的那些
+- `/review-local --engine claude` → 這一次改用 claude（不影響設定頁的預設）
 - `/review-local --all` → 分支 ＋ 未提交一起看
 - `/review-local --base develop` → base 不是 main/master 時
 - `/review-local --km` → 真的要看 km 自己的改動（少見）
@@ -67,6 +81,11 @@ untracked 新檔會用 `git diff --no-index` 產合成 diff 納入，**不會**�
 
 - 標 `MUST` 的一律自己追到程式碼確認一次。
 - 看 `confidence`：`inferred` 的預設不可信，要嘛驗成 `read_code`，要嘛拿掉。
+- **同一條 finding 裡，「診斷」與「後果」的證據等級常常不同。** 標 `read_code` 的通常
+  只有診斷是讀碼來的，「改回去會怎樣」那半截往往是推論 —— 自己重推一次。
+  2026-09-17（VB-2267）：子程序正確指出三個顯示端沒有測試覆蓋（診斷對），但說改回
+  `VSSvgImage` 會「看起來還是對的」（後果錯）—— 常數已經是 base name，改回去會在
+  **亮色**主題載入白版、白 logo 畫在白底上直接消失，比它講的嚴重。
 - 「安全性」類的直覺主張最容易錯 —— 問「洩漏給誰」「對方本來就知道嗎」
   「這條路前面有沒有守衛」。
 - **驗不過的就拿掉，並告訴 Jay 拿掉了什麼。** 只報「它說了什麼」而不報「我驗了沒」，

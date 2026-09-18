@@ -4,6 +4,7 @@ import { readSnapshot } from "@/lib/myPrs";
 import { classifyError, SOURCE_LABELS, unhealthySources } from "@/lib/health";
 import { readDisks } from "@/lib/disk";
 import { formatGB, isLow, levelOf, WARN_BELOW_PERCENT } from "@/lib/diskRules";
+import { reviewClis } from "@/lib/cliTools";
 import { orcaPresence } from "@/lib/orca";
 import Icon, { type IconName } from "@/components/Icon";
 import BuildDirsSection from "@/components/BuildDirsSection";
@@ -73,6 +74,12 @@ const OTHERS: {
     desc: "看目前記憶體／swap，並執行 memclean 清掉殭屍開發行程",
   },
   {
+    href: "/review-runs",
+    icon: "check",
+    title: "交叉驗證紀錄",
+    desc: "`/review-local` 每次跑完的結論（verdict、findings、是 codex 還是 claude 跑的）",
+  },
+  {
     href: "/pr-inbox",
     icon: "refresh",
     title: "PR 巡邏",
@@ -116,6 +123,8 @@ export default async function Home() {
   const lowDisks = (await readDisks().catch(() => [])).filter(isLow);
   // 裝了就永久記住，不再偵測；沒裝才每次重測（見 lib/orca.ts）
   const orca = await orcaPresence().catch(() => null);
+  // review 用的兩個 CLI，沒裝哪個就講哪個（Jay 2026-09-18）
+  const missingClis = (await reviewClis().catch(() => [])).filter((c) => !c.found);
   const openPrs = (myPrs?.prs ?? []).filter((p) => p.state === "OPEN");
 
   const chats = listChats() as (ReturnType<typeof listChats>[number] & {
@@ -151,6 +160,22 @@ export default async function Home() {
             </div>
           </div>
         )}
+
+        {/* review 要用的 CLI 沒裝。沒裝哪個就講哪個，兩個都沒裝就兩則都出 */}
+        {missingClis.map((c) => (
+          <div key={c.name} className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
+            <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-amber-800">
+              <Icon name="alert" size={16} />
+              沒有安裝 <code className="font-mono">{c.name}</code>
+            </div>
+            <div className="mt-1.5 text-xs text-amber-700">
+              {c.usedFor}用得到它；現在叫到的話會直接失敗。{c.installHint}。
+              <Link href="/settings" className="ml-1 underline">
+                去設定頁改用另一個引擎
+              </Link>
+            </div>
+          </div>
+        ))}
 
         {/* 硬碟快滿。10% 以下是警告（琥珀），5% 以下是要馬上處理（紅） */}
         {lowDisks.map((d) => {
