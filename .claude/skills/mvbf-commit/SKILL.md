@@ -33,6 +33,15 @@ git log -5 --format='%s%n%b%n---'
 
 - **type 標記**要對照 Jira 的 issue type 挑（`[Task VSFT-x]` / `[BUG VSFT-x]` /
   `[User Story VSFT-x]`），不是隨便選一個。
+- **沒有對應 Jira 單的雜務用 `[Chore]`**（設定檔整理、工具腳本…）。
+  ⚠️ `commit-format.md` 的 Type 清單**不完整** —— 它只列 Feature / BUG / User Story /
+  Task / Refactor / MacOS / Android / BOT，但 `origin/master` 近 300 筆實際用到的還有
+  `[Chore]` 9 筆、`[Fix]` 14、`[CI]` 5、`[Version]` 6、`[Docs]` 2（2026-09-18 實測）。
+  **不確定時數一次，不要以為規範檔列的就是全集**：
+  ```bash
+  git log --format='%s' -300 origin/master | grep -oE '^\[[A-Za-z]+' | sort | uniq -c | sort -rn
+  ```
+  > 這條落差應該上游到 `edu-droid-flutter` 讓團隊把清單補齊，**待與 Jay 確認**。
 - **一個 commit 動到多張票**：所有 VSFT key 都要列在 subject
   （例：`[User Story VSFT-9941][VSFT-8368] …`）。
 - **`Co-Authored-By`**：看該 repo 既有 commit 有沒有這個慣例，不確定就數一下：
