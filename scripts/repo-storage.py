@@ -314,6 +314,20 @@ def is_appledouble(name: str) -> bool:
     return name.startswith("._")
 
 
+def is_macos_noise(name: str) -> bool:
+    """複製時**兩邊都要當它不存在**的 macOS 產物。
+
+    - `._xxx`：見 [is_appledouble]。
+    - `.DS_Store`：Finder／Spotlight 會在**任意時間點**寫進目的地，寫到哪幾個
+      目錄每次都不一樣。2026-09-18 連續兩次 restore olfparser（來源只有 root
+      一個 `.DS_Store`）：第一次目的地多出 7 個（`bindings/`、`docs/`、`mac/`…），
+      第二次多出 2 個（`.git/`、`native/`），而且 root 那個兩次都被判「大小不同」。
+      它不是 repo 內容（olfparser 自己的 `.gitignore:23` 就排除它），
+      讓它參與比對等於把驗證變成擲骰子 —— 搬得成不成功要看運氣。
+    """
+    return is_appledouble(name) or name == ".DS_Store"
+
+
 # exFAT 不存 unix 權限，整顆碟讀回來都是 rwx------。所以搬出去時要把
 # 「跟預設不一樣」的權限另外記下來，搬回來才還原得了（見 MODE_MANIFEST_SUFFIX）。
 DEFAULT_FILE_MODE = 0o644
@@ -361,7 +375,7 @@ def collect_modes(root: Path) -> dict[str, int]:
             if mode != DEFAULT_DIR_MODE:
                 modes[prefix + dname + "/"] = mode
         for fname in filenames:
-            if is_appledouble(fname):
+            if is_macos_noise(fname):
                 continue
             full = os.path.join(dirpath, fname)
             if os.path.islink(full):
@@ -490,7 +504,7 @@ def dir_index(root: Path) -> dict[str, int]:
         for dname in dirnames:
             index[prefix + dname + "/"] = 0
         for fname in filenames:
-            if is_appledouble(fname):
+            if is_macos_noise(fname):
                 continue
             try:
                 index[prefix + fname] = os.lstat(os.path.join(dirpath, fname)).st_size
@@ -653,7 +667,16 @@ def copy_with_progress(src: Path, staging: Path, total: int, emitter: Emitter) -
             # 排除 `._*`：搬出去時來源（APFS）根本沒有這種檔，不受影響；
             # 搬回來時要濾掉外接碟（exFAT）自動生的那一堆，
             # 否則 repo 一回到本機就多出幾百個 untracked 檔案。
-            ["/usr/bin/rsync", "-a", "--exclude=._*", f"{src}/", f"{staging}/"],
+            # 排除 `.DS_Store`：理由見 [is_macos_noise]。它是 gitignore 掉的
+            # macOS 產物，不複製也不比對，repo 不會因此少任何東西。
+            [
+                "/usr/bin/rsync",
+                "-a",
+                "--exclude=._*",
+                "--exclude=.DS_Store",
+                f"{src}/",
+                f"{staging}/",
+            ],
             capture_output=True,
             text=True,
         )
