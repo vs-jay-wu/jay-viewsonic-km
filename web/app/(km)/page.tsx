@@ -6,6 +6,7 @@ import { hintFor } from "@/lib/healthRules";
 import { readDisks } from "@/lib/disk";
 import { formatGB, isLow, levelOf, WARN_BELOW_PERCENT } from "@/lib/diskRules";
 import { reviewClis } from "@/lib/cliTools";
+import { latestTeamReview } from "@/lib/prInbox";
 import { orcaPresence } from "@/lib/orca";
 import Icon, { type IconName } from "@/components/Icon";
 import BuildDirsSection from "@/components/BuildDirsSection";
@@ -126,6 +127,8 @@ export default async function Home() {
   const orca = await orcaPresence().catch(() => null);
   // review 用的兩個 CLI，沒裝哪個就講哪個（Jay 2026-09-18）
   const missingClis = (await reviewClis().catch(() => [])).filter((c) => !c.found);
+  // 指派給我的隊、但不是點名我的：只提醒，巡邏不會去 review（Jay 2026-09-18）
+  const teamReview = await latestTeamReview().catch(() => null);
   const openPrs = (myPrs?.prs ?? []).filter((p) => p.state === "OPEN");
 
   const chats = listChats() as (ReturnType<typeof listChats>[number] & {
@@ -327,6 +330,35 @@ export default async function Home() {
           不常用的東西放下面，平常不該佔注意力（Jay 2026-09-11）。
           真的壞掉時會自己往上跑 —— 上面那組健康度警告會列出來。
         */}
+        {/* 指派給我的隊的 PR。**放在「其他服務」前面**（Jay 2026-09-18）——
+            要看得到，但不該跟真正輪到我的事混在一起 */}
+        {teamReview && teamReview.prs.length > 0 && (
+          <div className="mt-10 rounded-xl border border-gray-200 bg-gray-50 px-5 py-4">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <h2 className="text-sm font-semibold text-gray-900">隊上有 PR 等 review</h2>
+              <span className="text-xs text-gray-500">
+                {teamReview.prs.length} 筆 · 指派給你的隊，不是點名你 —— 巡邏不會去看
+              </span>
+            </div>
+            <ul className="mt-2 space-y-1">
+              {teamReview.prs.map((p) => (
+                <li key={p.url} className="flex flex-wrap items-baseline gap-2 text-xs">
+                  <a
+                    href={p.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-gray-500 hover:underline"
+                  >
+                    {p.repo.split("/").pop()}#{p.number}
+                  </a>
+                  <span className="min-w-0 flex-1 truncate text-gray-700">{p.title}</span>
+                  <span className="shrink-0 text-gray-400">{p.author}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="mt-10">
           <h2 className="text-sm font-semibold text-gray-900">其他服務</h2>
           <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200">
