@@ -48,6 +48,38 @@
 
 仍然不自動做的：`git commit`、修改任何專案 repo 的程式碼。這兩件要另外問。
 
+### 0.1 每則貼出去的留言都要帶 marker，而且同一張 PR 只留一則
+
+**每則留言（含 review body）的最後一行固定是：**
+
+```
+<!-- ai-review-bot:vs-jay-wu -->
+```
+
+⚠️ **marker 裡不要出現 `km`**。km 是 Jay 個人知識庫的名字，PR 上的人看不懂，
+也等於把私人 repo 的存在寫進團隊資產（同 `cross-repo-workflow.md` §1 的理由）。
+原本寫成 `<!-- km-pr-inbox:bot -->`，2026-09-18 Jay 指出後改掉。
+
+兩個用途，缺一不可：
+
+1. **分得出「真人看過」與「這個工具看過」**。沒有 marker 的話，之後任何
+   「有沒有人 review 過」的判斷都會把自己的留言算成別人的。
+2. **同一張 PR 不要一直長新留言**。貼之前先找自己上一則：
+
+   ```bash
+   gh api repos/<owner>/<repo>/issues/<n>/comments --jq \
+     '[.[] | select(.body | contains("<!-- ai-review-bot:vs-jay-wu -->"))] | last | .id'
+   ```
+
+   找到就 `gh api -X PATCH repos/<owner>/<repo>/issues/comments/<id> -f body=...` 更新，
+   找不到才 `gh pr comment` 新建。
+   實測 `edu-as-airsync-receiver#134` 上已經累積到「第四輪」「第五輪」——
+   那些其實該是同一則的不同版本（Jay 2026-09-18）。
+
+   > ⚠️ **review（approve／request changes）不適用更新** —— GitHub 的 review 是
+   > 不可變的事件，每次都是新的一筆。marker 照樣要加，但不要試圖去 PATCH 舊的。
+   > 要撤回舊 review 用 dismiss，不是改內容。
+
 **approve / request changes 也自己送，不用問**（Jay 2026-09-10 明確授權）。
 只留言沒有自動化的價值 —— review 要有結論，球才會離開他手上。
 

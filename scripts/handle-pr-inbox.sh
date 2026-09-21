@@ -28,15 +28,20 @@
 #     高  我動過之後又有新 commit／新留言  → 球明確回到我手上
 #     中  被指派 review 但我還沒 review 過
 #     低  仍掛在我名下但無新活動；或只是被 mention／assign
+#   只提醒、不 review：**只指派給我的隊**、且不在負責的 repo 清單裡的
+#     （team 指派＝隊上誰都行，不是非我不可；首頁會列出來）
+#   等對方回覆（**一定會列出來**，只是不用動手）：
+#     我已回應、對方還沒動 → 等 author；我開的 PR 沒人回 → 等 reviewer
 #   略過（--all 可看到並附原因）：
-#     自己是作者、draft、我 review 後無任何新活動
+#     自己是作者但沒有待回的意見
+#   根本不抓：draft（除非 --include-drafts）
 #
 # 用法：
 #   ./scripts/handle-pr-inbox.sh                  # 只列待處理，人可讀
 #   ./scripts/handle-pr-inbox.sh --json           # 同上，JSON（給 agent 解析）
 #   ./scripts/handle-pr-inbox.sh --all            # 連略過的也列出（附略過原因）
 #   ./scripts/handle-pr-inbox.sh --include-mine   # 一併檢查我自己開的 PR 有沒有人留意見待回
-#   ./scripts/handle-pr-inbox.sh --include-drafts # 一併列出 draft
+#   ./scripts/handle-pr-inbox.sh --include-drafts # 一併列出 draft（預設連抓都不抓）
 #   ./scripts/handle-pr-inbox.sh --repo ragdoll-cat --repo edu-droid-flutter
 #                                             # 臨時指定 repo（可重複，蓋過設定檔）
 #   ./scripts/handle-pr-inbox.sh --all-repos      # 不過濾 repo，掃所有與我有關的
@@ -109,12 +114,19 @@ query($q: String!, $n: Int!) {
         author { login }
         reviewDecision
         headRefOid
+        additions deletions changedFiles
         reviewRequests(first: 20) {
           nodes { requestedReviewer { ... on User { login } ... on Team { slug } } }
         }
+        # **指派歷史**，不是只看「現在還在等誰」——我一 review，那個請求就被消掉，
+        # 於是「當初是點名我、還是丟給我的隊」事後就看不出來了。
+        timelineItems(last: 50, itemTypes: [REVIEW_REQUESTED_EVENT]) {
+          nodes { ... on ReviewRequestedEvent {
+            requestedReviewer { ... on User { login } ... on Team { slug } } } }
+        }
         commits(last: 1) { nodes { commit { committedDate } } }
         reviews(last: 50) { nodes { author { login } state submittedAt } }
-        comments(last: 50) { nodes { author { login } createdAt } }
+        comments(last: 50) { nodes { author { login } createdAt body } }
         reviewThreads(last: 60) {
           nodes {
             isResolved isOutdated
@@ -157,14 +169,22 @@ fetch() {  # $1 = 搜尋字串, $2 = 標記用的關係名
     >> "$RAW"
 }
 
+# draft **在搜尋層就排掉**（Jay 2026-09-18：不要掃 draft）。
+# 原本是抓回來再過濾 —— 東西還是進了 GraphQL 回應（每筆都帶 50 則留言、
+# 50 筆 review、60 條討論串），只是畫面上不顯示。實測 edu-as-airsync-sender
+# 是 6 筆變 2 筆，四分之三的回應量是白抓的。
+# `--include-drafts` 仍然拿得到，只是那時才去要。
+DRAFT_QUAL="draft:false"
+$INCLUDE_DRAFTS && DRAFT_QUAL=""
+
 # (A) 我負責的 repo 底下所有開著的 PR
 if [[ ${#REPO_QUALS[@]} -gt 0 ]]; then
-  fetch "is:open is:pr ${REPO_QUALS[*]}" "repo"
+  fetch "is:open is:pr $DRAFT_QUAL ${REPO_QUALS[*]}" "repo"
 fi
 
 # (B) 與我有關的關係（落在負責清單以外的 repo 也照樣列，見下面的過濾）
 for rel in "${RELATIONS[@]}"; do
-  fetch "is:open is:pr ${rel}:${ME}" "$rel"
+  fetch "is:open is:pr $DRAFT_QUAL ${rel}:${ME}" "$rel"
 done
 
 # ─── 判斷 ────────────────────────────────────────────────────────────────────
@@ -220,7 +240,22 @@ jq -s --arg me "$ME" --argjson includeMine "$INCLUDE_MINE" --argjson includeDraf
       # 「這個 review 請求是點名我，還是丟給我的隊？」——兩者的意思差很多，見下面的優先度
       | ([ $p.reviewRequests.nodes[]?.requestedReviewer.login // empty ]) as $reqUsers
       | ([ $p.reviewRequests.nodes[]?.requestedReviewer.slug // empty ]) as $reqTeams
-      | (($reqUsers | index($me)) != null) as $requestedMe
+      # 這個工具自己貼過留言嗎（靠 marker 認）。用途是「分得出真人與工具」——
+      # 目前只回報，不影響判斷，但沒有它就永遠加不了那類判準
+      | ([ $p.comments.nodes[]? | select(.body // "" | contains("<!-- ai-review-bot:vs-jay-wu -->")) ]) as $botComments
+      | ([ $p.timelineItems.nodes[]?.requestedReviewer.login // empty ]) as $everUsers
+      | ([ $p.timelineItems.nodes[]?.requestedReviewer.slug // empty ]) as $everTeams
+      # 現在還掛著，或歷史上曾經點名過我 —— 後者是關鍵：我一 review 請求就沒了
+      | ((($reqUsers + $everUsers) | index($me)) != null) as $requestedMe
+      # 規模分層（Jay 2026-09-18，參考另一套工具的做法）。
+      # **只看規模，不看內容** —— 內容要判斷就得先讀 diff，那正是我們想省的那一步。
+      # 代價是「3 行改動但很危險」會被判成 light；所以升級的門檻抓得很低
+      # （> 40 行或 > 5 檔就不是 light 了），deep 則抓實際分布的上四分位。
+      # 門檻是拿手上 12 張真實 PR 調的：600/25 那組有 8 張進 deep，等於沒分層。
+      | (($p.additions // 0) + ($p.deletions // 0)) as $churn
+      | (if $churn > 1500 or ($p.changedFiles // 0) > 20 then "deep"
+         elif $churn > 40 or ($p.changedFiles // 0) > 5 then "standard"
+         else "light" end) as $tier
       | ($p.commits.nodes[0].commit.committedDate | ts) as $lastCommit
       | ([$said, $lastCommit] | max) as $theirs
 
@@ -232,8 +267,13 @@ jq -s --arg me "$ME" --argjson includeMine "$INCLUDE_MINE" --argjson includeDraf
           # 排程用它判斷「這一筆跟上次是不是同一個狀態」（scripts/pr-inbox-watch.sh）
           headSha: ($p.headRefOid // null),
           # review 請求是**點名我**還是**丟給我的隊**
+          botCommented: (($botComments | length) > 0),
+          humanReviewed: ([ $p.reviews.nodes[]? | select(.author.login != $me and (.author.login | endswith("[bot]") | not)) ] | length > 0),
+          tier: $tier,
+          churn: $churn,
+          changedFiles: ($p.changedFiles // 0),
           requestedMe: $requestedMe,
-          requestedTeams: $reqTeams,
+          requestedTeams: (($reqTeams + $everTeams) | unique),
           author: $author,
           isDraft: $p.isDraft,
           reviewDecision: ($p.reviewDecision // "REVIEW_REQUIRED"),
@@ -256,6 +296,25 @@ jq -s --arg me "$ME" --argjson includeMine "$INCLUDE_MINE" --argjson includeDraf
         elif ($r.isDraft and ($includeDrafts | not)) then
           $r + {action: false, reason: "draft（--include-drafts 可列出）"}
 
+        # ── 只被指派給「我的隊」，而且不在負責的 repo 清單裡 ────────────────
+        #
+        # **只提醒，不 review**（Jay 2026-09-18）。team 指派的意思是「隊上誰都行」，
+        # 不是「非你不可」；infra 之類的人常常一次拉兩三個隊進來，那不該變成你的工作。
+        #
+        # 優先序：repo 清單 > 點名我 > team。前兩者照常走下面的判準。
+        #
+        # `requestedMe` 看的是**指派歷史**不是「現在還在等誰」—— 我一 review，
+        # 那個請求就被 GitHub 消掉，只看當下的話「當初是點名我還是丟給隊」會分不出來
+        # （edu-infra-shared#36 就是這樣：從頭到尾只有 edu-feature／edu-kanban，
+        # 但我按過一次 approve 之後它就靠 reviewed-by 永遠跟著我）。
+        elif (($r.relations | index("repo")) | not)
+             and ($r.requestedMe | not)
+             and (($r.relations | index("assignee")) | not)
+             and ($r.author != $me) then
+          $r + {action: false, teamOnly: true,
+                reason: ("指派給 " + (($r.requestedTeams // []) | join("／"))
+                         + " 隊（不是點名我，也不在負責的 repo 清單裡）→ 只提醒，不 review")}
+
         # 我自己的 PR：有人在我之後留了意見／未解決的討論 → 要回
         elif ($r.author == $me) then
           if ($r._said > $r._mine) then
@@ -264,7 +323,8 @@ jq -s --arg me "$ME" --argjson includeMine "$INCLUDE_MINE" --argjson includeDraf
             $r + {action: true, priority: "中",
                   reason: "我開的 PR，還有 \($r.openThreadsByOthers) 則未解決的討論"}
           else
-            $r + {action: false, reason: "我開的 PR，自我上次動作後無新意見"}
+            $r + {action: false, waitingFor: "reviewer",
+                  reason: "我開的 PR，等 reviewer 回覆"}
           end
 
         # 被指派 review 但還沒 review 過
@@ -300,12 +360,18 @@ jq -s --arg me "$ME" --argjson includeMine "$INCLUDE_MINE" --argjson includeDraf
         # （Jay 2026-09-18：「有需要處理的那就去處理啊？」——它有，只是消不掉）。
         #
         # 真的需要我再動的情況已經被上面那條 `_theirs > _mine` 接走了。
+        # 我已經回應過、對方之後沒再動 → **等 author 回覆**（球在對方）。
+        #
+        # 這不是「沒事」，是一個看得見的狀態（同事在 Teams 上就是這樣講的，
+        # Jay 2026-09-18 轉達）。原本歸進「略過」之後整個消失，
+        # 回頭會問「我 review 過的那筆去哪了」。
         elif ($r.relations | index("review-requested")) then
-          $r + {action: false,
-                reason: ("我已回應（" + (if $r._theirs > 0 then "對方最後動作 " + ($r._theirs | todateiso8601) else "對方還沒動過" end)
-                         + "），review 請求仍掛著但球在對方；我送出 review 判定才會消掉")}
+          $r + {action: false, waitingFor: "author",
+                reason: ("等 author 回覆（我最後動作 " + ($r._mine | todateiso8601)
+                         + "）；review 請求仍掛著，我送出 review 判定才會消掉")}
         else
-          $r + {action: false, reason: "自我上次動作後無新活動"}
+          $r + {action: false, waitingFor: "author",
+                reason: ("等 author 回覆（我最後動作 " + ($r._mine | todateiso8601) + "）")}
         end
     )
 
@@ -321,7 +387,9 @@ if $OUT_JSON; then
   else
     jq --arg me "$ME" --argjson scope "$REPO_FILTER" '{scannedAs:$me, scope:$scope, scannedAt:(now|todateiso8601),
                         prs:[.[]|select(.action)],
-                        skippedCount:([.[]|select(.action|not)]|length)}' "${RAW}.out"
+                        waiting:[.[]|select(.waitingFor)],
+                        teamReview:[.[]|select(.teamOnly)],
+                        skippedCount:([.[]|select((.action|not) and (.waitingFor|not) and (.teamOnly|not))]|length)}' "${RAW}.out"
   fi
   exit 0
 fi
@@ -334,15 +402,25 @@ jq -r --arg me "$ME" --argjson all "$SHOW_ALL" --argjson scope "$REPO_FILTER" '
             (if .openThreadsByOthers > 0 then "  未解決討論 \(.openThreadsByOthers) 則" else "" end) +
             (if .isDraft then "  [draft]" else "" end);
   ([.[] | select(.action)]) as $todo
-  | ([.[] | select(.action | not)]) as $skip
+  | ([.[] | select(.waitingFor)]) as $waiting
+  | ([.[] | select(.teamOnly)]) as $team
+  | ([.[] | select((.action | not) and (.waitingFor | not) and (.teamOnly | not))]) as $skip
   | "以 \($me) 的身分掃描 \(if ($scope|length)==0 then "所有與我有關的 repo" else ($scope|join("、")) end)"
-  + "，待處理 \($todo | length) 筆、略過 \($skip | length) 筆\n"
+  + "，待處理 \($todo | length) 筆、等對方回覆 \($waiting | length) 筆、隊上的 \($team | length) 筆、略過 \($skip | length) 筆\n"
   + ( ["高","中","低"]
       | map( . as $p
              | ($todo | map(select(.priority == $p))) as $g
              | if ($g | length) == 0 then empty
                else "\n【\($p)】\n" + ($g | map(line) | join("\n")) end )
       | join("\n") )
+  + (if ($waiting | length) > 0
+     then "\n\n【等對方回覆（球不在我這裡）】\n"
+          + ($waiting | map("  \(.repo)#\(.number)  \(.reason)") | join("\n"))
+     else "" end)
+  + (if ($team | length) > 0
+     then "\n\n【指派給我的隊（只提醒，不 review）】\n"
+          + ($team | map("  \(.repo)#\(.number)  \(.title)") | join("\n"))
+     else "" end)
   + (if $all and ($skip | length) > 0
      then "\n\n【略過】\n" + ($skip | map(line) | join("\n"))
      else "" end)
