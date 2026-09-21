@@ -3,8 +3,8 @@
 import { useState } from "react";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
-import { FileRow, TreeRows, type ViewMode } from "@/components/FileList";
-import { buildTree, type ChangedFile } from "@/lib/changesRules";
+import { FileRow, StageBadge, TreeRows, type ViewMode } from "@/components/FileList";
+import { buildTree, countByStage, splitByStage, type ChangedFile, type WipSide } from "@/lib/changesRules";
 import { laneColor, type Commit, type Graph, type GraphRow } from "@/lib/gitViewRules";
 
 /**
@@ -37,6 +37,10 @@ const x = (lane: number) => lane * LANE_W + LANE_W / 2;
  */
 const linkColor = (from: number, to: number) => laneColor(Math.max(from, to));
 
+/** 未提交那一列分成兩區：索引（已 git add）與工作區（還沒）。
+    定義在 `lib/changesRules.ts` —— 「未提交的改動」那頁也是切這兩區，不要各定義一份 */
+export type { WipSide };
+
 export default function CommitGraph({
   commits,
   graph,
@@ -56,12 +60,12 @@ export default function CommitGraph({
   openSha: string | null;
   info: Record<string, { message: string; files: ChangedFile[] }>;
   onToggle: (sha: string) => void;
-  onOpenFile: (sha: string | null, file: ChangedFile) => void;
+  onOpenFile: (sha: string | null, file: ChangedFile, side?: WipSide) => void;
   /** 展開後的檔案清單要平鋪還是樹狀（跟其他頁共用同一個偏好） */
   view: ViewMode;
   collapsedDirs: Set<string>;
   onToggleDir: (key: string) => void;
-  openFile: { sha: string | null; path: string } | null;
+  openFile: { sha: string | null; path: string; side?: WipSide } | null;
   /** 剛跳過去的那一列，短暫highlight —— 不然在一百多列裡看不出停在哪 */
   flashSha?: string | null;
   /** 未提交的改動。畫在最上面一列，圓圈是虛線（照 VS Code） */
@@ -115,22 +119,82 @@ export default function CommitGraph({
               <span className="min-w-0 flex-1 truncate text-gray-700">
                 {wip.files.length} 個檔案還沒 commit
               </span>
+              {/* 收起來的時候也要看得出「有東西已經 add 了」，不然要展開才知道 */}
+              {(() => {
+                const n = countByStage(wip.files);
+                if (!n.staged && !n.partial) return null;
+                return (
+                  <span className="shrink-0 text-[11px] text-gray-500">
+                    {n.staged > 0 && <span className="text-emerald-600">{n.staged} staged</span>}
+                    {n.partial > 0 && (
+                      <span className="text-indigo-600">
+                        {n.staged > 0 ? " · " : ""}
+                        {n.partial} 部分 staged
+                      </span>
+                    )}
+                    {n.unstaged > 0 && ` · ${n.unstaged} 未 staged`}
+                  </span>
+                );
+              })()}
             </span>
           </button>
 
-          {wip.open && (
-            <ExpandedFiles
-              width={width}
-              lanes={[wipLane]}
-              files={wip.files}
-              keyPrefix="wip"
-              view={view}
-              collapsedDirs={collapsedDirs}
-              onToggleDir={onToggleDir}
-              openPath={openFile && openFile.sha === null ? openFile.path : null}
-              onOpenFile={(f) => onOpenFile(null, f)}
-            />
-          )}
+          {/*
+            * 照 VS Code 分成兩區：**部分 staged 的檔案會同時出現在兩邊**
+            * （`MM` ＝ 索引有一版、工作區還有沒 add 的改動），而且兩邊點開
+            * 看到的 diff 不一樣 —— staged 那側是 `git diff --cached`
+            * （commit 會帶走的），未 staged 那側是 `git diff`（不會帶走的）。
+            * 標題一律畫（就算只有一區）—— 它同時是收合／展開的把手，
+            * 而收合狀態跟目錄共用同一個 `collapsedDirs`，不必再開一份 state。
+            */}
+          {wip.open &&
+            (() => {
+              const { index: staged, worktree: unstaged } = splitByStage(wip.files);
+              const section = (files: ChangedFile[], side: WipSide, title: string) => {
+                if (files.length === 0) return null;
+                const key = `wip-sec:${side}`;
+                const open = !collapsedDirs.has(key);
+                return (
+                  <ExpandedFiles
+                    key={side}
+                    width={width}
+                    lanes={[wipLane]}
+                    files={open ? files : []}
+                    keyPrefix={`wip:${side}`}
+                    view={view}
+                    collapsedDirs={collapsedDirs}
+                    onToggleDir={onToggleDir}
+                    openPath={
+                      openFile && openFile.sha === null && (openFile.side ?? "worktree") === side
+                        ? openFile.path
+                        : null
+                    }
+                    onOpenFile={(f) => onOpenFile(null, f, side)}
+                    onlyPartialBadge
+                    header={
+                      <button
+                        onClick={() => onToggleDir(key)}
+                        className="flex w-full items-center gap-1 text-left text-[11px] font-medium text-gray-500 hover:text-gray-800"
+                      >
+                        <Icon
+                          name={open ? "chevronDown" : "chevronRight"}
+                          size={12}
+                          className="shrink-0 text-gray-400"
+                        />
+                        {title}
+                        <span className="font-normal text-gray-400">{files.length}</span>
+                      </button>
+                    }
+                  />
+                );
+              };
+              return (
+                <>
+                  {section(staged, "index", "Staged Changes")}
+                  {section(unstaged, "worktree", "Changes")}
+                </>
+              );
+            })()}
         </li>
       )}
       {commits.map((c, i) => {
@@ -331,6 +395,7 @@ function ExpandedFiles({
   openPath,
   onOpenFile,
   header,
+  onlyPartialBadge,
 }: {
   width: number;
   /** 這一段要往下延續的 lane */
@@ -343,6 +408,8 @@ function ExpandedFiles({
   openPath: string | null;
   onOpenFile: (f: ChangedFile) => void;
   header?: React.ReactNode;
+  /** 已經分區了就不用每列再標一次 staged（見 StageBadge） */
+  onlyPartialBadge?: boolean;
 }) {
   return (
     <div className="relative flex bg-gray-50">
@@ -383,11 +450,14 @@ function ExpandedFiles({
                 selected={openPath === f.path}
                 onOpen={() => onOpenFile(f)}
                 trailing={
-                  f.from ? (
-                    <Tooltip label={`從 ${f.from} 改名`}>
-                      <span className="shrink-0 text-[10px] text-sky-600">R</span>
-                    </Tooltip>
-                  ) : undefined
+                  <>
+                    {f.from && (
+                      <Tooltip label={`從 ${f.from} 改名`}>
+                        <span className="shrink-0 text-[10px] text-sky-600">R</span>
+                      </Tooltip>
+                    )}
+                    <StageBadge file={f} onlyPartial={onlyPartialBadge} />
+                  </>
                 }
               />
             ))
@@ -399,6 +469,9 @@ function ExpandedFiles({
               onToggle={onToggleDir}
               selectedPath={openPath}
               onOpen={onOpenFile}
+              extras={(f) => ({
+                trailing: <StageBadge file={f} onlyPartial={onlyPartialBadge} />,
+              })}
             />
           )}
         </div>

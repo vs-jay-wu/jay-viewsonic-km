@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
-import { KIND_CLS, KIND_LABEL, KIND_TITLE, type ChangedFile, type TreeNode } from "@/lib/changesRules";
+import {
+  KIND_CLS, KIND_LABEL, KIND_TITLE, STAGE_CLS, STAGE_LABEL, STAGE_TITLE, stageState,
+  type ChangedFile, type TreeNode,
+} from "@/lib/changesRules";
 
 /**
  * 改動清單的共用列與樹。「未提交的改動」與「這條線的改動」兩頁共用 ——
@@ -63,6 +66,25 @@ export function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: V
       >
         <Icon name={view === "tree" ? "tree" : "list"} size={15} />
       </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * 「已進索引」的標記。**未 staged 不標** —— 那是常態，標了整片都是字。
+ * commit 裡的檔案兩軸都是 false（`none`），一樣不標。
+ *
+ * `onlyPartial`：已經分成 Staged／Changes 兩區塊時用。那時「staged」三個字
+ * 是區塊標題講過的廢話，但**部分 staged 還是要標** —— 它同時出現在兩區，
+ * 不標的話會看起來像重複列了一次。
+ */
+export function StageBadge({ file, onlyPartial }: { file: ChangedFile; onlyPartial?: boolean }) {
+  const st = stageState(file);
+  if (!STAGE_LABEL[st]) return null;
+  if (onlyPartial && st !== "partial") return null;
+  return (
+    <Tooltip label={STAGE_TITLE[st]}>
+      <span className={`shrink-0 text-[10px] ${STAGE_CLS[st]}`}>{STAGE_LABEL[st]}</span>
     </Tooltip>
   );
 }

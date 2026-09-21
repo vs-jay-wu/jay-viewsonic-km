@@ -29,5 +29,8 @@ export async function GET(req: NextRequest) {
   // 看整條線時：base = merge-base（base → 工作區），sha = 單一 commit
   const base = req.nextUrl.searchParams.get("base") || undefined;
   const sha = req.nextUrl.searchParams.get("sha") || undefined;
-  return NextResponse.json(await fileDiff(worktree, file, { untracked, oldPath, base, sha }));
+  // 未提交那一區分成 staged／未 staged 兩塊時，兩塊要看的差異不一樣
+  const rawSide = req.nextUrl.searchParams.get("side");
+  const side = rawSide === "index" || rawSide === "worktree" ? rawSide : undefined;
+  return NextResponse.json(await fileDiff(worktree, file, { untracked, oldPath, base, sha, side }));
 }

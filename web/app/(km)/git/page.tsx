@@ -5,7 +5,7 @@ import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import { useConfirm } from "@/components/Confirm";
 import { useToast } from "@/components/Toast";
-import CommitGraph from "@/components/CommitGraph";
+import CommitGraph, { type WipSide } from "@/components/CommitGraph";
 import DiffView from "@/components/DiffView";
 import ImageDiffView from "@/components/ImageDiffView";
 import { ViewToggle, useFileView } from "@/components/FileList";
@@ -109,8 +109,10 @@ export default function GitPage() {
   const [openCommit, setOpenCommit] = useState<string | null>(null);
   const [commitInfo, setCommitInfo] = useState<Record<string, CommitInfo>>({});
   /** 點檔案看 diff。用浮動抽屜而不是再切一欄 —— 版面不要因為開面板而位移（web/AGENTS.md） */
-  /** `sha: null` ＝ 未提交的改動那一列（HEAD → 工作區） */
-  const [diffFor, setDiffFor] = useState<{ sha: string | null; file: ChangedFile } | null>(null);
+  /** `sha: null` ＝ 未提交那一列；`side` 是它的哪一區（索引／工作區） */
+  const [diffFor, setDiffFor] = useState<
+    { sha: string | null; file: ChangedFile; side?: WipSide } | null
+  >(null);
   const [wipOpen, setWipOpen] = useState(false);
   const [flashSha, setFlashSha] = useState<string | null>(null);
   const [diff, setDiff] = useState<DiffPayload | null>(null);
@@ -249,7 +251,9 @@ export default function GitPage() {
   };
 
   /** 選到的 repo／commit／檔案寫進網址（replace，不塞 history），重整才回得來 */
-  const syncUrl = (next: { dir?: string | null; sha?: string | null; file?: string | null }) => {
+  const syncUrl = (next: {
+    dir?: string | null; sha?: string | null; file?: string | null; side?: string | null;
+  }) => {
     const url = new URL(window.location.href);
     const set = (k: string, v: string | null | undefined) => {
       if (v === undefined) return;
@@ -259,6 +263,7 @@ export default function GitPage() {
     set("repo", next.dir);
     set("sha", next.sha);
     set("file", next.file);
+    set("side", next.side);
     window.history.replaceState(null, "", url);
   };
 
@@ -282,7 +287,7 @@ export default function GitPage() {
     const opening = openCommit !== sha;
     setOpenCommit(opening ? sha : null);
     if (opening) setWipOpen(false);
-    syncUrl({ sha: opening ? sha : null, file: null });
+    syncUrl({ sha: opening ? sha : null, file: null, side: null });
     if (!opening) setDiffFor(null);
     if (commitInfo[sha] || !detail) return;
     const qs = new URLSearchParams({ dir: detail.dir, sha });
@@ -330,11 +335,11 @@ export default function GitPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diffFor]);
 
-  const openFileDiff = async (sha: string | null, file: ChangedFile) => {
+  const openFileDiff = async (sha: string | null, file: ChangedFile, side?: WipSide) => {
     if (!detail) return;
-    setDiffFor({ sha, file });
+    setDiffFor({ sha, file, side });
     // 網址裡用 `wip` 這個字代表「未提交那一列」，重整才回得到同一個狀態
-    syncUrl({ sha: sha ?? WIP, file: file.path });
+    syncUrl({ sha: sha ?? WIP, file: file.path, side: side ?? "" });
     setDiff(null);
     const qs = new URLSearchParams({
       worktree: detail.dir,
@@ -344,6 +349,8 @@ export default function GitPage() {
     // 未提交的改動比的是 HEAD → 工作區，沒有 sha；未追蹤的檔案 git diff 看不到
     if (sha) qs.set("sha", sha);
     else if (file.kind === "untracked") qs.set("untracked", "1");
+    // 分區之後兩邊看的差異不同：index=`git diff --cached`／worktree=`git diff`
+    else if (side) qs.set("side", side);
     try {
       const res = await fetch(`/api/changes/diff?${qs}`);
       const json = await res.json();
@@ -366,7 +373,8 @@ export default function GitPage() {
       setWipOpen(true);
       const wipFile = q.get("file");
       const f = detail.wip.find((x) => x.path === wipFile);
-      if (f) void openFileDiff(null, f);
+      const s = q.get("side");
+      if (f) void openFileDiff(null, f, s === "index" || s === "worktree" ? s : undefined);
       return;
     }
     if (openCommit === sha) return;
@@ -620,7 +628,11 @@ export default function GitPage() {
                       return next;
                     })
                   }
-                  openFile={diffFor ? { sha: diffFor.sha, path: diffFor.file.path } : null}
+                  openFile={
+                    diffFor
+                      ? { sha: diffFor.sha, path: diffFor.file.path, side: diffFor.side }
+                      : null
+                  }
                   flashSha={flashSha}
                   wip={{
                     files: detail.wip,
@@ -653,7 +665,13 @@ export default function GitPage() {
               {diffFor.file.path}
             </span>
             <span className="shrink-0 font-mono text-[11px] text-gray-400">
-              {diffFor.sha ? `commit ${diffFor.sha.slice(0, 8)}` : "未提交（HEAD → 工作區）"}
+              {diffFor.sha
+                ? `commit ${diffFor.sha.slice(0, 8)}`
+                : diffFor.side === "index"
+                  ? "已 staged（HEAD → 索引，commit 會帶走）"
+                  : diffFor.side === "worktree"
+                    ? "未 staged（索引 → 工作區，commit 不會帶走）"
+                    : "未提交（HEAD → 工作區）"}
             </span>
             <Tooltip side="left" label="關閉（Esc）">
               <button

@@ -5,12 +5,12 @@ import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import DiffView from "@/components/DiffView";
 import ImageDiffView from "@/components/ImageDiffView";
-import { FileRow, TreeRows, ViewToggle, useFileView } from "@/components/FileList";
+import { FileRow, StageBadge, TreeRows, ViewToggle, useFileView } from "@/components/FileList";
 import { DragHandle, useDragWidth, useWideLayout } from "@/components/Split";
 import { hljsHref, type DiffTheme } from "@/lib/uiSettingsRules";
 import {
-  KIND_CLS, KIND_LABEL, KIND_TITLE, buildTree, countByKind,
-  type ChangedFile, type DiffLine, type RepoChanges, type TreeNode,
+  KIND_CLS, KIND_LABEL, KIND_TITLE, buildTree, countByKind, countByStage, sortRepos, splitByStage,
+  type ChangedFile, type DiffLine, type RepoChanges, type TreeNode, type WipSide,
 } from "@/lib/changesRules";
 import type { ImageSides } from "@/lib/changes";
 
@@ -18,8 +18,7 @@ interface Snapshot {
   scannedAt: string;
   scanned: number;
   repos: RepoChanges[];
-  ignored: string[];
-  ignoredChanges: number;
+  pinned: string[];
   skippedOffloaded: number;
 }
 
@@ -33,7 +32,23 @@ interface Selected {
   worktreeName: string;
   repo: string;
   file: ChangedFile;
+  /**
+   * 點的是哪一區。部分 staged 的檔案兩區都會列出來，而兩邊的 diff 不一樣 ——
+   * 選取狀態與網址都要帶著它，否則點另一區會看起來沒反應。
+   */
+  side: WipSide;
 }
+
+/** 兩個區塊的標題與說明（照 VS Code 的用字） */
+const SIDE_TITLE: Record<WipSide, string> = {
+  index: "Staged Changes",
+  worktree: "Changes",
+};
+
+const SIDE_DESC: Record<WipSide, string> = {
+  index: "已 staged（HEAD → 索引，commit 會帶走）",
+  worktree: "未 staged（索引 → 工作區，commit 不會帶走）",
+};
 
 interface DiffPayload {
   lines: DiffLine[];
@@ -146,6 +161,7 @@ export default function ChangesPage() {
     const url = new URL(window.location.href);
     url.searchParams.set("w", sel.worktree);
     url.searchParams.set("f", sel.file.path);
+    url.searchParams.set("s", sel.side);
     window.history.replaceState(null, "", url);
     setDiff(null);
     setDiffLoading(true);
@@ -156,6 +172,8 @@ export default function ChangesPage() {
         untracked: sel.file.kind === "untracked" ? "1" : "0",
         // 改名的檔案，HEAD 那側要用舊路徑才抓得到
         from: sel.file.from ?? "",
+        // 哪一區：index ＝ `git diff --cached`、worktree ＝ `git diff`
+        side: sel.side,
       });
       const res = await fetch(`/api/changes/diff?${qs}`);
       const json = await res.json();
@@ -177,25 +195,45 @@ export default function ChangesPage() {
     const w = q.get("w");
     const f = q.get("f");
     if (!w || !f) return;
+    // 舊網址沒有 `s`（那時還沒分區）—— 當成未 staged 那區，那是絕大多數的情況
+    const side: WipSide = q.get("s") === "index" ? "index" : "worktree";
     for (const r of data.repos) {
       for (const wt of r.worktrees) {
         if (wt.path !== w) continue;
         const file = wt.files.find((x) => x.path === f);
         // 找不到就安靜地放掉：那個改動可能已經被 commit 或還原了
-        if (file) void openFile({ worktree: wt.path, worktreeName: wt.name, repo: r.repo, file });
+        if (file) void openFile({ worktree: wt.path, worktreeName: wt.name, repo: r.repo, file, side });
         return;
       }
     }
     // deps 只有 data：openFile 每次 render 都是新的函式，帶進來會無限重跑
   }, [data]);
 
-  const toggleIgnore = async (repo: string) => {
-    await fetch("/api/changes/ignore", {
+  /**
+   * pin／取消 pin。回來的清單直接套在手上這份快照上，**不重掃** ——
+   * 重掃要跑一百多個 repo 的 git，為了換個順序讓整頁空白幾秒不划算。
+   */
+  const togglePin = async (repo: string) => {
+    const res = await fetch("/api/changes/pin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ repo }),
     });
-    await load();
+    const json = (await res.json()) as { pinned?: string[]; error?: string };
+    if (!res.ok || !json.pinned) {
+      setError(json.error ?? "pin 失敗");
+      return;
+    }
+    const pinned = json.pinned;
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            pinned,
+            repos: sortRepos(prev.repos.map((r) => ({ ...r, pinned: pinned.includes(r.repo) }))),
+          }
+        : prev
+    );
   };
 
   const repos = useMemo(() => {
@@ -203,7 +241,7 @@ export default function ChangesPage() {
     // 未追蹤的一律顯示（Jay 2026-09-14）。只改模式的才預設藏起來 ——
     // 那是整個 repo 被 chmod 過的產物，會把真正的改動洗掉
     const keep = (f: ChangedFile) => showModeOnly || !f.modeOnly;
-    return data.repos
+    const list = data.repos
       .map((r) => {
         const worktrees = r.worktrees
           .map((w) => ({ ...w, files: w.files.filter(keep) }))
@@ -211,18 +249,32 @@ export default function ChangesPage() {
         return { ...r, worktrees, total: worktrees.reduce((n, w) => n + w.files.length, 0) };
       })
       .filter((r) => r.total > 0);
+    // 藏掉「只改模式」的檔案會改變各 repo 的改動數，順序要跟著重算
+    return sortRepos(list);
   }, [data, showModeOnly]);
 
   const totalFiles = repos.reduce((n, r) => n + r.total, 0);
 
-  // 樹狀檢視時才建樹。拖寬度會一直重 render，沒有 memo 的話每一幀都重建一次
+  /** 每個 worktree 切成 Staged／Changes 兩份（部分 staged 的兩邊都會有） */
+  const sections = useMemo(() => {
+    const m = new Map<string, Record<WipSide, ChangedFile[]>>();
+    for (const r of repos) for (const w of r.worktrees) m.set(w.path, splitByStage(w.files));
+    return m;
+  }, [repos]);
+
+  // 樹狀檢視時才建樹。拖寬度會一直重 render，沒有 memo 的話每一幀都重建一次。
+  // 一區一棵樹（key 是 `<worktree>:<區>`）—— 兩區各自的目錄結構本來就不一樣
   const trees = useMemo(() => {
     const m = new Map<string, TreeNode[]>();
     if (view === "tree") {
-      for (const r of repos) for (const w of r.worktrees) m.set(w.path, buildTree(w.files));
+      for (const [wPath, sec] of sections) {
+        for (const side of ["index", "worktree"] as WipSide[]) {
+          if (sec[side].length) m.set(`${wPath}:${side}`, buildTree(sec[side]));
+        }
+      }
     }
     return m;
-  }, [repos, view]);
+  }, [sections, view]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -261,10 +313,8 @@ export default function ChangesPage() {
         <div className="mt-1 h-4 text-xs">
           {error ? (
             <span className="text-red-600">{error}</span>
-          ) : data && data.ignoredChanges > 0 ? (
-            <span className="text-gray-400">
-              已忽略 {data.ignored.join("、")}（{data.ignoredChanges} 個改動沒列出來）
-            </span>
+          ) : data && data.pinned.length > 0 ? (
+            <span className="text-gray-400">已 pin {data.pinned.join("、")}（排在最前面）</span>
           ) : null}
         </div>
       </div>
@@ -304,8 +354,8 @@ export default function ChangesPage() {
               <div className="flex w-full items-center gap-2 bg-gray-50 px-4 py-2">
                 <button
                   onClick={() => toggleCollapsed(r.repo)}
-                  // 不要 `flex-1`：整條列跟著最寬的路徑一起變寬，把 ✕ 推到捲軸的最右邊
-                  // 就點不到了。✕ 直接跟在名字後面，永遠在畫面上
+                  // 不要 `flex-1`：整條列跟著最寬的路徑一起變寬，把 pin 推到捲軸的最右邊
+                  // 就點不到了。pin 直接跟在名字後面，永遠在畫面上
                   className="flex items-center gap-2 text-left"
                 >
                   <Icon
@@ -316,18 +366,25 @@ export default function ChangesPage() {
                   <span className="whitespace-nowrap font-mono text-xs font-medium text-gray-900">{r.repo}</span>
                   <span className="text-[11px] text-gray-400">{r.total}</span>
                 </button>
-                <Tooltip side="left" label="忽略這個 repo（通常是產物或別人的 WIP）">
+                <Tooltip
+                  side="left"
+                  label={r.pinned ? "取消 pin" : "pin 住這個 repo（排到最前面，不會藏起任何東西）"}
+                >
                   <button
-                    onClick={() => toggleIgnore(r.repo)}
-                    className="shrink-0 text-gray-300 hover:text-gray-700"
+                    onClick={() => void togglePin(r.repo)}
+                    aria-label={r.pinned ? `取消 pin ${r.repo}` : `pin ${r.repo}`}
+                    className={`shrink-0 ${
+                      r.pinned ? "text-amber-500" : "text-gray-300 hover:text-amber-500"
+                    }`}
                   >
-                    <Icon name="x" size={13} />
+                    <Icon name="pin" size={13} />
                   </button>
                 </Tooltip>
               </div>
 
               {!collapsed.has(r.repo) && r.worktrees.map((w) => {
                 const counts = countByKind(w.files);
+                const stage = countByStage(w.files);
                 const wOpen = !collapsed.has(w.path);
                 return (
                   <div key={w.path}>
@@ -370,35 +427,93 @@ export default function ChangesPage() {
                         {counts.untracked > 0 && `U${counts.untracked} `}
                         {counts.conflict > 0 && `C${counts.conflict}`}
                       </span>
+                      {/* 收起來的時候也要看得出「有東西已經 add 了」，不然要展開才知道 */}
+                      {(stage.staged > 0 || stage.partial > 0) && (
+                        <span className="text-gray-500">
+                          {stage.staged > 0 && (
+                            <span className="text-emerald-600">{stage.staged} staged</span>
+                          )}
+                          {stage.partial > 0 && (
+                            <span className="text-indigo-600">
+                              {stage.staged > 0 ? " · " : ""}
+                              {stage.partial} 部分 staged
+                            </span>
+                          )}
+                        </span>
+                      )}
                     </button>
 
+                    {/*
+                      * 照 VS Code 分成 Staged Changes／Changes 兩區。
+                      * **部分 staged 的檔案兩邊都會出現**（`MM` ＝ 索引有一版、工作區
+                      * 還有沒 add 的改動），而且兩邊點開看到的 diff 不一樣 —— 那不是
+                      * 重複列，正是分區的理由。只有一區有東西時仍然畫標題：它同時是
+                      * 收合的把手，而且「這些是不是已經 add 了」本來就要看得出來。
+                      */}
                     <div className={wOpen ? "" : "hidden"}>
-                      {view === "list"
-                        ? w.files.map((f) => (
-                            <FileRow
-                              key={f.path}
-                              file={f}
-                              label="path"
-                              selected={selected?.worktree === w.path && selected.file.path === f.path}
-                              onOpen={() =>
-                                openFile({ worktree: w.path, worktreeName: w.name, repo: r.repo, file: f })
-                              }
-                              trailing={<FileBadges file={f} />}
-                            />
-                          ))
-                        : (
-                          <TreeRows
-                            nodes={trees.get(w.path) ?? []}
-                            keyPrefix={w.path}
-                            collapsed={collapsed}
-                            onToggle={toggleCollapsed}
-                            selectedPath={selected?.worktree === w.path ? selected.file.path : null}
-                            onOpen={(f) =>
-                              openFile({ worktree: w.path, worktreeName: w.name, repo: r.repo, file: f })
-                            }
-                            extras={(f) => ({ trailing: <FileBadges file={f} /> })}
-                          />
-                        )}
+                      {(["index", "worktree"] as WipSide[]).map((side) => {
+                        const files = sections.get(w.path)?.[side] ?? [];
+                        if (!files.length) return null;
+                        const secKey = `${w.path}:sec:${side}`;
+                        const secOpen = !collapsed.has(secKey);
+                        const open = (file: ChangedFile) =>
+                          openFile({
+                            worktree: w.path, worktreeName: w.name, repo: r.repo, file, side,
+                          });
+                        const isSelected = (file: ChangedFile) =>
+                          selected?.worktree === w.path &&
+                          selected.side === side &&
+                          selected.file.path === file.path;
+                        return (
+                          <div key={side}>
+                            <Tooltip side="left" label={SIDE_DESC[side]}>
+                              <button
+                                onClick={() => toggleCollapsed(secKey)}
+                                className="flex w-full items-center gap-1 whitespace-nowrap py-1 pl-6 pr-4 text-left text-[11px] font-medium text-gray-500 hover:text-gray-800"
+                              >
+                                <Icon
+                                  name={secOpen ? "chevronDown" : "chevronRight"}
+                                  size={12}
+                                  className="shrink-0 text-gray-400"
+                                />
+                                {SIDE_TITLE[side]}
+                                <span className="font-normal text-gray-400">{files.length}</span>
+                              </button>
+                            </Tooltip>
+                            <div className={secOpen ? "" : "hidden"}>
+                              {view === "list"
+                                ? files.map((f) => (
+                                    <FileRow
+                                      key={f.path}
+                                      file={f}
+                                      label="path"
+                                      // 區塊標題自己縮了一層，底下的檔案要再縮一層才看得出從屬
+                                      depth={1}
+                                      selected={isSelected(f)}
+                                      onOpen={() => open(f)}
+                                      trailing={<FileBadges file={f} />}
+                                    />
+                                  ))
+                                : (
+                                  <TreeRows
+                                    nodes={trees.get(`${w.path}:${side}`) ?? []}
+                                    depth={1}
+                                    keyPrefix={`${w.path}:${side}`}
+                                    collapsed={collapsed}
+                                    onToggle={toggleCollapsed}
+                                    selectedPath={
+                                      selected?.worktree === w.path && selected.side === side
+                                        ? selected.file.path
+                                        : null
+                                    }
+                                    onOpen={open}
+                                    extras={(f) => ({ trailing: <FileBadges file={f} /> })}
+                                  />
+                                )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -441,6 +556,10 @@ export default function ChangesPage() {
                 >
                   {KIND_LABEL[selected.file.kind]}
                 </span>
+                {/* 同一個檔案在兩區看到的 diff 不一樣，一定要標出現在看的是哪一邊 */}
+                <span className="shrink-0 font-mono text-[11px] text-gray-400">
+                  {SIDE_DESC[selected.side]}
+                </span>
               </div>
 
               {diffLoading ? (
@@ -450,7 +569,7 @@ export default function ChangesPage() {
               ) : diff?.image ? (
                 <ImageDiffView
                   // 換檔案就重建，狀態（尺寸、滑桿位置）跟著歸零
-                  key={`${selected.worktree}:${selected.file.path}`}
+                  key={`${selected.worktree}:${selected.side}:${selected.file.path}`}
                   worktree={selected.worktree}
                   file={selected.file.path}
                   oldPath={diff.image.oldPath}
@@ -481,7 +600,15 @@ export default function ChangesPage() {
                   loadLines={
                     selected.file.kind === "untracked"
                       ? undefined
-                      : (from, to) => fetchDiffLines(selected.worktree, selected.file.path, "", from, to)
+                      : (from, to) =>
+                          fetchDiffLines(
+                            selected.worktree,
+                            selected.file.path,
+                            // staged 那側的行號指的是索引的內容，不是工作區的
+                            selected.side === "index" ? ":" : "",
+                            from,
+                            to
+                          )
                   }
                 />
               ) : null}
@@ -493,12 +620,17 @@ export default function ChangesPage() {
   );
 }
 
-/** 只有這一頁要的兩個小標：只改模式、已 git add */
+/**
+ * 只有這一頁要的兩個小標：只改模式、部分 staged。
+ *
+ * 清單已經分成 Staged／Changes 兩區，所以**只標「部分 staged」** —— 「staged」三個字
+ * 是區塊標題講過的廢話，但部分 staged 的檔案兩區都會出現，不標會看起來像重複列。
+ */
 function FileBadges({ file }: { file: ChangedFile }) {
   return (
     <>
       {file.modeOnly && <span className="shrink-0 text-[10px] text-gray-300">模式</span>}
-      {file.staged && <span className="shrink-0 text-[10px] text-emerald-600">staged</span>}
+      <StageBadge file={file} onlyPartial />
     </>
   );
 }
@@ -506,8 +638,9 @@ function FileBadges({ file }: { file: ChangedFile }) {
 /**
  * 給 DiffView 抓「展開更多上下文」用的那幾行。
  *
- * rev 決定讀哪一版的新側：看單一 commit 是那個 sha，其餘（HEAD→工作區、
- * base→工作區）都是工作區現在的檔案，所以是空字串。
+ * rev 決定讀哪一版的新側：看單一 commit 是那個 sha，`":"` 是索引裡那一版
+ * （Staged Changes 區塊），其餘（HEAD→工作區、base→工作區）都是工作區現在的檔案，
+ * 所以是空字串。
  */
 async function fetchDiffLines(
   worktree: string,

@@ -56,17 +56,17 @@ describe("parseNameStatus", () => {
       ["M\tlib/a.ts", "A\tlib/b.ts", "D\tlib/c.ts", "R100\told/x.ts\tnew/x.ts"].join("\n")
     );
     expect(out).toEqual([
-      { path: "lib/a.ts", kind: "modified", staged: false },
-      { path: "lib/b.ts", kind: "added", staged: false },
-      { path: "lib/c.ts", kind: "deleted", staged: false },
-      { path: "new/x.ts", kind: "renamed", staged: false, from: "old/x.ts" },
+      { path: "lib/a.ts", kind: "modified", staged: false, unstaged: false },
+      { path: "lib/b.ts", kind: "added", staged: false, unstaged: false },
+      { path: "lib/c.ts", kind: "deleted", staged: false, unstaged: false },
+      { path: "new/x.ts", kind: "renamed", staged: false, unstaged: false, from: "old/x.ts" },
     ]);
   });
 });
 
 describe("mergeLineFiles", () => {
   const f = (path: string, kind: ChangedFile["kind"] = "modified"): ChangedFile => ({
-    path, kind, staged: false,
+    path, kind, staged: false, unstaged: false,
   });
 
   it("標出「只在 commit」「只在工作區」「兩邊都有」", () => {
@@ -121,7 +121,7 @@ describe("branchMatchesTicket", () => {
 });
 
 describe("fileOrigin", () => {
-  const base = { path: "a.ts", kind: "modified" as const, staged: false };
+  const base = { path: "a.ts", kind: "modified" as const, staged: false, unstaged: true };
   it("三種狀態各有標示", () => {
     expect(fileOrigin({ ...base, inCommits: true, inWip: true }).label).toBe("C+W");
     expect(fileOrigin({ ...base, inCommits: true, inWip: false }).label).toBe("C");

@@ -110,13 +110,13 @@ export function parseNameStatus(stdout: string): ChangedFile[] {
     const code = parts[0]?.[0] ?? "";
     // rename 是 `R100\told\tnew`
     if (code === "R" && parts.length >= 3) {
-      out.push({ path: parts[2], kind: "renamed", staged: false, from: parts[1] });
+      out.push({ path: parts[2], kind: "renamed", staged: false, unstaged: false, from: parts[1] });
       continue;
     }
     if (parts.length < 2) continue;
     const kind: ChangeKind =
       code === "A" ? "added" : code === "D" ? "deleted" : code === "C" ? "added" : "modified";
-    out.push({ path: parts[1], kind, staged: false });
+    out.push({ path: parts[1], kind, staged: false, unstaged: false });
   }
   return out;
 }

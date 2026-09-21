@@ -4,13 +4,13 @@ import path from "path";
 import { repoPath, repoRoot, run } from "@/lib/repo";
 import { isSensitivePath } from "@/lib/codeBrowseRules";
 import {
-  imageMimeOf, parseDiff, parseStatus,
+  imageMimeOf, parseDiff, parseStatus, sortRepos,
   type ChangedFile, type DiffLine, type RepoChanges, type WorktreeChanges,
 } from "@/lib/changesRules";
 
 export type { RepoChanges, WorktreeChanges, ChangedFile, DiffLine };
 
-const IGNORE_FILE = repoPath("data/local-state/changes-ignored.json");
+const PIN_FILE = repoPath("data/local-state/changes-pinned.json");
 /** 同時跑幾個 git —— 117 個 repo 循序跑要 2.6 秒，開併發後快得多 */
 const CONCURRENCY = 12;
 /** 單一檔案的 diff 上限，太大的只給前面這麼多 */
@@ -18,24 +18,30 @@ export const DIFF_MAX_BYTES = 400_000;
 /** 二進位檔的判斷用：git 會直接把位元組吐出來 */
 const NUL = String.fromCharCode(0);
 
-// ─── 忽略清單 ────────────────────────────────────────────────────────────────
+// ─── pin 住的 repo ───────────────────────────────────────────────────────────
 
-export async function readIgnored(): Promise<string[]> {
-  const raw = await readFile(IGNORE_FILE, "utf8").catch(() => null);
+/**
+ * pin 住的 repo 名（`/git` 那頁存的是目錄路徑，這頁的單位是 repo 名 ——
+ * 同一個 repo 的多個 worktree 在這頁本來就收在同一組底下）。
+ *
+ * **只影響排序**，不會讓任何 repo 從清單上消失。
+ */
+export async function readPinned(): Promise<string[]> {
+  const raw = await readFile(PIN_FILE, "utf8").catch(() => null);
   if (!raw) return [];
   try {
-    const d = JSON.parse(raw) as { ignored?: string[] };
-    return Array.isArray(d.ignored) ? d.ignored : [];
+    const d = JSON.parse(raw) as { pinned?: string[] };
+    return Array.isArray(d.pinned) ? d.pinned : [];
   } catch {
     return [];
   }
 }
 
-export async function toggleIgnored(repo: string): Promise<string[]> {
-  const cur = await readIgnored();
+export async function togglePinned(repo: string): Promise<string[]> {
+  const cur = await readPinned();
   const next = cur.includes(repo) ? cur.filter((r) => r !== repo) : [...cur, repo];
-  await mkdir(path.dirname(IGNORE_FILE), { recursive: true });
-  await writeFile(IGNORE_FILE, JSON.stringify({ ignored: next }, null, 2) + "\n", "utf8");
+  await mkdir(path.dirname(PIN_FILE), { recursive: true });
+  await writeFile(PIN_FILE, JSON.stringify({ pinned: next }, null, 2) + "\n", "utf8");
   return next;
 }
 
@@ -210,9 +216,8 @@ export interface ChangesSnapshot {
   /** 掃了幾個工作區（含 worktree） */
   scanned: number;
   repos: RepoChanges[];
-  ignored: string[];
-  /** 被忽略的 repo 底下有幾個改動（只給數字，不列內容） */
-  ignoredChanges: number;
+  /** pin 住的 repo 名（含目前沒有改動、所以沒出現在 `repos` 裡的） */
+  pinned: string[];
   /** 因為是 offloaded（搬到外接）而跳過的資料夾數 */
   skippedOffloaded: number;
 }
@@ -266,7 +271,7 @@ export async function scanChanges(): Promise<ChangesSnapshot> {
     byRepo.set(main, list);
   }
 
-  const ignored = await readIgnored();
+  const pinned = await readPinned();
   const flat = [...byRepo.entries()].flatMap(([main, list]) => list.map((w) => ({ main, w })));
   const statuses = await mapLimit(flat, CONCURRENCY, async ({ main, w }) => ({
     main,
@@ -275,15 +280,10 @@ export async function scanChanges(): Promise<ChangesSnapshot> {
   }));
 
   const repos = new Map<string, RepoChanges>();
-  let ignoredChanges = 0;
   for (const { main, w, files } of statuses) {
     if (!files.length) continue;
     const repo = path.basename(main);
-    if (ignored.includes(repo)) {
-      ignoredChanges += files.length;
-      continue;
-    }
-    const entry = repos.get(repo) ?? { repo, worktrees: [], total: 0 };
+    const entry = repos.get(repo) ?? { repo, worktrees: [], total: 0, pinned: pinned.includes(repo) };
     entry.worktrees.push({
       path: w.path,
       name: path.basename(w.path),
@@ -305,9 +305,8 @@ export async function scanChanges(): Promise<ChangesSnapshot> {
   return {
     scannedAt: new Date().toISOString(),
     scanned: flat.length,
-    repos: [...repos.values()].sort((a, b) => b.total - a.total),
-    ignored,
-    ignoredChanges,
+    repos: sortRepos([...repos.values()]),
+    pinned,
     skippedOffloaded,
   };
 }
@@ -397,7 +396,16 @@ export const IMAGE_MAX_BYTES = 25 * 1024 * 1024;
 export async function fileDiff(
   worktree: string,
   file: string,
-  opts: { untracked?: boolean; oldPath?: string; base?: string; sha?: string } = {}
+  opts: {
+    untracked?: boolean; oldPath?: string; base?: string; sha?: string;
+    /**
+     * VS Code 那種「Staged Changes／Changes」兩區塊要看的是不同的差異：
+     *   index     HEAD → 索引（`git diff --cached`）＝ commit 下去會帶走的
+     *   worktree  索引 → 工作區（`git diff`）＝ commit **不會**帶走的
+     * 不給就是舊行為（HEAD → 工作區，兩者合在一起）。
+     */
+    side?: "index" | "worktree";
+  } = {}
 ): Promise<FileDiff> {
   const abs = path.resolve(worktree, file);
   if (abs !== worktree && !abs.startsWith(worktree + path.sep)) {
@@ -416,7 +424,11 @@ export async function fileDiff(
     ? ["-C", worktree, "show", "--no-color", "--format=", opts.sha, "--", file]
     : opts.untracked
       ? ["-C", worktree, "diff", "--no-index", "--no-color", "--", "/dev/null", file]
-      : ["-C", worktree, "diff", opts.base ?? "HEAD", "--no-color", "--", file];
+      : opts.side === "index"
+        ? ["-C", worktree, "diff", "--cached", "--no-color", "--", file]
+        : opts.side === "worktree"
+          ? ["-C", worktree, "diff", "--no-color", "--", file]
+          : ["-C", worktree, "diff", opts.base ?? "HEAD", "--no-color", "--", file];
   const { stdout, stderr, code } = await run("git", args, { timeoutMs: 30_000 });
   // `--no-index` 有差異時回 1，那是正常的
   if (code !== 0 && code !== 1 && !stdout) {
@@ -427,12 +439,15 @@ export async function fileDiff(
   }
   // 看單一 commit 時，兩側都要從 git 取：舊＝`<sha>^`、新＝`<sha>`。
   // 只換舊側是錯的 —— 新側若讀工作區，看到的會是「現在」而不是那個 commit 當時
+  // 圖片：`side: "worktree"` 的舊側是**索引**（空字串 rev ＝ git 的 `:<path>`）。
+  // `side: "index"` 的新側其實該是索引、這裡仍讀工作區的檔 —— 只有「圖片 staged
+  // 之後又被改過」才會不一致，先不處理（文字 diff 那側是對的）。
   const image = await imageSides(
     worktree,
     abs,
     file,
     opts.oldPath ?? file,
-    opts.sha ? `${opts.sha}^` : opts.base ?? "HEAD",
+    opts.sha ? `${opts.sha}^` : opts.side === "worktree" ? "" : opts.base ?? "HEAD",
     opts.sha ?? null
   );
   if (/^Binary files /m.test(stdout) || stdout.includes(NUL)) {
@@ -547,7 +562,13 @@ export interface FileLines {
 /**
  * 讀一個檔案的第 from..to 行（1-based，含頭含尾）。
  *
- * `rev` 空字串＝讀工作區現在的檔案，否則 `git show <rev>:<path>`。
+ * `rev` 空字串＝讀工作區現在的檔案，`":"` ＝**索引裡那一版**（git 自己的
+ * `:<path>` 寫法），其餘 `git show <rev>:<path>`。
+ *
+ * 索引那一版是給「Staged Changes」區塊的展開用的：那邊的 diff 是 HEAD → 索引，
+ * 行號指的是索引的內容。部分 staged 的檔案（`MM`）工作區跟索引不一樣，
+ * 拿工作區的行去補會**安靜地補錯行**。
+ *
  * **機敏檔案在這裡也要擋**：diff 本來就不會帶它們的內容進來，但展開是另一條
  * 讀取路徑，漏掉就等於開了一個後門（sensitive-files.md）。
  */
@@ -563,7 +584,9 @@ export async function readFileLines(
 
   let text: string;
   if (rev) {
-    const r = await run("git", ["-C", worktree, "show", `${rev}:${file}`], { timeoutMs: 30_000 });
+    // `rev === ":"` 時 spec 是 `:<path>`（索引），不是 `::<path>`
+    const spec = rev === ":" ? `:${file}` : `${rev}:${file}`;
+    const r = await run("git", ["-C", worktree, "show", spec], { timeoutMs: 30_000 });
     if (r.code !== 0) return { error: r.stderr.trim().slice(0, 200) || "讀不到這個版本" };
     text = r.stdout;
   } else {

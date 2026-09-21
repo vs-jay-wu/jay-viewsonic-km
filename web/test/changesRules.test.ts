@@ -1,20 +1,55 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildTree, contextGaps, countByKind, diffStat, expandStep, formatBytes, imageMimeOf, splitGap,
-  languageOf, parseDiff, parseStatus, parseStatusLine,
-  type ChangedFile, type DiffLine,
+  buildTree, contextGaps, countByKind, countByStage, diffStat, expandStep, formatBytes,
+  imageMimeOf, splitByStage, splitGap, languageOf, parseDiff, parseStatus, parseStatusLine, sortRepos,
+  stageState,
+  type ChangedFile, type DiffLine, type RepoChanges,
 } from "@/lib/changesRules";
 
 describe("parseStatusLine — 前兩個字元是固定欄位，不能用空白切", () => {
   it("工作區改動（` M`）與已 staged（`M `）分得出來", () => {
     expect(parseStatusLine(" M lib/a.ts")).toEqual({
-      path: "lib/a.ts", kind: "modified", staged: false, from: undefined,
+      path: "lib/a.ts", kind: "modified", staged: false, unstaged: true, from: undefined,
     });
-    expect(parseStatusLine("M  lib/a.ts")).toMatchObject({ kind: "modified", staged: true });
+    expect(parseStatusLine("M  lib/a.ts")).toMatchObject({
+      kind: "modified", staged: true, unstaged: false,
+    });
+  });
+
+  /*
+   * 索引與工作區是**兩個獨立欄位**。只有一個布林的時候，`MM` 會被記成單純的
+   * staged —— 畫面上看不出工作區還有東西沒 add，而那正是 commit 不會帶走的部分。
+   */
+  it("`MM` ＝ 兩邊都有（只 add 了一部分）", () => {
+    expect(parseStatusLine("MM lib/a.ts")).toMatchObject({ staged: true, unstaged: true });
+    expect(stageState(parseStatusLine("MM lib/a.ts")!)).toBe("partial");
+  });
+
+  it("stageState 四種狀態", () => {
+    expect(stageState(parseStatusLine("M  a.ts")!)).toBe("staged");
+    expect(stageState(parseStatusLine(" M a.ts")!)).toBe("unstaged");
+    expect(stageState(parseStatusLine("?? a.ts")!)).toBe("unstaged");
+    // commit 裡的檔案沒有索引／工作區之分，兩軸都是 false
+    expect(stageState({ path: "a.ts", kind: "modified", staged: false, unstaged: false }))
+      .toBe("none");
+  });
+
+  it("`AM`（新增後又改）也是 partial；`UU` 衝突算在工作區", () => {
+    expect(stageState(parseStatusLine("AM a.ts")!)).toBe("partial");
+    expect(parseStatusLine("UU a.ts")).toMatchObject({
+      kind: "conflict", staged: false, unstaged: true,
+    });
+  });
+
+  it("countByStage 數得出各有幾個", () => {
+    const files = parseStatus(["M  a.ts", " M b.ts", "MM c.ts", "?? d.ts"].join("\n"));
+    expect(countByStage(files)).toEqual({ staged: 1, unstaged: 2, partial: 1, none: 0 });
   });
 
   it("未追蹤", () => {
-    expect(parseStatusLine("?? new.ts")).toEqual({ path: "new.ts", kind: "untracked", staged: false });
+    expect(parseStatusLine("?? new.ts")).toEqual({
+      path: "new.ts", kind: "untracked", staged: false, unstaged: true,
+    });
   });
 
   it("**檔名有空格**也要對（這是不能用 split(' ') 的原因）", () => {
@@ -148,7 +183,7 @@ describe("formatBytes", () => {
 });
 
 describe("buildTree", () => {
-  const f = (path: string): ChangedFile => ({ path, kind: "modified", staged: false });
+  const f = (path: string): ChangedFile => ({ path, kind: "modified", staged: false, unstaged: true });
 
   it("照目錄分層，目錄排在檔案前面", () => {
     const t = buildTree([f("z.txt"), f("src/a.ts"), f("src/b.ts")]);
@@ -279,5 +314,66 @@ describe("splitGap — 補到的行可能在缺口的任何位置", () => {
       { kind: "line", no: 5 },
       { kind: "line", no: 6 },
     ]);
+  });
+});
+
+describe("sortRepos — pin 只動順序，不會少掉任何 repo", () => {
+  const repo = (name: string, total: number, pinned: boolean): RepoChanges =>
+    ({ repo: name, worktrees: [], total, pinned });
+
+  it("pin 住的排最前面，即使改動數比較少", () => {
+    const out = sortRepos([repo("a", 9, false), repo("b", 1, true), repo("c", 5, false)]);
+    expect(out.map((r) => r.repo)).toEqual(["b", "a", "c"]);
+  });
+
+  it("同一組（都 pin 或都沒 pin）內照改動數由多到少", () => {
+    const out = sortRepos([repo("a", 2, true), repo("b", 7, true), repo("c", 3, false)]);
+    expect(out.map((r) => r.repo)).toEqual(["b", "a", "c"]);
+  });
+
+  /* pin 取代的是「忽略這個 repo」——那顆會讓改動整個消失，這裡刻意不再有這種行為 */
+  it("沒有任何 repo 被濾掉", () => {
+    const input = [repo("a", 1, false), repo("b", 2, true)];
+    expect(sortRepos(input)).toHaveLength(2);
+    expect(input.map((r) => r.repo)).toEqual(["a", "b"]); // 不動到傳進來的陣列
+  });
+});
+
+describe("splitByStage — Staged Changes／Changes 兩區", () => {
+  const files = parseStatus(
+    ["M  a.ts", " M b.ts", "MM c.ts", "?? d.ts", "UU e.ts", "A  f.ts"].join("\n")
+  );
+  const { index, worktree } = splitByStage(files);
+
+  it("已 staged 的只在 index 區", () => {
+    expect(index.map((f) => f.path)).toContain("a.ts");
+    expect(worktree.map((f) => f.path)).not.toContain("a.ts");
+    expect(index.map((f) => f.path)).toContain("f.ts");
+  });
+
+  it("只改工作區的、未追蹤的、衝突的都在 worktree 區", () => {
+    expect(worktree.map((f) => f.path)).toEqual(expect.arrayContaining(["b.ts", "d.ts", "e.ts"]));
+    expect(index.map((f) => f.path)).not.toContain("d.ts");
+  });
+
+  /*
+   * 這條是整個分區的重點：`MM` 索引有一版、工作區還有沒 add 的改動，兩邊點開
+   * 看到的 diff 不一樣（`git diff --cached` vs `git diff`），所以兩區都要列。
+   */
+  it("部分 staged（`MM`）兩區都出現", () => {
+    expect(index.map((f) => f.path)).toContain("c.ts");
+    expect(worktree.map((f) => f.path)).toContain("c.ts");
+  });
+
+  it("沒有檔案整筆消失（每個檔至少落在一區）", () => {
+    const seen = new Set([...index, ...worktree].map((f) => f.path));
+    expect([...seen].sort()).toEqual(files.map((f) => f.path).sort());
+  });
+
+  /* 兩軸都 false 是 `git status` 吐不出來的組合，但真的出現時寧可列在 Changes 也不要不見 */
+  it("兩軸都 false 的歸到 Changes", () => {
+    const odd = { path: "x.ts", kind: "modified" as const, staged: false, unstaged: false };
+    expect(splitByStage([odd]).worktree).toHaveLength(1);
+    expect(splitByStage([odd]).index).toHaveLength(0);
   });
 });

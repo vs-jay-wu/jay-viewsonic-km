@@ -17,8 +17,17 @@ export interface ChangedFile {
    * 真正有內容差異的只有 17 個。不分出來的話，真的改動會被完全埋掉。
    */
   modeOnly?: boolean;
-  /** 改動在索引區（已 git add）還是工作區 */
+  /**
+   * 索引區（已 `git add`）有這個改動。
+   *
+   * **`staged` 與 `unstaged` 是兩軸，不是二選一**：git status 的兩個欄位
+   * 分別是索引與工作區，`MM` 代表兩邊都有 —— 也就是「只 add 了一部分」。
+   * 早期這裡只有一個布林，那種檔案會被當成單純的 staged，看不出工作區
+   * 還有沒進索引的東西（Jay 2026-09-21 在 `/git` 上回報）。
+   */
   staged: boolean;
+  /** 工作區有還沒進索引的改動。與 `staged` 同時成立 ＝ 部分 staged */
+  unstaged: boolean;
   /** rename 的來源 */
   from?: string;
 }
@@ -42,6 +51,20 @@ export interface RepoChanges {
   worktrees: WorktreeChanges[];
   /** 全部 worktree 加起來的改動數 */
   total: number;
+  /** pin 住的排在最前面（只是排序偏好，不影響內容） */
+  pinned: boolean;
+}
+
+/**
+ * 清單排序：pin 住的整批排在最前面，各自再照改動數由多到少。
+ *
+ * pin 只動順序、**不會**把任何 repo 藏起來 —— 藏起來的那種（原本的「忽略這個 repo」）
+ * 會讓改動安靜地消失，反而是這頁最不該有的行為。
+ */
+export function sortRepos(repos: RepoChanges[]): RepoChanges[] {
+  return [...repos].sort((a, b) =>
+    a.pinned === b.pinned ? b.total - a.total : a.pinned ? -1 : 1
+  );
 }
 
 /**
@@ -94,15 +117,19 @@ export function parseStatusLine(line: string): ChangedFile | null {
   }
   const path = rest.replace(/^"|"$/g, "");
 
-  if (x === "?" && y === "?") return { path, kind: "untracked", staged: false };
+  if (x === "?" && y === "?") {
+    return { path, kind: "untracked", staged: false, unstaged: true };
+  }
   if (x === "U" || y === "U" || (x === "A" && y === "A") || (x === "D" && y === "D")) {
-    return { path, kind: "conflict", staged: false };
+    // 衝突的檔案還在工作區等人解，索引那一格不算數
+    return { path, kind: "conflict", staged: false, unstaged: true };
   }
   const code = x !== " " ? x : y;
   const staged = x !== " " && x !== "?";
+  const unstaged = y !== " " && y !== "?";
   const kind: ChangeKind =
     code === "A" ? "added" : code === "D" ? "deleted" : code === "R" ? "renamed" : "modified";
-  return { path, kind, staged, from };
+  return { path, kind, staged, unstaged, from };
 }
 
 export function parseStatus(stdout: string): ChangedFile[] {
@@ -113,6 +140,63 @@ export function parseStatus(stdout: string): ChangedFile[] {
     .map(parseStatusLine)
     .filter((f): f is ChangedFile => !!f)
     .sort((a, b) => a.path.localeCompare(b.path));
+}
+
+/**
+ * 這個檔案現在在哪一側。`none` ＝ 不適用（commit 裡的檔案沒有索引／工作區之分）。
+ */
+export type StageState = "staged" | "unstaged" | "partial" | "none";
+
+export function stageState(f: ChangedFile): StageState {
+  if (f.staged && f.unstaged) return "partial";
+  if (f.staged) return "staged";
+  return f.unstaged ? "unstaged" : "none";
+}
+
+/**
+ * VS Code 那種「Staged Changes／Changes」兩區塊。
+ *
+ * `index` ＝ HEAD → 索引（commit 會帶走的）、`worktree` ＝ 索引 → 工作區（不會帶走的）。
+ */
+export type WipSide = "index" | "worktree";
+
+/**
+ * 把一份清單切成兩區。**部分 staged 的檔案會同時出現在兩邊**（`MM` ＝ 索引有一版、
+ * 工作區還有沒 add 的改動），而且兩邊點開看到的 diff 不一樣 —— 這正是要分區的理由，
+ * 不是重複列。
+ *
+ * 兩軸都 false 的（`none`，理論上 `git status` 不會吐出來）歸到 `worktree` ——
+ * 寧可列在「還沒 add」那區，也不要整筆消失。
+ */
+export function splitByStage<T extends ChangedFile>(files: T[]): Record<WipSide, T[]> {
+  return {
+    index: files.filter((f) => f.staged),
+    worktree: files.filter((f) => !f.staged || f.unstaged),
+  };
+}
+
+/** 只有「已進索引」的兩種要標出來；未 staged 是常態，標了只會變成雜訊 */
+export const STAGE_LABEL: Record<StageState, string> = {
+  staged: "staged", partial: "部分 staged", unstaged: "", none: "",
+};
+
+export const STAGE_TITLE: Record<StageState, string> = {
+  staged: "已 git add，commit 會帶走這個檔的全部改動",
+  partial: "只 git add 了一部分 —— 工作區還有沒進索引的改動，commit 不會帶走那些",
+  unstaged: "還沒 git add",
+  none: "",
+};
+
+/** 琥珀色只給警告，所以「部分 staged」用中性的靛色，不是黃色 */
+export const STAGE_CLS: Record<StageState, string> = {
+  staged: "text-emerald-600", partial: "text-indigo-600", unstaged: "", none: "",
+};
+
+/** 一份清單裡各有幾個（畫面上的「N staged · M 未 staged」） */
+export function countByStage(files: ChangedFile[]): Record<StageState, number> {
+  const out = { staged: 0, unstaged: 0, partial: 0, none: 0 };
+  for (const f of files) out[stageState(f)]++;
+  return out;
 }
 
 /** 未追蹤的通常是產物（build、快取），量大時會洗版，所以可以單獨關掉 */
