@@ -46,6 +46,28 @@ export function classifyError(error: string | null): ErrorKind {
   return "other";
 }
 
+/**
+ * 依**實際的錯誤訊息**給提示，而不是照來源猜。
+ *
+ * 由來：首頁對 PR 巡邏寫死「巡邏連續失敗多半是 gh auth 掉了」，而 2026-09-21
+ * 連續失敗 8 次的真正原因是 codex 沒額度 —— 那句猜測把人帶去查錯的地方。
+ * 認得出來的就講具體的，認不出來才退回來源的預設提示。
+ */
+export function hintFor(lastError: string | null, fallback?: string): string | undefined {
+  const e = (lastError ?? "").toLowerCase();
+  if (!e) return fallback;
+  if (/沒額度|out of credits|credit balance is too low|usage limit reached/.test(e)) {
+    return "AI 引擎沒額度了。腳本會自動改用另一個引擎（codex ↔ claude）——兩個都沒額度時才會一直失敗。";
+  }
+  if (/找不到 (codex|claude)|command not found/.test(e)) {
+    return "找不到 AI 引擎的執行檔，檢查 codex／claude 有沒有裝、在不在 PATH 上。";
+  }
+  if (/401|403|unauthorized|bad credentials|gh auth|未登入/.test(e)) {
+    return "認證掉了，跑 gh auth status 看看。";
+  }
+  return fallback;
+}
+
 export function thresholdFor(kind: ErrorKind): number {
   return kind === "auth" ? AUTH_ALERT_THRESHOLD : FAILURE_ALERT_THRESHOLD;
 }

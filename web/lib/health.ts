@@ -41,7 +41,9 @@ export const SOURCE_LABELS: Record<string, { label: string; href: string; hint: 
   "pr-inbox": {
     label: "GitHub（PR 巡邏）",
     href: "/pr-inbox",
-    hint: "同樣走 gh；巡邏連續失敗多半是 gh auth 掉了",
+    // 這只是**認不出錯誤訊息時**的退路。認得出來的由 healthRules.hintFor 覆蓋 ——
+    // 這裡原本寫死「多半是 gh auth 掉了」，而實際連續失敗 8 次那次是 AI 引擎沒額度。
+    hint: "巡邏走 gh 與 AI 引擎（codex／claude），兩邊都可能是原因；看下面那行實際訊息。",
   },
   "my-tickets": {
     label: "Jira（單追蹤）",

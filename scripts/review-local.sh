@@ -66,10 +66,16 @@ done
 
 for cmd in git jq; do command -v "$cmd" >/dev/null || { echo "找不到 $cmd" >&2; exit 1; }; done
 
+source "$KM_ROOT/scripts/lib/engine.sh"
+
 # 引擎：--engine > web 設定頁（data/local-state/ui-settings.json）> codex
+ENGINE_EXPLICIT=true
 if [[ -z "$ENGINE" ]]; then
+  ENGINE_EXPLICIT=false
   ENGINE="$(jq -r '.reviewEngine // "codex"' "$KM_ROOT/data/local-state/ui-settings.json" 2>/dev/null || echo codex)"
   [[ "$ENGINE" == "null" || -z "$ENGINE" ]] && ENGINE=codex
+  # 偏好的那個最近回報沒額度就先換 —— 不然每一輪都要先失敗一次才會切
+  ENGINE="$(engine_pick "$ENGINE")"
 fi
 [[ "$ENGINE" == "codex" || "$ENGINE" == "claude" ]] || { echo "--engine 只能是 codex 或 claude（收到：$ENGINE）" >&2; exit 2; }
 command -v "$ENGINE" >/dev/null || {
@@ -419,80 +425,106 @@ RUN="$CTX/run.json"
 SCHEMA_FILE="$CTX/schema.json"
 printf '%s\n' "$SCHEMA" > "$SCHEMA_FILE"
 
-if [[ "$ENGINE" == "codex" ]]; then
-  # codex 的對應關係（都實測過，2026-09-18 codex-cli 0.154.0）：
-  #   -s read-only      能讀整個檔案系統（含 km 的 skills／rules），但寫入會被作業系統擋掉
-  #                     —— 實測要求它 `echo > 檔案` 得到 "operation not permitted"，檔案沒被建立
-  #   --ephemeral       不落地 session
-  #   --output-schema   跟 claude 的 --json-schema 同一份 schema
-  #   -o <FILE>         最後一則訊息（就是那份 JSON）直接寫檔，不必從 JSONL 撈
-  # 沒有對應的是預算上限（claude 的 --max-budget-usd），所以 codex 不會有 costUsd。
-  CODEX_ARGS=(
-    exec "$PROMPT"
-    -C "$REPO_ROOT"
-    -s read-only
-    --ephemeral
-    --output-schema "$SCHEMA_FILE"
-    -o "$CTX/result.raw"
+# 一次執行。**不 exit，回 0/1** —— 失敗時呼叫端要能決定換不換引擎。
+run_engine() {
+  # 清掉上一輪的殘留 —— 換引擎重跑時，失敗那次的半成品不能被當成這次的結果
+  : > "$CTX/run.err"; : > "$CTX/result.raw"
+  if [[ "$1" == "codex" ]]; then
+    # codex 的對應關係（都實測過，2026-09-18 codex-cli 0.154.0）：
+    #   -s read-only      能讀整個檔案系統（含 km 的 skills／rules），但寫入會被作業系統擋掉
+    #                     —— 實測要求它 `echo > 檔案` 得到 "operation not permitted"，檔案沒被建立
+    #   --ephemeral       不落地 session
+    #   --output-schema   跟 claude 的 --json-schema 同一份 schema
+    #   -o <FILE>         最後一則訊息（就是那份 JSON）直接寫檔，不必從 JSONL 撈
+    # 沒有對應的是預算上限（claude 的 --max-budget-usd），所以 codex 不會有 costUsd。
+    CODEX_ARGS=(
+      exec "$PROMPT"
+      -C "$REPO_ROOT"
+      -s read-only
+      --ephemeral
+      --output-schema "$SCHEMA_FILE"
+      -o "$CTX/result.raw"
+    )
+    [[ -n "$MODEL" ]] && CODEX_ARGS+=(-m "$MODEL")
+
+    # **`< /dev/null` 不能省**：codex exec 在 stdin 不是 TTY 時會等著把 stdin 當成
+    # 追加的 prompt 讀進來（畫面上停在 "Reading additional input from stdin..."）。
+    # 從腳本／排程呼叫時 stdin 通常不是 TTY，於是整個 review 就無聲卡死
+    # —— 實測卡了 18 分鐘才發現不是模型在想（2026-09-18）。
+    if ! codex "${CODEX_ARGS[@]}" < /dev/null > "$RUN" 2>"$CTX/run.err"; then
+      echo "codex 執行失敗：" >&2
+      [[ -s "$CTX/run.err" ]] && tail -20 "$CTX/run.err" >&2
+      return 1
+    fi
+    [[ -s "$CTX/result.raw" ]] || {
+      echo "codex 沒有吐出最後訊息（-o 檔是空的）：" >&2; tail -20 "$CTX/run.err" >&2; return 1
+    }
+    COST="null"
+  else
+
+  CLAUDE_ARGS=(
+    -p "$PROMPT"
+    --restricted                      # 拿掉所有會執行指令的工具
+    --tools "Read,Grep,Glob"          # 白名單本身就不含任何寫入工具
+    --add-dir "$CTX"                  # 預抓的 diff
+    --add-dir "$KM_ROOT"              # km 的 skills / rules
+    --session-id "$SID"
+    --no-session-persistence
+    --permission-prompts none         # 任何會跳詢問的事一律拒絕，不會卡住
+    --output-format json
+    --json-schema "$SCHEMA"
+    --max-budget-usd "$BUDGET"
   )
-  [[ -n "$MODEL" ]] && CODEX_ARGS+=(-m "$MODEL")
+  [[ -n "$MODEL" ]] && CLAUDE_ARGS+=(--model "$MODEL")
 
-  # **`< /dev/null` 不能省**：codex exec 在 stdin 不是 TTY 時會等著把 stdin 當成
-  # 追加的 prompt 讀進來（畫面上停在 "Reading additional input from stdin..."）。
-  # 從腳本／排程呼叫時 stdin 通常不是 TTY，於是整個 review 就無聲卡死
-  # —— 實測卡了 18 分鐘才發現不是模型在想（2026-09-18）。
-  if ! codex "${CODEX_ARGS[@]}" < /dev/null > "$RUN" 2>"$CTX/run.err"; then
-    echo "codex 執行失敗：" >&2
+  # 失敗原因不一定在 stderr —— 預算用盡 / 中斷這類是 exit code + run.json 的
+  # terminal_reason，stderr 是空的。只印 run.err 會變成「無聲失敗」，找半天。
+  explain_failure() {
     [[ -s "$CTX/run.err" ]] && tail -20 "$CTX/run.err" >&2
-    exit 1
-  fi
-  [[ -s "$CTX/result.raw" ]] || {
-    echo "codex 沒有吐出最後訊息（-o 檔是空的）：" >&2; tail -20 "$CTX/run.err" >&2; exit 1
+    [[ -s "$RUN" ]] || { echo "  （沒有 run.json，claude 連結果都沒吐）" >&2; return; }
+    local reason subtype cost
+    reason="$(jq -r '.terminal_reason // "?"' "$RUN" 2>/dev/null)"
+    subtype="$(jq -r '.subtype // "?"' "$RUN" 2>/dev/null)"
+    cost="$(jq -r '.total_cost_usd // 0' "$RUN" 2>/dev/null)"
+    echo "  terminal_reason=$reason  subtype=$subtype  已花費=\$$cost" >&2
+    [[ "$reason" == "budget_exhausted" ]] && \
+      echo "  → 預算用盡（上限 \$$BUDGET）。用 --budget <金額> 提高後重跑。" >&2
+    jq -r '.result // empty' "$RUN" 2>/dev/null | head -5 >&2
   }
-  COST="null"
-else
 
-CLAUDE_ARGS=(
-  -p "$PROMPT"
-  --restricted                      # 拿掉所有會執行指令的工具
-  --tools "Read,Grep,Glob"          # 白名單本身就不含任何寫入工具
-  --add-dir "$CTX"                  # 預抓的 diff
-  --add-dir "$KM_ROOT"              # km 的 skills / rules
-  --session-id "$SID"
-  --no-session-persistence
-  --permission-prompts none         # 任何會跳詢問的事一律拒絕，不會卡住
-  --output-format json
-  --json-schema "$SCHEMA"
-  --max-budget-usd "$BUDGET"
-)
-[[ -n "$MODEL" ]] && CLAUDE_ARGS+=(--model "$MODEL")
+  if ! (cd "$REPO_ROOT" && claude "${CLAUDE_ARGS[@]}") > "$RUN" 2>"$CTX/run.err"; then
+    echo "claude 執行失敗：" >&2; explain_failure; return 1
+  fi
+  if [[ "$(jq -r '.is_error // false' "$RUN")" == "true" ]]; then
+    echo "claude 回報錯誤：" >&2; explain_failure; return 1
+  fi
 
-# 失敗原因不一定在 stderr —— 預算用盡 / 中斷這類是 exit code + run.json 的
-# terminal_reason，stderr 是空的。只印 run.err 會變成「無聲失敗」，找半天。
-explain_failure() {
-  [[ -s "$CTX/run.err" ]] && tail -20 "$CTX/run.err" >&2
-  [[ -s "$RUN" ]] || { echo "  （沒有 run.json，claude 連結果都沒吐）" >&2; return; }
-  local reason subtype cost
-  reason="$(jq -r '.terminal_reason // "?"' "$RUN" 2>/dev/null)"
-  subtype="$(jq -r '.subtype // "?"' "$RUN" 2>/dev/null)"
-  cost="$(jq -r '.total_cost_usd // 0' "$RUN" 2>/dev/null)"
-  echo "  terminal_reason=$reason  subtype=$subtype  已花費=\$$cost" >&2
-  [[ "$reason" == "budget_exhausted" ]] && \
-    echo "  → 預算用盡（上限 \$$BUDGET）。用 --budget <金額> 提高後重跑。" >&2
-  jq -r '.result // empty' "$RUN" 2>/dev/null | head -5 >&2
+  jq -r '.result' "$RUN" > "$CTX/result.raw"
+  COST=$(jq -r '.total_cost_usd // 0' "$RUN")
+
+  fi
+  return 0
 }
 
-if ! (cd "$REPO_ROOT" && claude "${CLAUDE_ARGS[@]}") > "$RUN" 2>"$CTX/run.err"; then
-  echo "claude 執行失敗：" >&2; explain_failure; exit 1
+# ─── 執行（沒額度就自動換另一個）──────────────────────────────────────────
+#
+# 使用者的偏好在「那個引擎根本跑不了」的時候沒有意義。只有**確定是額度問題**
+# 才換（判準在 scripts/lib/engine.sh，刻意寫得窄）—— 一般的失敗照舊直接回報，
+# 換引擎重跑一次只會多花一次錢又蓋掉真正的錯誤。
+ENGINE_SWITCHED_FROM=""
+if ! run_engine "$ENGINE"; then
+  OTHER="$(engine_other "$ENGINE")"
+  if engine_out_of_credits "$CTX/run.err" && command -v "$OTHER" >/dev/null; then
+    engine_mark_out "$ENGINE" "$(grep -oE "$ENGINE_NO_CREDIT_RE" "$CTX/run.err" | head -1)"
+    echo "⚠️  $ENGINE 沒額度，自動改用 $OTHER 重跑…" >&2
+    ENGINE_SWITCHED_FROM="$ENGINE"
+    ENGINE="$OTHER"
+    run_engine "$ENGINE" || exit 1
+  else
+    exit 1
+  fi
 fi
-if [[ "$(jq -r '.is_error // false' "$RUN")" == "true" ]]; then
-  echo "claude 回報錯誤：" >&2; explain_failure; exit 1
-fi
-
-jq -r '.result' "$RUN" > "$CTX/result.raw"
-COST=$(jq -r '.total_cost_usd // 0' "$RUN")
-
-fi
+engine_mark_ok "$ENGINE"
 
 # 兩個引擎到這裡都留下 $CTX/result.raw，後面完全共用
 if ! jq -e . "$CTX/result.raw" > "$CTX/result.json" 2>/dev/null; then
@@ -510,6 +542,7 @@ write_run_record() {
     --arg id "$RUN_ID" --arg startedAt "$RUN_STARTED" \
     --arg finishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg engine "$ENGINE" --arg model "$MODEL" \
+    --arg switchedFrom "$ENGINE_SWITCHED_FROM" \
     --arg repo "$SHORT" --arg root "$REPO_ROOT" --arg branch "$BRANCH" \
     --arg head "$HEAD_SHA" --arg base "$BASE" --arg scope "$SCOPE" \
     --arg cost "$COST" --argjson onDefault "$ON_DEFAULT_BRANCH" \
@@ -517,6 +550,7 @@ write_run_record() {
     --slurpfile result "$CTX/result.json" \
     '{id:$id, startedAt:$startedAt, finishedAt:$finishedAt,
       engine:$engine, model:(if $model == "" then null else $model end),
+      switchedFrom:(if $switchedFrom == "" then null else $switchedFrom end),
       repo:$repo, repoRoot:$root, branch:$branch, head:$head, base:$base, scope:$scope,
       onDefaultBranch:$onDefault, diffTruncated:$truncated,
       sensitiveFilesTouched:($sensitive|split("\n")|map(select(length>0))),

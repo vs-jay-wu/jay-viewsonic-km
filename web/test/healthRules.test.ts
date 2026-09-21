@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  afterFailure, afterSuccess, emptyHealth, isUnhealthy, FAILURE_ALERT_THRESHOLD,
+  afterFailure, afterSuccess, emptyHealth, hintFor, isUnhealthy, FAILURE_ALERT_THRESHOLD,
 } from "@/lib/healthRules";
 
 describe("連續失敗的判準", () => {
@@ -124,5 +124,44 @@ describe("healthFromRuns：從 PR 巡邏的執行紀錄推導", () => {
 
   it("沒有紀錄時是健康的", () => {
     expect(healthFromRuns("pr-inbox", []).consecutiveFailures).toBe(0);
+  });
+});
+
+/*
+ * 由來：首頁對 PR 巡邏寫死「多半是 gh auth 掉了」，而 2026-09-21 連續失敗 8 次
+ * 的真正原因是 codex 沒額度 —— 那句猜測把人帶去查錯的地方。
+ */
+describe("hintFor — 依實際錯誤訊息給提示，不要照來源猜", () => {
+  const fallback = "預設提示";
+
+  it("認得出沒額度（兩個引擎的訊息都要認得）", () => {
+    for (const e of [
+      "codex 失敗：沒額度",
+      "ERROR: Your workspace is out of credits. Ask your workspace owner to refill",
+      "API Error: Credit balance is too low",
+      "Usage limit reached",
+    ]) {
+      expect(hintFor(e, fallback)).toContain("沒額度");
+    }
+  });
+
+  it("認得出認證問題", () => {
+    expect(hintFor("gh: Bad credentials (HTTP 401)", fallback)).toContain("gh auth");
+  });
+
+  it("認得出執行檔不見了", () => {
+    expect(hintFor("找不到 codex 執行檔", fallback)).toContain("PATH");
+  });
+
+  it("認不出來就用來源的預設提示，不要亂猜", () => {
+    expect(hintFor("Error: connect ETIMEDOUT", fallback)).toBe(fallback);
+    expect(hintFor("codex 離開碼 1", fallback)).toBe(fallback);
+    expect(hintFor(null, fallback)).toBe(fallback);
+    expect(hintFor("", fallback)).toBe(fallback);
+  });
+
+  it("沒額度的提示要蓋掉來源的預設值（這是這條存在的理由）", () => {
+    const wrong = "巡邏連續失敗多半是 gh auth 掉了";
+    expect(hintFor("codex 失敗：沒額度", wrong)).not.toBe(wrong);
   });
 });

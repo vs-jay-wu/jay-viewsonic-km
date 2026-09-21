@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listChats } from "@/lib/db";
 import { readSnapshot } from "@/lib/myPrs";
 import { classifyError, SOURCE_LABELS, unhealthySources } from "@/lib/health";
+import { hintFor } from "@/lib/healthRules";
 import { readDisks } from "@/lib/disk";
 import { formatGB, isLow, levelOf, WARN_BELOW_PERCENT } from "@/lib/diskRules";
 import { reviewClis } from "@/lib/cliTools";
@@ -262,7 +263,7 @@ export default async function Home() {
                         needsYou ? "text-red-700" : "text-amber-700"
                       }`}
                     >
-                      {meta?.hint}
+                      {hintFor(h.lastError, meta?.hint)}
                       {h.lastError && (
                         <div className="mt-1 truncate font-mono" title={h.lastError}>
                           {h.lastError}

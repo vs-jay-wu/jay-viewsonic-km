@@ -81,8 +81,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ─── 引擎 ───────────────────────────────────────────────────────────────────
+source "$REPO_ROOT/scripts/lib/engine.sh"
 UI_SETTINGS="$REPO_ROOT/data/local-state/ui-settings.json"
+ENGINE_EXPLICIT=true
 if [[ -z "$ENGINE" && -f "$UI_SETTINGS" ]]; then
+  ENGINE_EXPLICIT=false
   ENGINE="$(jq -r '.reviewEngine // empty' "$UI_SETTINGS" 2>/dev/null || true)"
 fi
 [[ -z "$ENGINE" || "$ENGINE" == "null" ]] && ENGINE=claude
@@ -90,6 +93,9 @@ case "$ENGINE" in
   claude|codex) ;;
   *) echo "⚠️  reviewEngine=\"$ENGINE\" 不認識，退回 claude" >&2; ENGINE=claude ;;
 esac
+# 偏好的那個最近回報沒額度就先換。不做這件事的話，排程每 5 分鐘就白失敗一次
+# —— 2026-09-21 實際發生過：codex 沒額度，巡邏連續失敗 8 次。
+$ENGINE_EXPLICIT || ENGINE="$(engine_pick "$ENGINE")"
 
 # ─── 這輪允不允許送出 review 判定 ────────────────────────────────────────────
 #
@@ -211,9 +217,11 @@ write_record() {
     --argjson claude "${4:-null}" \
     --arg verdictMode "${VERDICT_MODE:-full}" \
     --arg engine "${ENGINE:-claude}" \
+    --arg switchedFrom "${ENGINE_SWITCHED_FROM:-}" \
     '{id:$id, startedAt:$startedAt, finishedAt:$finishedAt, status:$status,
       note:$note, trigger:$trigger, prCount:$prCount, prs:$prs, claude:$claude,
-      teamReview:$teamReview, verdictMode:$verdictMode, engine:$engine}' \
+      teamReview:$teamReview, verdictMode:$verdictMode, engine:$engine,
+      switchedFrom:(if $switchedFrom == "" then null else $switchedFrom end)}' \
     > "$RECORD"
   RECORD_WRITTEN=1
 }
@@ -435,45 +443,71 @@ $VERDICT_RULE
 
 仍然禁止：git commit、修改任何專案 repo 的程式碼。"
 
-echo "▶ 啟動 $ENGINE 處理（$(date -u +%H:%M:%SZ)，判定模式 $VERDICT_MODE）…"
+# 一次執行。$1 是引擎；結果留在 $AI_JSON / $AI_JSON.last，離開碼在 $AI_CODE。
+run_ai() {
+  # 換引擎重跑時，上一輪的殘留不能被當成這次的結果
+  : > "$AI_JSON"; : > "$AI_JSON.last"; : > "$LOG_FILE.err"
+  set +e
+  if [[ "$1" == "codex" ]]; then
+    # codex 沒有 slash command，所以把「去讀那份 command」寫進 prompt。
+    # 另外兩件事**一定要翻譯**，否則它會照字面去找不存在的東西：
+    #   1. 那份 command 叫人「先叫該 repo 的 skill」—— codex 的 skill 只認
+    #      ~/.codex/skills（全域），km 的在 .claude/skills/，所以改成直接讀檔。
+    #   2. CLAUDE.md 用連結指向 .claude/rules/ 的六份規則，Claude 這側會自己
+    #      載入，codex 不會 —— 要明講去讀。
+    CODEX_PROMPT="先完整讀完 $REPO_ROOT/.claude/commands/handle-pr-inbox.md，然後照它寫的做。
+
+  那份檔原本是 Claude Code 的 slash command，有兩處要換成 codex 的做法：
+    - 它說「先叫 <alias> skill」的地方，改成直接讀 $REPO_ROOT/.claude/skills/<alias>/SKILL.md。
+    - 動手前先讀 $REPO_ROOT/CLAUDE.md，以及它列出的 $REPO_ROOT/.claude/rules/ 那幾份規則。
+
+  $EXTRA"
+    # 需要寫入（/tmp 的留言草稿）與網路（gh），所以不能用 /review-local 那種
+    # read-only；`< /dev/null` 一樣不能省（stdin 不是 TTY 時 codex 會等著讀它）。
+    codex exec "$CODEX_PROMPT" \
+      -C "$REPO_ROOT" \
+      -s workspace-write \
+      -c sandbox_workspace_write.network_access=true \
+      -c model_reasoning_effort="$CODEX_EFFORT" \
+      --ephemeral \
+      -o "$AI_JSON.last" \
+      < /dev/null > "$AI_JSON" 2>"$LOG_FILE.err"
+    AI_CODE=$?
+  else
+    claude -p "/handle-pr-inbox" \
+      --model "$CLAUDE_MODEL" \
+      --output-format json \
+      --append-system-prompt "$EXTRA" \
+      "${CLAUDE_ARGS[@]}" \
+      > "$AI_JSON" 2>"$LOG_FILE.err"
+    AI_CODE=$?
+  fi
+  set -e
+}
+
 AI_JSON="$(mktemp)"
-: > "$AI_JSON.last"
-set +e
-if [[ "$ENGINE" == "codex" ]]; then
-  # codex 沒有 slash command，所以把「去讀那份 command」寫進 prompt。
-  # 另外兩件事**一定要翻譯**，否則它會照字面去找不存在的東西：
-  #   1. 那份 command 叫人「先叫該 repo 的 skill」—— codex 的 skill 只認
-  #      ~/.codex/skills（全域），km 的在 .claude/skills/，所以改成直接讀檔。
-  #   2. CLAUDE.md 用連結指向 .claude/rules/ 的六份規則，Claude 這側會自己
-  #      載入，codex 不會 —— 要明講去讀。
-  CODEX_PROMPT="先完整讀完 $REPO_ROOT/.claude/commands/handle-pr-inbox.md，然後照它寫的做。
+ENGINE_SWITCHED_FROM=""
+echo "▶ 啟動 $ENGINE 處理（$(date -u +%H:%M:%SZ)，判定模式 $VERDICT_MODE）…"
+run_ai "$ENGINE"
 
-那份檔原本是 Claude Code 的 slash command，有兩處要換成 codex 的做法：
-  - 它說「先叫 <alias> skill」的地方，改成直接讀 $REPO_ROOT/.claude/skills/<alias>/SKILL.md。
-  - 動手前先讀 $REPO_ROOT/CLAUDE.md，以及它列出的 $REPO_ROOT/.claude/rules/ 那幾份規則。
-
-$EXTRA"
-  # 需要寫入（/tmp 的留言草稿）與網路（gh），所以不能用 /review-local 那種
-  # read-only；`< /dev/null` 一樣不能省（stdin 不是 TTY 時 codex 會等著讀它）。
-  codex exec "$CODEX_PROMPT" \
-    -C "$REPO_ROOT" \
-    -s workspace-write \
-    -c sandbox_workspace_write.network_access=true \
-    -c model_reasoning_effort="$CODEX_EFFORT" \
-    --ephemeral \
-    -o "$AI_JSON.last" \
-    < /dev/null > "$AI_JSON" 2>"$LOG_FILE.err"
-  AI_CODE=$?
-else
-  claude -p "/handle-pr-inbox" \
-    --model "$CLAUDE_MODEL" \
-    --output-format json \
-    --append-system-prompt "$EXTRA" \
-    "${CLAUDE_ARGS[@]}" \
-    > "$AI_JSON" 2>"$LOG_FILE.err"
-  AI_CODE=$?
+# 沒額度就換另一個重跑。判準刻意寫得窄（scripts/lib/engine.sh）——
+# 一般的失敗不換，換了只會多花一次錢又蓋掉真正的錯誤。
+#
+# ⚠️ 重跑有重複留言的風險（前一個引擎可能已經貼過）。可以接受是因為
+# 「沒額度」實測是在啟動階段就擋掉、還沒動到 PR；萬一真的貼過，
+# handle-pr-inbox 的 bot marker 會讓第二次改成 PATCH 既有留言而不是新開一則。
+if [[ "$AI_CODE" -ne 0 ]]; then
+  OTHER="$(engine_other "$ENGINE")"
+  if engine_out_of_credits "$LOG_FILE.err" "$AI_JSON" && command -v "$OTHER" >/dev/null; then
+    engine_mark_out "$ENGINE" "$(grep -ohE "$ENGINE_NO_CREDIT_RE" "$LOG_FILE.err" "$AI_JSON" 2>/dev/null | head -1)"
+    echo "⚠️  $ENGINE 沒額度，自動改用 $OTHER 重跑…"
+    ENGINE_SWITCHED_FROM="$ENGINE"
+    ENGINE="$OTHER"
+    KNOB="$([[ "$ENGINE" == "codex" ]] && echo "effort $CODEX_EFFORT" || echo "$CLAUDE_MODEL")"
+    run_ai "$ENGINE"
+  fi
 fi
-set -e
+[[ "$AI_CODE" -eq 0 ]] && engine_mark_ok "$ENGINE"
 
 # 原始輸出留檔供複查；stderr 併進同一個 log
 { cat "$AI_JSON"; echo; echo "─── stderr ───"; cat "$LOG_FILE.err" 2>/dev/null; } > "$LOG_FILE"
@@ -524,7 +558,13 @@ if [[ "$AI_CODE" -eq 0 ]]; then
     echo "✓ 完成（花費 $(jq -r '.costUsd // "?"' <<< "$AI_META") USD，$(jq -r '.numTurns // "?"' <<< "$AI_META") turns）"
   fi
 else
-  write_record failed "$ENGINE 離開碼 $AI_CODE" "$PR_COUNT" "$AI_META"
-  echo "✗ $ENGINE 失敗（離開碼 $AI_CODE），詳見 $LOG_FILE" >&2
+  # **不要只寫離開碼**。首頁的健康度是拿這句去猜原因的，只有「codex 離開碼 1」
+  # 的話它只能顯示一句寫死的猜測（曾經是「多半是 gh auth 掉了」，而實際上是
+  # 沒額度）。把 CLI 自己吐的第一行錯誤帶上。
+  FAIL_WHY="$(engine_out_of_credits "$LOG_FILE.err" "$AI_JSON" && echo "沒額度" || true)"
+  [[ -z "$FAIL_WHY" ]] && FAIL_WHY="$(grep -m1 -E '^(Error|ERROR|error:)' "$LOG_FILE.err" 2>/dev/null | cut -c1-160)"
+  [[ -z "$FAIL_WHY" ]] && FAIL_WHY="離開碼 $AI_CODE"
+  write_record failed "$ENGINE 失敗：$FAIL_WHY" "$PR_COUNT" "$AI_META"
+  echo "✗ $ENGINE 失敗（$FAIL_WHY），詳見 $LOG_FILE" >&2
   exit 1
 fi
