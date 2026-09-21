@@ -52,7 +52,13 @@ export interface RunRecord {
   trigger: string;
   prCount: number;
   prs: RunPr[];
+  /** AI 執行的 meta。**欄位名是歷史包袱**：codex 跑的那輪也記在這一格，
+   *  因為 web 與舊紀錄都靠「這格不是 null」判斷 AI 有沒有跑過。看引擎要看 `engine`。 */
   claude: ClaudeMeta | null;
+  /** 這輪用哪個引擎跑的（2026-09-21 起才有；之前的一律是 claude） */
+  engine?: "claude" | "codex";
+  /** 指派給我的隊、但不是點名我的 —— 不派 AI，只在首頁提醒（Jay 2026-09-18） */
+  teamReview?: RunPr[];
   hasLog: boolean;
   /** 那一輪允不允許送出 review 判定（off / approve / full） */
   verdictMode?: string;
@@ -252,4 +258,17 @@ export function triggerRun(
   });
   child.unref();
   return { pid: child.pid ?? null };
+}
+
+/**
+ * 最近一輪偵測到的「隊上的 PR」。
+ *
+ * **只讀最新那一輪**：這是「現在隊上有什麼等著」的快照，不是歷史。
+ * 舊紀錄沒有這個欄位（欄位是後來加的），所以往前找到第一筆有值的就停。
+ */
+export async function latestTeamReview(): Promise<{ prs: RunPr[]; at: string } | null> {
+  for (const r of await listRuns(20)) {
+    if (r.teamReview) return { prs: r.teamReview, at: r.finishedAt };
+  }
+  return null;
 }

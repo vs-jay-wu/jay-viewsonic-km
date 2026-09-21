@@ -15,7 +15,7 @@ interface ClaudeMeta {
 interface RunRecord {
   id: string; startedAt: string; finishedAt: string; status: string; note: string;
   trigger: string; prCount: number; prs: RunPr[]; claude: ClaudeMeta | null;
-  hasLog: boolean; verdictMode?: string;
+  hasLog: boolean; verdictMode?: string; engine?: "claude" | "codex";
 }
 interface LockState {
   locked: boolean; pid: number | null; startedAt: string | null;
@@ -566,9 +566,15 @@ export default function PrInboxPage() {
                         </span>
                       </button>
                       {r.claude && (
-                        <span className="text-xs text-gray-500">
-                          {fmtCost(r.claude.costUsd)} · {r.claude.numTurns ?? "?"} turns ·{" "}
-                          {fmtDuration(r.claude.durationMs)}
+                        <span className="flex items-center gap-1.5 text-xs text-gray-500">
+                          {/* 2026-09-21 前的紀錄沒有 engine 欄位，那時只有 claude */}
+                          <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] text-gray-500">
+                            {r.engine ?? "claude"}
+                          </span>
+                          {/* codex 不回報金額與 turns，就不要擺一排問號 */}
+                          {r.engine === "codex"
+                            ? fmtDuration(r.claude.durationMs)
+                            : `${fmtCost(r.claude.costUsd)} · ${r.claude.numTurns ?? "?"} turns · ${fmtDuration(r.claude.durationMs)}`}
                         </span>
                       )}
                       <button

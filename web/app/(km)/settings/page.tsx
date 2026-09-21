@@ -63,6 +63,12 @@ export default function SettingsPage() {
                 （同一份 schema），所以舊的紀錄照樣讀得懂；差別只在 codex 沒有金額可回報。
                 在終端機打 <code className="font-mono">/review-local</code> 也會讀這裡的設定。
               </p>
+              <p className="mt-1.5 max-w-xl text-xs text-gray-500">
+                <b className="text-gray-700">PR 巡邏也吃這個設定</b>（2026-09-21 起）。兩邊拿到的是同一份指示：
+                claude 走 <code className="font-mono">/handle-pr-inbox</code> slash command，codex 沒有這個機制，
+                所以改成叫它先讀那份 <code className="font-mono">.md</code> 再照做。
+                codex 那側沒有金額可回報，巡邏紀錄的花費會是空的。
+              </p>
             </div>
             <div className="flex gap-1">
               {REVIEW_ENGINES.map((e) => (

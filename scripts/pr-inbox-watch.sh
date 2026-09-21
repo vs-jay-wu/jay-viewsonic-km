@@ -5,6 +5,7 @@
 #
 #   偵測（本腳本，不用 AI）  handle-pr-inbox.sh --json 有沒有待處理的 PR
 #   處理（有才啟動 AI）      claude -p /handle-pr-inbox
+#                            或 codex exec「先讀 handle-pr-inbox.md 再照做」
 #
 # 為什麼要分段：偵測每半小時跑一次不花錢，AI 一次要錢也要時間。沒事就別叫。
 #
@@ -19,7 +20,7 @@
 # 每次執行在 data/pr-inbox-runs/ 留三個檔（gitignored，web 可刪）：
 #   <id>.json      這次的結果與花費（status / prCount / costUsd / sessionId…）
 #   <id>.prs.json  偵測到的 PR 清單快照
-#   <id>.log       claude 的原始輸出（只有真的叫了 AI 才有）
+#   <id>.log       AI 的原始輸出（只有真的叫了 AI 才有）
 #
 # 用法：
 #   ./scripts/pr-inbox-watch.sh                  偵測，必要時叫 AI（排程用）
@@ -31,12 +32,15 @@
 #   ./scripts/pr-inbox-watch.sh --verdicts approve
 #                                  臨時覆寫「允不允許送出 review 判定」
 #                                  off（只留言，預設）／approve／full
+#   ./scripts/pr-inbox-watch.sh --engine codex
+#                                  臨時覆寫引擎；不給就讀 web 設定頁的
+#                                  reviewEngine（跟 /review-local 同一格）
 #
 # 排程：不在這支腳本裡，而是掛在 km web server（見 web/lib/prInboxScheduler.ts）。
 #       在 web 的「PR 巡邏」頁開關，設定存 data/local-state/pr-inbox-watch.json。
 #       要讓 web 常駐：./scripts/setup-km-web.sh --install
 #
-# 需要：gh（已登入）、jq、claude
+# 需要：gh（已登入）、jq，以及 claude 或 codex（看 --engine）
 
 set -uo pipefail
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$HOME/.local/bin:$PATH"
@@ -50,6 +54,13 @@ WATCH_CONFIG="$REPO_ROOT/data/local-state/pr-inbox-watch.json"
 # （head sha ＋ 對方最後動作時間）。指紋沒變就不再重送 —— 見下面的 BATCH 那段。
 HANDLED_FILE="$REPO_ROOT/data/local-state/pr-inbox-handled.json"
 
+# 用哪個引擎。兩邊拿到的是**同一份指示**，差別只在送法：
+#   claude  `/handle-pr-inbox` —— Claude Code 的 slash command，它自己會載入
+#   codex   codex 沒有 slash command 的對應物，改成在 prompt 裡叫它先去讀
+#           那份 .md 再照做（順便翻譯兩件 Claude 專屬的事，見 CODEX_PROMPT）
+# 值的來源：--engine > web 設定頁的 reviewEngine（跟 /review-local 同一格）> claude
+ENGINE=""
+
 TRIGGER="scheduled"
 DETECT_ONLY=false
 QUIET_CHECK=false
@@ -60,6 +71,7 @@ while [[ $# -gt 0 ]]; do
     --trigger)      TRIGGER="${2:?--trigger 需要 scheduled|manual}"; shift ;;
     --detect-only)  DETECT_ONLY=true ;;
     --verdicts)     VERDICT_MODE="${2:?--verdicts 需要 off|approve|full}"; shift ;;
+    --engine)       ENGINE="${2:?--engine 需要 claude|codex}"; shift ;;
     --force-unlock) rm -rf "$LOCK_DIR"; echo "已清掉 $LOCK_DIR"; exit 0 ;;
     --quiet-check)  QUIET_CHECK=true ;;
     -h|--help)      sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -67,6 +79,17 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+
+# ─── 引擎 ───────────────────────────────────────────────────────────────────
+UI_SETTINGS="$REPO_ROOT/data/local-state/ui-settings.json"
+if [[ -z "$ENGINE" && -f "$UI_SETTINGS" ]]; then
+  ENGINE="$(jq -r '.reviewEngine // empty' "$UI_SETTINGS" 2>/dev/null || true)"
+fi
+[[ -z "$ENGINE" || "$ENGINE" == "null" ]] && ENGINE=claude
+case "$ENGINE" in
+  claude|codex) ;;
+  *) echo "⚠️  reviewEngine=\"$ENGINE\" 不認識，退回 claude" >&2; ENGINE=claude ;;
+esac
 
 # ─── 這輪允不允許送出 review 判定 ────────────────────────────────────────────
 #
@@ -143,6 +166,7 @@ ID="$(date +%Y%m%d-%H%M%S)"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 RECORD="$RUNS_DIR/$ID.json"
 PRS_FILE="$RUNS_DIR/$ID.prs.json"
+TEAM_FILE="$RUNS_DIR/$ID.team.json"
 LOG_FILE="$RUNS_DIR/$ID.log"
 
 RECORD_WRITTEN=0
@@ -183,11 +207,13 @@ write_record() {
     --arg trigger "$TRIGGER" \
     --argjson prCount "${3:-0}" \
     --argjson prs "$(cat "$PRS_FILE" 2>/dev/null || echo '[]')" \
+    --argjson teamReview "$(cat "$TEAM_FILE" 2>/dev/null || echo '[]')" \
     --argjson claude "${4:-null}" \
     --arg verdictMode "${VERDICT_MODE:-full}" \
+    --arg engine "${ENGINE:-claude}" \
     '{id:$id, startedAt:$startedAt, finishedAt:$finishedAt, status:$status,
       note:$note, trigger:$trigger, prCount:$prCount, prs:$prs, claude:$claude,
-      verdictMode:$verdictMode}' \
+      teamReview:$teamReview, verdictMode:$verdictMode, engine:$engine}' \
     > "$RECORD"
   RECORD_WRITTEN=1
 }
@@ -207,6 +233,7 @@ on_signal() {
 # 一回收就會派第二隻去 review 同一批 PR。所以回收前先問這一句。
 ai_still_running() {
   pgrep -f 'claude -p /handle-pr-inbox' >/dev/null 2>&1 \
+    || pgrep -f 'codex exec .*handle-pr-inbox' >/dev/null 2>&1 \
     || pgrep -f 'scripts/review-pr.sh' >/dev/null 2>&1
 }
 
@@ -241,7 +268,7 @@ echo "$ID" > "$LOCK_DIR/runId"
 # 鎖就永遠留著、之後每輪都被「上一輪還在跑」擋住。要加東西就加進這個函式。
 on_exit() {
   rm -rf "$LOCK_DIR"
-  rm -f "$RUNS_DIR/$ID.fresh.json" "$RUNS_DIR/$ID.batch.json"   # 這一輪的暫存
+  rm -f "$RUNS_DIR/$ID.fresh.json" "$RUNS_DIR/$ID.batch.json" "$TEAM_FILE"   # 這一輪的暫存
 }
 trap on_exit EXIT
 trap on_signal INT TERM
@@ -260,6 +287,8 @@ fi
 
 jq '.prs' "$DETECT_OUT" > "$PRS_FILE"
 PR_COUNT="$(jq '.prs | length' "$DETECT_OUT")"
+# 指派給我的隊、但不是點名我的 —— **不派 AI**，只留給首頁提醒（Jay 2026-09-18）
+jq -c '.teamReview // []' "$DETECT_OUT" > "$TEAM_FILE"
 rm -f "$DETECT_OUT" "$DETECT_OUT.err"
 
 if [[ "$PR_COUNT" -eq 0 ]]; then
@@ -317,9 +346,28 @@ echo "$BATCH_LIST"
 
 # ─── 處理（啟動 AI）────────────────────────────────────────────────────────
 
-command -v claude >/dev/null || {
-  echo "找不到 claude" >&2
-  write_record failed "找不到 claude 執行檔" "$PR_COUNT"
+# ─── 依規模選模型 ────────────────────────────────────────────────────────────
+#
+# 這一批的 tier ＝ 裡面**最重的那一張**。一個 session 同時處理 3 張，沒辦法
+# 逐張換模型；寧可讓兩張小的搭到大的便車，也不要用便宜模型去看結構性改動。
+# 要真的逐張分層就得改成一張一個 session，那是另一件事。
+#
+# codex 這邊**不能選模型**（ChatGPT 帳號實測：gpt-5.1／gpt-5-codex／codex-mini
+# 全被拒，只有預設的 gpt-5.6-sol 可用），所以改用 reasoning effort 當旋鈕。
+BATCH_TIER="$(jq -r '[.[].tier // "deep"]
+  | if index("deep") then "deep" elif index("standard") then "standard" else "light" end' "$BATCH_FILE")"
+
+case "$BATCH_TIER" in
+  light)    CLAUDE_MODEL=haiku;  CODEX_EFFORT=low ;;
+  standard) CLAUDE_MODEL=sonnet; CODEX_EFFORT=medium ;;
+  *)        CLAUDE_MODEL=opus;   CODEX_EFFORT=high ;;
+esac
+KNOB="$([[ "$ENGINE" == "codex" ]] && echo "effort $CODEX_EFFORT" || echo "$CLAUDE_MODEL")"
+echo "  這一批是 $BATCH_TIER —— 用 $ENGINE（$KNOB）"
+
+command -v "$ENGINE" >/dev/null || {
+  echo "找不到 $ENGINE" >&2
+  write_record failed "找不到 $ENGINE 執行檔" "$PR_COUNT"
   exit 1
 }
 
@@ -367,12 +415,17 @@ PROMPT
     ;;
 esac
 
+# ⚠️ EXTRA 是**雙引號字串**，裡面的反引號會被 zsh 當成命令替換執行。
+# 踩過：`claude -p` 這四個字真的被跑了一次（沒有 prompt → 印出
+# 「Error: Input must be provided either through stdin or as a prompt argument
+# when using --print」），而且那段文字在送進 prompt 時會變成空字串。
+# → 這個字串裡的反引號一律要跳脫成 \`。
 # 這段是給非互動環境的補充規則：沒有人可以回答問題，所以不要問；
 # 同時把 command 本身「不自動做」的事再釘一次。
 EXTRA="你在排程（非互動）環境中執行，stdin 沒有人 —— 不要提問，也不要等待確認。
 **這一輪就是要把事情做完**，實測過兩種會空轉的回答，兩種都不行：
   - 「我等 watcher 觸發」「下一輪再處理」 —— 沒有下一輪會幫你做，下一輪是從頭開始。
-  - 「已經丟到背景子代理，等結果回來」 —— `claude -p` 一回傳，背景工作就跟著沒了。
+  - 「已經丟到背景子代理，等結果回來」 —— \`claude -p\` 一回傳，背景工作就跟著沒了。
     要開子代理可以，但**必須在這個 session 裡等到它們回來、把結果寫進回報**。
 
 這一輪**只處理下面這幾筆**（已經由排程挑好，其餘的下一輪會處理，不要碰）：
@@ -382,35 +435,76 @@ $VERDICT_RULE
 
 仍然禁止：git commit、修改任何專案 repo 的程式碼。"
 
-echo "▶ 啟動 claude 處理（$(date -u +%H:%M:%SZ)，判定模式 $VERDICT_MODE）…"
-CLAUDE_JSON="$(mktemp)"
+echo "▶ 啟動 $ENGINE 處理（$(date -u +%H:%M:%SZ)，判定模式 $VERDICT_MODE）…"
+AI_JSON="$(mktemp)"
+: > "$AI_JSON.last"
 set +e
-claude -p "/handle-pr-inbox" \
-  --output-format json \
-  --append-system-prompt "$EXTRA" \
-  "${CLAUDE_ARGS[@]}" \
-  > "$CLAUDE_JSON" 2>"$LOG_FILE.err"
-CLAUDE_CODE=$?
+if [[ "$ENGINE" == "codex" ]]; then
+  # codex 沒有 slash command，所以把「去讀那份 command」寫進 prompt。
+  # 另外兩件事**一定要翻譯**，否則它會照字面去找不存在的東西：
+  #   1. 那份 command 叫人「先叫該 repo 的 skill」—— codex 的 skill 只認
+  #      ~/.codex/skills（全域），km 的在 .claude/skills/，所以改成直接讀檔。
+  #   2. CLAUDE.md 用連結指向 .claude/rules/ 的六份規則，Claude 這側會自己
+  #      載入，codex 不會 —— 要明講去讀。
+  CODEX_PROMPT="先完整讀完 $REPO_ROOT/.claude/commands/handle-pr-inbox.md，然後照它寫的做。
+
+那份檔原本是 Claude Code 的 slash command，有兩處要換成 codex 的做法：
+  - 它說「先叫 <alias> skill」的地方，改成直接讀 $REPO_ROOT/.claude/skills/<alias>/SKILL.md。
+  - 動手前先讀 $REPO_ROOT/CLAUDE.md，以及它列出的 $REPO_ROOT/.claude/rules/ 那幾份規則。
+
+$EXTRA"
+  # 需要寫入（/tmp 的留言草稿）與網路（gh），所以不能用 /review-local 那種
+  # read-only；`< /dev/null` 一樣不能省（stdin 不是 TTY 時 codex 會等著讀它）。
+  codex exec "$CODEX_PROMPT" \
+    -C "$REPO_ROOT" \
+    -s workspace-write \
+    -c sandbox_workspace_write.network_access=true \
+    -c model_reasoning_effort="$CODEX_EFFORT" \
+    --ephemeral \
+    -o "$AI_JSON.last" \
+    < /dev/null > "$AI_JSON" 2>"$LOG_FILE.err"
+  AI_CODE=$?
+else
+  claude -p "/handle-pr-inbox" \
+    --model "$CLAUDE_MODEL" \
+    --output-format json \
+    --append-system-prompt "$EXTRA" \
+    "${CLAUDE_ARGS[@]}" \
+    > "$AI_JSON" 2>"$LOG_FILE.err"
+  AI_CODE=$?
+fi
 set -e
 
 # 原始輸出留檔供複查；stderr 併進同一個 log
-{ cat "$CLAUDE_JSON"; echo; echo "─── stderr ───"; cat "$LOG_FILE.err" 2>/dev/null; } > "$LOG_FILE"
+{ cat "$AI_JSON"; echo; echo "─── stderr ───"; cat "$LOG_FILE.err" 2>/dev/null; } > "$LOG_FILE"
 rm -f "$LOG_FILE.err"
 
-CLAUDE_META="$(jq -n --argjson code "$CLAUDE_CODE" --slurpfile r "$CLAUDE_JSON" '
-  ($r[0] // {}) as $o
-  | {exitCode: $code,
-     sessionId:  ($o.session_id // null),
-     costUsd:    ($o.total_cost_usd // null),
-     durationMs: ($o.duration_ms // null),
-     apiDurationMs: ($o.duration_api_ms // null),
-     numTurns:   ($o.num_turns // null),
-     isError:    ($o.is_error // ($code != 0)),
-     resultText: (($o.result // "") | tostring | .[0:4000])}' 2>/dev/null \
-  || echo "{\"exitCode\":$CLAUDE_CODE,\"isError\":true}")"
-rm -f "$CLAUDE_JSON"
+# 紀錄裡這一格的欄位名維持 `claude`，因為 web 與 54 筆舊紀錄都靠它判斷
+# 「這輪 AI 到底有沒有跑」；真正用哪個引擎看同層的 `engine`。
+if [[ "$ENGINE" == "codex" ]]; then
+  # codex 沒有金額／turns 可回報（沒有 --max-budget-usd 的對應物），一律 null。
+  AI_META="$(jq -n --argjson code "$AI_CODE" --rawfile last "$AI_JSON.last" '
+    {exitCode: $code, sessionId: null, costUsd: null,
+     durationMs: null, apiDurationMs: null, numTurns: null,
+     isError: ($code != 0),
+     resultText: ($last | .[0:4000])}' 2>/dev/null \
+    || echo "{\"exitCode\":$AI_CODE,\"isError\":true}")"
+else
+  AI_META="$(jq -n --argjson code "$AI_CODE" --slurpfile r "$AI_JSON" '
+    ($r[0] // {}) as $o
+    | {exitCode: $code,
+       sessionId:  ($o.session_id // null),
+       costUsd:    ($o.total_cost_usd // null),
+       durationMs: ($o.duration_ms // null),
+       apiDurationMs: ($o.duration_api_ms // null),
+       numTurns:   ($o.num_turns // null),
+       isError:    ($o.is_error // ($code != 0)),
+       resultText: (($o.result // "") | tostring | .[0:4000])}' 2>/dev/null \
+    || echo "{\"exitCode\":$AI_CODE,\"isError\":true}")"
+fi
+rm -f "$AI_JSON" "$AI_JSON.last"
 
-if [[ "$CLAUDE_CODE" -eq 0 ]]; then
+if [[ "$AI_CODE" -eq 0 ]]; then
   # 記下這一批的指紋；順便清掉已經不在待處理清單上的（PR 關了／合併了）
   NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   jq --slurpfile old "$HANDLED_FILE" --slurpfile all "$PRS_FILE" \
@@ -421,11 +515,16 @@ if [[ "$CLAUDE_CODE" -eq 0 ]]; then
         .[$p._key] = {fingerprint: $p._fp, handledAt: $now, runId: $runId,
                       title: $p.title, url: $p.url})
   ' "$BATCH_FILE" > "$HANDLED_FILE.tmp" && mv "$HANDLED_FILE.tmp" "$HANDLED_FILE"
-  write_record handled "已交給 AI 處理 $BATCH_COUNT 筆（待處理共 $PR_COUNT，判定模式 $VERDICT_MODE）" "$PR_COUNT" "$CLAUDE_META"
-  remove_session_transcript "$(jq -r '.sessionId // ""' <<< "$CLAUDE_META")"
-  echo "✓ 完成（花費 $(jq -r '.costUsd // "?"' <<< "$CLAUDE_META") USD，$(jq -r '.numTurns // "?"' <<< "$CLAUDE_META") turns）"
+  write_record handled "已交給 AI 處理 $BATCH_COUNT 筆（待處理共 $PR_COUNT，$ENGINE／$BATCH_TIER／$KNOB，判定模式 $VERDICT_MODE）" "$PR_COUNT" "$AI_META"
+  # codex 是 --ephemeral，本來就不落地，沒有 transcript 要清
+  [[ "$ENGINE" == "claude" ]] && remove_session_transcript "$(jq -r '.sessionId // ""' <<< "$AI_META")"
+  if [[ "$ENGINE" == "codex" ]]; then
+    echo "✓ 完成（codex 不回報金額與 turns）"
+  else
+    echo "✓ 完成（花費 $(jq -r '.costUsd // "?"' <<< "$AI_META") USD，$(jq -r '.numTurns // "?"' <<< "$AI_META") turns）"
+  fi
 else
-  write_record failed "claude 離開碼 $CLAUDE_CODE" "$PR_COUNT" "$CLAUDE_META"
-  echo "✗ claude 失敗（離開碼 $CLAUDE_CODE），詳見 $LOG_FILE" >&2
+  write_record failed "$ENGINE 離開碼 $AI_CODE" "$PR_COUNT" "$AI_META"
+  echo "✗ $ENGINE 失敗（離開碼 $AI_CODE），詳見 $LOG_FILE" >&2
   exit 1
 fi
