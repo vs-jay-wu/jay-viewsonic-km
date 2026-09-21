@@ -9,7 +9,7 @@ export type IconName =
   | "clock" | "spinner" | "chevronRight" | "chevronDown" | "external" | "coins"
   | "search" | "lock" | "gitPr" | "bell" | "repos" | "hardDrive"
   | "toTop" | "toBottom" | "menu" | "list" | "tree" | "target"
-  | "bug" | "task" | "story" | "spike" | "ops";
+  | "bug" | "task" | "story" | "spike" | "ops" | "worktree";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></>,
@@ -54,6 +54,8 @@ const PATHS: Record<IconName, React.ReactNode> = {
   target: <><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="2.5" /></>,
   toBottom: <><path d="M4 20h16" /><path d="M12 4v12" /><path d="m6 10 6 6 6-6" /></>,
   hardDrive: <><rect x="3" y="13" width="18" height="7" rx="2" /><path d="m5.5 13 2.2-7h8.6l2.2 7" /><path d="M7 16.5h.01M10.5 16.5h.01" /></>,
+  // 分支從主線岔出去 —— worktree 的標記（Jay 2026-09-21 指定的那張）
+  worktree: <><circle cx="6" cy="18.5" r="2.6" /><circle cx="18" cy="5.5" r="2.6" /><path d="M6 15.9V4" /><path d="M18 8.1a10 10 0 0 1-9.4 10" /></>,
 };
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, "name"> {

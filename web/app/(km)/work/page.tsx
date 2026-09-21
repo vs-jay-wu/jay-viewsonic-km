@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
+import WorktreeBadge from "@/components/WorktreeBadge";
 import DiffView from "@/components/DiffView";
 import ImageDiffView from "@/components/ImageDiffView";
 import { FileRow, TreeRows, ViewToggle, useFileView } from "@/components/FileList";
@@ -306,11 +307,7 @@ function WorkChangesView() {
                       </span>
                     )}
                     {b.worktreeName !== b.repo && (
-                      <Tooltip label={b.worktree}>
-                        <span className="rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] text-violet-700">
-                          worktree
-                        </span>
-                      </Tooltip>
+                      <WorktreeBadge />
                     )}
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-400">

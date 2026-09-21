@@ -7,6 +7,7 @@ import { useConfirm } from "@/components/Confirm";
 import { useToast } from "@/components/Toast";
 import CommitGraph, { type WipSide } from "@/components/CommitGraph";
 import DiffView from "@/components/DiffView";
+import WorktreeBadge from "@/components/WorktreeBadge";
 import ImageDiffView from "@/components/ImageDiffView";
 import { ViewToggle, useFileView } from "@/components/FileList";
 import SearchSelect, { type SearchOption } from "@/components/SearchSelect";
@@ -496,11 +497,7 @@ export default function GitPage() {
                             ? r.name.slice(g.name.length + 1)
                             : r.name}
                         </span>
-                        {r.worktreeOf && (
-                          <span className="shrink-0 rounded-full border border-violet-200 bg-violet-50 px-1 text-[10px] text-violet-700">
-                            wt
-                          </span>
-                        )}
+                        {r.worktreeOf && <WorktreeBadge />}
                       </span>
                       <span className="flex items-center gap-2 text-[11px] text-gray-400">
                         <span className="truncate font-mono">

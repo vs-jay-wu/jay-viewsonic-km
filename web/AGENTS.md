@@ -28,6 +28,10 @@ if (!(await confirm({ title: "刪掉這筆？", message: "無法復原。", dang
 - **琥珀色只給警告**。pin／保護狀態用中性灰底，含意交給圖示。
 - **版面不要因為切分頁、開面板而位移**：條件出現的控制項不要放在共用的
   篩選列裡；側邊面板用浮動抽屜而不是 flex 兄弟。
+- **worktree 的標記一律用 `components/WorktreeBadge.tsx`**（Jay 2026-09-21）——
+  分支岔出去那個圖示，一般的用中性灰、session 綁的用琥珀色（它會跟著 session 消失，
+  是真的警告）。`/changes`／`/git`／`/code`／`/work` 曾經各畫各的（「wt」「worktree」
+  紫色藥丸各種版本），新的頁面直接用這顆，不要再自己拼一個。
 - **只有圖示的按鈕一定要包 `components/Tooltip.tsx`** —— 原生 `title` 要停留快一秒
   才出現，隔幾個月回來會看不出那顆按鈕會做什麼。
 - 確認對話框**不要**在畫面上標示「Enter 確認 · Esc 取消」（行為留著就好）。

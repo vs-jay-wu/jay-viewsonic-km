@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
+import WorktreeBadge from "@/components/WorktreeBadge";
 import DiffView from "@/components/DiffView";
 import ImageDiffView from "@/components/ImageDiffView";
 import { FileRow, StageBadge, TreeRows, ViewToggle, useFileView } from "@/components/FileList";
@@ -398,20 +399,7 @@ export default function ChangesPage() {
                         className="shrink-0 text-gray-300"
                       />
                       {!w.isMain && (
-                        <span
-                          className={`rounded-full border px-1.5 py-0.5 leading-none ${
-                            w.isSessionBound
-                              ? "border-violet-200 bg-violet-50 text-violet-700"
-                              : "border-gray-200 bg-white text-gray-500"
-                          }`}
-                          title={
-                            w.isSessionBound
-                              ? "session 綁的 worktree —— session 結束可能整個消失"
-                              : "另一個 worktree"
-                          }
-                        >
-                          {w.isSessionBound ? "session worktree" : "worktree"}
-                        </span>
+                        <WorktreeBadge sessionBound={w.isSessionBound} />
                       )}
                       <span className="whitespace-nowrap text-gray-500">{w.name}</span>
                       {w.branch && (

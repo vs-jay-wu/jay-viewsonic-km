@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import hljs from "highlight.js/lib/common";
 import Icon from "@/components/Icon";
+import WorktreeBadge from "@/components/WorktreeBadge";
 import Tooltip from "@/components/Tooltip";
 import SearchSelect, { type SearchOption } from "@/components/SearchSelect";
 import { DragHandle, useDragWidth, useWideLayout } from "@/components/Split";
@@ -115,7 +116,7 @@ function CodeBrowser() {
         value: w.dir,
         label: w.name,
         keywords: g.name,
-        hint: <span className="shrink-0 text-[10px] text-violet-500">wt</span>,
+        hint: <WorktreeBadge />,
       })),
     ]);
   }, [repos]);
