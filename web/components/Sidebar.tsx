@@ -13,14 +13,13 @@ interface Chat {
 const TOOLS: { href: string; label: string; icon: IconName }[] = [
   { href: "/", label: "首頁", icon: "home" },
   { href: "/tickets", label: "單追蹤", icon: "clipboard" },
-  { href: "/my-prs", label: "我的 PR", icon: "gitPr" },
   { href: "/vb-bugs", label: "VB Bug 總覽", icon: "alert" },
   { href: "/changes", label: "未提交的改動", icon: "code" },
   { href: "/git", label: "Repo 檢視", icon: "repos" },
   { href: "/code", label: "程式碼", icon: "code" },
   { href: "/docs", label: "文件", icon: "clipboard" },
   { href: "/sessions", label: "Claude Sessions", icon: "layers" },
-  { href: "/settings", label: "設定", icon: "cpu" },
+  { href: "/settings", label: "設定", icon: "settings" },
 ];
 
 /**
@@ -57,8 +56,14 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
    */
   return (
     <aside className="w-64 shrink-0 bg-[#2d2d2d] text-white flex flex-col h-full overflow-hidden">
-      <div className="px-4 py-4 border-b border-white/10">
-        <h1 className="text-base font-semibold">KM 工作台</h1>
+      <div className="border-b border-white/10">
+        <Link
+          href="/"
+          onClick={onNavigate}
+          className="block px-4 py-4 hover:bg-white/10 transition-colors"
+        >
+          <h1 className="text-base font-semibold">KM 工作台</h1>
+        </Link>
       </div>
 
       <nav className="flex-1 overflow-y-auto py-2">

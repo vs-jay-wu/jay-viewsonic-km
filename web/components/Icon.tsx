@@ -4,7 +4,7 @@
 import type { SVGProps } from "react";
 
 export type IconName =
-  | "home" | "cpu" | "refresh" | "layers" | "hash" | "message" | "clipboard"
+  | "home" | "cpu" | "settings" | "refresh" | "layers" | "hash" | "message" | "clipboard"
   | "trash" | "pin" | "pinOff" | "play" | "code" | "check" | "x" | "alert"
   | "clock" | "spinner" | "chevronRight" | "chevronDown" | "external" | "coins"
   | "search" | "lock" | "gitPr" | "bell" | "repos" | "hardDrive"
@@ -14,6 +14,9 @@ export type IconName =
 const PATHS: Record<IconName, React.ReactNode> = {
   home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></>,
   cpu: <><rect x="6" y="6" width="12" height="12" rx="1.5" /><path d="M10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M2 14h3M19 10h3M19 14h3" /></>,
+  /* 齒輪。**不要用「圓心 ＋ 八條放射線」那種畫法** —— 16px 下它讀起來是太陽
+     不是齒輪（2026-09-22 試過，一眼就認錯）。要真的畫出齒的輪廓。 */
+  settings: <><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z" /><circle cx="12" cy="12" r="3" /></>,
   refresh: <><path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" /></>,
   layers: <><path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z" /><path d="m3 12 9 4.5 9-4.5" /><path d="m3 16.5 9 4.5 9-4.5" /></>,
   hash: <><path d="M5 9h14M5 15h14M10 3 8 21M16 3l-2 18" /></>,
