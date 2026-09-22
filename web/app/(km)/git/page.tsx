@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import { useConfirm } from "@/components/Confirm";
@@ -92,7 +93,19 @@ const WIP = "wip";
 /** 分支選單最上面那一列（不屬於任何群組） */
 const ALL_BRANCHES: SearchOption = { value: "--all", label: "全部分支", keywords: "all 全部" };
 
+/**
+ * `useSearchParams` 要有 Suspense 邊界，否則靜態預算那一段會整頁退成
+ * client rendering（Next 會警告）。內容全都在 `GitView` 裡。
+ */
 export default function GitPage() {
+  return (
+    <Suspense fallback={<p className="px-6 py-10 text-sm text-fg-subtle">載入中…</p>}>
+      <GitView />
+    </Suspense>
+  );
+}
+
+function GitView() {
   const confirm = useConfirm();
   const toast = useToast();
   const wide = useWideLayout();
@@ -298,6 +311,26 @@ export default function GitPage() {
     const dir = q.get("repo");
     if (dir && repos.some((r) => r.dir === dir)) setSelected(dir);
   }, [repos]);
+
+  /**
+   * 網址上的 `repo=` 被拿掉了就回到沒選的狀態。
+   *
+   * 會發生的情境是**側邊欄的「Repo 檢視」**：它導到 `/git`，但同一個頁面元件
+   * 不會重掛，`selected` 還留著上一個 repo —— 網址是 `/git`、畫面卻停在某個
+   * repo 的 graph（Jay 2026-09-22 在 `/code` 回報同一個 bug，這頁也有）。
+   *
+   * 只處理「參數消失」這一種：其餘的選取都是這頁自己用 `syncUrl` 寫上去的，
+   * 反過來再讀一次只會互相打架。
+   */
+  const params = useSearchParams();
+  const urlRepo = params.get("repo");
+  useEffect(() => {
+    if (!restored.current || urlRepo) return;
+    setSelected(null);
+    setDetail(null);
+    setDiffFor(null);
+    setOpenCommit(null);
+  }, [urlRepo]);
 
   const togglePin = async (dir: string) => {
     setBusyPin(true);

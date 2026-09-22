@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import hljs from "@/lib/highlight";
 import Icon from "@/components/Icon";
 import WorktreeBadge from "@/components/WorktreeBadge";
@@ -60,7 +61,20 @@ function CodeBrowser() {
   });
 
   const [repos, setRepos] = useState<RepoBrief[]>([]);
-  const [dir, setDir] = useState<string>("");
+  /**
+   * 目前看的 repo **以網址為準**，不另外存一份 state。
+   *
+   * 兩份的話會對不起來：側邊欄的「程式碼」是導到 `/code`（沒有 `repo=`），
+   * 但同一個頁面元件不會重掛，state 還留著上一個 repo —— 於是網址是 `/code`、
+   * 畫面卻還停在某個 repo（Jay 2026-09-22 回報）。網址是唯一真相就不會有這種事。
+   */
+  const params = useSearchParams();
+  const router = useRouter();
+  const dir = params.get("repo") ?? "";
+  const setDir = useCallback(
+    (d: string) => router.replace(d ? `/code?repo=${encodeURIComponent(d)}` : "/code", { scroll: false }),
+    [router]
+  );
   /** 已展開的目錄 → 它底下的項目。逐層抓，不預先掃整個 repo */
   const [tree, setTree] = useState<Record<string, TreeEntry[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -86,8 +100,6 @@ function CodeBrowser() {
       const res = await fetch(`/api/git/repos${fresh ? "?fresh=1" : ""}`, { cache: "no-store" });
       const d = (await res.json()) as { repos: RepoBrief[] };
       setRepos(d.repos);
-      const q = new URLSearchParams(window.location.search).get("repo");
-      if (q && d.repos.some((r) => r.dir === q)) setDir(q);
     } catch {
       // 抓不到就維持現狀，畫面上的「選一個 repo（0 個）」自己會說明
     } finally {
@@ -165,9 +177,6 @@ function CodeBrowser() {
     setFile(null);
     setHits(null);
     void loadDir("");
-    const url = new URL(window.location.href);
-    url.searchParams.set("repo", dir);
-    window.history.replaceState(null, "", url);
   }, [dir, loadDir]);
 
   const toggleDir = (rel: string) => {
