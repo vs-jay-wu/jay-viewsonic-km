@@ -5,15 +5,63 @@ description: 在 VB 專案（EDU - Software）開 Jira 單。所有新單都開�
 
 # 在 VB 開 Jira 單
 
-**新開的 ticket 建在 `VB`（EDU - Software）。** `VSFT`（myViewBoard Suite）是舊落點，
-既有的 VSFT 單留在原地不搬。
+**新開的 ticket 建在 `VB`（EDU - Software）。** `VSFT`（myViewBoard Suite）是舊落點。
+
+既有單**預設**留在原地 —— 但「預設」不是禁止：**要接手實作的既有單可以搬過來**，
+見下方〈把既有單搬到 VB〉。
 
 | 範圍 | 開哪裡 |
 |---|---|
 | **全部**——mvbf / ClassSwift / 學生端 web / 狸貓版的產品面與實作票 | **`VB-*`** |
 
 > 2026-09-16 起連狸貓版的實作票也開 VB（見下方紅框）。`VSFT` 與 `MT` 都不再是我們的落點，
-> 既有單留在原地。
+> 既有單**預設**留在原地 —— 要動工的可以搬，見〈把既有單搬到 VB〉。
+
+## 把既有單搬到 VB
+
+2026-09-17 Jay 把 `VSFT-6912`（mvbf 暗色 logo）搬成 **`VB-2267`**，因為那張要動工了。
+判準是「**這張要開始做了**」，不是為了整理而整理。
+
+### ⚠️ Agent 搬不動，要 Jay 手動搬
+
+MCP 的 `jira_move_issue` 走 Jira Cloud 的 **bulk move API**，需要「**大量變更**」**全域**
+權限 —— 目前的 token 沒有。實測回：
+
+```
+您沒有必要的「大量變更」全域權限，因此無法變更所選議題。
+```
+
+失敗是乾淨的：回讀該票 `updated` 戳記未變，內容完全沒被動到。
+網頁 UI 的單張 `⋯ → Move` 走的是 **Move Issues 專案權限**、不是 bulk change，Jay 手動可行
+（2026-09-17 搬成功）。
+> 證據等級：權限錯誤訊息是**實測**；「UI 走不同權限」是 Jira Cloud 的一般行為，
+> **沒在本站台驗過**。
+
+### 搬移保留什麼、改掉什麼（VSFT-6912 → VB-2267 實測）
+
+| | 結果 |
+|---|---|
+| 內部 issue id | **不變**（`69653`）→ 是搬移不是複製；留言、changelog、`created` 全保留 |
+| key | `VSFT-6912` → `VB-2267`（會記進 changelog） |
+| 議題類型 | `任務` 保住（id 由 VSFT 的 `10483` 換成 VB 的 `10010`） |
+| labels / reporter / assignee / 優先權 | 全保留 |
+| **狀態** | ⚠️ `KICK-OFF` → **`READY FOR DEV`**，類別從「待辦事項」變成「**進行中**」 |
+| `Project` / `Team` / 衝刺 | 全空，搬完要自己補 |
+
+**狀態那條最容易漏。** VB 沒有 `KICK-OFF`，搬移精靈會逼你挑一個對應狀態，挑完那張
+backlog 裡沒人動的票在看板上就變成「可以開工」。**搬完一定回讀確認狀態是不是你要的。**
+
+> 我事前預測會落在 `待辦事項` / `BACKLOG`，**猜錯**。所以不要預告映射結果，搬完直接讀回來。
+
+`Team` 這次**沒有**被預設值帶成別隊（那個坑是**建單**時的，見上方欄位表）——
+但這只是一次觀察，搬完還是回頭確認。
+
+### 只驗過 VSFT → VB
+
+**`MT → VB` 沒試過。** 不要因為 VSFT 可以就推論 MT 也一樣
+（`cross-system-claims.md` §1 就是這一族的錯）。
+
+---
 
 ### 〔歷史，2026-09-16 已作廢〕狸貓版曾經分兩層
 
@@ -44,7 +92,8 @@ VB 上確實有狸貓版的票，最早 2026-08-31，全部集中在近兩週：
 > **轉換期還會看到新的 MT 票**——2026-09-16 當天 MT 仍有 `MT-3209`～`MT-3218`
 > （含 `mac` / `windows` label，reporter 是團隊其他人）。那是**尚未轉換完的殘留**，
 > 不是規則有例外：看到別人開 MT 不用糾正，但**自己不要跟著開**。
-> 既有 MT 單留在原地，不搬。
+> 既有 MT 單留在原地，不搬（**`MT → VB` 沒試過**；VSFT 那邊已有搬移實例，
+> 見〈把既有單搬到 VB〉—— 但不要據此推論 MT 也一樣）。
 >
 > **翻案條件**：Jay 說要改回。
 
@@ -59,11 +108,31 @@ VB 上確實有狸貓版的票，最早 2026-08-31，全部集中在近兩週：
 |---|---|---|---|
 | **Project** | `customfield_12435`（多選） | 見下方對照 | 跟著**產品面**走，可從既有票推導 |
 | **Team** | `customfield_10001`（Atlassian Team，吃 **uuid**） | Jay ＝ `6f9a9340-9236-4cdf-8ce4-f65469b81da9`（星期六浩克 scrum team - EDU） | 跟著**誰接這件事**走，見 [[repo-team-mapping-is-many-to-many]] |
-| **衝刺** | `customfield_10020` | 當期 `VB Sprint N` 的數字 id | VB 是**全專案共用一個 sprint**，不分隊 |
+| **衝刺** | `customfield_10020` | 當期 `VB Sprint N` 的數字 id | VB 是**全專案共用一個 sprint**，不分隊。⚠️ 先看 `endDate`，見下 |
 | 議題類型 | — | `任務` / `漏洞` / `故事` / `Spike` / `Ops Task` | |
 
 **`Team` 有預設值會自動帶入，而且不一定是你的隊。** 2026-09-09 建 VB-2055 時被帶成
 `Say My Name scrum team - EDU`，我沒設過那欄。**建完一定要回頭確認這格。**
+
+### ⚠️ 填衝刺前先看 `endDate`，快結束就別塞
+
+「填當期」在 sprint 剩幾小時的時候是錯的 —— 那張單一建立就逾期，會出現在下一次
+sprint review 的未完成清單裡。
+
+```
+jira_search: project = VB AND sprint is not EMPTY AND updated >= -14d
+             fields: key,customfield_10020    use_display_names: true
+```
+
+回傳的每個 sprint 物件都帶 `state`（`active` / `future`）與 `startDate` / `endDate`。判準：
+
+| 情況 | 怎麼填 |
+|---|---|
+| 當期還有幾天 ＋ 這件事這期真的要做 | 填當期 |
+| 當期即將結束，或這是還沒排程的 follow-up | **留空**（進 backlog），由 grooming 決定 |
+
+2026-09-21 開 VB-2357（VB-2335 的 follow-up）時 `VB Sprint 11` 當晚 16:00Z 就結束、
+`VB Sprint 12` 隔天才開始，所以刻意留空並在回報時講明 —— 排程是 Jay／PM 的決定，不是我的。
 
 ### Team uuid（用 JQL 查證，不要背）
 
@@ -178,12 +247,6 @@ token 不自帶身分，Basic auth 的帳號欄位就是 email。實測 `Bearer 
 **徵兆**：建單失敗但錯誤訊息完全沒提是哪個欄位 —— 先把自訂 textarea 欄位拿掉再試一次，
 不要從必填欄位那邊找。
 
-## 開完之後
-
-1. **回頭 verify 一次欄位**（尤其 Team），用 `jira_get_issue` 讀回來看，不要相信建立時的回傳。
-2. 有相關單就建連結（`jira_create_issue_link`，`Relates`）。
-3. **VSFT 沒有刪除權限**——開錯專案時只能留作廢留言＋轉 CLOSED，並記得清掉舊單的 issue link
-   與其他地方（PR 描述、其他單的留言）的引用。
 ### 附件路徑必須在 km repo 底下
 
 `jira_update_issue` 的 `attachments` 會拒絕 km repo 以外的路徑：
@@ -193,8 +256,15 @@ Path traversal detected: /tmp/... resolves outside /Users/jay.wj.wu/ProjectsWork
 ```
 
 （2026-09-17 實測，VB-2294 傳截圖。）**scratchpad 在 `/tmp` 底下，所以不能直接傳。**
+`~/Downloads` 之類的家目錄位置**一樣會被擋**（判準是「在不在 km repo 底下」，不是「在不在 /tmp」）。
 做法：在 km 裡開暫存目錄（例 `.tmp-jira-attach/`）→ 複製過去 → 傳 → 刪掉 →
 `git status --porcelain` 確認沒殘留。
+
+**一次可以傳多個**：`attachments` 吃逗號分隔的絕對路徑清單（2026-09-21 VB-2335 一次傳 9 個成功）。
+
+⚠️ **回傳的 `attachment_results` 裡每個 `id` 都是 `null`，那不代表失敗。** 看
+`success: true` 與 `failed: []`，再用 `jira_get_issue(fields="attachment")` 回讀 —— 讀回來
+才有真正的 `attachment/content/<id>`。這跟 [[handoff-docs]] §6「不要看 echo 下結論」同一族。
 
 檔名會**原樣**出現在 Jira，所以複製時就取有意義的名字
 （`recents-overlay-covers-recents.png`，不是 `shot2.png`），
@@ -202,3 +272,9 @@ Path traversal detected: /tmp/... resolves outside /Users/jay.wj.wu/ProjectsWork
 
 ---
 
+## 開完之後
+
+1. **回頭 verify 一次欄位**（尤其 Team），用 `jira_get_issue` 讀回來看，不要相信建立時的回傳。
+2. 有相關單就建連結（`jira_create_issue_link`，`Relates`）。
+3. **VSFT 沒有刪除權限**——開錯專案時只能留作廢留言＋轉 CLOSED，並記得清掉舊單的 issue link
+   與其他地方（PR 描述、其他單的留言）的引用。

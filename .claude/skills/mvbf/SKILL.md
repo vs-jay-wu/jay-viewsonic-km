@@ -1,6 +1,6 @@
 ---
 name: mvbf
-description: "Use when writing, reviewing, or committing code in edu-droid-flutter (mvbf / myViewBoard Flutter app) — before any Edit/Write in that repo. Covers branch check, team-rule discovery, comment standards, headless engine limits. Examples: \"改 mvbf 的 xxx\", \"review 這個 PR\", \"幫我 commit mvbf\""
+description: "Use when writing, reviewing, or committing code in edu-droid-flutter (mvbf / myViewBoard Flutter app) — before any Edit/Write in that repo. Covers branch check, team-rule discovery, comment standards, headless engine limits, and hotfix backport / release judgement calls. Examples: \"改 mvbf 的 xxx\", \"review 這個 PR\", \"幫我 commit mvbf\", \"出 hotfix\""
 ---
 
 # mvbf（edu-droid-flutter）工作核心
@@ -15,11 +15,16 @@ repo：`Orgs/Viewsonic-EDU/edu-droid-flutter`
 ## 步驟 0：先讀團隊 rules（每次都做）
 
 那個 repo 的 rules **不會**跨 repo 自動載入——在 km 工作時它們不在 context 裡，
-就算 cwd 是 mvbf 也未必載入（該 repo沒有 CLAUDE.md）。所以動手前：
+就算 cwd 是 mvbf 也未必載入。所以動手前：
 
 ```bash
 ls Orgs/Viewsonic-EDU/edu-droid-flutter/.claude/rules/
+cat Orgs/Viewsonic-EDU/edu-droid-flutter/CLAUDE.md
 ```
+
+> 該 repo **有** `CLAUDE.md` 與 `AGENTS.md`（2026-09-17 於 `origin/master` 6dbcc8516 實測）。
+> 兩份內容相同：**OLF 格式法（WRAP track）**，守門規則是 `.claude/rules/olf-format.md`。
+> 只有動到 OLF 讀寫／匯入匯出才需要細讀，但先掃一眼才知道這次有沒有被它管到。
 
 讀完與本次任務相關的。目前有（可能增減，以 `ls` 為準）：
 
@@ -33,6 +38,7 @@ ls Orgs/Viewsonic-EDU/edu-droid-flutter/.claude/rules/
 | `toastification-abstraction.md` | 動到 toast／通知 |
 | `aes-cipher-encryption.md` | 動到加解密 |
 | `jira-status-transition-policy.md` | 要改 Jira 狀態 |
+| `olf-format.md` | 動到 OLF 讀寫／匯入匯出（根 `CLAUDE.md` 那條格式法的守門規則） |
 
 ## 步驟 1：確認分支
 
@@ -108,10 +114,17 @@ changelog。歷史屬於 commit message 與 Jira。
 | | 例子 | 為什麼 |
 |---|---|---|
 | ❌ | 白名單陣列旁寫「排除的欄位有這三個」 | **冗餘複述** —— 真相來源就是旁邊的陣列。兩份表述必然脫鉤，且脫鉤時沒人知道。刪掉不損失任何資訊 |
+| ❌ | 註解裡抄**別的 class 的常數值**（色碼、尺寸、id） | **跨檔冗餘複述** —— 那個值改了不會有人回來更新這裡，而且脫鉤時沒有任何徵兆。要寫的是**判準**（「這塊底色畫自 X、不隨主題變動」），不是值 |
 | ✅ | 「A31 是唯一用 store flavor 的 IFP」 | **新資訊** —— 這在該檔案（甚至整個 repo）查不到，要看 build config ＋ 出貨機型清單。刪掉就是知識遺失 |
 
 所以「已知的例外／個案」該寫，而且往往是註解最有價值的部分。要寫的是**規則與判準**
 （下一個人拿它做決定），不是**從別處衍生的結論**（會過期）。
+
+**由來（跨檔那列）**：VB-2267。手掌擦的註解原本抄了 `VSGlobalColors` 的三個色碼
+（`unknownGray1 #fafafa` 等），Jay 指出：「你引用了很多這種色碼，而且是在其他 class，
+這樣其他地方如果改了，也要改這邊的值？如果沒改動，註解就會錯」。改成寫不變條件 ——
+「`_buildEraserImage` 整支都不讀 `vsColors`／`Theme`」—— 色票怎麼調都不影響這句的真偽，
+再附一行 grep 指令讓它壞掉時會被發現。
 
 **寫「新資訊型」的枚舉時，附上怎麼查證：**
 
@@ -165,6 +178,61 @@ fvm dart analyze <改動到的檔案…> | grep prefer_single_quotes
 再把命中的行號與 `git diff -U0 HEAD -- <file>` 的 `@@ +start,count @@` 交集，
 只修落在新增行上的那些（未追蹤的新檔則全檔都算）。改完**記得還原
 `analysis_options.yaml`**，用 `git diff -- analysis_options.yaml` 確認沒有殘留。
+
+### ⚠️ 量 base 的 analyze 數字時，不要把 base 版本蓋回工作檔
+
+要比「我的改動有沒有新增告警」得跑兩次 analyze。**不要**用
+`git show HEAD:<file> > <file>` 這種就地覆蓋的作法量 base —— 那會**無聲地洗掉
+自己還沒 commit 的編輯**（`dart analyze` 只吃路徑，覆蓋成功不會有任何提示）。
+
+改用不碰工作檔的作法：
+
+```bash
+# 把 base 版本放到 repo 外，在那裡量
+mkdir -p /tmp/base && git show origin/master:lib/foo.dart > /tmp/base/foo.dart
+fvm dart analyze /tmp/base/foo.dart | tail -2
+```
+
+`/tmp` 的單檔 analyze 會少掉專案的 `analysis_options.yaml`，數字未必可比 ——
+**真的要精準比對就先把改動 commit 起來**（之後要改再 amend），
+用 `git stash` 搬移是最差解（stash stack 跨 worktree 共用，可能動到別人的暫存）。
+
+**由來**：VB-2193。為了量 lint 差異把兩個 base 檔 `cp` 回 `lib/`，把當次的編輯整個洗掉，
+只能照 diff 重做一次。徵兆：`git diff` 突然變空、或只剩一部分改動。
+
+---
+
+## 寫測試
+
+### ⚠️ `testWidgets` 裡做真實 I/O 必須包 `tester.runAsync()`
+
+`testWidgets` 跑在 fake async 下，**真實檔案 I/O 的 Future 永遠不會完成**。
+直接 `await` 一個會讀寫磁碟的函式，測試會一路卡到 flutter_test 的預設上限：
+
+```
+10:00 +0 -1: <測試名> [E]
+  TimeoutException after 0:10:00.000000: Test timed out after 10 minutes.
+  dart:isolate  _RawReceivePort._handleMessage
+```
+
+**看到整整 10 分鐘的 TimeoutException，先想這條** —— 不是死結、不是效能問題，
+也不要去調 `timeout`。把呼叫包進 `runAsync`：
+
+```dart
+List<Foo>? result;
+await tester.runAsync(() async {
+  result = await thingThatTouchesDisk(...);
+});
+expect(result, ...);
+```
+
+**判斷是不是這條**：把同一段邏輯改用普通 `test()`（沒有 fake async）跑一次，
+會過就是它。純 `test()` 沒有 `BuildContext`，所以需要 context 的只能用
+`testWidgets` ＋ `runAsync`。
+
+⚠️ `runAsync` 裡**不能**呼叫 `tester.pump()`，所以「在非同步作業進行到一半時
+改變 widget 樹」做不到 —— 依賴那種時序的守衛就會測不到（見
+`cross-system-claims.md` 的變異測試第三個確認）。
 
 ---
 
@@ -250,6 +318,148 @@ headless 一碰就把「第一次啟動」這個一次性事件消耗掉，使�
 
 ---
 
+## Tooltip 與 semantics
+
+### `VSTooltip` 只在**接了滑鼠**時 hover 觸發 —— 純觸控裝置驗不到
+
+`lib/widget/custom_tooltip.dart` 把 `triggerMode` 寫死為 `TooltipTriggerMode.manual`
+（原註解：`// Prevent trigger from long press`），剩下唯一的路徑是 hover，而那條還掛在
+`_mouseIsConnected` 底下。**所以整個 app 的 tooltip 在純觸控機上一個都不會出現。**
+
+**徵兆**：長按按鈕只會觸發它本來的動作（跳選單、開視窗），沒有任何 tooltip。
+
+**判準**：要在機器上驗 tooltip 就得**接一隻滑鼠**，或改用 IFP。看不到時先用
+**既有的**按鈕對照一次（例如 file manager，它本來就有 tooltip）——對照組也看不到，
+就是觸發模式問題，不是你的改動壞了。證據等級：實測（2026-09-14，Pixel Tablet）。
+
+延伸的設計判準：**tooltip 不可以承載操作所需的必要資訊**，因為觸控使用者永遠看不到。
+必要資訊要放在 `semanticsLabel` 或可見的 UI 上。
+
+### ⚠️ `VSTooltip` 內部是 `ExcludeSemantics`，會吃掉 child 的點擊語意
+
+`custom_tooltip.dart` 的 `VSTooltip.build` 外層包了 `ExcludeSemantics`，砍的是**整棵子樹**。
+把它包在一個自訂控制項外面，底下 `GestureDetector` 的 tap 語意會一起消失 ——
+**螢幕閱讀器使用者按不動那個元件，而畫面上完全看不出異狀。**
+
+正確作法（與 `lib/widget/common/vs_icon_button.dart` 既有寫法一致）：
+**VSTooltip 只負責視覺，語意由呼叫端自己包一層 `Semantics` 補回來**，而且各欄位分工固定：
+
+| 欄位 | 放什麼 |
+|---|---|
+| `identifier` | QA 定位字串（`[QA][main toolbar: …]`） |
+| `label` | 使用者聽得懂的名稱（已翻譯） |
+| `tooltip` | tooltip 文字；與 `label` 相同時省略，避免念兩次 |
+| `enabled` / `selected` / `onTap` | 狀態與動作（`onTap` 就是被 ExcludeSemantics 吃掉、要補回來的那個） |
+
+順序是 `Semantics( child: VSTooltip( child: 實際控制項 ) )` —— 包反了等於沒包。
+
+**這條值得配一條測試釘住**，因為壞掉沒有視覺徵兆：
+
+```dart
+final node = tester.getSemantics(find.byType(MyWidget));
+expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+```
+
+> `VSTooltip` 那層 `ExcludeSemantics` 其實**過寬**：它 fork 的 `CustomTooltip` 本身就有
+> `excludeFromSemantics` 參數（`custom_tooltip.dart` 的 `Semantics(label: excludeFromSemantics ? null : _tooltipMessage, child: widget.child)`），
+> 只拿掉 tooltip 自己的 label、保留 child 語意。改它要驗 17 處呼叫端，
+> **2026-09-14 與 Jay 確認先不開單**；在它被改掉之前，照上面的作法走。
+
+### `semanticsId` 不是 `semanticsLabel`
+
+`semanticsId` 是 QA 自動化定位用的字串，塞進 `label` 會被螢幕閱讀器逐字念出來。
+repo 裡有不少 legacy 是這樣寫的（例：`ClassSwiftLaunchToggle` 曾經
+`Semantics(label: widget.semanticsId)`）—— **legacy 這樣寫不構成新程式碼照做的理由**
+（Jay 2026-09-14 原話：「我知道有很多 legacy 是這樣做，但新的請用正確做法做」）。
+
+另一個同型錯誤是**多包一層 `Semantics`**：多一層就多一個節點，同一個控制項會被讀成兩個。
+語意節點只留一個。
+
+由來：VB-2213 / PR #271。
+
+---
+
+## 圖片資產：App 讀的不是 `.svg`
+
+### 管線
+
+執行期只讀**編譯後**的 `images/dist/<name>.svg.vec`（`UtilityHelper.getSvgVectorPath`），
+原始 `.svg` 從來不會被打開。新增或改圖：
+
+```bash
+mkdir -p tmp_images && cp <new>.svg tmp_images/
+make images    # vector_graphics_compiler → images/dist/*.svg.vec，再把 svg 搬進 images/
+```
+
+`tmp_images/` 是 gitignore 的暫存區，`make images` 跑完會自己清空。
+
+⚠️ **改了 `.svg` 卻沒跑 `make images`：測試全綠、App 顯示舊圖**，沒有任何徵兆。
+驗 dist 有沒有同步（不需要人眼）——重編到暫存目錄比 sha：
+
+```bash
+fvm flutter packages pub run vector_graphics_compiler --input-dir <tmp> --out-dir <out>
+shasum <out>/<name>.svg.vec images/dist/<name>.svg.vec   # 相同 = 同步
+```
+
+編譯是決定性的：同一份 svg 重編會 **byte-identical**（VB-2267 實測，含對照組）。
+
+### `.vec` 裡的顏色**可以**用位元組驗
+
+填色編在**檔頭的顏色表**：offset 15 起、stride 10、每格 **3 byte 且是 BGR**。
+VB-2267 的亮暗兩版實測（同一份幾何、只換色 → 兩檔等長 8601，只差 21 個 byte）：
+
+```
+offset  15/25/35/45/55/65/75（7 格）
+light:  25 00 db · 25 00 db · 25 00 da · 27 00 db · 26 00 d8 · 24 00 d9 · 27 00 d8
+dark:   ff ff ff × 7
+```
+
+BGR 反轉後正好是亮色 SVG 裡那六個紅（`#db0025` 佔兩格）。
+
+**寫斷言不要寫死位移**（位移隨檔案與 compiler 版本而異）。驗不變式本身就夠：
+兩檔**等長**、**有差異**、且**每個差異位置在暗版都是 `0xff`**。這條擋得住
+「換錯顏色後重編」與「.vec 被換成別份美術」，實測兩種變異都會紅。
+
+> ⚠️ **我一開始下錯結論。** 掃 ARGB uint32 掃不到東西（白版紅版數字一模一樣），
+> 我就寫下「`.vec` 的顏色沒辦法用位元組驗」—— 實際上只是**編碼假設錯了**（是 3-byte BGR）。
+> 是 mvbf PR #279 的 reviewer 指出來的。
+> **「我的探針壞了」不等於「這件事驗不了」**，見 `cross-system-claims.md` §5。
+
+### 亮／暗雙檔：`_edu` 後綴慣例
+
+`UtilityHelper.getThemeFileName(base, isLight)`：亮色 → `${base}_edu`、暗色 → `base`。
+
+| 要什麼 | 用哪個 |
+|---|---|
+| 跟隨主題 | `VSThemeSvgImage` / `VSThemeSvgIcon`（內部走 `theme.getSvgAssetPath`） |
+| 不分主題 | `VSSvgImage` / `VSSvgIcon` |
+| 預載清單 | `ImageCollection` 的 `themeSvgs` vs `noThemeSvgs`，要跟上面對齊 |
+
+⚠️ **`VSIcons` 的常數必須是不含 `_edu` 的 base name，否則整個機制靜默空轉。**
+`myViewBoard_logo` 曾經寫成 `'myViewBoard_logo_edu'`，等於直接當檔名用，
+`getThemeFileName` 在兩個主題回同一支檔 —— 畫面照常顯示、零錯誤訊息。
+**這就是 VB-2267 的根因。**
+
+**徵兆**：常數值自己帶了 `_edu` / `_on` / `_off` 後綴，卻被標成 `/// theme`。
+
+### 要讓一張圖跟著主題翻色之前，先追它畫在什麼底上
+
+**底不跟著主題翻，圖就不能翻。** repo 裡有些表面的顏色是寫死的（直接用
+`VSGlobalColors.*` 或裸 `Colors.*`），不走 `vsColors` token，暗色主題下不會變暗。
+把白版圖畫上去等於消失，而且**畫面不會有任何錯誤徵兆**。
+
+對**每一個**消費點各查一次（不能只查一個就推論其他的）：
+
+```bash
+grep -n 'vsColors\|Theme\.of' <畫那塊底色的檔>   # 沒命中 = 這塊不隨主題變
+```
+
+VB-2267 實例：標題列 / 設定▸關於 / 登入框三處的底都是 `vsColors.containerBackground`
+（暗色會變暗）✅ 可以翻；手掌擦 `eraser_palm_helper.dart` 全檔零 `vsColors`
+❌ 必須固定取亮色版。
+
+---
+
 ## Build 注意事項
 
 含 ClassSwift 的 flavor（`ifp` / `edla`）需要 CS checkout：
@@ -262,13 +472,76 @@ headless 一碰就把「第一次啟動」這個一次性事件消耗掉，使�
 尚未取得，或缺少同步標記」）。**先補 property，不要去跑 `tools/sync-classswift.sh`**
 ——那會建出第二份 checkout，跟本機在測的不是同一份。要跑先問。
 
+### ⚠️ ClassSwift 過了還會卡第二個外部相依：Finch
+
+`settings.gradle` 有**兩份平行的三層驗證**（ClassSwift 與 Finch），補了
+`-PclassswiftRepoPath` 只解決第一個，接著會停在：
+
+```
+Settings file '…/android/settings.gradle' line: 177
+    Finch 尚未取得，或缺少同步標記。
+    請執行：./tools/sync-finch.sh
+```
+
+Finch 的 checkout 位置是 repo 根的 `third_party/finch`（gitignore），**新 worktree 沒有**。
+兩條路：
+
+| 做法 | 什麼時候用 |
+|---|---|
+| `./tools/sync-finch.sh` | 首選。依版控的 `finch-ref.properties` clone，拿到的就是釘選版 |
+| `-PfinchRepoPath=<路徑>` | 腳本拉不到 ref 時的退路。**會跳過版本驗證** |
+
+⚠️ **不要直接把 `-PfinchRepoPath` 指向 `Orgs/Viewsonic-EDU/edu-vbos-finch`。**
+那份 checkout 的 HEAD 是它自己的最新 tag，跟 `finch-ref.properties` 釘的**不是同一版**
+（2026-09-18 實測：ref 釘 `vb-2077-mvb-sync-20260914`，本機 HEAD 已是 `…-20260917`）。
+編錯版介面的後果見該檔檔頭第 4 類：**bindService 成功、呼叫送得出去，直到對方
+unmarshal 才丟 BadParcelableException，而且只在裝著那版 Finch 的機器上發生**。
+
+要用退路就開一個停在釘選 SHA 的 worktree（不動 Jay 的 checkout）：
+
+```bash
+git -C <edu-vbos-finch> worktree add --detach <同層路徑> <釘選的 SHA>
+```
+
+**另外**：`sync-finch.sh` 會因為「釘選的 tag 在遠端不存在」而失敗
+（`錯誤：在 Finch 找不到 ref「…」`）。那不是本機環境問題 —— 是
+`finch-ref.properties` 指向一個已被遠端刪掉／取代的 tag，代表**當下的
+`origin/master` 從乾淨 clone 建不起來**。先用 `git ls-remote --tags origin 'vb-2077-*'`
+確認，再回報給 Jay，不要自己改 ref 檔。
+
 只驗編譯不必建整個 APK：
 
 ```bash
 ./gradlew :app:compileEdlaDebugJavaWithJavac -PclassswiftRepoPath=…
 ```
 
-Dart 側用 Flutter MCP 的 `analyze_files`，比 `flutter analyze` 快。
+Dart 側用 `fvm dart analyze <檔案>`（**不要用 Flutter MCP**，見 km `CLAUDE.md`）。
+
+### ⚠️ 要**安裝**的 APK 用 `fvm flutter build apk`，不要直接下 `./gradlew assemble`
+
+版號是 flutter 注入的（`flutter build` 會把 `flutter.versionCode` / `flutter.versionName`
+寫進 `android/local.properties`，gradle 再讀它）。**直接跑 `./gradlew assembleEdlaDebug`
+繞過那一步，APK 會變成 `versionCode=1 / versionName=1.0`**，而且 build 完全成功、
+沒有任何警告。
+
+實測後果（2026-09-14，VB-2213，Pixel Tablet）：app 以為有新版，一開就跳
+`Whiteboard Updater`「The new version has been downloaded. Do you want to install it now?」
+—— **按下 Update 會把你正在測的 build 換成 OTA 版**，而你會以為自己還在測剛才那份。
+
+```bash
+# 驗證裝上去的是哪個版號
+adb -s <serial> shell dumpsys package com.viewsonic.droid | grep -E 'versionCode|versionName'
+```
+
+`./gradlew` 直接下仍然適合**只驗編譯**（`:app:compileEdlaDebugJavaWithJavac`），
+那種情況產物不會被安裝，版號無所謂。
+
+flutter 這條路要傳 gradle property 用 `--android-project-arg`：
+
+```bash
+fvm flutter build apk --debug --flavor edla \
+  --android-project-arg=classswiftRepoPath=/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs/Viewsonic-EDU/ragdoll-cat
+```
 
 ### 新開的 worktree 要先補 `.fvm`
 
@@ -290,6 +563,78 @@ Because droid requires Flutter SDK version >=3.41.5, version solving failed.
 
 ⚠️ `fvm use` 會**把 `.fvmrc` 結尾的換行吃掉**，產生一行純雜訊 diff。跑完
 `git checkout -- .fvmrc` 還原，別讓它混進 commit。
+
+⚠️ **起點沒有 `.fvmrc` 時（例如從舊 production tag 開的 hotfix 分支），`fvm use <版本>`
+會改寫 `.gitignore`** —— 把既有的 `.fvm` / `.fvmrc` 兩行刪掉，在檔尾補一個**沒有結尾換行**
+的 `.fvm/`。後果是 `.fvmrc` 從被忽略變成 untracked，`git status` 不再乾淨。
+
+實測（2026-09-18，hotfix/3.10.207 的 backport worktree，起點 tag `3.10.206`
+＝ `.fvmrc` 進版控之前的 `0b4c87c89^`）：
+
+```
+ M .gitignore
+?? .fvmrc
+```
+
+`verify_hotfix_backport.sh` 的「工作目錄乾淨」會因此變紅，而它給的建議是
+「先 commit 或 stash」—— **照做就是把 fvm 的副作用 commit 進 backport 分支**，
+而那條分支的全部賣點正是「只有刻意挑進來的東西」。正確做法是還原：
+
+```bash
+git checkout -- .gitignore   # .fvmrc 會自動變回被忽略
+```
+
+**徵兆**：backport 分支上突然有 `.gitignore` 的改動，而你這輪根本沒碰它。
+
+### 新開的 worktree 也沒有 `gradlew`
+
+同樣是 gitignore（`android/.gitignore` 列了 `/gradlew`、`/gradlew.bat`、
+`gradle-wrapper.jar`、`gradle-wrapper.properties`）。**徵兆是 `exit 127`／
+`no such file or directory: ./gradlew`** —— 不是 build 壞了。從主 checkout 複製一份：
+
+```bash
+cp <主checkout>/android/gradlew android/
+cp <主checkout>/android/gradle/wrapper/gradle-wrapper.* android/gradle/wrapper/
+```
+
+### ⚠️ keystore 路徑會不會壞，取決於 worktree 放在**哪一層**
+
+`android/app/build.gradle` 用相對路徑找 keystore
+（`rootProject.file('../../playstore_keystore/…')`、`file('../../../playstore_keystore/…')`、
+ifp 的 `file('../../../mvbf_keystore/MVBA_PlatForm.jks')`）。**判準是目錄深度，不是
+「有沒有用 worktree」**：
+
+| worktree 位置 | 結果 |
+|---|---|
+| **同層**（`Orgs/Viewsonic-EDU/<repo>-<topic>`，即 `cross-repo-workflow.md` §4 建議的放法） | 深度與主 checkout 相同 → **路徑解析得到，照常簽章** |
+| `.claude/worktrees/<name>`（session 綁定那種） | 多墊兩層 → 解析到不存在的路徑，packaging 倒 |
+
+同層那種**已實測可行**（2026-09-14，VB-2213）：`cd android/app` 後
+`[ -f ../../../mvbf_keystore/MVBA_PlatForm.jks ]` 為真，`:app:packageEdlaDebug` 正常產出
+可安裝的 APK。所以**不要**因為「這是 worktree」就先去改 build.gradle ——
+先用那行 `[ -f ... ]` 測一次。
+
+下面講的是**深一層那種**才會遇到的情形，`:app:packageStoreDebug` 會倒在：
+
+```
+property 'signingConfigData.storeFile' specifies file
+'…/.claude/worktrees/playstore_keystore/viewsonic.keystore' which doesn't exist
+```
+
+**兩個容易誤判的點：**
+
+1. **`storeDebug` 也會倒。** store / open 的 **debug** buildType 一樣用
+   `signingConfigs.googlePlayRrelease`（只有 ifp / edla 的 debug 走 ifp keystore）。
+   以為「改用 debug 就能繞過」是錯的——我踩過。
+2. **R8 不受影響。** 失敗點在 packaging，`minifyStoreReleaseWithR8` 與
+   resource shrinking 都已經跑完 → 想驗 R8 或量 APK 體積**不需要**解決簽章問題，
+   從 `build/app/intermediates/dex/` 與 `optimized_processed_res/` 直接量即可。
+
+要真的產出 APK，就**暫時**把那兩條路徑往上加幾層（層數自己算，不要猜：
+`python3 -c "import os;print(os.path.normpath(os.path.join(os.getcwd(),'<相對路徑>')))"`），
+build 完**立刻還原**並用 `git diff -- android/app/build.gradle | grep -i keystore` 確認沒殘留。
+這不違反 `excluded-dirs.md`：只改指向，沒有讀取、複製或搬移 keystore 本身。
+不想動版控檔就改從主 checkout build。
 
 ### `ifp` flavor 裝不到一般 Android 裝置
 
@@ -341,6 +686,11 @@ VSFT-6704。Jay 指定用 `vsColors.textOnPrimaryDisable`，查證後發現在�
 團隊的規範在該 repo 的 `.claude/rules/i18n-conventions.md` 與
 `.claude/skills/poeditor-i18n-workflow/`，**動手前兩份都要讀**。以下只記實際跑過一輪
 （VSFT-6704）才知道的事。
+
+> ⚠️ **這一段只適用 mvbf（POEditor `754682` ＋ `arb`）。** ClassSwift Android 是
+> **另一個專案** `825204` ＋ `android_strings`，格式、語系清單、plural 語意、同步時機
+> 全都不同（例如 Android 的值有一層轉義編碼，而 arb 沒有）。動到那邊看 [[cs]] skill
+> 的「i18n：POEditor ↔ `values-*/strings.xml`」，不要把這裡的做法搬過去。
 
 ### ⚠️ 兩份團隊文件對「AI 要不要寫 term comment」講反了
 
@@ -396,73 +746,221 @@ curl -s -X POST https://api.poeditor.com/v2/terms/list \
 `not_support` 而**不是** `not_supported`。新增前先
 `list_terms(search: ...)` 看鄰居怎麼取。
 
+**新增之前先確認同義的 term 是否已存在。** VB-2213 原本要為 toggle 的無障礙標籤開
+`Quiz Tool` 的新 term，`list_terms(search: 'quiz_tool')` 一查發現 `quiz_tool` 早就有、
+arb 裡也在用，直接沿用即可（規範原話：「若已有合適的 term，可直接採用，無需新增」）。
+
+### 文案沿用另一個產品的既有字串時，翻譯可以一起搬（例外，需 Jay 同意）
+
+常規是**工程只提供英文**，其他語言由翻譯人員處理。但當新 term 是**刻意沿用 ClassSwift
+（Quiz Tool）端既有 UI 字串**時，那些字串在 CS 已經翻好 41 種語言，重新送翻只會得到
+**兩個產品對同一個視窗講不同話**的結果。
+
+Jay 2026-09-14（VB-2213）裁定這種情況可以直接搬：「因為有 3 個 term 都是沿用 cs 的
+window 已有的，順手將英文以外的翻譯都補上吧（這次是例外，我知道規則是寫我們只負責英文）」。
+
+**適用判準**（三個都成立才算）：
+
+1. 英文字串與 CS 端**逐字相同**；
+2. 指的是**同一個東西**（同一個視窗／同一個動作），不是碰巧同字；
+3. 有 Jay 或 spec owner 點頭 —— **這是個案例外，不是新常規**。
+
+做法：從 `ragdoll-cat/app/src/main/res/values-*/strings.xml` 取，語系代碼要轉換
+（`zh-rCN`→`zh-Hans`、`zh-rTW`→`zh-TW`、`in`→`id`，其餘相同；`values-night` /
+`values-land` / `values-v23` / `values-w*` 要排除，那些不是語系）。
+逐語系打 POEditor `translations/add`（它**不覆蓋**既有翻譯，安全）。
+
+⚠️ **CS 有的語系不一定等於 POEditor 有的**，反之亦然。VB-2213 實測：POEditor 的
+挪威語（`no`）在 CS 沒有對應 `values-` 目錄 → 那個語系只能留英文。**回報覆蓋率時要把
+缺的語系講出來**，不要只說「都補上了」。
+
+驗證要看 arb，不要只看 API 回傳：pipeline 跑完後掃一次
+`lib/l10n/intl_*.arb`，數「幾個非英語檔含有這個 key」，缺的列出來。
+
 ---
 
-## `/dev-deliver`：Jira transition id 不能照抄
+## `/dev-deliver`：Jira transition 要用「目標狀態」挑，不能照抄 id 或名稱
 
 `dev-deliver` 是 **mvbf repo 自己的 command**（`.claude/commands/dev-deliver.md`），
-km 沒有同名 skill。它原本把 Jira 的 transition id 寫死在文件裡：Phase 1 用
-`progressing`(19)、Phase 7 用 `task done`(8)。
+km 沒有同名 skill。它原本把 transition id 寫死（`progressing`(19)、`task done`(8)）。
 
-**寫死的 id 有兩種壞法，兩種都實際踩過：**
+### 跑這個流程時，另外兩個 skill 也要叫
 
-1. **同一專案內，清單依「單子當下的狀態」而變** —— 想要的那條可能還沒出現。
-2. **跨專案時，同一個數字是完全不同的動作** —— 這種最危險，因為它不會失敗，
-   它會成功地做錯事。
+command 本身不會提醒，但這兩步都踩過坑：
 
-### 第 2 種：VB 與 VSFT 的 id 完全對不起來（VB-1945 實測）
-
-| 想做的事 | VSFT | VB |
-|---|---|---|
-| 轉「進行中」 | `progressing` **19** | `progressing` **2** |
-| 轉 IN CODE REVIEW | `task done` **8** | 有一條直接叫 `IN CODE REVIEW` **52** |
-| — | — | `task done` 是 **5** |
-| **19 在這裡是** | progressing | ⚠️ **`Closed`** |
-
-也就是照 command 原文在 VB 專案填 19，**會直接把票關掉**，而且 API 會回報成功。
-
-VB-1945 在「進行中」狀態的完整清單（實查）：
-`become sprint candidate`(3)、`Pending`(18)、`Closed`(19)、`READY FOR DEV`(39)、
-`STAGE READY(READY FOR QA)`(43)、`IN CODE REVIEW`(52)、`PR MERGED`(57)、`TODO`(58)、
-`back to ready for dev`(4)、`task done`(5)
-
-**挑選判準**：優先挑**名稱與目標狀態一致**的那條（VB 的 `IN CODE REVIEW`(52)）；
-沒有同名的才找等價轉換（VSFT 的 `task done`）。**不要猜某個名稱通往哪個狀態。**
-
-### 第 1 種：以 VSFT-6704（issue type：**漏洞**）實測
-
-| 當下狀態 | 可用 transition |
+| 時機 | 先叫 |
 |---|---|
-| 開放 | CLOSED(2)、OPEN(9)、PENDING(12)、open to ready for QA(4)、**progressing(19)**、Deploy to Stage(13)、Code reviewed(16) |
-| 進行中 | CLOSED(2)、OPEN(9)、PENDING(12)、**task done(8)**、Deploy to Stage(13)、Code reviewed(16) |
+| Phase 1 開分支前 | 確認基底夠新 —— `cross-repo-workflow.md` §2 的「分支的**基底**也要夠新」 |
+| Phase 6／7 寫 PR 描述與 Jira 留言 | `handoff-docs` —— 它 §6 就寫了 `jira_add_comment` 的**回傳值是有損的**，不要據此重貼 |
 
-也就是在「開放」狀態下 **`task done`(8) 根本不在清單裡**，要先轉成「進行中」它才出現。
-`task done`(8) 轉完的狀態名稱是 **IN CODE REVIEW**（又一個「transition 名稱 ≠ 狀態名稱」
-的例子）。
+VB-2193 那輪沒叫 `handoff-docs`，看到 Jira 回傳值裡底線變成 `*` 就連改三次留言，
+實際儲存的 ADF 從頭到尾是好的（用 `responseContentFormat: "adf"` 讀回來確認）。
 
-### 真正的陷阱
+### 唯一該記的判準
 
-在「開放」狀態找不到 id 8 時，清單裡看起來最接近的是 **`Code reviewed`(16)**——
-**不要按**。那條是通往 **PR MERGED** 的，PR 還沒合就按會讓單子跳到錯誤狀態。
-（同一組對照另見 km memory 的 `vsft-bug-workflow-states.md`。）
+**挑 `to.name` 等於目標狀態名稱的那條**（要「進行中」就挑 `to.name == "進行中"`，
+要 code review 就挑 `to.name == "IN CODE REVIEW"`）。
 
-### 做法
+三個都不可以當判準：
 
-**每個 transition 前都重跑一次 `jira_get_transitions`，用當下查到的 id，
-不要照 command 或任何文件裡的數字硬填。** command 裡的 id 只能當「我要找的是哪一條」
-的提示，不能當輸入值。
+| 不要用 | 為什麼 |
+|---|---|
+| **id** | 每張票都可能不同，而且照填不會失敗，會**成功地做錯事** |
+| **transition 名稱** | 同一個目標狀態，不同 workflow 的 transition 叫法不同 |
+| **`statusCategory`** | 幾乎所有工作中的狀態其 category 都是「進行中」，篩了等於沒篩 |
 
-VSFT 那張表只驗過 **漏洞**、VB 那張只驗過 **故事**；其他 issue type 的工作流可能再不同，
-一樣重查就好。
+### ⚠️ 粒度是「每張票的 workflow」，不是「每個專案」
+
+這點我記錯過一次：2026-09-10 寫成「依專案而異」，隔天被 reviewer 用實查推翻。
+**同一個 Jira 專案內，不同 issue type 走不同 workflow，id 就已經對不起來**
+（2026-09-11 實查 VB 的故事 vs 漏洞：同一個 id 在兩邊是相反方向的動作）。
+
+所以**任何「某某專案的 X 是 id N」的句型都不成立**，包括我自己寫過的。這裡刻意不列
+任何 id 對照表——列了就會被下一個人照抄，而那正是這條要防的事。
+
+### ⚠️ 工具選擇：預設那支拿不到 `to`
+
+`jira_get_transitions` **只回 `id` 與 `name`，沒有 `to`** —— 用它無法執行上面的判準。
+要拿目標狀態得用 `getTransitionsForJiraIssue`（可加 `includeUnavailableTransitions=true`）。
+照新判準做卻沿用舊工具會直接卡住，這點很容易漏，因為兩支工具名字很像。
+
+### 清單會隨「單子當下的狀態」變動
+
+每個 transition 前都要**重查**，Phase 1 查到的結果在 Phase 7 不適用。
+`includeUnavailableTransitions=true` 可以看到全集，用來確認「是真的沒有這條」
+還是「只是現在還不能走」。
+
+### 已知的兩個沉默陷阱（現況，非永久事實）
+
+- **`19` 在 VB 是 `Closed`**（故事與漏洞 workflow 都是），在 VSFT 卻是 `progressing`。
+  照舊值填會直接把票關掉，API 回報成功。
+- **VSFT 的 `Code reviewed` 通往 `PR MERGED`**，不是 code review 中；PR 還沒合就按會跳錯狀態。
+  （另見 memory 的 `vsft-bug-workflow-states.md`。）
+
+> ⚠️ **VB / VSFT 的分工目前本身就是混亂的，Jay 表示之後會整理**（2026-09-11 當場說明）。
+> 上面兩條是當天實查的現況，不是穩定契約 —— 看到與實際不符時，**相信現查的結果**，
+> 並回頭把這段改掉。
+
+### ⚠️ `scripts/jira_assign_sprint.sh` 的 board 預設值還停在 VSFT 時代
+
+Phase 1 最後一步 `bash scripts/jira_assign_sprint.sh {ISSUE_KEY}` 會**回報成功**，
+但可能把票放進**錯的 sprint**：腳本裡 `BOARD_ID="360"` 是寫死的，那是 VSFT 的 board。
+VB 用的是 **board 1754**，sprint 名為 `VB Sprint N`（不帶隊名）。
+
+**徵兆**：它印出的 sprint 名字**帶隊名**（例如 `星期六浩克-sprint 27`），而且 `End:`
+的日期**已經過去了** —— 但它照樣印 `✅ Successfully moved`。
+
+2026-09-17（VB-2267）實際踩到：票被放進 board 360 一個 2026-09-07 就結束的 sprint。
+
+**現在怎麼做**（腳本本身有旗標，不必改檔）：
+
+```bash
+bash scripts/jira_assign_sprint.sh <KEY> --board-id 1754 --sprint-prefix "VB Sprint" --dry-run
+bash scripts/jira_assign_sprint.sh <KEY> --board-id 1754 --sprint-prefix "VB Sprint"
+```
+
+**查證放對了沒 —— 不要只看腳本的成功訊息。** 先看大家在哪個 sprint：
+
+```
+jira_search: project = VB AND sprint is not EMPTY AND updated >= -14d
+             fields: key,customfield_10020    use_display_names: true
+```
+
+再 `jira_get_issue` 讀回自己那張，確認「衝刺」欄**只剩**新的那個
+（重跑是取代、不是並存 —— 已實測）。
+
+> 腳本要讀 repo 根的 `config.json`（gitignored，含 Jira 憑證）。新開的 worktree 沒有這個檔，
+> 會停在 `❌ Jira URL not found`；從主 checkout 複製一份即可。
+
+**這條應該上游到 `edu-droid-flutter`**：把預設值改成 VB 的 board，或讓腳本依 issue key 的
+專案前綴自動選 board（別再寫死）。**待與 Jay 確認後交給其他 agent 處理** ——
+在那之前，跑 dev-deliver 時自己補上面那兩個旗標。
 
 ### 由來
 
-- **VSFT-6704**（漏洞）走 `dev-deliver`。當時單子在「開放」，Phase 7 的 id 8 查不到，
-  差點誤用 `Code reviewed`(16)。先做 Phase 1 轉「進行中」之後 id 8 才出現。
-- **VB-1945**（故事）走 `dev-deliver`。照 command 填 Phase 1 的 19 會把票關掉 ——
-  現查才發現 VB 的 `progressing` 是 2。已回頭修 mvbf 的 `dev-deliver.md`
-  （PR #268），把寫死的 id 換成「查名稱、用當下的 id」＋這兩個陷阱 ——
-  所以新版 command 已經不會給出可直接填入的數字了。
+- **VSFT-6704**（漏洞）：Phase 7 的 id 8 在「開放」狀態查不到，差點誤用 `Code reviewed`(16)。
+- **VB-1945**（故事）：照 command 填 Phase 1 的 19 會把票關掉。
+- **mvbf PR #268**：修 `dev-deliver.md`。第一版只把寫死的 *id* 換成寫死的**名稱**
+  （`progressing`），被 reviewer 指為「同一個坑換個外衣」——因為 VB 的漏洞 workflow
+  裡根本沒有叫 `progressing` 的 transition，會讓 Phase 1 直接中斷。第二版才改成比對
+  `to.name`。**教訓：把一個寫死的東西換成另一個寫死的東西，不算修好。**
+
+---
+
+## 出 hotfix / 發版：四條補在團隊 skill 之外的判準
+
+流程本體在**專案 repo 的** `.claude/skills/mvb-hotfix-release/SKILL.md`（團隊維護，不要在這裡複製）。
+以下四條是 2026-09-18 出 `3.10.207`（VSFT-10164 / backport PR #287）時，團隊 skill **沒涵蓋**、
+**講得太緊**、或**已經過期**的地方。
+
+> 📤 **這四條應該上游到該 repo（前三條進 `mvb-hotfix-release`，第 4 條進 `mvb-release-note`），
+> 待與 Jay 確認。** 在那之前先放這裡，不要自己去改專案 repo。
+
+### 1. squash merge 的 PR 可以安全 backport（§4 那條「停下來回報」要分兩層）
+
+skill §4 說「master 上只找得到一顆涵蓋全部改動的，就是 squash —— **停下來回報，不要往下挑**」。
+
+那條的**本意**是「不要拿 PR 頁面上的 SHA 去挑」（那些 SHA 不在 master 歷史上）。
+但 squash 之後，**master 上那一顆就是該 PR 的完整淨改動**，挑它不會漏、也不會多帶。
+
+所以判準是：**停下來回報是對的（讓人確認範圍），但「不能挑」不成立。**
+回報時要講清楚「PR 有 N 顆、master 上只有 1 顆、那 1 顆等於全部」，由人拍板。
+
+**證據等級：實測。** PR #275 `gh api .../pulls/275` 回 `commits=3`、
+`merge_commit_sha=68d68db40`（1 個 parent），master 上只有那一顆；cherry-pick 後
+增刪行與來源逐行相同（比對法見第 3 條）。
+
+### 2. 衝突可能來自「不在範圍內的 commit 的 context」——解法要看 hotfix 線自己的前提
+
+skill §5 只說「用**上界**那一刻的檔案狀態當基準，不要用 master 最新狀態」。
+但它沒說：**上界的那個狀態，本身可能依賴一顆你並沒有要 backport 的 commit。**
+
+實例：`android/app/src/store/AndroidManifest.xml` 的衝突，來源 commit 的 context 含
+`7c4da965f`（移除 `SetLanguageActivity` 的 exported 覆寫）之後的狀態。照那邊解會把覆寫
+一併拿掉 —— 但 `7c4da965f` 的**前提**是 ClassSwift v1.9.2 的 drop-standalone 刪掉了該 Activity，
+而 hotfix 線釘的是 **CS v1.8.2**（`46eb2aa94`），Activity 還在，覆寫拿掉會讓 store APK
+把 CS 的 `exported` 宣告原樣併進最終 manifest。
+
+**判準**：解衝突前先問兩個問題 ——
+
+1. 這段 context 是**哪顆 commit** 造成的？（`git log -S'<那段文字>' <起點>..origin/master`）
+2. 那顆的**前提**在 hotfix 線成立嗎？
+
+**版本釘選是最常見的「前提不成立」來源**：CS 版本、Flutter SDK 版本、plugin 版本 ——
+hotfix 線釘的通常比 master 舊，master 上「因為升級了所以可以刪」的東西，在 hotfix 線不能刪。
+
+### 3. patch-id 不同時，用「只比增刪行」區分「掉東西」與「只是 context 不同」
+
+skill 講了 patch-id **不是**「必須相同」而是「不同時你要說得出原因」，但沒給怎麼說。
+
+`git patch-id` 會把 **context 行**也算進指紋，所以**純粹因為周圍文字不同**就會變號 ——
+這跟「cherry-pick 掉了東西」在輸出上長得一模一樣（都只是兩個不同的雜湊）。可分辨的探針：
+
+```bash
+diff <(git show <來源 SHA>   --format= | grep -E '^[+-]' | grep -v '^[+-][+-][+-]') \
+     <(git show <分支上那顆> --format= | grep -E '^[+-]' | grep -v '^[+-][+-][+-]')
+```
+
+無輸出 ＝ **增刪行逐行相同**，差異只在 context → 正常，可以寫進 PR 描述當證據。
+有輸出 ＝ 真的不一樣，逐行看是不是掉了東西。
+
+⚠️ **對照組**：這條探針要在一個**已知有實質差異**的 commit 上跑出非空輸出，
+才證明它有鑑別力（見 `cross-system-claims.md` §5）。
+
+### 4. release note 的 route A 已經寫過線上頁面了（`mvb-release-note` 那句已過期）
+
+那份 skill 寫著「Every publish so far has gone through route B, so route A has not yet
+written to the live page. Treat its first real use as a shakedown.」——
+**2026-09-18 已經不成立**：`scripts/mvb_release_note_publish.py --publish` 真的寫了，
+page version 98 → 99，三道 post-write guard 全綠
+（`node count 506 (expected 506)` / `old content byte-identical` / `new sections byte-identical`）。
+
+所以 route A 現在是**預設路徑**，不必再當 shakedown 對待。但那次的作法仍值得照做，
+因為它便宜：`--self-test`（21 checks）→ dry run 讀節點數與 APK URL → 才 `--publish`，
+而且**三個 guard 要逐項讀**，不要只看 exit code。
+
+⚠️ 那份 skill 的其他內容（route B 的取 body、slicing、`PYTHONIOENCODING=utf-8`）沒有過期，
+只有「route A 還沒上線過」這一句要改。
 
 ---
 

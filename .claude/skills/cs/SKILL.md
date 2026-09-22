@@ -59,16 +59,16 @@ ls .claude/rules/
     -PclassswiftRepoPath=/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs/Viewsonic-EDU/ragdoll-cat
   ```
   （mvbf 的 `:classswift` module 直接把 sourceSets 指到這個 checkout，改 CS 的 code 重建 mvbf 就會生效）
+
+  ⚠️ **上面這條只適合「驗編譯」。要裝到機器上實測，改用
+  `fvm flutter build apk --debug --flavor edla --android-project-arg=classswiftRepoPath=…`**
+  —— 直接下 `./gradlew assemble` 會繞過 flutter 的版號注入，APK 變成 `versionCode=1`，
+  然後 app 一開就跳更新卡、按下去把你正在測的 build 換掉。詳見 [[mvbf]] skill 的
+  「Build 注意事項」。
 - 獨立 app 才用 `./gradlew installRcDebug`（APK 在 `app/build/outputs/apk/rc/debug/`）
 - **只在 CS 登入畫面裡的邏輯，fusion 完全不會執行** —— 見下面的 overlay 權限陷阱
 
 IPC 契約在 `docs/mvb-ipc-spec.md`，對面是 mvbf（見 [[mvbf]] skill）。
-
----
-
-## 切分支後編譯噴 `Unresolved reference`：safe-args 產生碼沒清
-
-改動 `app/src/main/res/navigation/nav_graph.xml` 的分支之間切換後，fusion build 會噴：
 
 ### 差異不只在 build 與登入 —— 執行期行為也不同
 
@@ -97,6 +97,12 @@ adb shell dumpsys activity services com.viewsonic.droid | grep -A45 'ServiceReco
 # isForeground / types=0x…（0x200=remoteMessaging、0x20=mediaProjection）
 # startRequested（stopService 有沒有被呼叫過）/ Bindings: 底下的 IntentBindRecord
 ```
+
+---
+
+## 切分支後編譯噴 `Unresolved reference`：safe-args 產生碼沒清
+
+改動 `app/src/main/res/navigation/nav_graph.xml` 的分支之間切換後，fusion build 會噴：
 
 ```
 e: .../build/classswift/generated/source/navigation-args/.../XxxFragmentDirections.kt
@@ -152,6 +158,204 @@ VSFT-10092 有兩輪 review 卡在這上面。
 
 > 順帶：`git add .` 前務必看一次 `git status` —— 復活的孤兒 golden 可能是前面某張票
 > **刻意刪掉**的檔案（VSFT-10065 / VSFT-10067 各刪過一批），加回去不會有人發現。
+
+---
+
+## PR 的兩道 test gate，第二道最容易漏
+
+`.claude/rules/test-with-feature.md` 是這個 repo 的 PR gate（由 PR template 的 checkbox ＋
+reviewer 把關，**不是 CI**）。它有**兩道**，我 2026-09-21（VB-2335 / PR #1164）只看到第一道，
+被 reviewer 擋下來。
+
+| Gate | 位置 | 要什麼 |
+|---|---|---|
+| Change type A/B/C/D | 該檔前半 | 依改動類型附對應測試 |
+| **Per-Ticket E2E Gate** | 該檔 `### Per-Ticket E2E Gate` 那節 | **Type A/B/C 的 user-facing ticket，收尾要有 ticket scope 對應的 agent E2E journey PASS**，否則要掛 `skip-e2e-gate` ＋合格例外理由 |
+
+**送 PR 前把那個檔整份讀完**，不要只讀到 change type 表就開始寫 PR 描述。
+
+### journey 是什麼、為什麼你大概跑不了
+
+journey ＝ 五層測試的最上層，**真機上的完整使用者流程**。特別的是它**不是腳本**：
+一條 journey 就是一份自然語言任務書，跑的時候由 orchestrator 開一個 `claude -p` 子 agent，
+讀任務書 → 用 `mobile_dump_ui` 判斷畫面 → 自己決定操作 → 自己判 PASS/FAIL/NEEDS_HUMAN。
+`_shared-preamble.md` 明文禁止寫死座標、禁止 Appium / Espresso DSL。
+
+**規格進版控、執行引擎不進**：
+
+- `docs/testing-strategy/journeys/J*.md` — 任務書，在 repo 裡
+- **`pipeline/`** — orchestrator / runner / 產出，**`.gitignore` 裡，fresh clone 沒有**
+
+`docs/testing-strategy/architecture/device-rig.md` 說明這是刻意的：那些東西自動化的是
+**某一座特定機櫃**（launchd 排程、參考機 SM-X520 `R52Y60E4GEW`），
+「it does not promise turn-key execution from a fresh clone」。
+
+所以在 Jay 的機器上**跑不了 journey**，這不是環境壞了。
+
+### ⚠️ 現有 journey 只有 J2–J6，而且涵蓋範圍比名字窄
+
+| Journey | Mission |
+|---|---|
+| J2 login-mvb | toggle → CS 綁定 → 落在 `MvbQuizCollectionWindow` |
+| J3 quiz-dispatch-mvb-qc | 在 Quiz **Collection** 挑既有題目 → Start/Push → `MessageStartQuiz` |
+| J4 push-respond | J3 之後的學生端作答視窗 |
+| J5 mvb-toggle | toggle 開／關／再開的生命週期 |
+| J6 join-class-crud | 學生管理／加入班級 |
+
+**沒有一條涵蓋「從畫布截圖並派成題目」**（`ScreenshotActivity` / `ScreenCaptureSession`）。
+J3 名字最像，但它的 drive 是 folders → 題目列表 → 詳情 → Start，一步都不碰擷取路徑。
+
+> ⚠️ **被要求「補 E2E 證據」時，先確認那條 journey 會不會執行到你改的程式碼。**
+> 名字相近就照跑、拿回一個 PASS 當 gate 證據，是
+> [`cross-system-claims.md`](../../rules/cross-system-claims.md) §5 那個「測試存在、
+> 名字對，但執行路徑根本沒碰到」的變體 —— 只是這次是**別人要求我去跑**那個空轉的測試。
+> 假綠比沒有證據更糟。
+
+`test-with-feature.md` 本文寫「J1–J5」，跟實際的 J2–J6 對不起來；
+`docs/testing-strategy/features/mvb-quiz-mask.md` 自己註記了這個不一致。
+
+### 沒有對應 journey 時怎麼辦（2026-09-21 實際走過一次）
+
+`skip-e2e-gate` 的允許清單**沒有**「此 scope 沒有 journey」這一項，硬掛會把原因標錯。
+當時走通的做法：
+
+1. 把上面三件事查出來當證據（沒有對應 journey／`pipeline/` 不在 repo／參考機沒接）
+2. **手動跑同一個形狀**，每個 gating moment 留一張圖
+3. **用產品程式碼自己的 log 證明走到了改動的分支**（不是為除錯另加的探針）
+4. 附**負向對照**：把修正改回去，同一台機器重現原症狀 → 證明這次執行分得出修好與沒修好
+5. 把裁定權交回 maintainer（接受證據 vs 掛 label），不要自己決定
+6. 缺的 journey 開 follow-up ticket，別卡住當前 PR
+
+maintainer 當時選 1（接受證據、不掛 label），理由是硬掛 label 會把原因標錯。
+**證據要留在 PR 上** —— 票的附件不算（見 [[handoff-docs]] 的「GitHub 沒有附件上傳 API」）。
+
+### PR template 的 `./pipeline/local-qa.sh` 是死連結
+
+自我審核那三個 checkbox 之一要求跑 `./pipeline/local-qa.sh`，但 `pipeline` 在 gitignore 裡、
+Jay 的 checkout 沒有，`git log --all -- '*local-qa.sh'` 也查不到 —— 那是別人的個人工具。
+
+**不要勾它。** 改成跑 `ci.yml` 實際 gate 的兩條，並在 PR 裡寫明為什麼沒勾：
+
+```bash
+./gradlew compileStagDebugSources lintStagDebug
+./gradlew testStagDebugUnitTest --rerun-tasks
+```
+
+> 📤 這條與上面的「J1–J5 vs J2–J6」都**應該上游到 ragdoll-cat 的團隊 rules**，待與 Jay 確認。
+
+---
+
+## 在新 worktree 跑 JVM 測試要先補三個 gitignored 檔
+
+`./gradlew testStagDebugUnitTest` 在乾淨的 worktree 會連續倒三次，而且**錯誤訊息都不指向
+「這個檔沒進版控」**。依序補：
+
+| 停在哪 | 缺什麼 | 怎麼補 |
+|---|---|---|
+| `:classswift` configuration（fusion build）或 `:app` | `keystore.properties`（repo 根） | 從主 checkout 複製。**這個檔名叫 keystore 但實為 secrets**（OAuth client id、Amplitude key、guest 登入 key） |
+| `:app:processStagDebugGoogleServices`「File google-services.json is missing」 | `app/src/stag/google-services.json` | 見下 |
+| SDK 路徑相關 | `local.properties` | 從主 checkout 複製 |
+
+### ⚠️ `cs_googlejson/` 裡沒有一份 package name 對得上
+
+repo 內 `cs_googlejson/{aosp,edla}{Stag,Rc,Prod}/` 六份的 package 分別是
+`com.viewsonic.classswift.aosp[.stag|.rc]` 與 `com.viewsonic.classswift[.stag|.rc]`，
+**沒有**現在 `stag` variant 需要的 `com.viewsonic.classswift.service.stag`。直接複製會停在：
+
+```
+No matching client found for package name 'com.viewsonic.classswift.service.stag'
+```
+
+真正的來源是 CI secret（`GOOGLE_SERVICES_JSON_STAG`，見
+`.github/actions/setup-ci-env/action.yml`，它寫到 `app/src/stag/`），本機沒有。
+
+**只是要跑 JVM 單元測試**的話，把 `cs_googlejson/edlaStag/` 那份的 package name 改掉即可
+（Firebase 在 JVM 測試不會被呼叫，這個檔只是為了讓 google-services plugin 過關）：
+
+```bash
+python3 -c "
+import json
+j=json.load(open('<主checkout>/cs_googlejson/edlaStag/google-services.json'))
+for c in j['client']:
+    c['client_info']['android_client_info']['package_name']='com.viewsonic.classswift.service.stag'
+json.dump(j, open('app/src/stag/google-services.json','w'), indent=2)"
+```
+
+三個檔都被 gitignore（`git check-ignore -v` 確認過），所以補完 `git status` 仍然乾淨。
+
+---
+
+## i18n：POEditor ↔ `values-*/strings.xml`
+
+**跟 mvbf 那條線是兩回事**，不要互相外推：mvbf 是 POEditor `754682` ＋ `arb`
+（見 [[mvbf]] skill 的「i18n：POEditor 流程的實務補充」），cs 是 **`825204`
+（`ClassSwift in mvb (Android)`）＋ `android_strings`**，41 個語系。
+同步腳本與 workflow 在該 repo 的 `.github/scripts/sync-poeditor-translations.py`
+與 `.github/workflows/poeditor-sync.yml`（VB-2281），細節看那兩個檔的檔頭。
+
+以下是實際跑過一輪（VB-2280 灌基準 ＋ VB-2281 接自動化）才知道、而且**看程式碼看不出來**的事。
+
+### 版本鏈：要在 **cs 打 tag 之前**同步，不是 mvbf 發版時
+
+mvbf 不是從工作區建 CS，而是用 `classswift-ref.properties` 釘一個 **tag**，
+且 `edu-droid-flutter/.github/actions/android-setup/action.yml` 有一道 gate
+**強制 checkout 必須落在 tag 上**（寫 SHA 也拒絕）。所以 mvbf 發版當下才拉翻譯，
+拉到的東西進不了那個已經釘好的 tag。順序只能是：
+
+```
+ragdoll-cat:  拉 POEditor → merge → 打 tag
+                                      ↓
+edu-droid-flutter:  bump classswift-ref.properties（人工 PR，約兩週一次）→ 發版
+```
+
+### Android 的值有「編碼層」，灌進 POEditor 前要先解碼
+
+`strings.xml` 存的不是內容本身，是 Android 轉義後的形式。**最容易漏的是外層雙引號**：
+
+| repo 原文 | 真實值 |
+|---|---|
+| `", "` | `, `（外層引號是用來保住前後空白的**編碼**） |
+| `Turn on \"Display over other apps\"` | `Turn on "Display over other apps"` |
+| `That\'s an error.` | `That's an error.` |
+
+直接把原文灌上去，POEditor 匯出時會**再包一層**，第一個就壞掉。
+反方向寫回時也要重新編碼 —— POEditor 匯出一律外層包引號、換行是**字面換行**，
+三者都會踩到該 repo `validate-translations.py` 的硬性失敗
+（`spurious quote wrapping` / `embedded newline` / `unescaped apostrophe`）。
+
+> 字面換行與 `\n` 在 **aapt2 編譯後完全等價**（compile + link + dump 實測，兩者 dump 輸出相同），
+> 所以正規化是為了 diff 與那道檢查，不是為了修正顯示。
+
+### POEditor 的 plural key set ＝該語言的 CLDR 詞形，空值＝還沒翻
+
+**實測** `terms/list`（825204）：
+
+| 語言 | 回傳的 keys |
+|---|---|
+| `ca` | `one, other` |
+| `ru` / `cs` | `few, many, one, other` |
+| `ar` | `few, many, one, other, two, zero` |
+| `zh-TW` | `other` |
+
+所以 **「key 不存在」與「key 存在但值是空字串」意思完全不同**：前者是這個語言沒有這個詞形
+（可以用 `other` 補，Android 本來就是這樣 fallback），後者是有這個詞形、翻譯員還沒填
+（**必須沿用現值**）。把兩者壓成同一種，會把捷克文、烏克蘭文既有的正確詞形靜默換成 `other` ——
+而 validator 只驗 placeholder、不看文法詞形，**CI 會全綠**。VB-2281 PR #1163 被 reviewer 抓到。
+
+### `validate-translations.py` 只掃 `<string>`，不掃 `<plurals>`
+
+那支腳本很嚴（placeholder、簡繁混用、機翻殘留、跳脫），但 `embedded newline` 與空值檢查
+**只走 `<string>`**。所以 `cs / lt / lv / sk / uk` 的 plural item 裡一直躺著字面換行沒被發現
+（VSFT-9904 那批機翻把兩句黏在一起的殘留，VB-2281 只改寫法沒動內容）。
+plural 的 placeholder 漂移原本也只是 warning、不影響結束碼，VB-2281 已升為硬性失敗。
+
+**動到翻譯時不要只依賴那支腳本的綠燈**，plural 要自己看。
+
+### 語系代碼映射
+
+`zh-rCN→zh-Hans`、`zh-rTW→zh-TW`、**`in→id`**（Android 沿用 Java 的舊印尼文代碼）、
+`values/→en-us`。其餘同名。`values-night` / `values-w600dp` / `values-v23` 不是語系 ——
+誤當語系送出去，**POEditor 回的是空翻譯而不是錯誤**。
 
 ---
 
