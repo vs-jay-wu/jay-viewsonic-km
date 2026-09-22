@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!--
+    km 工作台的分頁圖示。
+
+    **自帶底色**（不是透明背景的線條圖）：分頁列在淺色與深色主題下都有，
+    透明背景的單色圖會在其中一種底下消失。底色用側邊欄的 #2d2d2d，
+    跟 app 本身認得出來是同一個東西。
+
+    16px 下只認得出「形狀 + 一個字母」，所以放 K 而不是 KM —— 兩個字母
+    在 16px 會糊成一團。
+  -->
+  <rect width="32" height="32" rx="7" fill="#2d2d2d"/>
+  <path d="M11 8v16M11 16l8-8M13.5 13.5 20 24"
+        fill="none" stroke="#ffffff" stroke-width="2.6"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

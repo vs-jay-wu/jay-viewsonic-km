@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!--
+    AV Streaming 筆記的分頁圖示。跟 km 工作台**刻意不同色**——
+    它們是兩個站（各自 root layout），開在不同分頁時要一眼分得出來。
+  -->
+  <rect width="32" height="32" rx="7" fill="#0f172a"/>
+  <path d="M9 9l7 14 7-14" fill="none" stroke="#7dd3fc" stroke-width="2.6"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
