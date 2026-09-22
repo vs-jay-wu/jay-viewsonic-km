@@ -207,7 +207,14 @@ export default function SearchSelect({
         aria-label={ariaLabel}
         className="inline-flex max-w-[16rem] items-center gap-1.5 rounded-lg border border-line-strong px-2 py-1 text-left font-mono text-[11px] text-fg hover:bg-surface-raised"
       >
-        <span className="truncate">{current?.label ?? value}</span>
+        {/*
+          還沒選東西時要看得出這顆是選單。原本是 `current?.label ?? value`，
+          value 是空字串時整顆按鈕只剩一個箭頭，看起來像壞掉的空殼
+          （Jay 2026-09-22 在 /code 遇到）。
+        */}
+        <span className={`truncate ${current || value ? "" : "text-fg-subtle"}`}>
+          {current?.label || value || ariaLabel || "選擇…"}
+        </span>
         <Icon name="chevronDown" size={11} className="shrink-0 text-fg-subtle" />
       </button>
 
@@ -245,6 +252,15 @@ export default function SearchSelect({
               </div>
             </div>
             <ul ref={listRef} style={{ maxHeight: MAX_HEIGHT - 48 }} className="overflow-auto py-1">
+              {/*
+                空清單要講原因。沒有這一條的話「還沒抓到資料」與「打的字沒命中」
+                長得一模一樣（都是一片空白），只能猜是不是壞了。
+              */}
+              {rows.length === 0 && (
+                <li className="px-3 py-2 text-[11px] text-fg-subtle">
+                  {q ? "沒有符合的項目" : "還沒有可選的項目（資料可能還在載入）"}
+                </li>
+              )}
               {rows.map((row, i) => (
                 <li key={row.kind === "group" ? `g:${row.path}` : row.option.value}>
                   <button

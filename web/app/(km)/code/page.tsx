@@ -76,16 +76,27 @@ function CodeBrowser() {
   /** 從搜尋結果跳過去時要捲到哪一行 */
   const [gotoLine, setGotoLine] = useState<number | null>(null);
 
-  useEffect(() => {
-    fetch("/api/git/repos", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d: { repos: RepoBrief[] }) => {
-        setRepos(d.repos);
-        const q = new URLSearchParams(window.location.search).get("repo");
-        if (q && d.repos.some((r) => r.dir === q)) setDir(q);
-      })
-      .catch(() => undefined);
+  const [rescanning, setRescanning] = useState(false);
+
+  /** `fresh` 會等 server 重新掃完（那支 API 平常走快取，見 lib/repoCacheRules.ts） */
+  const loadRepos = useCallback(async (fresh = false) => {
+    if (fresh) setRescanning(true);
+    try {
+      const res = await fetch(`/api/git/repos${fresh ? "?fresh=1" : ""}`, { cache: "no-store" });
+      const d = (await res.json()) as { repos: RepoBrief[] };
+      setRepos(d.repos);
+      const q = new URLSearchParams(window.location.search).get("repo");
+      if (q && d.repos.some((r) => r.dir === q)) setDir(q);
+    } catch {
+      // 抓不到就維持現狀，畫面上的「選一個 repo（0 個）」自己會說明
+    } finally {
+      setRescanning(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadRepos();
+  }, [loadRepos]);
 
   // 配色沿用設定頁那一項（跟 diff 同一個）
   useEffect(() => {
@@ -234,7 +245,43 @@ function CodeBrowser() {
       </div>
 
       {!dir ? (
-        <p className="px-6 py-10 text-sm text-fg-subtle">選一個 repo。</p>
+        /*
+         * 還沒選 repo 時直接把清單攤在畫面上，不要只寫一句「選一個 repo。」——
+         * 唯一的入口是右上角那顆小藥丸，看起來就像頁面壞了（Jay 2026-09-22
+         * 連兩次回報「請求都正常但東西出不來」）。順帶讓「真的一個都抓不到」
+         * 這件事**看得見**：清單空的時候這裡會講出來，不必開 devtools 猜。
+         */
+        <div className="min-h-0 flex-1 overflow-auto px-6 py-6">
+          <p className="flex items-center gap-1.5 text-sm text-fg-muted">
+            選一個 repo（{repoOptions.length} 個）
+            <Tooltip label="重新掃描工作區">
+              <button
+                onClick={() => void loadRepos(true)}
+                disabled={rescanning}
+                aria-label="重新掃描"
+                className="text-fg-subtle hover:text-fg disabled:opacity-40"
+              >
+                <Icon name="refresh" size={14} className={rescanning ? "animate-spin" : ""} />
+              </button>
+            </Tooltip>
+          </p>
+          {repoOptions.length === 0 ? (
+            <p className="mt-3 text-sm text-fg-subtle">還在抓 repo 清單…</p>
+          ) : (
+            <div className="mt-3 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+              {repoOptions.map((o) => (
+                <button
+                  key={o.value}
+                  onClick={() => setDir(o.value)}
+                  className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-left font-mono text-xs text-fg hover:bg-surface-raised"
+                >
+                  <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                  {o.hint}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       ) : (
         <div ref={rowRef} className="flex min-h-0 flex-1 flex-col lg:flex-row">
           {/* 左：搜尋 ＋ 資料夾樹 */}
