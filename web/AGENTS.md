@@ -21,11 +21,51 @@ if (!(await confirm({ title: "刪掉這筆？", message: "無法復原。", dang
 回傳值跟 `confirm()` 一樣是布林，所以取代既有呼叫不必改控制流。
 鍵盤是 **Enter 確認、Esc 取消**，開啟時焦點就在確認鈕上。
 
+## 顏色一律用語意 token，不要寫死 Tailwind 色階
+
+2026-09-22 起這個 app 有 dark / light / system 三態，顏色全部走 `app/globals.css`
+定義的語意 token（`bg-surface`、`text-fg-muted`、`border-line`、`text-warn`…），
+**新程式碼不要再寫 `text-gray-500` / `bg-white` 這種**。色碼依主題在 globals.css
+翻，那裡也寫了每個 token 的語意 —— 挑錯 token 比挑錯色碼難發現，所以先讀那段。
+
+### ⚠️ 坐在「固定背景」上的東西不可以用會翻色的 token
+
+這是做深色模式時實際誤傷的地方：側邊欄是固定深底（`bg-[#2d2d2d]`，兩個主題都一樣），
+它上面的 `text-white` 被機械換成 token 之後，深色主題下 token 翻成近黑色，**整欄的字
+幾乎消失**。畫面上沒有任何錯誤，只是看不清楚。
+
+**判準**：問「這個元素的背景會不會跟著主題變？」
+
+| 背景 | 上面的顏色 |
+|---|---|
+| 走 token（`bg-surface` / `bg-surface-raised`…） | 也走 token |
+| **寫死的**（`bg-[#2d2d2d]`、疊在圖片上、terminal 區塊） | **寫死**，或用專屬 token（`--term` / `--term-fg` 就是為此而設） |
+
+目前屬於後者的：`components/Sidebar.tsx`（檔頭有但書）、`ImageDiffView` 疊在圖片上的
+控制項、modal 遮罩 `bg-black/50`、以及 diff 與程式碼檢視自己 `dark` prop 控制的那組。
+
+另外 `hover:bg-black` 這種也不行 —— 深色下 hover 會變成純黑，等於消失。
+
+### 驗證用算的，不要用看的
+
+對比門檻：內文 AA 4.5、次要文字 3.0。**兩個主題各算一次**，不是只看深色 ——
+2026-09-22 量出來反而是淺色有兩個 token 不達標（`fg-subtle` 2.54、`pin` 2.15），
+都是既有顏色，量了才發現。
+
+整頁掃描的做法（會抓到「字跟背景幾乎同色」這一類）：走訪所有葉節點文字，**用 canvas
+讓瀏覽器把顏色解析成 sRGB** 再算對比。不要自己 parse `getComputedStyle().color`：
+Tailwind v4 對帶透明度的顏色吐 `oklab()`，當成 RGB 解析會得到完全錯誤的數字
+（白字被算成 1.52，而且看起來很像真的）。
+
+---
+
 其他已經定下來的：
 
 - **icon 用 `components/Icon.tsx` 的 inline SVG，不要用 emoji**
   （emoji 跨平台大小與基線不一致，也不吃 `currentColor`）。
-- **琥珀色只給警告**。pin／保護狀態用中性灰底，含意交給圖示。
+- **琥珀色只給警告**（token 是 `--warn`）。pin 與「部分 staged」這類**分類**用途
+  另有 `--pin` / `--info`，刻意跟語意色分開 —— 併進 `--warn` 的話，
+  「琥珀色只給警告」這條就沒辦法用 grep 查了。
 - **版面不要因為切分頁、開面板而位移**：條件出現的控制項不要放在共用的
   篩選列裡；側邊面板用浮動抽屜而不是 flex 兄弟。
 - **worktree 的標記一律用 `components/WorktreeBadge.tsx`**（Jay 2026-09-21）——
