@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import hljs from "highlight.js/lib/common";
+import hljs from "@/lib/highlight";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import {
@@ -179,11 +179,14 @@ export default function DiffView({
 
   const highlight = useCallback(
     (text: string) => {
-      if (!lang || !text) return null;
+      // 先問 `getLanguage` 而不是靠 try/catch：沒註冊的語言 highlight.js 會在
+      // **丟例外之前**先印一行 console.error，catch 攔得住例外、攔不住那行 log，
+      // Next 的錯誤浮層就會一直跳（Jay 2026-09-22 遇到 dart）。
+      if (!lang || !text || !hljs.getLanguage(lang)) return null;
       try {
         return hljs.highlight(text, { language: lang, ignoreIllegals: true }).value;
       } catch {
-        return null; // 不認得的語言就不上色
+        return null;
       }
     },
     [lang]
