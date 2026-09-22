@@ -24,20 +24,45 @@ import type { DiffTheme } from "@/lib/uiSettingsRules";
  * 缺口的計算在 `changesRules.ts`（有測試），這裡只負責抓資料與畫。
  */
 
-const ROW_LIGHT: Record<string, string> = {
-  add: "bg-ok-bg",
-  del: "bg-danger-bg",
-  hunk: "bg-surface-sunken text-fg-muted select-none",
-  context: "",
-  meta: "hidden",
-};
-
-const ROW_DARK: Record<string, string> = {
+/**
+ * ⚠️ **這一整支的顏色都寫死，不走語意 token。**
+ *
+ * diff 的深／淺是 `theme` prop 自己決定的（設定頁可以讓它跟隨全域，也可以
+ * 獨立設定），跟 app 的主題**不一定同向**。走 token 的話「淺色 diff ＋ 深色
+ * app」會拿到深色的字畫在白底上，整片看不見 —— 這是 `web/AGENTS.md`
+ * 「坐在固定背景上的東西不可以用會翻色的 token」那條講的情形。
+ *
+ * 色票取自 GitHub 的 diff（兩個主題都是），行號與次要文字刻意比內文暗，
+ * 但仍維持 4.5 以上的對比 —— 2026-09-22 之前深色的內文誤用了 `fg-disabled`
+ * (#52525b)，在 #0d1117 上只有 2.6，Jay 回報「看不太清楚」。
+ */
+const DARK = {
+  bg: "bg-[#0d1117]",
+  panel: "bg-[#161b22]",
+  filled: "bg-[#12171f]",
+  border: "border-[#30363d]",
+  hover: "hover:bg-[#1f242c]",
+  fg: "text-[#e6edf3]",
+  muted: "text-[#8b949e]",
+  lineNo: "text-[#6e7681]",
+  hoverFg: "hover:text-[#e6edf3]",
   add: "bg-emerald-950/60",
   del: "bg-red-950/60",
-  hunk: "bg-control/90 text-fg-subtle select-none",
-  context: "",
-  meta: "hidden",
+};
+
+const LIGHT = {
+  bg: "bg-[#ffffff]",
+  panel: "bg-[#f6f8fa]",
+  filled: "bg-[#f6f8fa]",
+  border: "border-[#d0d7de]",
+  hover: "hover:bg-[#eaeef2]",
+  fg: "text-[#1f2328]",
+  muted: "text-[#656d76]",
+  // GitHub 用的 #8c959f 在白底只有 3.04，剛好壓線；壓深一階換到 4.0 的餘裕
+  lineNo: "text-[#6e7781]",
+  hoverFg: "hover:text-[#1f2328]",
+  add: "bg-[#e6ffec]",
+  del: "bg-[#ffebe9]",
 };
 
 const KIND_SIGN: Record<string, string> = {
@@ -75,6 +100,7 @@ export default function DiffView({
   loadLines?: (from: number, to: number | null) => Promise<{ lines: string[]; total: number } | null>;
 }) {
   const dark = theme === "dark";
+  const C = dark ? DARK : LIGHT;
   const [filled, setFilled] = useState<Filled>(new Map());
   const [total, setTotal] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -109,7 +135,13 @@ export default function DiffView({
 
   /** 一次把整份檔案補進來 —— 改動仍夾在原本的位置上 */
   const showWholeFile = useCallback(() => void fetchRange(1, null), [fetchRange]);
-  const KIND_ROW = dark ? ROW_DARK : ROW_LIGHT;
+  const KIND_ROW: Record<string, string> = {
+    add: C.add,
+    del: C.del,
+    hunk: `${C.panel} ${C.muted} select-none`,
+    context: "",
+    meta: "hidden",
+  };
   const lang = languageOf(file);
 
   /**
@@ -165,10 +197,10 @@ export default function DiffView({
       .map((l) => l.text)
       .filter((t) => /^(old mode|new mode|rename |similarity index|new file|deleted file)/.test(t));
     return (
-      <div className="px-4 py-6 text-sm text-fg-muted">
+      <div className={`px-4 py-6 text-sm ${C.muted}`}>
         <p>沒有內容差異。</p>
         {notes.length > 0 && (
-          <ul className="mt-2 font-mono text-xs text-fg-subtle">
+          <ul className={`mt-2 font-mono text-xs ${C.lineNo}`}>
             {notes.map((n) => (
               <li key={n}>{n}</li>
             ))}
@@ -179,19 +211,15 @@ export default function DiffView({
   }
 
   return (
-    <div className={`overflow-x-auto ${dark ? "bg-[#0d1117]" : "bg-surface"}`}>
+    <div className={`overflow-x-auto ${C.bg}`}>
       {loadLines && gaps.length > 0 && (
         <div
-          className={`sticky top-0 z-10 flex items-center gap-2 border-b px-3 py-1.5 text-[11px] ${
-            dark ? "border-line bg-[#0d1117] text-fg-subtle" : "border-line bg-surface text-fg-muted"
-          }`}
+          className={`sticky top-0 z-10 flex items-center gap-2 border-b px-3 py-1.5 text-[11px] ${C.border} ${C.bg} ${C.muted}`}
         >
           <button
             onClick={showWholeFile}
             disabled={busy}
-            className={`rounded border px-2 py-0.5 disabled:opacity-40 ${
-              dark ? "border-line-strong hover:bg-control/85" : "border-line-strong hover:bg-surface-raised"
-            }`}
+            className={`rounded border px-2 py-0.5 disabled:opacity-40 ${C.border} ${C.hover}`}
           >
             {busy ? "載入中…" : "顯示整個檔案"}
           </button>
@@ -201,7 +229,7 @@ export default function DiffView({
                 setFilled(new Map());
                 setTotal(null);
               }}
-              className="underline hover:text-fg"
+              className={`underline ${C.hoverFg}`}
             >
               只看改動
             </button>
@@ -217,7 +245,7 @@ export default function DiffView({
               const size = g.to === null ? null : g.to - g.from + 1;
               const big = size === null || size > EXPAND_STEP;
               return (
-                <tr key={`g${k}`} className={dark ? "bg-control/90/60" : "bg-surface-sunken"}>
+                <tr key={`g${k}`} className={C.panel}>
                   <td colSpan={3} className="select-none px-1 py-0.5 text-center">
                     <span className="flex items-center justify-center gap-0.5">
                       {big && g.to !== null && (
@@ -226,7 +254,7 @@ export default function DiffView({
                             onClick={() => void fetchRange(...rangeOf(expandStep(g, "up")))}
                             disabled={busy}
                             aria-label="往上展開"
-                            className={dark ? "text-fg-subtle hover:text-on-solid" : "text-fg-muted hover:text-fg"}
+                            className={`${C.muted} ${C.hoverFg}`}
                           >
                             <Icon name="toTop" size={11} />
                           </button>
@@ -245,7 +273,7 @@ export default function DiffView({
                           onClick={() => void fetchRange(...rangeOf(expandStep(g, big ? "down" : "all")))}
                           disabled={busy}
                           aria-label="展開更多"
-                          className={dark ? "text-fg-subtle hover:text-on-solid" : "text-fg-muted hover:text-fg"}
+                          className={`${C.muted} ${C.hoverFg}`}
                         >
                           {big ? <Icon name="toBottom" size={11} /> : <span className="px-1">⋯</span>}
                         </button>
@@ -253,7 +281,7 @@ export default function DiffView({
                     </span>
                   </td>
                   <td
-                    className={`select-none px-2 text-[11px] ${dark ? "text-fg-muted" : "text-fg-subtle"}`}
+                    className={`select-none px-2 text-[11px] ${C.muted}`}
                   >
                     {size === null ? `第 ${g.from} 行之後` : `藏了 ${size} 行（${g.from}–${g.to}）`}
                   </td>
@@ -264,13 +292,13 @@ export default function DiffView({
             if (row.kind === "filled") {
               const html = highlight(row.text);
               return (
-                <tr key={`f${k}`} className={dark ? "bg-control/40" : "bg-surface-raised/60"}>
-                  <td className={`w-10 select-none px-2 text-right align-top ${dark ? "text-fg" : "text-fg-disabled"}`} />
-                  <td className={`w-10 select-none px-2 text-right align-top ${dark ? "text-fg-muted" : "text-fg-disabled"}`}>
+                <tr key={`f${k}`} className={C.filled}>
+                  <td className="w-10 select-none px-2 text-right align-top" />
+                  <td className={`w-10 select-none px-2 text-right align-top ${C.lineNo}`}>
                     {row.no}
                   </td>
                   <td className="w-4 select-none pl-1 text-center align-top" />
-                  <td className={`whitespace-pre-wrap break-all px-2 align-top ${dark ? "text-fg-subtle" : "text-fg-muted"}`}>
+                  <td className={`whitespace-pre-wrap break-all px-2 align-top ${C.muted}`}>
                     {html ? <span dangerouslySetInnerHTML={{ __html: html }} /> : row.text || " "}
                   </td>
                 </tr>
@@ -281,10 +309,10 @@ export default function DiffView({
             const html = highlight(l.kind === "hunk" ? "" : l.text);
             return (
               <tr key={`d${row.index}`} className={KIND_ROW[l.kind]}>
-                <td className={`w-10 select-none px-2 text-right align-top ${dark ? "text-fg-muted" : "text-fg-disabled"}`}>
+                <td className={`w-10 select-none px-2 text-right align-top ${C.lineNo}`}>
                   {l.oldNo ?? ""}
                 </td>
-                <td className={`w-10 select-none px-2 text-right align-top ${dark ? "text-fg-muted" : "text-fg-disabled"}`}>
+                <td className={`w-10 select-none px-2 text-right align-top ${C.lineNo}`}>
                   {l.newNo ?? ""}
                 </td>
                 <td
@@ -293,12 +321,12 @@ export default function DiffView({
                       ? "text-ok"
                       : l.kind === "del"
                         ? "text-danger"
-                        : dark ? "text-fg-muted" : "text-fg-disabled"
+                        : C.lineNo
                   }`}
                 >
                   {KIND_SIGN[l.kind]}
                 </td>
-                <td className={`whitespace-pre-wrap break-all px-2 align-top ${dark ? "text-fg-disabled" : "text-fg"}`}>
+                <td className={`whitespace-pre-wrap break-all px-2 align-top ${C.fg}`}>
                   {html ? <span dangerouslySetInnerHTML={{ __html: html }} /> : l.text || " "}
                 </td>
               </tr>
@@ -307,7 +335,7 @@ export default function DiffView({
         </tbody>
       </table>
       {truncated && (
-        <p className={`border-t px-4 py-2 text-xs text-fg-subtle ${dark ? "border-line" : "border-line"}`}>
+        <p className={`border-t px-4 py-2 text-xs ${C.border} ${C.muted}`}>
           這個 diff 太大，只顯示前面一段。
         </p>
       )}

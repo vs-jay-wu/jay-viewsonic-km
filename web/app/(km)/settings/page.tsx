@@ -9,6 +9,8 @@ import {
 } from "@/lib/uiSettingsRules";
 import { resolveDiffTheme } from "@/lib/uiSettingsRules";
 import { useResolvedTheme } from "@/components/useResolvedTheme";
+import DiffView from "@/components/DiffView";
+import type { DiffLine } from "@/lib/changesRules";
 
 const THEME_LABEL: Record<Theme, string> = { system: "跟隨系統", light: "淺色", dark: "深色" };
 const THEME_ICON: Record<Theme, IconName> = { system: "monitor", light: "sun", dark: "moon" };
@@ -18,6 +20,14 @@ const DIFF_LABEL: Record<DiffThemePref, string> = {
 const DIFF_ICON: Record<DiffThemePref, IconName> = {
   follow: "link", light: "sun", dark: "moon",
 };
+
+/** 配色預覽的內容。挑有增有刪的四行就夠看出差別 */
+const PREVIEW_LINES: DiffLine[] = [
+  { kind: "context", text: "export function relativeWording(at: Date) {", oldNo: 41, newNo: 41 },
+  { kind: "del", text: "  return at.toISOString();", oldNo: 42, newNo: null },
+  { kind: "add", text: '  return "昨天";', oldNo: null, newNo: 42 },
+  { kind: "context", text: "}", oldNo: 43, newNo: 43 },
+];
 
 /**
  * 設定。
@@ -173,52 +183,13 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* 預覽：讓你不用切過去就看得出差別 */}
-          <div
-            className={`mt-4 overflow-hidden rounded-lg border ${
-              previewTheme === "dark" ? "border-line bg-[#0d1117]" : "border-line bg-surface"
-            }`}
-          >
-            <table className="w-full border-collapse font-mono text-[12px] leading-[1.55]">
-              <tbody>
-                {[
-                  { no: [41, 41], sign: " ", text: "export function relativeWording(at: Date) {", kind: "context" },
-                  { no: [42, null], sign: "−", text: "  return at.toISOString();", kind: "del" },
-                  { no: [null, 42], sign: "+", text: '  return "昨天";', kind: "add" },
-                  { no: [43, 43], sign: " ", text: "}", kind: "context" },
-                ].map((l, i) => (
-                  <tr
-                    key={i}
-                    className={
-                      previewTheme === "dark"
-                        ? l.kind === "add"
-                          ? "bg-emerald-950/60"
-                          : l.kind === "del"
-                            ? "bg-red-950/60"
-                            : ""
-                        : l.kind === "add"
-                          ? "bg-ok-bg"
-                          : l.kind === "del"
-                            ? "bg-danger-bg"
-                            : ""
-                    }
-                  >
-                    <td className={`w-10 px-2 text-right ${previewTheme === "dark" ? "text-fg-muted" : "text-fg-disabled"}`}>
-                      {l.no[0] ?? ""}
-                    </td>
-                    <td className={`w-10 px-2 text-right ${previewTheme === "dark" ? "text-fg-muted" : "text-fg-disabled"}`}>
-                      {l.no[1] ?? ""}
-                    </td>
-                    <td className={`w-4 text-center ${l.kind === "add" ? "text-ok" : l.kind === "del" ? "text-danger" : "text-fg-muted"}`}>
-                      {l.sign}
-                    </td>
-                    <td className={`px-2 ${previewTheme === "dark" ? "text-fg-disabled" : "text-fg"}`}>
-                      {l.text}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/*
+            預覽直接用真正的 `DiffView`，不要自己再畫一份 —— 這裡原本是抄過來的
+            表格，DiffView 換了配色它不會跟著換，於是「淺色」會預覽出深色的
+            加／刪底色（Jay 2026-09-22 抓到）。抄一份就一定會漂移。
+          */}
+          <div className="mt-4 overflow-hidden rounded-lg border border-line">
+            <DiffView lines={PREVIEW_LINES} file="preview.ts" theme={previewTheme} />
           </div>
         </div>
       </div>
