@@ -4,23 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
 import Icon, { type IconName } from "@/components/Icon";
+import { NAV } from "@/lib/navRules";
 
 interface Chat {
   id: number;
   topic: string | null;
 }
 
-const TOOLS: { href: string; label: string; icon: IconName }[] = [
-  { href: "/", label: "首頁", icon: "home" },
-  { href: "/tickets", label: "單追蹤", icon: "clipboard" },
-  { href: "/vb-bugs", label: "VB Bug 總覽", icon: "alert" },
-  { href: "/changes", label: "未提交的改動", icon: "code" },
-  { href: "/git", label: "Repo 檢視", icon: "repos" },
-  { href: "/code", label: "程式碼", icon: "code" },
-  { href: "/docs", label: "文件", icon: "clipboard" },
-  { href: "/sessions", label: "Claude Sessions", icon: "layers" },
-  { href: "/settings", label: "設定", icon: "settings" },
-];
 
 /**
  * 掛在同一個 domain、但**不是 km 工作台**的站（各自 root layout 與設計，
@@ -67,7 +57,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
       </div>
 
       <nav className="flex-1 overflow-y-auto py-2">
-        {TOOLS.map((t) => (
+        {NAV.map((t) => (
           <Link
             key={t.href}
             href={t.href}
