@@ -142,6 +142,12 @@ export default function GitPage() {
   const diffTheme = resolveDiffTheme(diffPref, useResolvedTheme(appTheme));
   const [view, switchView] = useFileView();
   const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(new Set());
+  /**
+   * 展開了 worktree 的 repo。**預設全部收起來**（Jay 2026-09-22）——
+   * 有 18 個 worktree 的 repo 會把清單整個淹掉，而多數時候你要找的是主 repo。
+   * 記在 localStorage，不然每次重整都要重新展開。
+   */
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [busyPin, setBusyPin] = useState(false);
   /** 網址還原只做一次 —— 之後重新掃描不該把當下選的東西蓋掉 */
   const restored = useRef(false);
@@ -379,6 +385,29 @@ export default function GitPage() {
     }
   };
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("km.git.expandedGroups");
+      if (raw) setExpandedGroups(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      /* 讀不到就全部收起來 */
+    }
+  }, []);
+
+  const toggleGroup = (name: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      try {
+        localStorage.setItem("km.git.expandedGroups", JSON.stringify([...next]));
+      } catch {
+        /* 存不了就算了，下次重整回到全收合 */
+      }
+      return next;
+    });
+  };
+
   /** 選到的 repo／commit／檔案寫進網址（replace，不塞 history），重整才回得來 */
   const syncUrl = (next: {
     dir?: string | null; sha?: string | null; file?: string | null; side?: string | null;
@@ -582,10 +611,23 @@ export default function GitPage() {
                * （Jay 2026-09-22）。這種情況把 pin 直接放到唯一那一列上。
                */
               const flat = g.worktrees.length === 0;
+              /* 選中的 worktree 一定要看得見 —— 重整還原網址時它可能在收合的組裡 */
+              const groupOpen =
+                expandedGroups.has(g.name) || g.worktrees.some((w) => w.dir === selected);
               return (
                 <div key={g.name} className="border-b border-line last:border-0">
                   {!flat && (
                   <div className="flex items-center gap-1.5 bg-surface-raised px-2 py-1">
+                    <Tooltip label={groupOpen ? "收合 worktree" : `展開 ${g.worktrees.length} 個 worktree`}>
+                      <button
+                        onClick={() => toggleGroup(g.name)}
+                        aria-label={groupOpen ? `收合 ${g.name} 的 worktree` : `展開 ${g.name} 的 worktree`}
+                        aria-expanded={groupOpen}
+                        className="shrink-0 text-fg-subtle hover:text-fg"
+                      >
+                        <Icon name={groupOpen ? "chevronDown" : "chevronRight"} size={12} />
+                      </button>
+                    </Tooltip>
                     <Tooltip label={g.pinned ? "取消 pin（整組）" : "pin 住這個 repo（worktree 會跟著排到前面）"}>
                       <button
                         onClick={() => pinTarget && void togglePin(pinTarget.dir)}
@@ -614,7 +656,7 @@ export default function GitPage() {
                   </div>
                   )}
 
-                  {[...(g.main ? [g.main] : []), ...g.worktrees].map((r) => (
+                  {[...(g.main ? [g.main] : []), ...(groupOpen ? g.worktrees : [])].map((r) => (
                     <div key={r.dir} className="flex items-stretch">
                     {flat && (
                       <Tooltip label={g.pinned ? "取消 pin" : "pin 住這個 repo（排到最前面）"}>
