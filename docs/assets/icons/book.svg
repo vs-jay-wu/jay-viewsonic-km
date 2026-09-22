@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+     fill="none" stroke="var(--c)" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+  <style>
+    svg { --c: #333333 }
+    @media (prefers-color-scheme: dark) { svg { --c: #e8e8e8 } }
+  </style>
+  <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v16H6.5A2.5 2.5 0 0 0 4 20.5Z" /><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20v4H6.5A2.5 2.5 0 0 1 4 20.5Z" />
+</svg>
