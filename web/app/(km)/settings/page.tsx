@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Icon from "@/components/Icon";
+import Icon, { type IconName } from "@/components/Icon";
+import Tooltip from "@/components/Tooltip";
 import {
   DEFAULT_UI_SETTINGS, REVIEW_ENGINES, THEMES,
   type DiffThemePref, type Theme, type UiSettings,
@@ -10,6 +11,13 @@ import { resolveDiffTheme } from "@/lib/uiSettingsRules";
 import { useResolvedTheme } from "@/components/useResolvedTheme";
 
 const THEME_LABEL: Record<Theme, string> = { system: "跟隨系統", light: "淺色", dark: "深色" };
+const THEME_ICON: Record<Theme, IconName> = { system: "monitor", light: "sun", dark: "moon" };
+const DIFF_LABEL: Record<DiffThemePref, string> = {
+  follow: "跟隨全域", light: "淺色", dark: "深色",
+};
+const DIFF_ICON: Record<DiffThemePref, IconName> = {
+  follow: "link", light: "sun", dark: "moon",
+};
 
 /**
  * 設定。
@@ -36,6 +44,13 @@ export default function SettingsPage() {
   const save = async (patch: Partial<UiSettings>) => {
     setBusy(true);
     setSettings((s) => ({ ...s, ...patch })); // 先動畫面，不要等往返
+    /*
+     * `<html data-theme>` 是 server 在 SSR 時從設定檔出的（那是「不會閃」的來源），
+     * 所以**存檔本身不會讓當下這一頁變色** —— 要等下一次導覽或重整。改設定卻沒反應
+     * 看起來就像壞了（Jay 2026-09-22 回報），所以這裡當場也改一次 DOM。
+     * 兩邊寫的是同一個值，重整之後仍由 server 那份作準。
+     */
+    if (patch.theme) document.documentElement.dataset.theme = patch.theme;
     try {
       const res = await fetch("/api/settings", {
         method: "POST",
@@ -52,7 +67,7 @@ export default function SettingsPage() {
     <div className="flex-1 overflow-y-auto">
       <div className="mx-auto max-w-4xl px-4 py-6 sm:px-8 sm:py-10">
         <h1 className="flex items-center gap-2.5 text-2xl font-semibold text-fg">
-          <Icon name="cpu" size={22} className="text-fg-subtle" />
+          <Icon name="settings" size={22} className="text-fg-subtle" />
           設定
         </h1>
         <p className="mt-1.5 text-sm text-fg-muted">
@@ -70,18 +85,21 @@ export default function SettingsPage() {
             </div>
             <div className="flex gap-1">
               {THEMES.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => save({ theme: t })}
-                  disabled={busy || !loaded}
-                  className={`rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50 ${
-                    settings.theme === t
-                      ? "border-control bg-control text-on-solid"
-                      : "border-line text-fg-muted hover:bg-surface-raised"
-                  }`}
-                >
-                  {THEME_LABEL[t]}
-                </button>
+                <Tooltip key={t} label={THEME_LABEL[t]}>
+                  <button
+                    onClick={() => save({ theme: t })}
+                    disabled={busy || !loaded}
+                    aria-label={THEME_LABEL[t]}
+                    aria-pressed={settings.theme === t}
+                    className={`rounded-lg border p-2 disabled:opacity-50 ${
+                      settings.theme === t
+                        ? "border-control bg-control text-on-solid"
+                        : "border-line text-fg-muted hover:bg-surface-raised"
+                    }`}
+                  >
+                    <Icon name={THEME_ICON[t]} size={16} />
+                  </button>
+                </Tooltip>
               ))}
             </div>
           </div>
@@ -136,18 +154,21 @@ export default function SettingsPage() {
             </div>
             <div className="flex gap-1">
               {(["follow", "dark", "light"] as DiffThemePref[]).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => save({ diffTheme: t })}
-                  disabled={busy || !loaded}
-                  className={`rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50 ${
-                    settings.diffTheme === t
-                      ? "border-control bg-control text-on-solid"
-                      : "border-line text-fg-muted hover:bg-surface-raised"
-                  }`}
-                >
-                  {t === "follow" ? "跟隨全域" : t === "dark" ? "深色" : "淺色"}
-                </button>
+                <Tooltip key={t} label={DIFF_LABEL[t]}>
+                  <button
+                    onClick={() => save({ diffTheme: t })}
+                    disabled={busy || !loaded}
+                    aria-label={DIFF_LABEL[t]}
+                    aria-pressed={settings.diffTheme === t}
+                    className={`rounded-lg border p-2 disabled:opacity-50 ${
+                      settings.diffTheme === t
+                        ? "border-control bg-control text-on-solid"
+                        : "border-line text-fg-muted hover:bg-surface-raised"
+                    }`}
+                  >
+                    <Icon name={DIFF_ICON[t]} size={16} />
+                  </button>
+                </Tooltip>
               ))}
             </div>
           </div>
