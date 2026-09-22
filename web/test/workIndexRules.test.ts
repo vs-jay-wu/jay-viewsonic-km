@@ -41,9 +41,12 @@ describe("findItemBySession", () => {
 
 describe("prStateStyle", () => {
   it("只有 open 亮色，merged／closed 是背景資訊", () => {
-    expect(prStateStyle("OPEN").cls).toContain("emerald");
-    expect(prStateStyle("MERGED").cls).toContain("violet");
-    expect(prStateStyle("CLOSED").cls).toContain("gray");
+    // 比的是**語意 token** 不是 Tailwind 色名（2026-09-22 起顏色走 token，
+    // 色碼依主題在 globals.css 翻）。這條守的是「open 亮、merged 另一個顏色、
+    // closed 退成背景資訊」這個分工。
+    expect(prStateStyle("OPEN").cls).toContain("ok");
+    expect(prStateStyle("MERGED").cls).toContain("info");
+    expect(prStateStyle("CLOSED").cls).toContain("fg-muted");
   });
 
   it("標籤是小寫的狀態字", () => {

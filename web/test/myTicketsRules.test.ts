@@ -145,9 +145,12 @@ describe("issueTypeStyle — 貼近 Jira 的顏色", () => {
     expect(issueTypeStyle(type).icon).toBe(icon);
   });
 
-  it("漏洞是紅的、任務是藍的", () => {
-    expect(issueTypeStyle("漏洞").cls).toContain("red");
-    expect(issueTypeStyle("任務").cls).toContain("sky");
+  // 比對的是 **token 名**不是 Tailwind 色名 —— 2026-09-22 起顏色走語意 token
+  // （`--danger` / `--accent`），色碼在 globals.css 裡依主題翻。這條守的是
+  // 「漏洞用危險色、任務用強調色」這個語意，不是某個特定的紅。
+  it("漏洞用危險色、任務用強調色", () => {
+    expect(issueTypeStyle("漏洞").cls).toContain("danger");
+    expect(issueTypeStyle("任務").cls).toContain("accent");
   });
 });
 
