@@ -76,11 +76,11 @@ export default function DocsPage() {
           <Icon name="clipboard" size={22} className="text-fg-subtle" />
           文件
         </h1>
-        <p className="mt-1.5 text-sm text-fg-muted">
-          `docs/` 底下的 HTML 文件集。一個 feature 資料夾是一份文件集，入口是
-          <code className="mx-1 rounded bg-surface-sunken px-1 py-0.5 text-xs">index.html</code>。
-          點標題用瀏覽器開（圖與樣式都會一起帶）。
-        </p>
+        {/*
+          * 這裡刻意**不**解釋「一個 feature 資料夾＝一份文件集、入口是 index.html」——
+          * 那是寫文件的人（AI）要遵守的規格，不是看文件的人需要知道的事
+          * （Jay 2026-09-22）。規格在 `.claude/rules/docs-feature-spec.md`。
+          */}
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[16rem]">
@@ -92,26 +92,38 @@ export default function DocsPage() {
               className="w-full rounded-lg border border-line-strong py-2 pl-9 pr-3 text-sm outline-none focus:border-line-strong"
             />
           </div>
-          <Tooltip label={pinnedCount === 0 ? "還沒有 pin 住任何文件集" : "只看 pin 住的"}>
+          <Tooltip
+            label={
+              pinnedCount === 0
+                ? "還沒有 pin 住任何文件集"
+                : onlyPinned
+                  ? `只看 pin 住的（${pinnedCount}）—— 點一下看全部`
+                  : `只看 pin 住的（${pinnedCount}）`
+            }
+          >
             <button
               onClick={() => setOnlyPinned((v) => !v)}
               disabled={pinnedCount === 0}
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs disabled:opacity-40 ${
+              aria-label="只看 pin 住的文件集"
+              aria-pressed={onlyPinned}
+              className={`rounded-lg border p-2 disabled:opacity-40 ${
                 onlyPinned
-                  ? "border-warn/40 bg-warn-bg text-warn"
-                  : "border-line-strong text-fg hover:bg-surface-raised"
+                  ? "border-warn/40 bg-warn-bg text-pin"
+                  : "border-line-strong text-fg-subtle hover:bg-surface-raised"
               }`}
             >
-              <Icon name="pin" size={13} className={onlyPinned ? "text-pin" : "text-fg-subtle"} />
-              只看 pin（{pinnedCount}）
+              <Icon name="pin" size={15} />
             </button>
           </Tooltip>
-          <button
-            onClick={() => void load()}
-            className="rounded-lg border border-line-strong px-3 py-2 text-xs text-fg hover:bg-surface-raised"
-          >
-            重新掃描
-          </button>
+          <Tooltip label="重新掃描">
+            <button
+              onClick={() => void load()}
+              aria-label="重新掃描"
+              className="rounded-lg border border-line-strong p-2 text-fg-subtle hover:bg-surface-raised hover:text-fg"
+            >
+              <Icon name="refresh" size={15} />
+            </button>
+          </Tooltip>
         </div>
 
         <div className="mt-2 h-4 text-xs">
