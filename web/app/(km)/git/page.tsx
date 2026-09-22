@@ -14,6 +14,7 @@ import { ViewToggle, useFileView } from "@/components/FileList";
 import SearchSelect, { type SearchOption } from "@/components/SearchSelect";
 import { filterGroups, groupRepos } from "@/lib/repoGroupRules";
 import { DragHandle, useDragWidth, useWideLayout } from "@/components/Split";
+import { useLiveRefresh } from "@/components/useLiveRefresh";
 import {
   hljsHref, resolveDiffTheme, type DiffThemePref, type Theme,
 } from "@/lib/uiSettingsRules";
@@ -22,6 +23,7 @@ import type { ImageSides } from "@/lib/changes";
 import {
   layoutGraph, mergeCommitPage, pushPlan,
   type Branch, type Commit, type RepoHead,
+  refreshCommits,
 } from "@/lib/gitViewRules";
 
 /**
@@ -182,6 +184,47 @@ export default function GitPage() {
   useEffect(() => {
     if (selected) void loadDetail(selected, ref);
   }, [selected, ref, loadDetail]);
+
+  /**
+   * 本機有變動就自己更新（輪詢的是 9–15ms 的指紋，見 components/useLiveRefresh.ts）。
+   *
+   * **安靜做**（Jay 2026-09-22）：不碰 `loading`，不跳 spinner，也不動捲軸 ——
+   * commit 用 `refreshCommits` 併回去，你已經捲出來的那幾頁留在原地。
+   */
+  const refreshQuietly = useCallback(async () => {
+    void loadRepos();
+    if (!selected) return;
+    const qs = new URLSearchParams({ dir: selected, ref });
+    const res = await fetch(`/api/git/repo?${qs}`, { cache: "no-store" });
+    if (!res.ok) return;
+    const fresh = (await res.json()) as RepoDetail;
+    const prev = detailRef.current;
+    // 請求在路上時換了 repo／分支：整份換掉，不要把兩棵 graph 併在一起
+    if (!prev || prev.dir !== fresh.dir) {
+      setDetail(fresh);
+      nextSkip.current = fresh.commits.length;
+      return;
+    }
+    const commits = refreshCommits(prev.commits, fresh.commits);
+    /*
+     * 游標在 updater 外面推 —— StrictMode 會把 updater 跑兩次（`loadMore` 那邊
+     * 也是為了這件事）。而且**不能直接指定成 `commits.length`**：去重之後長度
+     * 小於實際要過的位移，理由見 `nextSkip` 的註解。
+     *
+     * 尾巴被丟掉（`refreshCommits` 判定整段對不上）時就是重新開始，直接歸位。
+     */
+    const dropped = commits.length < prev.commits.length;
+    nextSkip.current = dropped
+      ? commits.length
+      : nextSkip.current + (commits.length - prev.commits.length);
+    setDetail({
+      ...fresh,
+      commits,
+      hasMore: dropped ? fresh.hasMore : prev.hasMore || fresh.hasMore,
+    });
+  }, [loadRepos, selected, ref]);
+
+  useLiveRefresh(() => void refreshQuietly(), { dir: selected, alsoOnVisible: true });
 
   useEffect(() => {
     detailRef.current = detail;

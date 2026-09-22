@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLiveRefresh } from "@/components/useLiveRefresh";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import WorktreeBadge from "@/components/WorktreeBadge";
@@ -10,7 +11,8 @@ import { FileRow, StageBadge, TreeRows, ViewToggle, useFileView } from "@/compon
 import { DragHandle, useDragWidth, useWideLayout } from "@/components/Split";
 import { hljsHref, type DiffTheme } from "@/lib/uiSettingsRules";
 import {
-  KIND_CLS, KIND_LABEL, KIND_TITLE, buildTree, countByKind, countByStage, sortRepos, splitByStage,
+  KIND_CLS, KIND_LABEL, KIND_TITLE, buildTree, countByKind, countByStage, patchWorktreeFiles,
+  sortRepos, splitByStage,
   type ChangedFile, type DiffLine, type RepoChanges, type TreeNode, type WipSide,
 } from "@/lib/changesRules";
 import type { ImageSides } from "@/lib/changes";
@@ -109,17 +111,25 @@ export default function ChangesPage() {
     });
   };
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  /**
+   * `quiet`：自動更新用的（Jay 2026-09-22「不要一直顯示讀取」）——
+   * 不開 spinner、失敗也不把畫面換成錯誤訊息。手動按「重新掃描」才是有回饋的那種。
+   */
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
       const res = await fetch("/api/changes", { cache: "no-store" });
       const json = await res.json();
-      if (!res.ok) setError(json.error ?? "掃描失敗");
-      else setData(json as Snapshot);
+      if (!res.ok) {
+        if (!quiet) setError(json.error ?? "掃描失敗");
+      } else {
+        setData(json as Snapshot);
+        setError(null);
+      }
     } catch (e) {
-      setError((e as Error).message);
+      if (!quiet) setError((e as Error).message);
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, []);
 
@@ -146,14 +156,45 @@ export default function ChangesPage() {
     link.href = hljsHref(diffTheme);
   }, [diffTheme]);
 
-  // 切回這個分頁時重掃 —— 你剛在終端改完東西回來看，要看到的是現在的狀態
-  useEffect(() => {
-    const onFocus = () => {
-      if (document.visibilityState === "visible") void load();
-    };
-    document.addEventListener("visibilitychange", onFocus);
-    return () => document.removeEventListener("visibilitychange", onFocus);
-  }, [load]);
+  /*
+   * 自動更新：本機有變動才重掃（指紋 9–15ms，全掃 3 秒）。
+   * `useLiveRefresh` 自己會處理「切回這個分頁就立刻檢查一次」與「背景不跑」。
+   *
+   * 這裡用**全域**指紋，所以 commit／stage 之類的變動是秒級；純粹改工作區的
+   * 檔案改不到 `.git`，要等你切回分頁那一次檢查 —— 那時全域指紋通常也還是
+   * 一樣的，所以額外補一條：選著某個 repo 時，那個 repo 走完整指紋（含檔案編輯）。
+   */
+  useLiveRefresh(() => void load(true), { alsoOnVisible: true });
+
+  /**
+   * 你正在看的那個 worktree 另外走完整指紋（含還沒 stage 的檔案編輯），
+   * 而且**只重抓那一個 worktree**（10–80ms）而不是全掃（3 秒）——
+   * 在編輯器連續存檔時，全掃會讓 git 一直滿載。
+   *
+   * 併不進去（`null`：快照裡本來沒有這個 worktree，而它現在有改動了）
+   * 才退回全掃 —— branch／isMain 這些中繼資料只有掃描端知道。
+   */
+  const selectedWorktree = selected?.worktree ?? null;
+  useLiveRefresh(
+    () => {
+      if (!selectedWorktree) return;
+      void (async () => {
+        const res = await fetch(
+          `/api/changes?dir=${encodeURIComponent(selectedWorktree)}`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) return;
+        const { files } = (await res.json()) as { files: ChangedFile[] };
+        setData((prev) => {
+          if (!prev) return prev;
+          const next = patchWorktreeFiles(prev, selectedWorktree, files);
+          if (!next) void load(true);
+          return next ?? prev;
+        });
+      })();
+    },
+    { dir: selectedWorktree, enabled: !!selectedWorktree }
+  );
 
   const openFile = async (sel: Selected) => {
     setSelected(sel);

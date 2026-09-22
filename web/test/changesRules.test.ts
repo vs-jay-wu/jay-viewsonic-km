@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildTree, contextGaps, countByKind, countByStage, diffStat, expandStep, formatBytes,
+  patchWorktreeFiles,
   imageMimeOf, splitByStage, splitGap, languageOf, parseDiff, parseStatus, parseStatusLine, sortRepos,
   stageState,
   type ChangedFile, type DiffLine, type RepoChanges,
@@ -375,5 +376,45 @@ describe("splitByStage — Staged Changes／Changes 兩區", () => {
     const odd = { path: "x.ts", kind: "modified" as const, staged: false, unstaged: false };
     expect(splitByStage([odd]).worktree).toHaveLength(1);
     expect(splitByStage([odd]).index).toHaveLength(0);
+  });
+});
+
+describe("patchWorktreeFiles", () => {
+  const f = (path: string): ChangedFile => ({
+    path, kind: "modified", staged: false, unstaged: true,
+  });
+  const wt = (path: string, files: ChangedFile[]) =>
+    ({ path, name: path, branch: "master", isMain: true, isSessionBound: false, files });
+  const snap = () => ({
+    repos: [
+      { repo: "km", total: 2, pinned: false, worktrees: [wt("/km", [f("a"), f("b")])] },
+      { repo: "mvbf", total: 1, pinned: false, worktrees: [wt("/mvbf", [f("c")])] },
+    ],
+  });
+
+  it("換掉那個 worktree 的檔案，total 跟著重算", () => {
+    const out = patchWorktreeFiles(snap(), "/km", [f("a")])!;
+    expect(out.repos[0].worktrees[0].files.map((x) => x.path)).toEqual(["a"]);
+    expect(out.repos[0].total).toBe(1);
+  });
+
+  it("沒碰到的 repo 原封不動", () => {
+    const out = patchWorktreeFiles(snap(), "/km", [f("a")])!;
+    expect(out.repos[1]).toEqual(snap().repos[1]);
+  });
+
+  it("改動清空就把 worktree 連同空掉的 repo 一起移掉，不留空殼", () => {
+    const out = patchWorktreeFiles(snap(), "/km", [])!;
+    expect(out.repos.map((r) => r.repo)).toEqual(["mvbf"]);
+  });
+
+  it("快照裡沒有、而且現在也沒改動 → 什麼都不用做", () => {
+    const s = snap();
+    expect(patchWorktreeFiles(s, "/never-seen", [])).toBe(s);
+  });
+
+  it("快照裡沒有、但現在有改動 → 回 null 要呼叫端去全掃", () => {
+    // branch / isMain / isSessionBound 只有掃描端知道，這裡硬湊會生出錯的中繼資料
+    expect(patchWorktreeFiles(snap(), "/never-seen", [f("a")])).toBeNull();
   });
 });

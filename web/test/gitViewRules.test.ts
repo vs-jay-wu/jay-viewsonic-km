@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   describeFetch, layoutGraph, mergeCommitPage, parseBranches, parseCommits, parseFetchOutput,
+  refreshCommits,
   parseRefs, pushPlan, sortBranches,
   type Branch, type Commit,
 } from "@/lib/gitViewRules";
@@ -320,5 +321,34 @@ describe("mergeCommitPage", () => {
   it("整頁都是看過的就回同一個陣列（不要白重算 graph）", () => {
     const current = [c("a"), c("b")];
     expect(mergeCommitPage(current, [c("a"), c("b")])).toBe(current);
+  });
+});
+
+describe("refreshCommits", () => {
+  it("新的 commit 出現在最上面，已經捲出來的那幾頁留著", () => {
+    const current = [c("c"), c("b"), c("a")];
+    const fresh = [c("d"), c("c")]; // 重抓的第一頁：多了 d
+    expect(refreshCommits(current, fresh).map((x) => x.sha)).toEqual(["d", "c", "b", "a"]);
+  });
+
+  it("什麼都沒變時內容一樣（不會重複）", () => {
+    const current = [c("c"), c("b"), c("a")];
+    expect(refreshCommits(current, [c("c"), c("b")]).map((x) => x.sha)).toEqual(["c", "b", "a"]);
+  });
+
+  it("amend 掉的舊 tip 不會變成幽靈留在清單裡", () => {
+    // c 被 amend 成 c'：新的第一頁沒有 c，錨點 b 還在 → c 應該消失
+    const current = [c("c"), c("b"), c("a")];
+    expect(refreshCommits(current, [c("c2"), c("b")]).map((x) => x.sha)).toEqual(["c2", "b", "a"]);
+  });
+
+  it("整段對不上就只留新的那一頁，不要把兩棵 graph 併在一起", () => {
+    const current = [c("c"), c("b"), c("a")];
+    expect(refreshCommits(current, [c("z"), c("y")]).map((x) => x.sha)).toEqual(["z", "y"]);
+  });
+
+  it("抓回空的一頁就維持現狀（通常是請求失敗或換了分支）", () => {
+    const current = [c("c"), c("b")];
+    expect(refreshCommits(current, [])).toBe(current);
   });
 });

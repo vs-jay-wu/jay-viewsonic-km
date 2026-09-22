@@ -409,3 +409,23 @@ export function mergeCommitPage(current: Commit[], incoming: Commit[]): Commit[]
   const added = incoming.filter((c) => !seen.has(c.sha));
   return added.length ? [...current, ...added] : current;
 }
+
+/**
+ * 自動更新時把**重抓的第一頁**併回已經顯示的那串。
+ *
+ * 跟 `mergeCommitPage`（往後接下一頁）方向相反：新的 commit 在**最上面**，
+ * 而且第一頁是那一段的真相 —— amend／rebase 之後舊的 tip 已經不存在，
+ * 直接把新的接在前面會留下一顆到不了的幽靈 commit。
+ *
+ * 做法是拿第一頁的**最後一顆**當錨點：
+ * - 錨點還在原本那串裡 → 錨點以下（你已經捲出來的那幾頁）原封不動留著，
+ *   上面換成新的第一頁。**這就是「自動更新不該害你重捲一次」的保證。**
+ * - 錨點不在了（整段被改寫、或離線太久） → 只留新的那一頁，分頁游標跟著重來。
+ *   這時寧可讓人重捲，也不要把兩棵不同的 graph 併在一起。
+ */
+export function refreshCommits(current: Commit[], fresh: Commit[]): Commit[] {
+  if (!fresh.length) return current;
+  const anchor = fresh[fresh.length - 1].sha;
+  const at = current.findIndex((c) => c.sha === anchor);
+  return at === -1 ? fresh : [...fresh, ...current.slice(at + 1)];
+}

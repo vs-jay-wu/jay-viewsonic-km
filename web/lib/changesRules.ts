@@ -278,7 +278,7 @@ export function diffStat(lines: DiffLine[]): { added: number; deleted: number } 
 }
 
 /** 副檔名 → highlight.js 的語言名。認不得就回 null（不上色，不要猜錯） */
-const LANG: Record<string, string> = {
+export const LANG: Record<string, string> = {
   ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript",
   mjs: "javascript", cjs: "javascript", json: "json", md: "markdown",
   py: "python", sh: "bash", zsh: "bash", bash: "bash", yml: "yaml", yaml: "yaml",
@@ -515,4 +515,42 @@ export function splitGap(
     return out.filter((p) => p.kind !== "gap");
   }
   return out;
+}
+
+/**
+ * 把「某一個 worktree 的最新狀態」併回既有的快照。
+ *
+ * 自動更新時用這個，而不是重跑全掃 —— 全掃 151 個工作區要 **3 秒**，
+ * 單獨問一個工作區只要 **10–80ms**。你在編輯器存檔的當下不該觸發一次 3 秒的
+ * 全掃，否則連續存檔等於讓 git 一直滿載。
+ *
+ * 回 `null` 代表「這裡補不了，去全掃」：快照裡沒有這個 worktree，而它現在
+ * 有改動了 —— 那些 `branch` / `isMain` / `isSessionBound` 只有掃描端知道，
+ * 這裡硬湊會生出錯的中繼資料。
+ *
+ * 沒有改動的 worktree**不留在快照裡**（掃描端就是這樣做的），所以檔案清空時
+ * 要把它移掉，repo 底下空了連 repo 一起移掉；不這樣做的話畫面會留下一個
+ * 「0 個改動」的空殼。
+ */
+export function patchWorktreeFiles<T extends { repos: RepoChanges[] }>(
+  snap: T,
+  worktreePath: string,
+  files: ChangedFile[]
+): T | null {
+  const has = snap.repos.some((r) => r.worktrees.some((w) => w.path === worktreePath));
+  if (!has) return files.length ? null : snap;
+
+  const repos: RepoChanges[] = [];
+  for (const r of snap.repos) {
+    if (!r.worktrees.some((w) => w.path === worktreePath)) {
+      repos.push(r);
+      continue;
+    }
+    const worktrees = r.worktrees
+      .map((w) => (w.path === worktreePath ? { ...w, files } : w))
+      .filter((w) => w.files.length > 0);
+    if (!worktrees.length) continue; // 這個 repo 已經全乾淨了
+    repos.push({ ...r, worktrees, total: worktrees.reduce((n, w) => n + w.files.length, 0) });
+  }
+  return { ...snap, repos };
 }

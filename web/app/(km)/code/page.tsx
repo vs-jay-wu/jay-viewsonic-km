@@ -1,12 +1,13 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import hljs from "highlight.js/lib/common";
+import hljs from "@/lib/highlight";
 import Icon from "@/components/Icon";
 import WorktreeBadge from "@/components/WorktreeBadge";
 import Tooltip from "@/components/Tooltip";
 import SearchSelect, { type SearchOption } from "@/components/SearchSelect";
 import { DragHandle, useDragWidth, useWideLayout } from "@/components/Split";
+import { useLiveRefresh } from "@/components/useLiveRefresh";
 import { hljsHref, type DiffTheme } from "@/lib/uiSettingsRules";
 import { languageOf } from "@/lib/changesRules";
 import { groupRepos } from "@/lib/repoGroupRules";
@@ -97,6 +98,19 @@ function CodeBrowser() {
   useEffect(() => {
     void loadRepos();
   }, [loadRepos]);
+
+  /**
+   * 本機有變動就安靜更新（不跳 spinner、不動捲軸）。這頁要更新的是 repo 清單
+   * 與**目前展開的那幾層**目錄 —— 檔案內容不自動換掉，你正在讀的東西不該
+   * 在眼前跳掉；要看新的按一下那個檔就好。
+   */
+  useLiveRefresh(
+    () => {
+      void loadRepos();
+      if (dir) for (const rel of ["", ...expanded]) void loadDir(rel);
+    },
+    { dir, alsoOnVisible: true }
+  );
 
   // 配色沿用設定頁那一項（跟 diff 同一個）
   useEffect(() => {
@@ -213,7 +227,8 @@ function CodeBrowser() {
   const lang = file ? languageOf(file.path) : null;
   const lines = useMemo(() => (file?.text ? file.text.split("\n") : []), [file]);
   const highlighted = useMemo(() => {
-    if (!file?.text || !lang) return null;
+    // getLanguage 的守衛見 DiffView 的同名函式（沒註冊的語言會噴 console.error）
+    if (!file?.text || !lang || !hljs.getLanguage(lang)) return null;
     try {
       return hljs.highlight(file.text, { language: lang, ignoreIllegals: true }).value.split("\n");
     } catch {
