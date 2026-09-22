@@ -382,17 +382,24 @@ export default function ChangesPage() {
               {!collapsed.has(r.repo) && r.worktrees.map((w) => {
                 const counts = countByKind(w.files);
                 const stage = countByStage(w.files);
-                const wOpen = !collapsed.has(w.path);
+                /*
+                 * 沒有額外 worktree 的 repo **不要再多一層收合**（Jay 2026-09-22）——
+                 * 那一層只有一個選項，等於每次都要點兩下才看得到檔案。這一列仍然畫
+                 * （它帶著分支與各類計數，repo 標題沒有那些），但不再是把手：
+                 * repo 標題展開了就直接看到檔案。
+                 */
+                const soleWorktree = r.worktrees.length === 1;
+                const wOpen = soleWorktree || !collapsed.has(w.path);
                 return (
                   <div key={w.path}>
                     <button
-                      onClick={() => toggleCollapsed(w.path)}
+                      onClick={() => toggleCollapsed(soleWorktree ? r.repo : w.path)}
                       className="flex w-full items-center gap-1.5 whitespace-nowrap px-4 py-1.5 text-left text-[11px] hover:bg-gray-50"
                     >
                       <Icon
                         name={wOpen ? "chevronDown" : "chevronRight"}
                         size={11}
-                        className="shrink-0 text-gray-300"
+                        className={`shrink-0 text-gray-300 ${soleWorktree ? "invisible" : ""}`}
                       />
                       {!w.isMain && (
                         <WorktreeBadge sessionBound={w.isSessionBound} />

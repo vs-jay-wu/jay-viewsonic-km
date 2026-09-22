@@ -526,9 +526,15 @@ export default function GitPage() {
           <div className="min-h-0 flex-1 overflow-auto">
             {groups.map((g) => {
               const pinTarget = g.main ?? g.worktrees[0];
+              /*
+               * 沒有 worktree 的 repo 不畫組標題 —— 那一列除了掛 pin 之外只是把
+               * 同一個名字再寫一次，卻要你多看一列才找得到真正能點的那一列
+               * （Jay 2026-09-22）。這種情況把 pin 直接放到唯一那一列上。
+               */
+              const flat = g.worktrees.length === 0;
               return (
                 <div key={g.name} className="border-b border-gray-100 last:border-0">
-                  {/* 組標題。pin 掛在這裡 —— pin 的是整組，worktree 會跟著排到前面 */}
+                  {!flat && (
                   <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-1">
                     <Tooltip label={g.pinned ? "取消 pin（整組）" : "pin 住這個 repo（worktree 會跟著排到前面）"}>
                       <button
@@ -556,10 +562,23 @@ export default function GitPage() {
                       </Tooltip>
                     )}
                   </div>
+                  )}
 
                   {[...(g.main ? [g.main] : []), ...g.worktrees].map((r) => (
+                    <div key={r.dir} className="flex items-stretch">
+                    {flat && (
+                      <Tooltip label={g.pinned ? "取消 pin" : "pin 住這個 repo（排到最前面）"}>
+                        <button
+                          onClick={() => pinTarget && void togglePin(pinTarget.dir)}
+                          disabled={busyPin || !pinTarget}
+                          className={`shrink-0 pl-2 ${g.pinned ? "text-amber-500" : "text-gray-300 hover:text-amber-500"}`}
+                          aria-label={g.pinned ? `取消 pin ${g.name}` : `pin ${g.name}`}
+                        >
+                          <Icon name="pin" size={12} />
+                        </button>
+                      </Tooltip>
+                    )}
                     <button
-                      key={r.dir}
                       onClick={() => {
                         setSelected(r.dir);
                         setRef("--all");
@@ -567,9 +586,9 @@ export default function GitPage() {
                         setDiffFor(null);
                         syncUrl({ dir: r.dir, sha: null, file: null });
                       }}
-                      className={`flex w-full flex-col gap-0.5 py-1.5 pl-3 pr-2 text-left hover:bg-gray-50 ${
-                        selected === r.dir ? "bg-sky-50" : ""
-                      }`}
+                      className={`flex w-full flex-col gap-0.5 py-1.5 pr-2 text-left hover:bg-gray-50 ${
+                        flat ? "pl-1.5" : "pl-3"
+                      } ${selected === r.dir ? "bg-sky-50" : ""}`}
                     >
                       <span className="flex items-center gap-1.5">
                         <span className="truncate font-mono text-xs text-gray-900">
@@ -594,6 +613,7 @@ export default function GitPage() {
                         <span className="ml-auto shrink-0">{relTime(r.lastCommitAt)}</span>
                       </span>
                     </button>
+                    </div>
                   ))}
                 </div>
               );
