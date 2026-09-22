@@ -1,53 +1,198 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 /*
- * **這個 app 是固定淺色的**，所以刻意不跟系統深色模式走。
+ * ─── 配色 token ───────────────────────────────────────────────────────────
  *
- * 原本這裡留著 Next.js 範本的 `prefers-color-scheme: dark` 覆寫，把 --foreground
- * 換成近白色。但畫面上每個卡片／清單都是明確畫白底的，於是在深色模式下
- * **所有沒指定文字顏色的元素（input、textarea…）會繼承近白色文字畫在白底上**，
- * 等於看不見（Jay 2026-09-14 回報搜尋框打字後看不到）。
+ * 三態（Jay 2026-09-22）：`data-theme` 一律是 `system` / `light` / `dark` 三個
+ * 明確的值，**不用「沒有屬性＝跟隨系統」**。因為未轉換的頁面外層包著
+ * `data-theme="light"` 的鎖，在那底下把屬性拿掉並不會讓 `@media` 重新生效，
+ * 只會繼承到鎖的淺色 —— 所以 `system` 也必須是一個會重新宣告變數的選擇器。
  *
- * `color-scheme: light` 是另一半：沒有它，瀏覽器原生控制項（checkbox、select、
- * 捲軸）在深色模式下仍會用深色樣式，跟周圍的白底對不起來。
+ * 好處：`system` 純靠 CSS `@media`（不需要 JS），明確的 light/dark 由 server 從
+ * 設定檔 SSR 出屬性，**兩種來源都不會閃**。
  *
- * 要做深色模式的話是整套換（含所有 bg-white／text-gray-*），不是把這段加回來。
+ * ⚠️ 2026-09-14 踩過一次：只把 `prefers-color-scheme` 的覆寫加回來、沒換 class，
+ * 結果所有沒指定文字顏色的元素（input、textarea）繼承近白色畫在白底上，
+ * 等於看不見。所以**沒轉換完的頁面一律鎖淺色**，見 components/ThemeScope.tsx。
+ *
+ * token 的語意（挑錯 token 比挑錯色碼難發現，所以這裡寫清楚）：
+ *   surface          頁面底
+ *   surface-raised   卡片、群組標題、表頭（比底稍微浮起來的那層）
+ *   surface-sunken   hover、內嵌區塊（比底稍微凹下去的那層）
+ *   surface-selected 選取中的列
+ *   fg               內文
+ *   fg-muted         次要資訊（說明、時間、計數）
+ *   fg-subtle        更次要（placeholder、還沒填的東西）
+ *   fg-disabled      停用
+ *   line             一般分隔線（utility 是 `border-line`）
+ *   line-strong      輸入框、按鈕外框（需要看得出邊界的）
+ *   accent           連結與選取的強調色
+ *   warn / danger / ok  **語意色，不要拿來當裝飾**（琥珀色只給警告，見 AGENTS.md）
+ *   pin / info       分類色（釘選、「部分 staged」）—— 跟語意色分開放，
+ *                    併進 warn 的話「琥珀色只給警告」這條規則就沒辦法查了
  */
-:root {
+:root,
+[data-theme="light"],
+[data-theme="system"] {
   color-scheme: light;
+
+  --surface: #ffffff;
+  --surface-raised: #f9fafb;
+  --surface-sunken: #f3f4f6;
+  --surface-selected: #f0f9ff;
+  --fg: #111827;
+  --fg-muted: #6b7280;
+  /* 不是 gray-400 —— 那個對白底只有 2.54，達不到非內文的 3.0。這裡是量出來
+     剛好過關的值（3.17）。深色那組本來就過（4.12），不必動。 */
+  --fg-subtle: #8b919b;
+  --fg-disabled: #d1d5db;
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+  --accent: #0369a1;
+  --accent-bg: #f0f9ff;
+  --warn: #b45309;
+  --warn-bg: #fffbeb;
+  --danger: #dc2626;
+  --danger-bg: #fef2f2;
+  --ok: #047857;
+  --ok-bg: #ecfdf5;
+  /* 分類色，不是語意色：pin 的釘子、「部分 staged」那種需要跟綠色分開的狀態。
+     刻意不併進 warn / accent —— 併了之後「琥珀色只給警告」這條就沒辦法查了。 */
+  /* 不是 amber-500（對白底 2.15，非文字元件門檻 3.0 都不到）。amber-600 是 3.19 */
+  --pin: #d97706;
+  --info: #4f46e5;
+  /* 主要／選取中的控制項（深底淺字的那種藥丸按鈕）。深色下要反過來，
+     不然 `bg-gray-900 text-white` 在深底上等於看不見。 */
+  --control: #111827;
+  --control-fg: #ffffff;
+  /* log／終端機區塊。**兩個主題都維持深底** —— 那是它的語意（這是主機吐出來的
+     東西），不是配色。 */
+  --term: #111827;
+  --term-fg: #e5e7eb;
+  /* 實心徽章上的文字。`bg-danger text-white` 在深色下會變成白字配亮紅，
+     所以這一格也要跟著翻。 */
+  --on-solid: #ffffff;
 }
 
-/* 表單元素預設是 `color: inherit`，很容易在某處繼承到淡色。明確釘成 gray-900，
-   各元件要別的顏色再自己蓋掉。 */
+/* 深色：中性灰 zinc（Jay 2026-09-22 選的）。
+   強調色不能直接沿用淺色那組 —— 深底上同樣的琥珀會發光刺眼，
+   而且對比方向相反（淺色要夠暗，深色要夠亮）。 */
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] {
+    color-scheme: dark;
+
+    --surface: #09090b;
+    --surface-raised: #18181b;
+    --surface-sunken: #27272a;
+    --surface-selected: #1e293b;
+    --fg: #f4f4f5;
+    --fg-muted: #a1a1aa;
+    --fg-subtle: #71717a;
+    --fg-disabled: #52525b;
+    --border: #27272a;
+    --border-strong: #3f3f46;
+    --accent: #7dd3fc;
+    --accent-bg: #0c2430;
+    --warn: #fbbf24;
+    --warn-bg: #2a2010;
+    --danger: #f87171;
+    --danger-bg: #2c1618;
+    --ok: #4ade80;
+    --ok-bg: #0f2418;
+    --pin: #fbbf24;
+    --info: #a5b4fc;
+    --control: #f4f4f5;
+    --control-fg: #09090b;
+    --term: #18181b;
+    --term-fg: #e4e4e7;
+    --on-solid: #09090b;
+  }
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface: #09090b;
+  --surface-raised: #18181b;
+  --surface-sunken: #27272a;
+  --surface-selected: #1e293b;
+  --fg: #f4f4f5;
+  --fg-muted: #a1a1aa;
+  --fg-subtle: #71717a;
+  --fg-disabled: #52525b;
+  --border: #27272a;
+  --border-strong: #3f3f46;
+  --accent: #7dd3fc;
+  --accent-bg: #0c2430;
+  --warn: #fbbf24;
+  --warn-bg: #2a2010;
+  --danger: #f87171;
+  --danger-bg: #2c1618;
+  --ok: #4ade80;
+  --ok-bg: #0f2418;
+  --pin: #fbbf24;
+  --info: #a5b4fc;
+  --control: #f4f4f5;
+  --control-fg: #09090b;
+  --term: #18181b;
+  --term-fg: #e4e4e7;
+  --on-solid: #09090b;
+}
+
+/* `@theme inline` 讓產生出來的 utility 直接指向 `var(--surface)` 而不是把值
+   內嵌進去 —— 這是執行期能換色的關鍵，不 inline 的話切換不會生效。 */
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-selected: var(--surface-selected);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-disabled: var(--fg-disabled);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-bg: var(--accent-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-pin: var(--pin);
+  --color-info: var(--info);
+  --color-control: var(--control);
+  --color-control-fg: var(--control-fg);
+  --color-term: var(--term);
+  --color-term-fg: var(--term-fg);
+  --color-on-solid: var(--on-solid);
+}
+
+/* 表單元素預設是 `color: inherit`，很容易在某處繼承到淡色 —— 2026-09-14 的
+   「搜尋框打字看不到」就是這樣來的。明確釘成 token，各元件要別的再自己蓋掉。 */
 input,
 textarea,
 select {
-  color: #111827;
+  color: var(--fg);
 }
 
 /* Tailwind v4 的 placeholder 預設是 currentColor 半透明，對比太低看不清楚
    （Jay 2026-09-11 回報）。統一釘成 gray-500。 */
 input::placeholder,
 textarea::placeholder {
-  color: #6b7280;
+  color: var(--fg-muted);
   opacity: 1;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--surface);
+  color: var(--fg);
   font-family: Arial, Helvetica, sans-serif;
 }
 
@@ -55,13 +200,13 @@ body {
 .md-body {
   font-size: 0.875rem;
   line-height: 1.7;
-  color: #1f2937;
+  color: var(--fg);
   word-break: break-word;
 }
 .md-body > * + * { margin-top: 0.6em; }
 .md-body h1, .md-body h2, .md-body h3, .md-body h4 {
   font-weight: 600;
-  color: #111827;
+  color: var(--fg);
   line-height: 1.35;
 }
 .md-body h1 { font-size: 1.05rem; margin-top: 1.2em; }
@@ -74,35 +219,35 @@ body {
 .md-body code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.85em;
-  background: #f3f4f6;
+  background: var(--surface-sunken);
   padding: 0.1em 0.35em;
   border-radius: 0.25rem;
 }
 .md-body pre {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 0.75rem;
   overflow-x: auto;
 }
 .md-body pre code { background: transparent; padding: 0; font-size: 0.8em; }
 .md-body blockquote {
-  border-left: 3px solid #e5e7eb;
+  border-left: 3px solid var(--border);
   padding-left: 0.75rem;
-  color: #4b5563;
+  color: var(--fg-muted);
 }
-.md-body a { color: #0369a1; text-decoration: underline; }
-.md-body strong { font-weight: 600; color: #111827; }
-.md-body hr { border-color: #e5e7eb; margin: 1em 0; }
+.md-body a { color: var(--accent); text-decoration: underline; }
+.md-body strong { font-weight: 600; color: var(--fg); }
+.md-body hr { border-color: var(--border); margin: 1em 0; }
 /* 表格可能比面板寬：讓它自己橫向捲，而不是把每一格壓成一字一行。
    thead/tbody 用 max-content 撐開自然寬度，外層 table 負責捲。 */
 .md-body table { display: block; overflow-x: auto; border-collapse: collapse; }
 .md-body thead, .md-body tbody { display: table; width: max-content; min-width: 100%; }
 .md-body td, .md-body th { min-width: 6rem; }
 .md-body th, .md-body td {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   padding: 0.35rem 0.5rem;
   text-align: left;
   vertical-align: top;
 }
-.md-body th { background: #f9fafb; font-weight: 600; }
+.md-body th { background: var(--surface-raised); font-weight: 600; }
