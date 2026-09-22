@@ -94,6 +94,41 @@ VSFT-9941 交付完切回 `master`，接著處理 PR review 時忘了切回 feat
 當下幾個字串比對失敗其實就是徵兆 —— `master` 沒有該票的 commit，所以對不上。
 **比對失敗時先懷疑「是不是在錯的分支」，而不是急著調整比對字串。**
 
+### 「在對的分支」還不夠，分支的**基底**也要夠新
+
+對的分支若切在幾十個 commit 前的 `master` 上，讀到的是**過去的程式碼**。
+在上面做的分析、修改、測試全都成立，只是描述的不是會出貨的那份 —— 而且
+`git status` 乾淨、測試全綠、analyze 沒告警，**沒有任何一個訊號會提醒你**。
+
+**開新分支前，以及回頭接續一條舊分支前，先跑：**
+
+```bash
+git -C <repo> fetch origin <base>
+git -C <repo> rev-list --count HEAD..origin/<base>   # 0 才安全
+```
+
+不是 0 就先 rebase／重開分支，再開始讀程式碼。**順序很重要**：先 rebase 再分析，
+不要分析完才發現要 rebase —— 那時已經照舊程式碼寫完，沉沒成本會誘使你「解衝突就好」，
+而**照舊的那邊解衝突會把新的改動靜默改回去**。
+
+**徵兆**（任一個出現就先去量落後幾個 commit）：
+
+- 單子描述的症狀，在程式碼裡看起來「還沒修」，但票是幾天前開的
+- 想改的函式，signature 或呼叫端跟票裡寫的不一樣
+- 打算「順手修掉」一整批呼叫端 —— 批量往往代表那批早就被集中重構過了
+
+### 由來（基底那條）
+
+VB-2193（mvbf PR #276）：分支切在 29 個 commit 前的 `master`，我在
+`incoming_document_handler.dart` 重寫了一個 **master 上早就修好、而且修得更完整**
+的函式。reviewer 指出照我那邊解衝突會把 Android / iOS / macOS 的 IWB 開檔路徑
+從 olfparser FFI 退回舊的 Dart ZIP/XML parser，還原邏輯也比 master 的不安全
+（我刪 `currentDocument`，master 抓住當初新增的那個物件再用 `contains` 守衛）。
+最後整份還原成 master、只留另一個檔的修正。
+
+當時的徵兆我全部看到了卻沒解讀：單子寫的三個症狀在程式碼裡都「還沒修」，
+而且我以為自己「順帶修掉 6 個呼叫端」—— 那 6 個其實早就改走別的函式了。
+
 ---
 
 ## 3. Commit 規範跟著「你正在 commit 的那個 repo」走
@@ -129,3 +164,36 @@ VSFT-9941 交付完切回 `master`，接著處理 PR review 時忘了切回 feat
 反覆發生：對專案 repo commit 時套用 km 的 gitmoji 格式。根因是 km 的
 `gitmoji-zh-tw.md` 與 `CLAUDE.md` 原本把規則寫得像全域適用、沒有標範圍，
 現已在兩處加上「僅限本 repo」的但書。
+
+---
+
+## 4. 未 commit 的東西不要留在 session 綁的 worktree 裡
+
+`.claude/worktrees/<name>` 底下的 worktree 是**跟著 session 走**的：session 結束時會被
+問要保留還是移除，被移除就整個目錄消失。**分支 ref 會留下，工作區的未 commit 改動不會。**
+
+### 由來
+
+2026-09-11：在 `.claude/worktrees/` 的 worktree 裡改好 mvbf 的 `dev-deliver.md`、
+還沒 commit 就換任務。下一段 session 回頭要給 Jay 看時，目錄已不存在；
+分支 `Jay/dev-deliver-no-hardcoded-transition-ids` 還在，但停在 `origin/master`、
+零 commit —— 改動整份重做。同一輪交付的另一條分支因為已經 commit + push，毫髮無傷。
+
+### 做法
+
+| 情境 | 放哪 |
+|---|---|
+| 一次做完、當場 commit + push | `.claude/worktrees/`（用完即丟，正是它的用途） |
+| 要跨 session、或要請 Jay 先看過才送 | **同層目錄**：`<repo>-<topic>`，例如 `edu-droid-flutter-dev-deliver` |
+
+同層那種用 `git worktree add` 手動建，不會被 session 清掉。Jay 自己既有的
+`edu-droid-flutter-vsft-6310` 就是這個放法，跟著它做即可。
+
+⚠️ `git -C <repo> worktree add ./<name>` 的**相對路徑是相對於 `-C` 的目標**，
+會建在 repo 裡面而不是同層（踩過）。用絕對路徑，或建完 `git worktree move` 搬走。
+
+### 徵兆
+
+「我記得改過這個檔，但 `git status` 是乾淨的」「分支在，但 `git log` 沒有我的 commit」
+—— 先想這條，不要懷疑自己記錯。
+
