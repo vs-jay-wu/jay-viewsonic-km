@@ -307,7 +307,7 @@ export default function SessionsPage() {
             <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">
               本機 <code className="text-xs">~/.claude/projects</code> 底下的 session 記錄。
               目前 {sessions.length} 個、共 {mb(totalBytes)}。
-              pin 住的 session 不能被刪 —— pin 在這裡就是「別動它」的意思。
+              pin 住的 session 不能被刪。
             </p>
           </div>
           <button
