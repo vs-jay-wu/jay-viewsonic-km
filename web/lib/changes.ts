@@ -344,7 +344,7 @@ export async function isKnownWorktree(candidate: string): Promise<boolean> {
  * worktree 的 `.git` 是**檔案**，內容是
  * `gitdir: <主 repo>/.git/worktrees/<名字>`。
  */
-async function mainRepoOfLinkedWorktree(dir: string): Promise<string | null> {
+export async function mainRepoOfLinkedWorktree(dir: string): Promise<string | null> {
   const raw = await readFile(path.join(dir, ".git"), "utf8").catch(() => null);
   const m = raw && /^gitdir:\s*(.+)$/m.exec(raw.trim());
   if (!m) return null;

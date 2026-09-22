@@ -1,7 +1,9 @@
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { repoPath, run } from "@/lib/repo";
-import { isKnownWorktree, listRepoDirs, mapLimit, worktreesOf } from "@/lib/changes";
+import {
+  isKnownWorktree, listRepoDirs, mainRepoOfLinkedWorktree, mapLimit, worktreesOf,
+} from "@/lib/changes";
 import {
   LOG_FORMAT, describeFetch, parseBranches, parseCommits, parseFetchOutput, pushPlan, sortBranches,
   type Branch, type Commit, type RepoHead,
@@ -279,6 +281,38 @@ export async function commitDetail(
  * `--prune` 只清掉遠端已經不存在的**遠端追蹤 ref**，不會動到本地分支或工作區。
  * 不加 `--tags`：那會把一堆不相干的 tag 拉進來。
  */
+/**
+ * 移除一個 linked worktree（`git worktree remove`）。
+ *
+ * **這是這個頁面唯一會刪東西的動作**，所以守門比 fetch／push 嚴：
+ *
+ * 1. 只能刪 **linked worktree**。主 repo 不給刪 —— `git worktree remove` 對主工作區
+ *    本來就會拒絕，但錯誤訊息不好懂，而且「按下去才發現不行」不是好體驗。
+ * 2. **不給 `--force`**。git 在工作區有未提交改動或未追蹤檔案時會拒絕，那正是我們
+ *    要的：`cross-repo-workflow.md` §4 講的就是「工作區的未 commit 改動不會留下」。
+ *    要硬刪請自己去終端機下 `--force`，那是刻意的摩擦。
+ * 3. 分支**不會**被刪掉。worktree 沒了，`git branch` 還看得到它，commit 也都還在。
+ */
+export async function removeWorktree(
+  dir: string
+): Promise<{ ok: boolean; summary: string; detail?: string }> {
+  const abs = path.resolve(dir);
+  if (!(await isKnownWorktree(abs))) return { ok: false, summary: "不認得這個工作區" };
+
+  const main = await mainRepoOfLinkedWorktree(abs);
+  if (!main) return { ok: false, summary: "這是主工作區，不能從這裡刪" };
+
+  const r = await run("git", ["-C", main, "worktree", "remove", abs], { timeoutMs: 60_000 });
+  if (r.code !== 0) {
+    const raw = (r.stderr + "\n" + r.stdout).trim();
+    // git 拒絕的理由多半是「有未提交的改動」——原文比我們重寫的訊息準確
+    return { ok: false, summary: "刪不掉", detail: raw.slice(-500) };
+  }
+  // 順手清掉 .git/worktrees 底下的殘骸（目錄被手動刪過時會留下）
+  await run("git", ["-C", main, "worktree", "prune"], { timeoutMs: 30_000 });
+  return { ok: true, summary: `已移除 worktree（分支還在）` };
+}
+
 export async function fetchRepo(
   dir: string,
   remote?: string

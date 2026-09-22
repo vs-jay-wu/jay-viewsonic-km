@@ -257,6 +257,46 @@ export default function GitPage() {
     }
   };
 
+  /**
+   * 移除一個 linked worktree。**這是這頁唯一會刪東西的動作**，所以：
+   * 一定跳確認，而且確認文案要講清楚失去什麼（工作區）與保留什麼（分支與 commit）。
+   * 不提供 `--force` —— 有未提交改動時讓 git 擋下來是刻意的（cross-repo-workflow §4
+   * 講的就是「工作區的未 commit 改動不會留下」）。
+   */
+  const removeWorktree = async (dir: string, name: string) => {
+    const ok = await confirm({
+      title: `移除 worktree ${name}？`,
+      message:
+        `會刪掉這個工作目錄。分支與 commit 都還在，之後可以重新 git worktree add 回來。\n\n` +
+        `裡面若有未提交的改動或未追蹤的檔案，git 會擋下來不刪 —— 那些東西刪掉就沒了。`,
+      danger: true,
+    });
+    if (!ok) return;
+    setBusyPin(true);
+    try {
+      const res = await fetch("/api/git/worktree", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dir }),
+      });
+      const json = (await res.json()) as { ok?: boolean; summary?: string; detail?: string };
+      if (!res.ok || !json.ok) {
+        toast({ ok: false, text: json.detail?.split("\n").pop() || json.summary || "刪不掉" });
+        return;
+      }
+      toast({ ok: true, text: `${name}：${json.summary}` });
+      // 刪掉的正好是選中的那個，畫面要跟著回到沒選的狀態
+      if (selected === dir) {
+        setSelected(null);
+        setDetail(null);
+        syncUrl({ dir: null, sha: null, file: null, side: null });
+      }
+      await loadRepos();
+    } finally {
+      setBusyPin(false);
+    }
+  };
+
   /** 照主 repo 分組：worktree 收在它底下，pin 是 pin 整組（Jay 2026-09-18） */
   const groups = useMemo(() => filterGroups(groupRepos(repos), query), [repos, query]);
 
@@ -486,7 +526,7 @@ export default function GitPage() {
             Repo 檢視
           </h1>
           <span className="text-xs text-gray-400">
-            唯讀 —— 只有 fetch 與 push 會動到東西，不做 checkout
+唯讀 —— 動到東西的只有 fetch、push 與移除 worktree，不做 checkout
           </span>
           {detail && (
             <div className="ml-auto flex items-center gap-2">
@@ -613,6 +653,20 @@ export default function GitPage() {
                         <span className="ml-auto shrink-0">{relTime(r.lastCommitAt)}</span>
                       </span>
                     </button>
+                    {/* 只有 linked worktree 能刪；主 repo 沒有這顆。
+                        只有圖示一定要包 Tooltip（web/AGENTS.md），而且這顆會刪東西 */}
+                    {r.worktreeOf && (
+                      <Tooltip side="left" label={`移除 worktree ${r.name}（分支會留著）`}>
+                        <button
+                          onClick={() => void removeWorktree(r.dir, r.name)}
+                          disabled={busyPin}
+                          aria-label={`移除 worktree ${r.name}`}
+                          className="shrink-0 px-2 text-gray-300 hover:text-red-600 disabled:opacity-40"
+                        >
+                          <Icon name="trash" size={12} />
+                        </button>
+                      </Tooltip>
+                    )}
                     </div>
                   ))}
                 </div>
