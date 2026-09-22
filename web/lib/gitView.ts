@@ -161,22 +161,57 @@ export async function listRepos(): Promise<{
   return { repos, skippedOffloaded, pinned };
 }
 
+/** 一頁 commit（`--max-count` 多要一顆，用來判斷後面還有沒有東西） */
+export interface CommitPage {
+  commits: Commit[];
+  hasMore: boolean;
+}
+
+interface PageOpts {
+  ref?: string;
+  limit?: number;
+  skip?: number;
+}
+
+/**
+ * 取一頁 commit。
+ *
+ * ⚠️ 分頁靠 `--skip`，而它是**對當下這棵 graph** 算的位移 —— 翻頁之間若有新
+ * commit 進來（fetch、或自己 commit 一顆），後面那幾頁會整體位移，同一顆可能
+ * 重複出現、也可能被跳過。呼叫端必須以 sha 去重（`lib/gitViewRules.ts` 的
+ * `mergeCommitPage`），不要假設各頁不相交。
+ */
+async function commitPage(repo: string, remotes: string[], opts: PageOpts): Promise<CommitPage> {
+  const limit = Math.min(opts.limit ?? PAGE, 500);
+  const skip = Math.max(0, opts.skip ?? 0);
+  const logRes = await run("git", [
+    "-C", repo, "log", `--format=${LOG_FORMAT}`,
+    // `--date-order` 而不是預設：分支交錯時預設的排法會讓 graph 的線亂跳
+    "--date-order",
+    `--max-count=${limit + 1}`, `--skip=${skip}`,
+    ...(opts.ref && opts.ref !== "--all" ? [opts.ref] : ["--all"]),
+  ], { timeoutMs: 60_000 });
+
+  const commits = parseCommits(logRes.stdout, remotes);
+  return { commits: commits.slice(0, limit), hasMore: commits.length > limit };
+}
+
 /**
  * 一個 repo 的分支、HEAD 與 commit graph。
  *
  * `ref` 給 `--all` 時看全部分支（預設），給某條分支就只看它那條線。
+ *
+ * 只要往下再翻一頁 commit 的話用 `repoCommits`，不要再打這支 —— 見那邊的註解。
  */
 export async function repoDetail(
   dir: string,
-  opts: { ref?: string; limit?: number; skip?: number } = {}
+  opts: PageOpts = {}
 ): Promise<RepoDetail | { error: string }> {
   const repo = await resolveRepo(dir);
   if (!repo) return { error: "不認得這個 repo（只能看工作區裡的）" };
 
-  const limit = Math.min(opts.limit ?? PAGE, 500);
-  const skip = Math.max(0, opts.skip ?? 0);
   const remotes = await remotesOf(repo);
-  const [head, brRes, checkedOut, logRes, wip] = await Promise.all([
+  const [head, brRes, checkedOut, page, wip] = await Promise.all([
     headOf(repo),
     run("git", [
       "-C", repo, "for-each-ref",
@@ -184,27 +219,36 @@ export async function repoDetail(
       "refs/heads", "refs/remotes",
     ], { timeoutMs: 30_000 }),
     checkedOutMap(repo),
-    run("git", [
-      "-C", repo, "log", `--format=${LOG_FORMAT}`,
-      // `--date-order` 而不是預設：分支交錯時預設的排法會讓 graph 的線亂跳
-      "--date-order",
-      `--max-count=${limit + 1}`, `--skip=${skip}`,
-      ...(opts.ref && opts.ref !== "--all" ? [opts.ref] : ["--all"]),
-    ], { timeoutMs: 60_000 }),
+    commitPage(repo, remotes, opts),
     wipFiles(repo),
   ]);
 
-  const commits = parseCommits(logRes.stdout, remotes);
   return {
     name: path.basename(repo),
     dir: repo,
     head,
     remotes,
     branches: sortBranches(parseBranches(brRes.stdout, checkedOut)),
-    commits: commits.slice(0, limit),
-    hasMore: commits.length > limit,
+    commits: page.commits,
+    hasMore: page.hasMore,
     wip,
   };
+}
+
+/**
+ * 只取 commit —— 「往下載入更多」用。
+ *
+ * 跟 `repoDetail` 分開是因為翻頁時**分支清單與未提交改動都用不到**，而那兩份都不便宜：
+ * `for-each-ref` 在分支多的 repo（ragdoll-cat 有 104 條）要掃全部的 ref，`wipFiles`
+ * 是一次 `git status`。翻一次頁重算一次、算完丟掉，純粹是浪費。
+ */
+export async function repoCommits(
+  dir: string,
+  opts: PageOpts = {}
+): Promise<CommitPage | { error: string }> {
+  const repo = await resolveRepo(dir);
+  if (!repo) return { error: "不認得這個 repo（只能看工作區裡的）" };
+  return commitPage(repo, await remotesOf(repo), opts);
 }
 
 /**

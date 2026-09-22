@@ -392,3 +392,20 @@ export function pushPlan(branch: Branch, remote = "origin"): PushPlan {
     remote: r,
   };
 }
+
+/**
+ * 把新載入的一頁 commit 併進已經顯示的那串。
+ *
+ * **一定要以 sha 去重**：分頁是 `git log --skip=N` 算的位移，翻頁之間若有新 commit
+ * 進來（fetch、或自己 commit 一顆），第二頁會整體往後位移，邊界那幾顆就會重複出現。
+ * 重複的 commit 進到 `layoutGraph` 不會報錯 —— 它會替同一個 sha 開第二條 lane，
+ * 畫出一條憑空岔出去又接回來的線，看起來像真的有那樣一條分支。
+ *
+ * 保留**先出現**的那一份：`layoutGraph` 是單向前掃，已經畫出來的列只依賴它前面的
+ * commit，所以維持既有順序才不會讓上面的線跳動。
+ */
+export function mergeCommitPage(current: Commit[], incoming: Commit[]): Commit[] {
+  const seen = new Set(current.map((c) => c.sha));
+  const added = incoming.filter((c) => !seen.has(c.sha));
+  return added.length ? [...current, ...added] : current;
+}

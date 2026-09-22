@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  describeFetch, layoutGraph, parseBranches, parseCommits, parseFetchOutput, parseRefs,
-  pushPlan, sortBranches,
+  describeFetch, layoutGraph, mergeCommitPage, parseBranches, parseCommits, parseFetchOutput,
+  parseRefs, pushPlan, sortBranches,
   type Branch, type Commit,
 } from "@/lib/gitViewRules";
 
@@ -301,5 +301,24 @@ describe("describeFetch — 一句話，不要倒原始輸出", () => {
     const out = describeFetch(changes);
     expect(out.text).toBe("5 條分支更新");
     expect(out.detail).toBe("a、b、c …還有 2 條");
+  });
+});
+
+describe("mergeCommitPage", () => {
+  it("接在後面，順序不動", () => {
+    expect(mergeCommitPage([c("a"), c("b")], [c("c"), c("d")]).map((x) => x.sha))
+      .toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("翻頁之間有新 commit 進來造成位移，重疊的那幾顆只留一份", () => {
+    // 第一頁拿到 a b c，之後有人 fetch 進來一顆，第二頁的 --skip 往後位移，
+    // 於是 b c 又被送回來一次。
+    const merged = mergeCommitPage([c("a"), c("b"), c("c")], [c("b"), c("c"), c("d")]);
+    expect(merged.map((x) => x.sha)).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("整頁都是看過的就回同一個陣列（不要白重算 graph）", () => {
+    const current = [c("a"), c("b")];
+    expect(mergeCommitPage(current, [c("a"), c("b")])).toBe(current);
   });
 });

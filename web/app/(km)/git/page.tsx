@@ -17,7 +17,7 @@ import { hljsHref, type DiffTheme } from "@/lib/uiSettingsRules";
 import { buildTree, type ChangedFile, type DiffLine, type TreeNode } from "@/lib/changesRules";
 import type { ImageSides } from "@/lib/changes";
 import {
-  layoutGraph, pushPlan,
+  layoutGraph, mergeCommitPage, pushPlan,
   type Branch, type Commit, type RepoHead,
 } from "@/lib/gitViewRules";
 
@@ -106,6 +106,21 @@ export default function GitPage() {
   const [detail, setDetail] = useState<RepoDetail | null>(null);
   const [ref, setRef] = useState("--all");
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  /** commit 清單捲動的是中欄本身，所以 IntersectionObserver 的 root 要綁它，不是 viewport */
+  const centerPane = useRef<HTMLDivElement>(null);
+  const sentinel = useRef<HTMLDivElement>(null);
+  /**
+   * 下一頁要從第幾顆開始。
+   *
+   * ⚠️ **不能拿 `commits.length` 當這個值**：去重之後長度會小於實際要過的位移，
+   * 而某一頁若整頁都是看過的（分支被刪、`fetch --prune` 之後 graph 縮短就會這樣），
+   * 長度根本不動 —— 下一輪又去要同一段，變成打不完的迴圈。
+   * 這個游標一律照**伺服器回了幾顆**往前推，跟留下幾顆無關。
+   */
+  const nextSkip = useRef(0);
+  /** `detail` 的鏡像：讓「這頁還算不算數」的判斷不必寫進 setState 的 updater 裡 */
+  const detailRef = useRef<RepoDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [openCommit, setOpenCommit] = useState<string | null>(null);
   const [commitInfo, setCommitInfo] = useState<Record<string, CommitInfo>>({});
@@ -142,6 +157,8 @@ export default function GitPage() {
       const res = await fetch(`/api/git/repo?${qs}`, { cache: "no-store" });
       const json = await res.json();
       setDetail(res.ok ? (json as RepoDetail) : null);
+      // 換 repo／換分支就是一份新的 graph，游標跟著回到第一頁的尾端
+      nextSkip.current = res.ok ? (json as RepoDetail).commits.length : 0;
       if (!res.ok) toast({ ok: false, text: json.error ?? "讀取失敗" });
     } finally {
       setLoading(false);
@@ -152,6 +169,70 @@ export default function GitPage() {
   useEffect(() => {
     if (selected) void loadDetail(selected, ref);
   }, [selected, ref, loadDetail]);
+
+  useEffect(() => {
+    detailRef.current = detail;
+  }, [detail]);
+
+  /**
+   * 捲到接近底部就接著載下一頁 commit。
+   *
+   * 每次 `detail` 換掉就重建一個 observer —— 載完之後 sentinel 若還在畫面裡，
+   * 重建的那個會立刻再觸發一次，自然接成連續載入（例如螢幕很高、一頁填不滿）。
+   *
+   * 位移看 `nextSkip`，不是 `commits.length`；理由見那個 ref 的註解。
+   */
+  useEffect(() => {
+    const el = sentinel.current;
+    const root = centerPane.current;
+    if (!el || !root || !selected || !detail?.hasMore || loadingMore) return;
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        io.disconnect(); // 這一頁回來之前不要再觸發
+        void (async () => {
+          setLoadingMore(true);
+          try {
+            const qs = new URLSearchParams({
+              dir: selected,
+              ref,
+              commitsOnly: "1",
+              skip: String(nextSkip.current),
+            });
+            const res = await fetch(`/api/git/repo?${qs}`, { cache: "no-store" });
+            const json = await res.json();
+            if (!res.ok) {
+              toast({ ok: false, text: json.error ?? "載入更多失敗" });
+              return;
+            }
+            const page = json.commits as Commit[];
+            // 這一頁在路上時換了 repo／分支，或第一頁被重新載過 —— 整頁作廢，
+            // 接上去會把兩棵不同的 graph 併在一起
+            if (detailRef.current !== detail) return;
+            // 游標在 updater 外面推：StrictMode 會把 updater 跑兩次，
+            // 在裡面改 ref 會一次跳兩頁
+            nextSkip.current += page.length;
+            setDetail((prev) =>
+              prev === detail
+                ? {
+                    ...prev,
+                    commits: mergeCommitPage(prev.commits, page),
+                    hasMore: page.length > 0 && (json.hasMore as boolean),
+                  }
+                : prev
+            );
+          } finally {
+            setLoadingMore(false);
+          }
+        })();
+      },
+      // 離底部還有半個畫面就先要下一頁，捲到底時通常已經接上了
+      { root, rootMargin: "400px" }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [detail, loadingMore, selected, ref, toast]);
 
   // 重整後把網址上的 repo／commit／檔案選回來
   useEffect(() => {
@@ -521,7 +602,10 @@ export default function GitPage() {
         </div>
 
         {/* 一個 repo 的內容。**橫向可捲**，右邊開 diff 時就靠它讓出空間 */}
-        <div className={`min-h-0 flex-1 overflow-auto ${selected ? "" : "hidden lg:block"}`}>
+        <div
+          ref={centerPane}
+          className={`min-h-0 flex-1 overflow-auto ${selected ? "" : "hidden lg:block"}`}
+        >
           {!detail ? (
             <p className="px-6 py-10 text-sm text-gray-400">
               {loading ? "讀取中…" : "選一個 repo。"}
@@ -606,7 +690,6 @@ export default function GitPage() {
               <div className="px-2 py-2">
                 <div className="px-2 pb-1 text-[11px] text-gray-400">
                   {ref === "--all" ? "全部分支" : ref} · {detail.commits.length} 個 commit
-                  {detail.hasMore && "（只顯示最近的）"}
                 </div>
                 <CommitGraph
                   commits={detail.commits}
@@ -643,6 +726,14 @@ export default function GitPage() {
                     },
                   }}
                 />
+                {/* 高度固定的一列：捲到它就載下一頁。文字換不換都不改變高度，
+                    所以載入前後版面不會跳（web/AGENTS.md） */}
+                <div
+                  ref={sentinel}
+                  className="flex h-8 items-center justify-center text-[11px] text-gray-400"
+                >
+                  {loadingMore ? "載入更多…" : detail.hasMore ? "" : "已經到最早的 commit"}
+                </div>
               </div>
             </div>
           )}
