@@ -27,12 +27,13 @@ if '-h' in args or '--help' in args:
   {C}memclean -f{R}           真的殺掉
   {C}memclean -a 30{R}        年齡門檻改成 30 分鐘{GRAY}（預設 120）{R}
   {C}memclean -g{R}           一併處理 Gradle / Kotlin daemon {GRAY}(不看年齡；build 中勿用){R}
-  {C}memclean -l{R}           一併處理 dart language-server {GRAY}(VS Code 會立刻重開){R}
+  {C}memclean -l{R}           連編輯器持有的 dart language-server 也清 {GRAY}(會立刻重開){R}
   {C}memclean --json{R}       輸出 JSON{GRAY}（給 web 用，不上色）{R}
   {C}memclean -f -g -a 60{R}  可組合
 
 {GRAY}預設對象：dart mcp-server（Claude Code 的 Flutter MCP，用過就膨脹到 ~2.3GB
-且永遠不縮回去），以及父行程已死的孤兒。{R}
+且永遠不縮回去），以及 mcp-server / language-server 裡父行程已死的孤兒 ——
+孤兒 language-server 沒有編輯器會重開它，2026-09-10 實測兩隻就佔 11.5GB。{R}
 """)
     sys.exit(0)
 
@@ -177,11 +178,16 @@ for line in ps:
             kind, reason = 'mcp-server', '孤兒（父行程已死）'
         elif age >= age_min * 60:
             kind, reason = 'mcp-server', f'閒置 {human_age(age)}'
+    elif 'dart' in cmd and 'language-server' in cmd:
+        # 孤兒不看 -l：父行程已死＝沒有編輯器會重開它，殺了不會回來，
+        # 而它照樣佔著 swap（footprint 可達數 GB，RSS 卻只剩個位數 MB）。
+        if ppid == 1:
+            kind, reason = 'language-server', '孤兒（沒有編輯器會重開）'
+        elif do_ls:
+            kind, reason = 'language-server', '編輯器會重開'
     elif do_gradle and ('GradleDaemon' in cmd or 'KotlinCompileDaemon' in cmd):
         kind, reason = ('Gradle daemon' if 'GradleDaemon' in cmd
                         else 'Kotlin daemon'), f'存活 {human_age(age)}'
-    elif do_ls and 'language-server' in cmd and 'dart' in cmd:
-        kind, reason = 'language-server', 'VS Code 會重開'
 
     if kind:
         rows.append((pid, kind, reason, fp.get(pid, 0.0), human_age(age), age, cmd))
