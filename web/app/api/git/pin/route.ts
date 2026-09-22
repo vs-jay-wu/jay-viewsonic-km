@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isKnownWorktree } from "@/lib/changes";
-import { togglePinned } from "@/lib/gitView";
+import { invalidateRepoCache, togglePinned } from "@/lib/gitView";
 
 export const dynamic = "force-dynamic";
 
@@ -11,5 +11,7 @@ export async function POST(req: NextRequest) {
   if (!(await isKnownWorktree(dir))) {
     return NextResponse.json({ error: "不認得這個 repo" }, { status: 403 });
   }
-  return NextResponse.json({ pinned: await togglePinned(dir) });
+  const pinned = await togglePinned(dir);
+  invalidateRepoCache(); // 排序會變
+  return NextResponse.json({ pinned });
 }

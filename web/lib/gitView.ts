@@ -9,6 +9,7 @@ import {
   type Branch, type Commit, type RepoHead,
 } from "@/lib/gitViewRules";
 import { parseNameStatus } from "@/lib/workChangesRules";
+import { cacheState, canServeCached, shouldRescan } from "@/lib/repoCacheRules";
 import { parseStatus, type ChangedFile } from "@/lib/changesRules";
 
 /**
@@ -161,6 +162,70 @@ export async function listRepos(): Promise<{
     return (x.lastCommitAt ?? "") < (y.lastCommitAt ?? "") ? 1 : -1;
   });
   return { repos, skippedOffloaded, pinned };
+}
+
+export type RepoList = Awaited<ReturnType<typeof listRepos>>;
+
+/**
+ * `listRepos()` 的快取。判準在 `lib/repoCacheRules.ts`（有測試），這裡只管狀態。
+ *
+ * **狀態掛在 `globalThis`**：dev 模式的 HMR 會重新載入模組，掛在模組變數上的話
+ * 每次存檔就清空（跟排程 timer 同一個理由，見 `web/AGENTS.md`）。
+ *
+ * **同時只會有一次掃描**（`inflight`）—— `/code`、`/git`、`/changes` 會在同一瞬間
+ * 各打一次，沒有這層就是三次全掃互相搶 CPU，反而更慢。
+ */
+interface RepoCache {
+  data: RepoList | null;
+  computedAt: number | null;
+  inflight: Promise<RepoList> | null;
+}
+
+const g = globalThis as typeof globalThis & { __kmRepoCache?: RepoCache };
+const cache: RepoCache = (g.__kmRepoCache ??= { data: null, computedAt: null, inflight: null });
+
+function rescan(): Promise<RepoList> {
+  cache.inflight ??= listRepos()
+    .then((d) => {
+      cache.data = d;
+      cache.computedAt = Date.now();
+      return d;
+    })
+    .finally(() => {
+      cache.inflight = null;
+    });
+  return cache.inflight;
+}
+
+/**
+ * 快取版。`force` 會等新的掃完才回（「重新掃描」按鈕要的是這個）。
+ *
+ * 回傳多兩個欄位讓呼叫端知道手上這份多舊：`computedAt`（ISO）與 `stale`
+ * （這次拿到的是舊資料、背景正在重算）。
+ */
+export async function listReposCached(
+  force = false
+): Promise<RepoList & { computedAt: string | null; stale: boolean }> {
+  const state = cacheState(cache.computedAt, Date.now());
+  const serveCached = canServeCached(state, force) && cache.data !== null;
+
+  if (shouldRescan(state, force)) {
+    const p = rescan();
+    // 背景重算的失敗不能變成未處理的 rejection —— 這次已經用舊資料回應了
+    if (serveCached) p.catch(() => undefined);
+    else await p;
+  }
+
+  return {
+    ...(cache.data as RepoList),
+    computedAt: cache.computedAt ? new Date(cache.computedAt).toISOString() : null,
+    stale: serveCached && state === "stale",
+  };
+}
+
+/** 內容確定變了就把快取作廢（pin、fetch、push、移除 worktree 之後） */
+export function invalidateRepoCache(): void {
+  cache.computedAt = null;
 }
 
 /** 一頁 commit（`--max-count` 多要一顆，用來判斷後面還有沒有東西） */

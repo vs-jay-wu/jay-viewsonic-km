@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { removeWorktree } from "@/lib/gitView";
+import { invalidateRepoCache, removeWorktree } from "@/lib/gitView";
 
 export const dynamic = "force-dynamic";
 
@@ -14,5 +14,6 @@ export async function DELETE(req: NextRequest) {
   const { dir } = (await req.json().catch(() => ({}))) as { dir?: string };
   if (!dir) return NextResponse.json({ error: "要給 dir" }, { status: 400 });
   const out = await removeWorktree(dir);
+  if (out.ok) invalidateRepoCache(); // 少了一個 worktree
   return NextResponse.json(out, { status: out.ok ? 200 : 400 });
 }

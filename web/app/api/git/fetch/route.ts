@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchRepo } from "@/lib/gitView";
+import { fetchRepo, invalidateRepoCache } from "@/lib/gitView";
 
 export const dynamic = "force-dynamic";
 
@@ -10,5 +10,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const { dir, remote } = (await req.json()) as { dir?: string; remote?: string };
   if (!dir) return NextResponse.json({ error: "要給 dir" }, { status: 400 });
-  return NextResponse.json(await fetchRepo(dir, remote));
+  const out = await fetchRepo(dir, remote);
+  invalidateRepoCache(); // ahead/behind 會變
+  return NextResponse.json(out);
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pushBranch } from "@/lib/gitView";
+import { invalidateRepoCache, pushBranch } from "@/lib/gitView";
 
 export const dynamic = "force-dynamic";
 
@@ -10,5 +10,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const { dir, branch } = (await req.json()) as { dir?: string; branch?: string };
   if (!dir || !branch) return NextResponse.json({ error: "要給 dir 與 branch" }, { status: 400 });
-  return NextResponse.json(await pushBranch(dir, branch));
+  const out = await pushBranch(dir, branch);
+  invalidateRepoCache(); // ahead/behind 會變
+  return NextResponse.json(out);
 }
