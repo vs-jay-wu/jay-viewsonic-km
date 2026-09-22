@@ -5,8 +5,11 @@
  *
  * 文件的慣例（2026-09-11 定，見 `.claude/rules/docs-feature-spec.md`）：
  * 一個 feature 資料夾 = 一份「文件集」，**入口一律 `index.html`**，
- * 每份 HTML 在 head 帶三個 meta：`km-doc-kind` / `km-doc-status` / `km-doc-tickets`。
+ * 每份 HTML 在 head 帶三個 meta：`km-doc-kind` / `km-doc-status` / `km-doc-tickets`，
+ * 外加選填的 `km-doc-icon`（主題示意圖示，不填就用 kind 的）。
  */
+
+import type { IconName } from "@/components/Icon";
 
 export const DOC_KINDS = [
   "overview", "goal", "findings", "investigation", "verify", "test",
@@ -19,6 +22,44 @@ export const KIND_LABEL: Record<DocKind, string> = {
   verify: "驗證", test: "測試", defects: "缺陷", report: "報告",
   handoff: "交接", reference: "參考", "open-questions": "待決", superseded: "已被取代",
 };
+
+/**
+ * 每個 kind 的示意圖示。**這一層不需要任何額外標註** —— `km-doc-kind` 本來就是
+ * 必填，所以全部文件立刻都有圖示。
+ */
+export const KIND_ICON: Record<DocKind, IconName> = {
+  overview: "layers", goal: "target", investigation: "search", findings: "clipboard",
+  verify: "check", test: "flask", defects: "bug", report: "chart",
+  handoff: "handoff", reference: "book", "open-questions": "help", superseded: "archive",
+};
+
+/**
+ * 主題示意圖示的白名單（選填的 `km-doc-icon`）。
+ *
+ * **只收白名單裡的值**：打錯或寫了沒有的名字時退回 kind 的圖示，而不是畫出一個
+ * 破掉的東西 —— 失敗方向要是安全的那一邊。要加新的就在這裡加一行，同時確認
+ * `Icon.tsx` 有對應的 path。
+ *
+ * ⚠️ 圖示一律**單色示意**，不要放品牌彩色縮圖（Office／PDF 那種）：它們不吃
+ * `currentColor`，深色主題下不會跟著變，也不會跟 hover／selected 的狀態走。
+ */
+export const SUBJECT_ICON: Record<string, IconName> = {
+  slides: "slides",      // 投影片／PPTX
+  font: "font",          // 字型、字級
+  package: "package",    // APK／套件／打包
+  window: "window",      // 視窗、疊放、焦點
+  pen: "pen",            // 註記、畫筆
+  quiz: "quiz",          // 派題、測驗
+  license: "license",    // 授權、CC-BY
+  code: "code",
+  repo: "repos",
+  chart: "chart",
+};
+
+/** 這份文件要畫哪個圖示：主題優先，沒有（或不認得）就退回 kind */
+export function docIcon(doc: { kind: DocKind; icon?: string | null }): IconName {
+  return (doc.icon && SUBJECT_ICON[doc.icon]) || KIND_ICON[doc.kind];
+}
 
 export type DocStatus = "active" | "done" | "superseded";
 
@@ -36,6 +77,8 @@ export interface DocFile {
   kind: DocKind;
   status: DocStatus;
   tickets: string[];
+  /** `km-doc-icon` 的原值（選填）。畫的時候走 `docIcon()`，不認得就退回 kind */
+  icon: string | null;
   sizeBytes: number;
   /** 最後一次 commit 的日期（沒進版控就是 null）—— 不用 mtime，checkout 會把它洗掉 */
   updated: string | null;
@@ -94,6 +137,8 @@ export interface ParsedDoc {
   kind: DocKind;
   status: DocStatus;
   tickets: string[];
+  /** `km-doc-icon` 的原值（選填）。不認得的值留著不丟，畫的時候才退回 kind */
+  icon: string | null;
 }
 
 /**
@@ -118,7 +163,9 @@ export function parseDocHead(head: string, fileName: string): ParsedDoc {
     .map((t) => t.trim().toUpperCase())
     .filter(Boolean);
 
-  return { title, kind, status, tickets };
+  const icon = metaOf(head, "km-doc-icon")?.trim().toLowerCase() || null;
+
+  return { title, kind, status, tickets, icon };
 }
 
 // ─── 分組與排序 ──────────────────────────────────────────────────────────────

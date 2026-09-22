@@ -108,7 +108,7 @@ export async function scanDocs(): Promise<DocsIndex> {
       const parsed = parseDocHead(head, name);
       files.push({
         path: rel, name, title: parsed.title, kind: parsed.kind, status: parsed.status,
-        tickets: parsed.tickets, sizeBytes: st.size,
+        tickets: parsed.tickets, icon: parsed.icon, sizeBytes: st.size,
         // 優先用 commit 日期（mtime 會被 checkout 洗掉）；還沒進版控的文件集
         // 只有 mtime 可用，總比沒有好
         updated: dates.get(rel) ?? st.mtime.toISOString().slice(0, 10),

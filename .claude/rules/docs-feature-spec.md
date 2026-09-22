@@ -79,6 +79,7 @@ km web 的「文件」頁靠它索引（`web/lib/docsRules.ts`，有測試）。
   <meta name="km-doc-kind" content="overview">
   <meta name="km-doc-status" content="active">
   <meta name="km-doc-tickets" content="VSFT-6964,VB-1945">   <!-- 沒有就省略 -->
+  <meta name="km-doc-icon" content="slides">                 <!-- 選填，見下 -->
   ```
 
   | meta | 值 |
@@ -86,6 +87,14 @@ km web 的「文件」頁靠它索引（`web/lib/docsRules.ts`，有測試）。
   | `km-doc-kind` | `overview` `goal` `findings` `investigation` `verify` `test` `defects` `report` `handoff` `reference` `open-questions` `superseded` |
   | `km-doc-status` | `active`（預設）／`done`／`superseded` |
   | `km-doc-tickets` | 逗號分隔的票號，**只寫這份文件的主題票**，不要把內文提到的全列進來 |
+  | `km-doc-icon` | **選填**。文件清單上的主題示意圖示。不填就用 `km-doc-kind` 的預設圖示，所以**忘了填不會壞**，只是比較通用 |
+
+- `km-doc-icon` 的可用值是**白名單**（寫在 `web/lib/docsRules.ts` 的 `SUBJECT_ICON`）：
+  `slides` `font` `package` `window` `pen` `quiz` `license` `code` `repo` `chart`。
+  **打錯或寫了清單外的值會退回 kind 的圖示**，不會畫出破掉的東西 —— 要加新的就在那個
+  map 加一行，並確認 `web/components/Icon.tsx` 有對應的 path。
+- 圖示一律**單色示意**（吃 `currentColor`），不要放品牌彩色縮圖（Office／PDF 那種）：
+  它們在深色主題下不會跟著變色，也不會跟 hover／selected 的狀態走。
 
 - **狀態不要只寫在 `<h1>` 的裝飾字裡**（「開發中」「已被取代」）——那是給人看的，
   機器讀不到；`km-doc-status` 才是索引與排序的依據。兩邊要一致。

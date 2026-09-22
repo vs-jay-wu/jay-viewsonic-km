@@ -4,7 +4,9 @@
 import type { SVGProps } from "react";
 
 export type IconName =
-  | "home" | "cpu" | "settings" | "sun" | "moon" | "monitor" | "link" | "refresh" | "layers" | "hash" | "message" | "clipboard"
+  | "home" | "cpu" | "settings" | "sun" | "moon" | "monitor" | "link" | "refresh"
+  | "flask" | "chart" | "book" | "help" | "archive" | "handoff"
+  | "slides" | "font" | "package" | "window" | "pen" | "quiz" | "license" | "layers" | "hash" | "message" | "clipboard"
   | "trash" | "pin" | "pinOff" | "play" | "code" | "check" | "x" | "alert"
   | "clock" | "spinner" | "chevronRight" | "chevronDown" | "external" | "coins"
   | "search" | "lock" | "gitPr" | "bell" | "repos" | "hardDrive"
@@ -17,6 +19,24 @@ const PATHS: Record<IconName, React.ReactNode> = {
   /* 齒輪。**不要用「圓心 ＋ 八條放射線」那種畫法** —— 16px 下它讀起來是太陽
      不是齒輪（2026-09-22 試過，一眼就認錯）。要真的畫出齒的輪廓。 */
   settings: <><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z" /><circle cx="12" cy="12" r="3" /></>,
+  // ─── 文件用的示意圖示 ──────────────────────────────────────────────
+  // 全部單色、吃 currentColor，跟其餘圖示同一套（不要放品牌彩色縮圖：
+  // 深色主題下不會跟著變色，也不會跟 hover／selected 的狀態走）。
+  flask: <><path d="M9 3h6" /><path d="M10 3v6L4.5 18A2 2 0 0 0 6.2 21h11.6a2 2 0 0 0 1.7-3L14 9V3" /><path d="M7.5 15h9" /></>,
+  chart: <><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></>,
+  book: <><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v16H6.5A2.5 2.5 0 0 0 4 20.5Z" /><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20v4H6.5A2.5 2.5 0 0 1 4 20.5Z" /></>,
+  help: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.2-.9.8-.9 1.4v.4" /><path d="M12 17h.01" /></>,
+  archive: <><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" /><path d="M10 12h4" /></>,
+  handoff: <><path d="M3 12h13" /><path d="m12 7 5 5-5 5" /><path d="M20 4v16" /></>,
+  // 主題示意（`km-doc-icon` 用）
+  slides: <><rect x="3" y="4" width="18" height="12" rx="1.5" /><path d="M12 16v4M9 20h6" /><path d="M7 8h7M7 11h5" /></>,
+  font: <><path d="M5 20 11 4h2l6 16" /><path d="M8 14h8" /></>,
+  package: <><path d="m12 2 9 5v10l-9 5-9-5V7Z" /><path d="m3 7 9 5 9-5" /><path d="M12 12v10" /></>,
+  window: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18" /><path d="M6.5 6.5h.01M9 6.5h.01" /></>,
+  pen: <><path d="M12 19 19.5 11.5a2.8 2.8 0 0 0-4-4L8 15l-1 5Z" /><path d="M4 21h7" /></>,
+  quiz: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h5M8 12h8M8 16h6" /></>,
+  license: <><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z" /><path d="M14 2v5h5" /><circle cx="12" cy="14" r="2.5" /><path d="m10.5 16.2-.5 3 2-1 2 1-.5-3" /></>,
+
   sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
   moon: <><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></>,
   // 螢幕＝「跟隨作業系統」。用顯示器而不是滑桿，因為這一格講的是「跟著誰」

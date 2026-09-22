@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  groupSetsByRepo, kindFromName, matchesDocQuery, parseDocHead, scopeOf, sortFiles, sortSets,
-  type DocFile, type DocSet,
+  groupSetsByRepo, kindFromName, matchesDocQuery, parseDocHead, scopeOf, sortFiles, sortSets, type DocFile, type DocSet, docIcon, KIND_ICON, SUBJECT_ICON, DOC_KINDS,
 } from "@/lib/docsRules";
 import { resolveDocPath } from "@/lib/docs";
 
 const file = (o: Partial<DocFile> & { name: string }): DocFile => ({
   path: `docs/features/x/${o.name}`, title: o.name, kind: "reference", status: "active",
-  tickets: [], sizeBytes: 1000, updated: "2026-09-01", ...o,
+  tickets: [], icon: null, sizeBytes: 1000, updated: "2026-09-01", ...o,
 });
 
 const set = (o: Partial<DocSet> & { dir: string }): DocSet => ({
@@ -30,7 +29,7 @@ describe("parseDocHead", () => {
   it("讀得到標題與三個 meta", () => {
     expect(parseDocHead(HEAD, "index.html")).toEqual({
       title: "VSFT-6964 文字字級絕對值顯示 — 總覽",
-      kind: "overview", status: "active", tickets: ["VSFT-6964"],
+      kind: "overview", status: "active", tickets: ["VSFT-6964"], icon: null,
     });
   });
 
@@ -184,5 +183,44 @@ describe("groupSetsByRepo — 依 repo 分群", () => {
     const groups = groupSetsByRepo(list, ["d"]);
     expect(groups.find((g) => g.repo === "edu-droid-flutter")!.sets.map((s) => s.dir))
       .toEqual(["d", "c"]);
+  });
+});
+
+/*
+ * 圖示分兩層：kind 是必填所以一定有圖，`km-doc-icon` 是選填的主題覆寫。
+ * 重點在**不認得的值要退回 kind**，而不是畫出破掉的東西 ——
+ * 這是「忘了標／打錯字」時唯一安全的失敗方向。
+ */
+describe("docIcon — 主題優先，退回 kind", () => {
+  it("沒標 icon 就用 kind 的", () => {
+    expect(docIcon({ kind: "test" })).toBe("flask");
+    expect(docIcon({ kind: "open-questions" })).toBe("help");
+    expect(docIcon({ kind: "overview", icon: null })).toBe("layers");
+  });
+
+  it("標了白名單內的主題就用它", () => {
+    expect(docIcon({ kind: "findings", icon: "slides" })).toBe("slides");
+    expect(docIcon({ kind: "overview", icon: "font" })).toBe("font");
+  });
+
+  it("**不認得的值退回 kind**，不是畫不出來", () => {
+    expect(docIcon({ kind: "verify", icon: "pptx" })).toBe(KIND_ICON.verify);
+    expect(docIcon({ kind: "verify", icon: "" })).toBe(KIND_ICON.verify);
+    expect(docIcon({ kind: "verify", icon: "打錯的名字" })).toBe(KIND_ICON.verify);
+  });
+
+  it("每個 kind 都有圖示（新增 kind 時不會漏）", () => {
+    for (const k of DOC_KINDS) expect(KIND_ICON[k]).toBeTruthy();
+  });
+
+  it("白名單指到的圖示名不可以是空的", () => {
+    for (const [subject, icon] of Object.entries(SUBJECT_ICON)) {
+      expect(icon, `${subject} 沒有對應的圖示`).toBeTruthy();
+    }
+  });
+
+  it("`km-doc-icon` 會被解析出來（大小寫與空白都收斂）", () => {
+    const head = '<title>x</title><meta name="km-doc-icon" content="  SLIDES ">';
+    expect(parseDocHead(head, "a.html").icon).toBe("slides");
   });
 });

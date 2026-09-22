@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import {
-  KIND_LABEL, STATUS_STYLE, groupSetsByRepo, matchesDocQuery, sortSets,
+  KIND_LABEL, STATUS_STYLE, docIcon, groupSetsByRepo, matchesDocQuery, sortSets,
   type DocFile, type DocsIndex,
 } from "@/lib/docsRules";
 import { ticketUrl } from "@/lib/workItemRules";
@@ -176,6 +176,11 @@ export default function DocsPage() {
                     </button>
                   </Tooltip>
 
+                  {/* 文件集的圖示＝它入口那份的圖示（沒有入口就用一般的資料夾／層級圖示） */}
+                  <span className="mt-0.5 shrink-0 self-start text-fg-subtle">
+                    <Icon name={s.entry ? docIcon(s.entry) : "layers"} size={17} />
+                  </span>
+
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <a
@@ -233,6 +238,12 @@ export default function DocsPage() {
                       <ul className="mt-2 space-y-1">
                         {s.files.map((f: DocFile) => (
                           <li key={f.path} className="flex items-baseline gap-2 text-xs">
+                            {/* 圖示先於文字標籤 —— 一眼掃過去先認形狀，要確認才讀字 */}
+                            <Tooltip label={KIND_LABEL[f.kind]}>
+                              <span className="shrink-0 self-center text-fg-subtle">
+                                <Icon name={docIcon(f)} size={14} />
+                              </span>
+                            </Tooltip>
                             <span className="w-16 shrink-0 text-right text-[11px] text-fg-subtle">
                               {KIND_LABEL[f.kind]}
                             </span>
