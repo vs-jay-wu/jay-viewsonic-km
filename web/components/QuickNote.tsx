@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Icon from "@/components/Icon";
 import { isStale, relativeWording, type Note } from "@/lib/noteRules";
 
 /**
@@ -16,19 +15,16 @@ import { isStale, relativeWording, type Note } from "@/lib/noteRules";
  */
 
 const SAVE_DEBOUNCE_MS = 600;
-const UNDO_WINDOW_MS = 10_000;
 
 export default function QuickNote() {
   const [text, setText] = useState("");
   const [updatedAt, setUpdatedAt] = useState("");
   const [connected, setConnected] = useState(false);
-  const [undoText, setUndoText] = useState<string | null>(null);
   /** 讓「5 分鐘前」會自己走動 */
   const [, setTick] = useState(0);
 
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 這個分頁的識別碼：推播時 server 會跳過它自己。
    *  用 lazy initializer 而不是在 render 裡塞 ref —— 後者會在 render 期間
    *  讀寫 ref 並呼叫不純的函式（lint 會擋，而且 StrictMode 下行為不保證）。 */
@@ -118,23 +114,6 @@ export default function QuickNote() {
     save(latestRef.current);
   };
 
-  /** 清空不跳確認 —— 這是每天都要做一次的動作。改成 10 秒內可復原。 */
-  const clear = () => {
-    const before = latestRef.current;
-    if (!before) return;
-    setUndoText(before);
-    onChangeImmediate("");
-    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    undoTimerRef.current = setTimeout(() => setUndoText(null), UNDO_WINDOW_MS);
-  };
-
-  const undo = () => {
-    if (undoText === null) return;
-    onChangeImmediate(undoText);
-    setUndoText(null);
-    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-  };
-
   function onChangeImmediate(value: string) {
     setText(value);
     latestRef.current = value;
@@ -172,14 +151,7 @@ export default function QuickNote() {
 
       {/* 這一行固定佔高度，不然打第一個字時整塊會抖一下 */}
       <div className="flex h-5 items-center gap-2 text-[11px]">
-        {undoText !== null ? (
-          <span className="text-gray-500">
-            已清空 ·{" "}
-            <button onClick={undo} className="text-sky-700 underline hover:text-sky-900">
-              復原
-            </button>
-          </span>
-        ) : when && text ? (
+        {when && text ? (
           <span className={`inline-flex items-center gap-1.5 ${stale ? "text-sky-700" : "text-gray-400"}`}>
             {stale && <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />}
             {relativeWording(when, now)}更新
@@ -190,15 +162,6 @@ export default function QuickNote() {
 
         {!connected && <span className="text-gray-400">· 未連線</span>}
 
-        {text && (
-          <button
-            onClick={clear}
-            aria-label="清空筆記"
-            className="ml-auto text-gray-300 hover:text-gray-700"
-          >
-            <Icon name="x" size={14} />
-          </button>
-        )}
       </div>
     </div>
   );

@@ -153,21 +153,29 @@ export default function BuildDirsSection() {
             </span>
           )}
         </h2>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={cleanAll}
-            disabled={loading || !!busy || !data?.repos.length}
-            className="text-xs text-gray-400 hover:text-red-600 disabled:opacity-50"
-          >
-            全部清理
-          </button>
-          <button
-            onClick={() => load(true)}
-            disabled={loading || !!busy}
-            className="text-xs text-gray-400 hover:text-gray-700 disabled:opacity-50"
-          >
-            {loading ? "掃描中…" : "重新掃描"}
-          </button>
+        <div className="flex items-center gap-1">
+          {/* 只有圖示的按鈕一定要包 Tooltip（web/AGENTS.md）—— 原生 title 要停留快一秒
+              才出現，隔幾個月回來會看不出這顆會做什麼，而其中一顆是刪東西的 */}
+          <Tooltip label="全部清理：刪掉所有 repo 的 build 產物">
+            <button
+              onClick={cleanAll}
+              disabled={loading || !!busy || !data?.repos.length}
+              aria-label="全部清理"
+              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600 disabled:opacity-40"
+            >
+              <Icon name="trash" size={15} />
+            </button>
+          </Tooltip>
+          <Tooltip label={loading ? "掃描中…" : "重新掃描"}>
+            <button
+              onClick={() => load(true)}
+              disabled={loading || !!busy}
+              aria-label="重新掃描"
+              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40"
+            >
+              <Icon name="refresh" size={15} className={loading ? "animate-spin" : ""} />
+            </button>
+          </Tooltip>
         </div>
       </div>
 

@@ -312,11 +312,7 @@ export default function ChangesPage() {
           </button>
         </div>
         <div className="mt-1 h-4 text-xs">
-          {error ? (
-            <span className="text-red-600">{error}</span>
-          ) : data && data.pinned.length > 0 ? (
-            <span className="text-gray-400">已 pin {data.pinned.join("、")}（排在最前面）</span>
-          ) : null}
+          {error && <span className="text-red-600">{error}</span>}
         </div>
       </div>
 
