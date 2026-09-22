@@ -182,6 +182,7 @@ Maintenance rule: 每次重新 clone 時，先 commit「同步前差異」說明
 | `HEAD~3`、「上一個 commit」 | 一旦有新 commit 就位移 |
 | 「改動目前在 stash / 在 X 分支」 | 狀態會變，而文件不會跟著變 |
 | 裸的 `檔案:行號` | 行號會位移，而且**看不出已經位移** |
+| **「明天要出 X」「下一版會一起處理 Y」** | 排程是**當下的打算**，隔天就可能改，而文件不會跟著改。讀的人會把它當成已定案的計畫去執行 |
 
 ### ✅ 改成
 
@@ -190,6 +191,10 @@ Maintenance rule: 每次重新 clone 時，先 commit「同步前差異」說明
 - **commit**：記 **SHA**（短 SHA 也行）或 Jira key，不要記相對位置。
 - **改動位置**：記「在哪個 repo 的工作區／哪條分支、staged 還是 untracked」這種**可驗證的敘述**，
   並附上驗證指令（如 `git status --porcelain`），而不是叫人直接照著 pop / checkout。
+- **排程**：skill／rules 記的是**規則與現況**，不是「接下來要做什麼」。
+  該記的是「production 與 rollback 必須一起 distribute」（規則）與
+  「目前 production OTA 是 3.10.207、rollback 是 3.12.5，落差未處理」（現況，附量測指令），
+  **不是**「明天會把 3.10.208 與 3.12.8 一起放」。排程屬於對話、Jira 單或交付說明。
 - **`檔案:行號`**：km 引用專案 repo 的行號是允許的（見
   [`cross-repo-workflow.md`](cross-repo-workflow.md) §1），但要**同時貼上那一行的內容**。
   行號位移時，讀的人一比對就知道要重新搜尋——指標壞了會被發現，這才是重點。

@@ -285,6 +285,84 @@ json.dump(j, open('app/src/stag/google-services.json','w'), indent=2)"
 
 ---
 
+## 出版本：tag 是 CI 打的，而「給舊 production 線的修正」要另開 release 線
+
+CS 的版本 tag **不是人手動打的**，是 `Build`（`build.yml` → `_build.yml`）dispatch 時
+產生的：它讀 dispatch 的那條 ref 上的 `version.properties`，`VERSION_PATCH + 1`、
+commit（`ci: bump version to X.Y.Z [skip ci]`）、打 tag。
+
+`build.yml` 的 guard 只允許從 **`develop` 或 `release/**`** dispatch，其他分支直接中止。
+
+### 日常 vs 給舊線出修正，是兩條不同的路
+
+| 情境 | 做法 |
+|---|---|
+| 一般 sprint 版本 | 直接在 `develop` dispatch **Build** → tag 打在 develop 上 |
+| **mvbf 的 production hotfix 要一顆修正** | **先 Cut Release Branch**，再在 `release/N.M` 上 dispatch Build |
+
+第二條之所以必要：mvbf 的 production 線把 CS 釘在一個舊 tag 上，而 `develop` 早就往前跑了。
+拿 develop 的新 tag 去換，等於把中間所有東西一起帶進 production 修補版。
+
+**2026-09-22 實際走過一次**（VB-2335，給 mvbf 3.10.208）：mvbf production 線釘 `v1.8.2`，
+而 develop 已經是 `v1.9.2` —— 中間 135 個 commit，主軸是 drop-standalone（移除 CS 自己的
+獨立登入鏈）與 i18n 重構。完整路徑：
+
+1. dispatch **Cut Release Branch**（`cut-release-branch.yml`），input `tag=v1.8.2`
+   → 建出 `release/1.8`。guard：tag 必須 reachable from develop、`release/N.M` 不能已存在
+2. 從 `release/1.8` 開工作分支 → cherry-pick 那顆修正 → **PR 進 `release/1.8`**
+   （`release/**` 有 ruleset 要求 `Build, Lint & Unit Test (stag debug)` 這個 check，不要直推）
+3. merge，**等 CI 綠**（見下一條），再在 `release/1.8` dispatch **Build** → `v1.8.3`
+4. mvbf 端才 bump `classswift-ref.properties`
+
+⚠️ **`release/N.M` 不會自己存在。** 2026-09-22 當下 `release/*` 只到 `release/1.7`，
+v1.8.x 與 v1.9.x 的 tag 全都直接打在 develop 上。所以第 1 步幾乎一定要做。
+
+⚠️ **修正也要在 develop 上**（本例是先進 develop 再 backport，所以不必補），
+否則下一版就回歸了。
+
+### ⚠️ merge 完**不能馬上** dispatch Build —— `check-ci-green` 會擋
+
+`_build.yml` 的第一步 `check-ci-green` 會讀該 commit 上**除了自己這個 run 以外**的所有
+check-run，只要有任何一條 **pending 或 failed** 就中止：
+
+```
+Checking CI status for <sha> (release/1.8)
+❌ 1 check(s) still running on release/1.8. Aborting.
+```
+
+而 merge 進 `release/**` 本身就會觸發一次 CI（`ci.yml` 的 `on: push`），那要 **約 15 分鐘**
+（實測 14m47s）。所以 merge 後立刻按 Build 一定被擋。
+
+**它中止得很乾淨** —— 後面的 job（Bump/tag、Build APK、Publish、Deploy）全是 `skipped`，
+沒打 tag、沒建 release、沒推 S3。所以這不是要修的東西，**等 CI 綠了重跑同一個 run
+（Re-run failed jobs）就好**，不必改任何設定。
+
+**由來**：2026-09-22，merge 於 00:03:21Z，Build dispatch 於 00:07:36Z，第 4 分鐘就按了。
+
+**做法**：merge 完先去做別的，等 `gh run list` 上那條 CI 變 `completed/success` 再按。
+
+### `mVB Quiz Tool → staging` 這一步在「往回出舊版」時會失敗
+
+`build.yml` 最後一段（VSFT-9584）會把 staging APK 當「Quiz Tool」推到 mVB 共用 S3 給
+Manager/MDM 安裝，然後**輪詢 mVB 後端 API 確認它回報新版號**。往回出舊版時那個輪詢會失敗：
+
+```
+Verifying via MVB backend (Manager) API: https://api.stage.myviewboard.com/api/v2/application/
+⚠️  MVB backend API not ready yet: file_name='ClassSwift_Service_v1.9.2.apk' version='v1.9.2'
+（8 次後）##[error]MVB backend API did not report v1.8.3 after 8 attempts
+```
+
+**證據等級**：API 在 2 分鐘內始終回舊版號是**實測**；「因為 v1.8.3 < v1.9.2 是降版所以
+後端不接受」是**推論** —— 腳本自己的錯誤訊息指向的是
+「admin-portal folder registration for `MVB_QuizTool_Stage`」，也就是要人去 admin portal 看。
+
+**判準**：**這一步失敗不影響 mvbf**。融合版是從**原始碼**編 CS，只認 tag；這條路徑給的是
+CS 的獨立 APK。`build.yml` 自己的註解也寫著它 "never blocks the ClassSwift OTA path"。
+而且對 staging 來說，Quiz Tool 的登記**維持在較新的版本反而是對的** —— 別為了讓它變綠
+就去把 stage 登記降版。要不要處理交給 Jay。
+
+---
+
 ## i18n：POEditor ↔ `values-*/strings.xml`
 
 **跟 mvbf 那條線是兩回事**，不要互相外推：mvbf 是 POEditor `754682` ＋ `arb`
@@ -307,6 +385,9 @@ ragdoll-cat:  拉 POEditor → merge → 打 tag
                                       ↓
 edu-droid-flutter:  bump classswift-ref.properties（人工 PR，約兩週一次）→ 發版
 ```
+
+> 「打 tag」那一步怎麼做（以及給 mvbf production 線的修正為什麼要另開 `release/N.M`），
+> 見上面的「出版本」一節。
 
 ### Android 的值有「編碼層」，灌進 POEditor 前要先解碼
 

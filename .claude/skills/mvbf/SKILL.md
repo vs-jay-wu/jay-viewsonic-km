@@ -248,7 +248,7 @@ expect(result, ...);
 - [`assets.md`](assets.md) — 圖片資產。改了 `.svg` 但 App 顯示舊圖／logo 在亮暗兩個主題取到同一支檔／要驗 `.svg.vec` 的顏色／要讓一張圖跟著主題翻色
 - [`ui.md`](ui.md) — UI：tooltip、semantics、色票。tooltip 在機器上一個都不出現／螢幕閱讀器按不動某個自訂控制項／套了名字裡有 `Disable` 的色票結果整列在白底上消失
 - [`platform.md`](platform.md) — Android 平台：headless engine 與背景工作。headless 丟 `MissingPluginException` 卻被 try/catch 吞掉、後面照跑／要重用既有函式到 headless／要新增 `JobService` 或挑 job id
-- [`release.md`](release.md) — hotfix 與發版。squash merge 的 PR 能不能 backport／cherry-pick 的衝突該照哪邊解／`patch-id` 不同是不是掉東西了／release note 的 route A
+- [`release.md`](release.md) — hotfix 與發版。squash merge 的 PR 能不能 backport／cherry-pick 的衝突該照哪邊解／`patch-id` 不同是不是掉東西了／release note 什麼時候寫、怎麼驗／改了 `classswift-ref.properties` 但 PR 只跑一項檢查就全綠／在 hotfix worktree 裡讀團隊 skill 說檔案不存在／build 完了要不要接著跑對外 distribute／Play Console 上要填什麼、Play 現在對外是哪一版
 
 ## 相關 skill
 

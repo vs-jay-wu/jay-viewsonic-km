@@ -231,6 +231,7 @@ git check-ignore -v <舊路徑> <新路徑>
 | `cd web && python3 …` | 已經在 `web` 時 `cd` 失敗，**整串不執行但後面用換行接的照跑**，看起來像「跑過了」 |
 | 走 CSSOM 找規則 | 規則在巢狀 `@layer` 裡，`sheet.cssRules` 的單層走訪看不到 → 誤判「這條 CSS 不存在」。改抓樣式表原文 grep |
 | 拿 log／`toString()` 當**型別**證據 | 例外的字串表示法**不保證**是 runtimeType。Dart 的 `FormatException.toString()` 前綴是**寫死的 `FormatException`**，所以子類別 `ArchiveException` 印出來也是 `FormatException:` → 我據此宣告「實測型別與單子推測的不同」，實際上單子沒猜錯。要型別就印 `runtimeType` 或用 `isA<T>()` 斷言 |
+| `gh run view --log-failed \| grep -i error` | GitHub Actions 會先把**即將執行的腳本原文**印出來（前綴 `\x1b[36;1m`），所以 grep 撈到的是還沒執行的 `echo "::error::…"` **字面**，看起來完全像真的錯誤訊息，而且可以撈到好幾條互相矛盾的。真正的輸出是 `##[error]` 那行。做法：先濾掉帶那個前綴的行再讀，或直接找 `##[error]` |
 | 拿 API 回的時間戳直接算「多久前」 | GitHub / Jira 回的是 **UTC**（`2026-09-21T06:38:01Z`）。我當成本地時間，把**14 分鐘前**的 PR 留言講成「三小時前」，還據此回報「只有舊留言、沒有新的」。台灣是 +8，**固定差 8 小時** |
 
 共同形狀：**回傳了一個合法的值，只是那個值是錯的**。所以「沒有錯誤訊息」不能當成「做對了」，
