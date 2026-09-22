@@ -656,8 +656,18 @@ export default function GitPage() {
                   </div>
                   )}
 
+                  {/*
+                    選中／hover 的底色掛在外層的 flex 容器上，不是掛在按鈕上 ——
+                    flat 模式的 pin 是那顆按鈕的**兄弟**，底色只畫在按鈕上的話
+                    pin 後面會缺一塊（Jay 2026-09-22）。
+                  */}
                   {[...(g.main ? [g.main] : []), ...(groupOpen ? g.worktrees : [])].map((r) => (
-                    <div key={r.dir} className="flex items-stretch">
+                    <div
+                      key={r.dir}
+                      className={`flex items-stretch hover:bg-surface-raised ${
+                        selected === r.dir ? "bg-surface-selected" : ""
+                      }`}
+                    >
                     {flat && (
                       <Tooltip label={g.pinned ? "取消 pin" : "pin 住這個 repo（排到最前面）"}>
                         <button
@@ -678,9 +688,9 @@ export default function GitPage() {
                         setDiffFor(null);
                         syncUrl({ dir: r.dir, sha: null, file: null });
                       }}
-                      className={`flex w-full flex-col gap-0.5 py-1.5 pr-2 text-left hover:bg-surface-raised ${
+                      className={`flex w-full flex-col gap-0.5 py-1.5 pr-2 text-left ${
                         flat ? "pl-1.5" : "pl-3"
-                      } ${selected === r.dir ? "bg-surface-selected" : ""}`}
+                      }`}
                     >
                       <span className="flex items-center gap-1.5">
                         <span className="truncate font-mono text-xs text-fg">
