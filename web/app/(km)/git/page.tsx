@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import { useConfirm } from "@/components/Confirm";
+import { useResolvedTheme } from "@/components/useResolvedTheme";
 import { useToast } from "@/components/Toast";
 import CommitGraph, { type WipSide } from "@/components/CommitGraph";
 import DiffView from "@/components/DiffView";
@@ -13,7 +14,9 @@ import { ViewToggle, useFileView } from "@/components/FileList";
 import SearchSelect, { type SearchOption } from "@/components/SearchSelect";
 import { filterGroups, groupRepos } from "@/lib/repoGroupRules";
 import { DragHandle, useDragWidth, useWideLayout } from "@/components/Split";
-import { hljsHref, type DiffTheme } from "@/lib/uiSettingsRules";
+import {
+  hljsHref, resolveDiffTheme, type DiffThemePref, type Theme,
+} from "@/lib/uiSettingsRules";
 import { buildTree, type ChangedFile, type DiffLine, type TreeNode } from "@/lib/changesRules";
 import type { ImageSides } from "@/lib/changes";
 import {
@@ -132,7 +135,11 @@ export default function GitPage() {
   const [wipOpen, setWipOpen] = useState(false);
   const [flashSha, setFlashSha] = useState<string | null>(null);
   const [diff, setDiff] = useState<DiffPayload | null>(null);
-  const [diffTheme, setDiffTheme] = useState<DiffTheme>("dark");
+  /** 使用者設的三態；深色目前只有這一頁吃得到（其餘鎖淺色，見 AppShell） */
+  const [appTheme, setAppTheme] = useState<Theme>("system");
+  const [diffPref, setDiffPref] = useState<DiffThemePref>("dark");
+  // `follow` 要看實際解析出來的全域配色 —— `system` 只有瀏覽器知道答案
+  const diffTheme = resolveDiffTheme(diffPref, useResolvedTheme(appTheme));
   const [view, switchView] = useFileView();
   const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(new Set());
   const [busyPin, setBusyPin] = useState(false);
@@ -316,10 +323,10 @@ export default function GitPage() {
         keywords: b.upstream ?? "",
         hint: (
           <span className="shrink-0 text-[10px]">
-            {b.checkedOutAt && <span className="text-sky-500">●</span>}
-            {b.ahead > 0 && <span className="ml-1 text-emerald-600">↑{b.ahead}</span>}
-            {b.behind > 0 && <span className="ml-1 text-amber-600">↓{b.behind}</span>}
-            {b.remote && <span className="ml-1 text-gray-300">remote</span>}
+            {b.checkedOutAt && <span className="text-accent">●</span>}
+            {b.ahead > 0 && <span className="ml-1 text-ok">↑{b.ahead}</span>}
+            {b.behind > 0 && <span className="ml-1 text-warn">↓{b.behind}</span>}
+            {b.remote && <span className="ml-1 text-fg-disabled">remote</span>}
           </span>
         ),
       })),
@@ -419,11 +426,14 @@ export default function GitPage() {
     setCommitInfo((m) => ({ ...m, [sha]: json }));
   };
 
-  // diff 的配色沿用設定頁那一項
+  // 配色沿用設定頁那兩項
   useEffect(() => {
     fetch("/api/settings")
       .then((r) => r.json())
-      .then((x: { diffTheme?: DiffTheme }) => setDiffTheme(x.diffTheme === "light" ? "light" : "dark"))
+      .then((x: { theme?: Theme; diffTheme?: DiffThemePref }) => {
+        if (x.theme === "light" || x.theme === "dark" || x.theme === "system") setAppTheme(x.theme);
+        if (x.diffTheme) setDiffPref(x.diffTheme);
+      })
       .catch(() => undefined);
   }, []);
 
@@ -519,13 +529,13 @@ export default function GitPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-gray-200 px-4 py-3 sm:px-6">
+      <div className="border-b border-line px-4 py-3 sm:px-6">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-            <Icon name="repos" size={18} className="text-gray-400" />
+          <h1 className="flex items-center gap-2 text-lg font-semibold text-fg">
+            <Icon name="repos" size={18} className="text-fg-subtle" />
             Repo 檢視
           </h1>
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-fg-subtle">
 唯讀 —— 動到東西的只有 fetch、push 與移除 worktree，不做 checkout
           </span>
           {detail && (
@@ -534,7 +544,7 @@ export default function GitPage() {
                 <button
                   onClick={() => void doFetch()}
                   disabled={busy}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-xs text-fg hover:bg-surface-raised disabled:opacity-50"
                 >
                   <Icon name="toBottom" size={13} />
                   fetch
@@ -548,18 +558,18 @@ export default function GitPage() {
       <div ref={rowRef} className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* repo 清單。寬度固定 —— Jay 2026-09-16：只有 commits ↔ diff 之間要能調 */}
         <div
-          className={`flex min-h-0 flex-col border-gray-200 lg:w-72 lg:shrink-0 lg:border-r ${
+          className={`flex min-h-0 flex-col border-line lg:w-72 lg:shrink-0 lg:border-r ${
             selected ? "hidden lg:flex" : "flex-1"
           }`}
         >
-          <div className="shrink-0 border-b border-gray-100 p-2">
+          <div className="shrink-0 border-b border-line p-2">
             <div className="relative">
-              <Icon name="search" size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Icon name="search" size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle" />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={`搜尋 ${repos.length} 個 repo…`}
-                className="w-full rounded-lg border border-gray-300 py-1.5 pl-8 pr-2 text-xs outline-none focus:border-gray-500"
+                className="w-full rounded-lg border border-line-strong py-1.5 pl-8 pr-2 text-xs outline-none focus:border-line-strong"
               />
             </div>
           </div>
@@ -573,32 +583,32 @@ export default function GitPage() {
                */
               const flat = g.worktrees.length === 0;
               return (
-                <div key={g.name} className="border-b border-gray-100 last:border-0">
+                <div key={g.name} className="border-b border-line last:border-0">
                   {!flat && (
-                  <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-1">
+                  <div className="flex items-center gap-1.5 bg-surface-raised px-2 py-1">
                     <Tooltip label={g.pinned ? "取消 pin（整組）" : "pin 住這個 repo（worktree 會跟著排到前面）"}>
                       <button
                         onClick={() => pinTarget && void togglePin(pinTarget.dir)}
                         disabled={busyPin || !pinTarget}
-                        className={g.pinned ? "text-amber-500" : "text-gray-300 hover:text-amber-500"}
+                        className={g.pinned ? "text-pin" : "text-fg-disabled hover:text-pin"}
                         aria-label={g.pinned ? `取消 pin ${g.name}` : `pin ${g.name}`}
                       >
                         <Icon name="pin" size={12} />
                       </button>
                     </Tooltip>
-                    <span className="truncate font-mono text-[11px] font-medium text-gray-700">
+                    <span className="truncate font-mono text-[11px] font-medium text-fg">
                       {g.name}
                     </span>
                     {g.worktrees.length > 0 && (
                       <Tooltip label={`${g.worktrees.length} 個 worktree`}>
-                        <span className="shrink-0 text-[10px] text-gray-400">
+                        <span className="shrink-0 text-[10px] text-fg-subtle">
                           +{g.worktrees.length}
                         </span>
                       </Tooltip>
                     )}
                     {!g.main && (
                       <Tooltip label="主 repo 不在掃描範圍內（被 offload，或在工作區之外）">
-                        <span className="shrink-0 text-[10px] text-gray-300">主 repo 不在</span>
+                        <span className="shrink-0 text-[10px] text-fg-disabled">主 repo 不在</span>
                       </Tooltip>
                     )}
                   </div>
@@ -611,7 +621,7 @@ export default function GitPage() {
                         <button
                           onClick={() => pinTarget && void togglePin(pinTarget.dir)}
                           disabled={busyPin || !pinTarget}
-                          className={`shrink-0 pl-2 ${g.pinned ? "text-amber-500" : "text-gray-300 hover:text-amber-500"}`}
+                          className={`shrink-0 pl-2 ${g.pinned ? "text-pin" : "text-fg-disabled hover:text-pin"}`}
                           aria-label={g.pinned ? `取消 pin ${g.name}` : `pin ${g.name}`}
                         >
                           <Icon name="pin" size={12} />
@@ -626,12 +636,12 @@ export default function GitPage() {
                         setDiffFor(null);
                         syncUrl({ dir: r.dir, sha: null, file: null });
                       }}
-                      className={`flex w-full flex-col gap-0.5 py-1.5 pr-2 text-left hover:bg-gray-50 ${
+                      className={`flex w-full flex-col gap-0.5 py-1.5 pr-2 text-left hover:bg-surface-raised ${
                         flat ? "pl-1.5" : "pl-3"
-                      } ${selected === r.dir ? "bg-sky-50" : ""}`}
+                      } ${selected === r.dir ? "bg-surface-selected" : ""}`}
                     >
                       <span className="flex items-center gap-1.5">
-                        <span className="truncate font-mono text-xs text-gray-900">
+                        <span className="truncate font-mono text-xs text-fg">
                           {/* 組標題已經有主 repo 名，worktree 只顯示後綴 */}
                           {r.worktreeOf && r.name.startsWith(`${g.name}-`)
                             ? r.name.slice(g.name.length + 1)
@@ -639,15 +649,15 @@ export default function GitPage() {
                         </span>
                         {r.worktreeOf && <WorktreeBadge />}
                       </span>
-                      <span className="flex items-center gap-2 text-[11px] text-gray-400">
+                      <span className="flex items-center gap-2 text-[11px] text-fg-subtle">
                         <span className="truncate font-mono">
                           {r.head.branch ?? `(detached ${r.head.sha.slice(0, 8)})`}
                         </span>
-                        {(r.ahead ?? 0) > 0 && <span className="text-emerald-600">↑{r.ahead}</span>}
-                        {(r.behind ?? 0) > 0 && <span className="text-amber-600">↓{r.behind}</span>}
+                        {(r.ahead ?? 0) > 0 && <span className="text-ok">↑{r.ahead}</span>}
+                        {(r.behind ?? 0) > 0 && <span className="text-warn">↓{r.behind}</span>}
                         {r.dirty > 0 && (
                           <Tooltip label={`${r.dirty} 個未提交的改動`}>
-                            <span className="text-gray-500">●{r.dirty}</span>
+                            <span className="text-fg-muted">●{r.dirty}</span>
                           </Tooltip>
                         )}
                         <span className="ml-auto shrink-0">{relTime(r.lastCommitAt)}</span>
@@ -661,7 +671,7 @@ export default function GitPage() {
                           onClick={() => void removeWorktree(r.dir, r.name)}
                           disabled={busyPin}
                           aria-label={`移除 worktree ${r.name}`}
-                          className="shrink-0 px-2 text-gray-300 hover:text-red-600 disabled:opacity-40"
+                          className="shrink-0 px-2 text-fg-disabled hover:text-danger disabled:opacity-40"
                         >
                           <Icon name="trash" size={12} />
                         </button>
@@ -681,25 +691,25 @@ export default function GitPage() {
           className={`min-h-0 flex-1 overflow-auto ${selected ? "" : "hidden lg:block"}`}
         >
           {!detail ? (
-            <p className="px-6 py-10 text-sm text-gray-400">
+            <p className="px-6 py-10 text-sm text-fg-subtle">
               {loading ? "讀取中…" : "選一個 repo。"}
             </p>
           ) : (
             <div className="min-w-[56rem]">
               {/* `min-w-[56rem]`：欄位寬度固定，窄於這個寬度就讓中欄自己橫捲
                   （右邊開 diff 時就會這樣），而不是把 sha／作者／日期擠掉 */}
-              <div className="sticky top-0 z-10 border-b border-gray-200 bg-white px-4 py-2">
+              <div className="sticky top-0 z-10 border-b border-line bg-surface px-4 py-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => setSelected(null)}
-                    className="text-gray-400 hover:text-gray-800 lg:hidden"
+                    className="text-fg-subtle hover:text-fg lg:hidden"
                     aria-label="回到清單"
                   >
                     <Icon name="chevronRight" size={16} className="rotate-180" />
                   </button>
-                  <span className="font-mono text-sm font-medium text-gray-900">{detail.name}</span>
+                  <span className="font-mono text-sm font-medium text-fg">{detail.name}</span>
                   <Tooltip label={detail.head.detached ? "HEAD 沒有指著任何分支" : "HEAD 指著這條分支"}>
-                    <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-600">
+                    <span className="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[11px] text-fg-muted">
                       HEAD → {detail.head.branch ?? detail.head.sha.slice(0, 8)}
                     </span>
                   </Tooltip>
@@ -712,7 +722,7 @@ export default function GitPage() {
                           setOpenCommit(null);
                           syncUrl({ sha: WIP, file: null });
                         }}
-                        className="rounded-full border border-dashed border-gray-300 px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50"
+                        className="rounded-full border border-dashed border-line-strong px-1.5 py-0.5 text-[11px] text-fg-muted hover:bg-surface-raised"
                       >
                         {detail.wip.length} 個未提交
                       </button>
@@ -729,7 +739,7 @@ export default function GitPage() {
                       onClick={jumpToHead}
                       disabled={!headInView}
                       aria-label="跳到 HEAD"
-                      className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-30"
+                      className="rounded p-1 text-fg-subtle hover:bg-surface-sunken hover:text-fg disabled:opacity-30"
                     >
                       <Icon name="target" size={15} />
                     </button>
@@ -739,7 +749,7 @@ export default function GitPage() {
                       onClick={() => void doFetch()}
                       disabled={busy}
                       aria-label="fetch"
-                      className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40"
+                      className="rounded p-1 text-fg-subtle hover:bg-surface-sunken hover:text-fg disabled:opacity-40"
                     >
                       {/* 箭頭朝下＝東西拉進來，跟 push 的 toTop 剛好成對 */}
                       <Icon name="toBottom" size={15} />
@@ -762,7 +772,7 @@ export default function GitPage() {
               <BranchList branches={detail.branches} busy={busy} onPush={doPush} />
 
               <div className="px-2 py-2">
-                <div className="px-2 pb-1 text-[11px] text-gray-400">
+                <div className="px-2 pb-1 text-[11px] text-fg-subtle">
                   {ref === "--all" ? "全部分支" : ref} · {detail.commits.length} 個 commit
                 </div>
                 <CommitGraph
@@ -804,7 +814,7 @@ export default function GitPage() {
                     所以載入前後版面不會跳（web/AGENTS.md） */}
                 <div
                   ref={sentinel}
-                  className="flex h-8 items-center justify-center text-[11px] text-gray-400"
+                  className="flex h-8 items-center justify-center text-[11px] text-fg-subtle"
                 >
                   {loadingMore ? "載入更多…" : detail.hasMore ? "" : "已經到最早的 commit"}
                 </div>
@@ -819,14 +829,14 @@ export default function GitPage() {
       {diffFor && detail && (
         <div
           style={wide ? { width: diffPane.width, flex: "0 0 auto" } : undefined}
-          className="flex min-h-0 w-full flex-col border-l border-gray-200 bg-white"
+          className="flex min-h-0 w-full flex-col border-l border-line bg-surface"
         >
-          <div className="flex shrink-0 items-center gap-2 border-b border-gray-200 px-4 py-2">
-            <span className="font-mono text-xs text-gray-500">{detail.name}</span>
-            <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-900">
+          <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2">
+            <span className="font-mono text-xs text-fg-muted">{detail.name}</span>
+            <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg">
               {diffFor.file.path}
             </span>
-            <span className="shrink-0 font-mono text-[11px] text-gray-400">
+            <span className="shrink-0 font-mono text-[11px] text-fg-subtle">
               {diffFor.sha
                 ? `commit ${diffFor.sha.slice(0, 8)}`
                 : diffFor.side === "index"
@@ -838,7 +848,7 @@ export default function GitPage() {
             <Tooltip side="left" label="關閉（Esc）">
               <button
                 onClick={closeDiff}
-                className="shrink-0 text-gray-400 hover:text-gray-800"
+                className="shrink-0 text-fg-subtle hover:text-fg"
                 aria-label="關閉 diff"
               >
                 <Icon name="x" size={16} />
@@ -847,9 +857,9 @@ export default function GitPage() {
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
             {!diff ? (
-              <p className="px-4 py-6 text-sm text-gray-400">讀取中…</p>
+              <p className="px-4 py-6 text-sm text-fg-subtle">讀取中…</p>
             ) : diff.error ? (
-              <p className="px-4 py-6 text-sm text-red-600">{diff.error}</p>
+              <p className="px-4 py-6 text-sm text-danger">{diff.error}</p>
             ) : diff.image ? (
               <ImageDiffView
                 key={`${diffFor.sha ?? WIP}:${diffFor.file.path}`}
@@ -868,7 +878,7 @@ export default function GitPage() {
                 }
               />
             ) : diff.binary ? (
-              <p className="px-4 py-6 text-sm text-gray-400">二進位檔，不顯示內容。</p>
+              <p className="px-4 py-6 text-sm text-fg-subtle">二進位檔，不顯示內容。</p>
             ) : (
               <DiffView
                 lines={diff.lines}
@@ -938,10 +948,10 @@ function BranchList({
     });
 
   return (
-    <div className="border-b border-gray-100 px-4 py-2">
+    <div className="border-b border-line px-4 py-2">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-gray-800"
+        className="flex items-center gap-1.5 text-[11px] text-fg-muted hover:text-fg"
       >
         <Icon name={open ? "chevronDown" : "chevronRight"} size={11} />
         分支（本地 {local.length} · 遠端 {remote.length}）
@@ -999,25 +1009,25 @@ function BranchNodes({
               className="flex items-center gap-2 text-[11px]"
             >
               <span
-                className={`w-1.5 shrink-0 ${b.checkedOutAt ? "text-sky-500" : "text-transparent"}`}
+                className={`w-1.5 shrink-0 ${b.checkedOutAt ? "text-accent" : "text-transparent"}`}
                 title={b.checkedOutAt ? `簽出在 ${b.checkedOutAt}` : undefined}
               >
                 ●
               </span>
-              <span className={`font-mono ${b.remote ? "text-gray-400" : "text-gray-800"}`}>
+              <span className={`font-mono ${b.remote ? "text-fg-subtle" : "text-fg"}`}>
                 {n.name}
               </span>
-              {b.upstream && <span className="font-mono text-gray-300">→ {b.upstream}</span>}
-              {b.ahead > 0 && <span className="text-emerald-600">↑{b.ahead}</span>}
-              {b.behind > 0 && <span className="text-amber-600">↓{b.behind}</span>}
-              {!b.remote && !b.upstream && <span className="text-gray-300">沒有上游</span>}
-              <span className="ml-auto shrink-0 text-gray-300">{relTime(b.date)}</span>
+              {b.upstream && <span className="font-mono text-fg-disabled">→ {b.upstream}</span>}
+              {b.ahead > 0 && <span className="text-ok">↑{b.ahead}</span>}
+              {b.behind > 0 && <span className="text-warn">↓{b.behind}</span>}
+              {!b.remote && !b.upstream && <span className="text-fg-disabled">沒有上游</span>}
+              <span className="ml-auto shrink-0 text-fg-disabled">{relTime(b.date)}</span>
               {!b.remote && (
                 <Tooltip side="left" label={plan.reason}>
                   <button
                     onClick={() => onPush(b)}
                     disabled={busy || !plan.ok}
-                    className="shrink-0 text-gray-300 hover:text-sky-600 disabled:opacity-30"
+                    className="shrink-0 text-fg-disabled hover:text-accent disabled:opacity-30"
                     aria-label={`push ${b.name}`}
                   >
                     <Icon name="toTop" size={13} />
@@ -1036,15 +1046,15 @@ function BranchNodes({
             <button
               onClick={() => onToggle(n.path)}
               style={{ paddingLeft: depth * 12 }}
-              className="flex w-full items-center gap-1.5 py-px text-left text-[11px] text-gray-600 hover:text-gray-900"
+              className="flex w-full items-center gap-1.5 py-px text-left text-[11px] text-fg-muted hover:text-fg"
             >
               <Icon
                 name={expanded ? "chevronDown" : "chevronRight"}
                 size={11}
-                className="shrink-0 text-gray-400"
+                className="shrink-0 text-fg-subtle"
               />
               <span className="font-mono">{n.name}</span>
-              <span className="text-gray-300">{countLeaves(n)}</span>
+              <span className="text-fg-disabled">{countLeaves(n)}</span>
             </button>
             {expanded && (
               <BranchNodes

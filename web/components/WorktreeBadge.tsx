@@ -26,8 +26,8 @@ export default function WorktreeBadge({ sessionBound = false }: { sessionBound?:
     <span
       className={`inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1 py-0.5 leading-none ${
         sessionBound
-          ? "border-amber-200 bg-amber-50 text-amber-700"
-          : "border-gray-200 bg-white text-gray-500"
+          ? "border-warn/40 bg-warn-bg text-warn"
+          : "border-line bg-surface text-fg-muted"
       }`}
     >
       <Icon name="worktree" size={11} />

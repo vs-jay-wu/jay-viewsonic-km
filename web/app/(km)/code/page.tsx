@@ -41,7 +41,7 @@ const DEFAULT_TREE_W = 320;
 
 export default function CodePage() {
   return (
-    <Suspense fallback={<p className="px-6 py-10 text-sm text-gray-400">載入中…</p>}>
+    <Suspense fallback={<p className="px-6 py-10 text-sm text-fg-subtle">載入中…</p>}>
       <CodeBrowser />
     </Suspense>
   );
@@ -214,12 +214,12 @@ function CodeBrowser() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-wrap items-center gap-3 border-b border-gray-200 px-4 py-3 sm:px-6">
-        <h1 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-          <Icon name="code" size={18} className="text-gray-400" />
+      <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 sm:px-6">
+        <h1 className="flex items-center gap-2 text-lg font-semibold text-fg">
+          <Icon name="code" size={18} className="text-fg-subtle" />
           程式碼
         </h1>
-        <span className="text-xs text-gray-400">唯讀 —— 看結構與內容，不能改</span>
+        <span className="text-xs text-fg-subtle">唯讀 —— 看結構與內容，不能改</span>
 
         <div className="ml-auto flex items-center gap-2">
           <SearchSelect
@@ -234,26 +234,26 @@ function CodeBrowser() {
       </div>
 
       {!dir ? (
-        <p className="px-6 py-10 text-sm text-gray-400">選一個 repo。</p>
+        <p className="px-6 py-10 text-sm text-fg-subtle">選一個 repo。</p>
       ) : (
         <div ref={rowRef} className="flex min-h-0 flex-1 flex-col lg:flex-row">
           {/* 左：搜尋 ＋ 資料夾樹 */}
           <div
             style={wide ? { width: treePane.width, flex: "0 0 auto" } : undefined}
-            className="flex min-h-0 flex-col border-gray-200 lg:border-r"
+            className="flex min-h-0 flex-col border-line lg:border-r"
           >
-            <div className="shrink-0 space-y-1.5 border-b border-gray-100 p-2">
+            <div className="shrink-0 space-y-1.5 border-b border-line p-2">
               <div className="relative">
-                <Icon name="search" size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <Icon name="search" size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle" />
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && void doSearch()}
                   placeholder="搜尋內容（Enter）…"
-                  className="w-full rounded-lg border border-gray-300 py-1.5 pl-8 pr-2 text-xs outline-none focus:border-gray-500"
+                  className="w-full rounded-lg border border-line-strong py-1.5 pl-8 pr-2 text-xs outline-none focus:border-line-strong"
                 />
               </div>
-              <div className="flex items-center gap-3 text-[11px] text-gray-500">
+              <div className="flex items-center gap-3 text-[11px] text-fg-muted">
                 <label className="inline-flex items-center gap-1">
                   <input type="checkbox" checked={caseSensitive} onChange={(e) => setCaseSensitive(e.target.checked)} />
                   區分大小寫
@@ -265,7 +265,7 @@ function CodeBrowser() {
                   </label>
                 </Tooltip>
                 {hits && (
-                  <button onClick={() => setHits(null)} className="ml-auto underline hover:text-gray-800">
+                  <button onClick={() => setHits(null)} className="ml-auto underline hover:text-fg">
                     回到檔案樹
                   </button>
                 )}
@@ -294,39 +294,39 @@ function CodeBrowser() {
           {/* 右：檔案內容 */}
           <div className="min-h-0 flex-1 overflow-auto">
             {loadingFile ? (
-              <p className="px-6 py-10 text-sm text-gray-400">讀取中…</p>
+              <p className="px-6 py-10 text-sm text-fg-subtle">讀取中…</p>
             ) : !file ? (
-              <p className="px-6 py-10 text-sm text-gray-400">選一個檔案。</p>
+              <p className="px-6 py-10 text-sm text-fg-subtle">選一個檔案。</p>
             ) : file.error ? (
               <div className="px-6 py-10">
-                <p className="font-mono text-xs text-gray-500">{file.path}</p>
-                <p className="mt-2 text-sm text-amber-700">{file.error}</p>
+                <p className="font-mono text-xs text-fg-muted">{file.path}</p>
+                <p className="mt-2 text-sm text-warn">{file.error}</p>
               </div>
             ) : (
               <>
-                <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-gray-200 bg-white px-4 py-2">
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-900">{file.path}</span>
-                  <span className="shrink-0 font-mono text-[11px] text-gray-400">
+                <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-line bg-surface px-4 py-2">
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg">{file.path}</span>
+                  <span className="shrink-0 font-mono text-[11px] text-fg-subtle">
                     {lines.length} 行 · {(file.sizeBytes / 1024).toFixed(1)} KB
                   </span>
                 </div>
-                <div className={dark ? "bg-[#0d1117]" : "bg-white"}>
+                <div className={dark ? "bg-[#0d1117]" : "bg-surface"}>
                   <table className="w-full border-collapse font-mono text-[12px] leading-[1.55]">
                     <tbody>
                       {lines.map((l, i) => (
                         <tr
                           key={i}
                           data-line={i + 1}
-                          className={gotoLine === i + 1 ? (dark ? "bg-amber-900/40" : "bg-amber-100") : ""}
+                          className={gotoLine === i + 1 ? (dark ? "bg-amber-900/40" : "bg-warn/30") : ""}
                         >
                           <td
                             className={`w-12 select-none px-2 text-right align-top ${
-                              dark ? "text-gray-600" : "text-gray-300"
+                              dark ? "text-fg-muted" : "text-fg-disabled"
                             }`}
                           >
                             {i + 1}
                           </td>
-                          <td className={`whitespace-pre-wrap break-all px-2 align-top ${dark ? "text-gray-200" : "text-gray-800"}`}>
+                          <td className={`whitespace-pre-wrap break-all px-2 align-top ${dark ? "text-fg-disabled" : "text-fg"}`}>
                             {highlighted ? (
                               <span dangerouslySetInnerHTML={{ __html: highlighted[i] ?? "" }} />
                             ) : (
@@ -366,7 +366,7 @@ function TreeLevel({
   selected: string | null;
 }) {
   const entries = tree[rel];
-  if (!entries) return <p className="px-3 py-2 text-[11px] text-gray-400">讀取中…</p>;
+  if (!entries) return <p className="px-3 py-2 text-[11px] text-fg-subtle">讀取中…</p>;
 
   return (
     <>
@@ -377,15 +377,15 @@ function TreeLevel({
             <button
               onClick={() => (e.kind === "dir" ? onToggle(e.path) : onOpen(e.path))}
               style={{ paddingLeft: 8 + depth * 12 }}
-              className={`flex w-full items-center gap-1.5 whitespace-nowrap py-0.5 pr-2 text-left text-xs hover:bg-gray-50 ${
-                selected === e.path ? "bg-sky-50" : ""
+              className={`flex w-full items-center gap-1.5 whitespace-nowrap py-0.5 pr-2 text-left text-xs hover:bg-surface-raised ${
+                selected === e.path ? "bg-surface-selected" : ""
               }`}
             >
               {e.kind === "dir" ? (
                 <Icon
                   name={isOpen ? "chevronDown" : "chevronRight"}
                   size={11}
-                  className="shrink-0 text-gray-400"
+                  className="shrink-0 text-fg-subtle"
                 />
               ) : (
                 <span className="w-[11px] shrink-0" />
@@ -393,10 +393,10 @@ function TreeLevel({
               <span
                 className={`font-mono ${
                   e.kind === "dir"
-                    ? "text-gray-700"
+                    ? "text-fg"
                     : looksBinary(e.path)
-                      ? "text-gray-400"
-                      : "text-gray-600"
+                      ? "text-fg-subtle"
+                      : "text-fg-muted"
                 }`}
               >
                 {e.name}
@@ -431,27 +431,27 @@ function SearchResults({
   searching: boolean;
   error: string | null;
 }) {
-  if (searching) return <p className="px-3 py-2 text-[11px] text-gray-400">搜尋中…</p>;
-  if (error) return <p className="px-3 py-2 text-[11px] text-red-600">{error}</p>;
-  if (!hits.length) return <p className="px-3 py-2 text-[11px] text-gray-400">沒有命中。</p>;
+  if (searching) return <p className="px-3 py-2 text-[11px] text-fg-subtle">搜尋中…</p>;
+  if (error) return <p className="px-3 py-2 text-[11px] text-danger">{error}</p>;
+  if (!hits.length) return <p className="px-3 py-2 text-[11px] text-fg-subtle">沒有命中。</p>;
 
   const groups = groupHits(hits);
   return (
     <>
-      <p className="px-3 py-1.5 text-[11px] text-gray-400">
+      <p className="px-3 py-1.5 text-[11px] text-fg-subtle">
         {hits.length} 個命中 · {groups.length} 個檔案
       </p>
       {groups.map((g) => (
-        <div key={g.path} className="border-b border-gray-50">
-          <p className="truncate bg-gray-50 px-3 py-1 font-mono text-[11px] text-gray-700">{g.path}</p>
+        <div key={g.path} className="border-b border-line">
+          <p className="truncate bg-surface-raised px-3 py-1 font-mono text-[11px] text-fg">{g.path}</p>
           {g.hits.map((h, i) => (
             <button
               key={i}
               onClick={() => onOpen(h.path, h.line)}
-              className="flex w-full items-baseline gap-2 px-3 py-0.5 text-left hover:bg-gray-50"
+              className="flex w-full items-baseline gap-2 px-3 py-0.5 text-left hover:bg-surface-raised"
             >
-              <span className="shrink-0 font-mono text-[10px] text-gray-400">{h.line}</span>
-              <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-gray-600">
+              <span className="shrink-0 font-mono text-[10px] text-fg-subtle">{h.line}</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-fg-muted">
                 {h.text.trim()}
               </span>
             </button>

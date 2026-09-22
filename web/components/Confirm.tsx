@@ -109,7 +109,7 @@ export default function ConfirmProvider({ children }: { children: React.ReactNod
       {children}
       {options && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-6"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-6"
           onClick={() => close(false)}
           role="presentation"
         >
@@ -119,20 +119,20 @@ export default function ConfirmProvider({ children }: { children: React.ReactNod
             aria-modal="true"
             aria-label={options.title}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl"
+            className="w-full max-w-md rounded-xl bg-surface p-5 shadow-xl"
           >
             <div className="flex items-start gap-3">
               <span
                 className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                  options.danger ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-600"
+                  options.danger ? "bg-danger-bg text-danger" : "bg-surface-sunken text-fg-muted"
                 }`}
               >
                 <Icon name={options.danger ? "alert" : "search"} size={16} />
               </span>
               <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-gray-900">{options.title}</h2>
+                <h2 className="text-sm font-semibold text-fg">{options.title}</h2>
                 {options.message && (
-                  <p className="mt-1.5 text-sm leading-relaxed text-gray-600">
+                  <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">
                     {options.message}
                   </p>
                 )}
@@ -144,15 +144,15 @@ export default function ConfirmProvider({ children }: { children: React.ReactNod
               <button
                 data-confirm-cancel="true"
                 onClick={() => close(false)}
-                className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-line px-3 py-2 text-sm text-fg hover:bg-surface-raised"
               >
                 {options.cancelLabel ?? "取消"}
               </button>
               <button
                 ref={confirmBtnRef}
                 onClick={() => close(true)}
-                className={`rounded-lg px-3.5 py-2 text-sm font-medium text-white ${
-                  options.danger ? "bg-red-600 hover:bg-red-700" : "bg-gray-900 hover:bg-black"
+                className={`rounded-lg px-3.5 py-2 text-sm font-medium text-on-solid ${
+                  options.danger ? "bg-danger hover:bg-danger/85" : "bg-control hover:bg-control/85"
                 }`}
               >
                 {options.confirmLabel ?? "確定"}

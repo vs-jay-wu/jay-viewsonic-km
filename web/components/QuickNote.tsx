@@ -138,7 +138,7 @@ export default function QuickNote() {
   const stale = !!when && isStale(when, now);
 
   return (
-    <div className="mt-6 rounded-xl border border-gray-200 bg-white px-4 py-3 focus-within:border-gray-400">
+    <div className="mt-6 rounded-xl border border-line bg-surface px-4 py-3 focus-within:border-line-strong">
       <textarea
         ref={boxRef}
         value={text}
@@ -146,21 +146,21 @@ export default function QuickNote() {
         onBlur={onBlur}
         rows={1}
         placeholder="隨手記點什麼…（自動儲存）"
-        className="w-full resize-none bg-transparent text-sm leading-relaxed text-gray-800 outline-none placeholder:text-gray-400"
+        className="w-full resize-none bg-transparent text-sm leading-relaxed text-fg outline-none placeholder:text-fg-subtle"
       />
 
       {/* 這一行固定佔高度，不然打第一個字時整塊會抖一下 */}
       <div className="flex h-5 items-center gap-2 text-[11px]">
         {when && text ? (
-          <span className={`inline-flex items-center gap-1.5 ${stale ? "text-sky-700" : "text-gray-400"}`}>
-            {stale && <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />}
+          <span className={`inline-flex items-center gap-1.5 ${stale ? "text-accent" : "text-fg-subtle"}`}>
+            {stale && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
             {relativeWording(when, now)}更新
           </span>
         ) : (
-          <span className="text-gray-300">尚未記錄</span>
+          <span className="text-fg-disabled">尚未記錄</span>
         )}
 
-        {!connected && <span className="text-gray-400">· 未連線</span>}
+        {!connected && <span className="text-fg-subtle">· 未連線</span>}
 
       </div>
     </div>

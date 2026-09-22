@@ -28,24 +28,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [open]);
 
   return (
-    <div className="flex h-full flex-col bg-gray-50 md:flex-row">
+    <div className="flex h-full flex-col bg-surface-raised md:flex-row">
       {/* 窄螢幕才有的頂列。用 sticky 佔位而不是浮在內容上，
           這樣頁面標題不會被按鈕蓋住 */}
-      <header className="flex shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-4 py-2.5 md:hidden">
+      <header className="flex shrink-0 items-center gap-3 border-b border-line bg-surface px-4 py-2.5 md:hidden">
         <button
           onClick={() => setOpen(true)}
           aria-label="開啟選單"
-          className="text-gray-500 hover:text-gray-900"
+          className="text-fg-muted hover:text-fg"
         >
           <Icon name="menu" size={20} />
         </button>
-        <span className="text-sm font-semibold text-gray-900">KM 工作台</span>
+        <span className="text-sm font-semibold text-fg">KM 工作台</span>
       </header>
 
       {/* 遮罩：只在窄螢幕、而且抽屜開著時出現 */}
       {open && (
         <div
-          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
           onClick={() => setOpen(false)}
           role="presentation"
         />
@@ -59,7 +59,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <Sidebar onNavigate={() => setOpen(false)} />
       </div>
 
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface">
         {children}
       </main>
     </div>

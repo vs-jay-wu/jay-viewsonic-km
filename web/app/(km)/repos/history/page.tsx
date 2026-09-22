@@ -31,7 +31,7 @@ function Route({ rec }: { rec: MoveRecord }) {
   const label = rec.action === "offload" ? "本機 → 外接" : "外接 → 本機";
   return (
     <Tooltip label={`${rec.sourcePath}\n→ ${rec.destination}`}>
-      <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
+      <span className="inline-flex items-center gap-1 text-[11px] text-fg-muted">
         <Icon name={rec.action === "offload" ? "toBottom" : "toTop"} size={11} />
         {label}
       </span>
@@ -41,10 +41,10 @@ function Route({ rec }: { rec: MoveRecord }) {
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-xl border border-gray-200 px-4 py-3">
-      <div className="text-[11px] text-gray-400">{label}</div>
-      <div className="mt-0.5 text-lg font-semibold tabular-nums text-gray-900">{value}</div>
-      {sub && <div className="text-[11px] text-gray-400">{sub}</div>}
+    <div className="rounded-xl border border-line px-4 py-3">
+      <div className="text-[11px] text-fg-subtle">{label}</div>
+      <div className="mt-0.5 text-lg font-semibold tabular-nums text-fg">{value}</div>
+      {sub && <div className="text-[11px] text-fg-subtle">{sub}</div>}
     </div>
   );
 }
@@ -85,23 +85,23 @@ export default function RepoMoveHistoryPage() {
       <div className="max-w-4xl mx-auto px-4 py-6 sm:px-8 sm:py-10">
         <Link
           href="/repos"
-          className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900"
+          className="inline-flex items-center gap-1 text-xs text-fg-muted hover:text-fg"
         >
           <Icon name="chevronRight" size={12} className="rotate-180" />
           Repos 總覽
         </Link>
 
-        <h1 className="mt-2 flex items-center gap-2.5 text-2xl font-semibold text-gray-900">
-          <Icon name="hardDrive" size={22} className="text-gray-400" />
+        <h1 className="mt-2 flex items-center gap-2.5 text-2xl font-semibold text-fg">
+          <Icon name="hardDrive" size={22} className="text-fg-subtle" />
           搬遷紀錄
         </h1>
-        <p className="mt-1.5 text-sm text-gray-500">
+        <p className="mt-1.5 text-sm text-fg-muted">
           每一次本機 ↔ 外接硬碟的搬移，網頁按的與 CLI 跑的都在這裡
           {data?.fileModifiedAt && `（最後更新 ${fmtTime(data.fileModifiedAt)}）`}
         </p>
 
         {error && (
-          <div className="mt-6 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mt-6 flex items-start gap-2 rounded-xl border border-danger/40 bg-danger-bg px-4 py-3 text-sm text-danger">
             <Icon name="alert" size={15} className="mt-0.5" />
             <span>{error}</span>
           </div>
@@ -125,18 +125,18 @@ export default function RepoMoveHistoryPage() {
         {/* 篩選列：高度固定，不隨結果變動（版面不要跳） */}
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[16rem]">
-            <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="搜尋 repo 名或備註…"
-              className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-gray-500"
+              className="w-full rounded-lg border border-line-strong py-2 pl-9 pr-3 text-sm outline-none focus:border-line-strong"
             />
           </div>
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value as HistoryFilter)}
-            className="rounded-lg border border-gray-300 px-2 py-2 text-xs text-gray-700 outline-none focus:border-gray-500"
+            className="rounded-lg border border-line-strong px-2 py-2 text-xs text-fg outline-none focus:border-line-strong"
           >
             {(Object.keys(HISTORY_FILTER_LABEL) as HistoryFilter[]).map((k) => (
               <option key={k} value={k}>{HISTORY_FILTER_LABEL[k]}</option>
@@ -144,26 +144,26 @@ export default function RepoMoveHistoryPage() {
           </select>
           <button
             onClick={() => void load()}
-            className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-2 text-xs text-gray-700 hover:border-gray-500 hover:bg-gray-50"
+            className="inline-flex items-center gap-1 rounded-lg border border-line-strong px-2.5 py-2 text-xs text-fg hover:border-line-strong hover:bg-surface-raised"
           >
             <Icon name="refresh" size={12} />
             重新整理
           </button>
         </div>
 
-        <div className="mt-2 h-4 text-xs text-gray-400">
+        <div className="mt-2 h-4 text-xs text-fg-subtle">
           {data && `顯示 ${shown.length} / ${data.records.length} 筆`}
         </div>
 
-        <div className="mt-4 rounded-xl border border-gray-200">
+        <div className="mt-4 rounded-xl border border-line">
           {data && shown.length === 0 ? (
-            <p className="px-4 py-10 text-center text-sm text-gray-400">
+            <p className="px-4 py-10 text-center text-sm text-fg-subtle">
               {data.empty
                 ? "還沒有搬移過任何 repo。到 Repos 總覽點「搬到外接」或「搬回本機」就會留下紀錄。"
                 : "沒有符合的紀錄。"}
             </p>
           ) : (
-            <ul className="divide-y divide-gray-100">
+            <ul className="divide-y divide-line">
               {shown.map((rec, i) => {
                 const speed = throughput(rec);
                 return (
@@ -172,30 +172,30 @@ export default function RepoMoveHistoryPage() {
                       <span
                         className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] font-medium leading-none ${
                           rec.status === "done"
-                            ? "border-gray-200 bg-gray-50 text-gray-600"
-                            : "border-red-200 bg-red-50 text-red-700"
+                            ? "border-line bg-surface-raised text-fg-muted"
+                            : "border-danger/40 bg-danger-bg text-danger"
                         }`}
                       >
                         <Icon name={rec.status === "done" ? "check" : "alert"} size={10} />
                         {rec.status === "done" ? "完成" : "失敗"}
                       </span>
-                      <span className="font-mono text-sm text-gray-900">{rec.repo}</span>
+                      <span className="font-mono text-sm text-fg">{rec.repo}</span>
                       <Route rec={rec} />
-                      <span className="ml-auto text-[11px] tabular-nums text-gray-400">
+                      <span className="ml-auto text-[11px] tabular-nums text-fg-subtle">
                         {fmtTime(rec.startedAt)}
                       </span>
                     </div>
 
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500">
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-fg-muted">
                       <span className="tabular-nums">{formatBytes(rec.bytes)}</span>
                       <span className="tabular-nums">{rec.fileCount} 項</span>
                       <span className="tabular-nums">{formatDuration(rec.durationSec)}</span>
                       {speed && (
-                        <span className="tabular-nums text-gray-400">
+                        <span className="tabular-nums text-fg-subtle">
                           {formatBytes(speed)}/s
                         </span>
                       )}
-                      <span className="text-gray-400">
+                      <span className="text-fg-subtle">
                         {rec.source === "web" ? "網頁" : "CLI"}
                       </span>
                     </div>
@@ -203,7 +203,7 @@ export default function RepoMoveHistoryPage() {
                     {rec.note && (
                       <p
                         className={`mt-1 text-[11px] leading-relaxed ${
-                          rec.status === "error" ? "text-red-600" : "text-gray-500"
+                          rec.status === "error" ? "text-danger" : "text-fg-muted"
                         }`}
                       >
                         {rec.note}

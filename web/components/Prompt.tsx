@@ -97,18 +97,18 @@ export default function PromptProvider({ children }: { children: React.ReactNode
           要離開請按取消或 Esc。 */}
       {options && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-6"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-6"
           role="presentation"
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-label={options.title}
-            className="w-full max-w-lg rounded-xl bg-white p-5 shadow-2xl"
+            className="w-full max-w-lg rounded-xl bg-surface p-5 shadow-2xl"
           >
-            <h2 className="text-sm font-semibold text-gray-900">{options.title}</h2>
+            <h2 className="text-sm font-semibold text-fg">{options.title}</h2>
             {options.message && (
-              <p className="mt-1 text-xs leading-relaxed text-gray-500">{options.message}</p>
+              <p className="mt-1 text-xs leading-relaxed text-fg-muted">{options.message}</p>
             )}
             <input
               ref={inputRef}
@@ -121,19 +121,19 @@ export default function PromptProvider({ children }: { children: React.ReactNode
                   submit();
                 }
               }}
-              className="mt-3 w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm outline-none focus:border-gray-500"
+              className="mt-3 w-full rounded-lg border border-line-strong px-3 py-2 font-mono text-sm outline-none focus:border-line-strong"
             />
-            <div className="mt-1 h-4 text-xs text-red-600">{error}</div>
+            <div className="mt-1 h-4 text-xs text-danger">{error}</div>
             <div className="mt-3 flex justify-end gap-2">
               <button
                 onClick={() => close(null)}
-                className="rounded-lg px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
+                className="rounded-lg px-3 py-1.5 text-sm text-fg-muted hover:bg-surface-sunken"
               >
                 取消
               </button>
               <button
                 onClick={submit}
-                className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-700"
+                className="rounded-lg bg-control px-3 py-1.5 text-sm text-on-solid hover:bg-control/85"
               >
                 {options.confirmLabel ?? "確定"}
               </button>

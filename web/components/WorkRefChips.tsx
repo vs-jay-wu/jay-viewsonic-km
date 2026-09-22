@@ -42,8 +42,8 @@ export default function WorkRefChips({
             onClick={(e) => e.stopPropagation()}
             className={`rounded-full border px-1.5 py-0.5 font-mono text-[11px] leading-none ${
               refs.ticketGuessed
-                ? "border-gray-200 bg-gray-50 text-gray-500"
-                : "border-sky-200 bg-sky-50 text-sky-700"
+                ? "border-line bg-surface-raised text-fg-muted"
+                : "border-accent/50 bg-surface-selected text-accent"
             }`}
           >
             {refs.ticketKey}
@@ -58,7 +58,7 @@ export default function WorkRefChips({
             target="_blank"
             rel="noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[11px] leading-none text-gray-600"
+            className="inline-flex items-center gap-1 rounded-full border border-line bg-surface-raised px-1.5 py-0.5 text-[11px] leading-none text-fg-muted"
           >
             <Icon name="gitPr" size={10} />
             {refs.prNumber}

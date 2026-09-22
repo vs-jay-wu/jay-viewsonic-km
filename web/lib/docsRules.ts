@@ -23,9 +23,9 @@ export const KIND_LABEL: Record<DocKind, string> = {
 export type DocStatus = "active" | "done" | "superseded";
 
 export const STATUS_STYLE: Record<DocStatus, { label: string; cls: string }> = {
-  active: { label: "進行中", cls: "border-sky-200 bg-sky-50 text-sky-700" },
-  done: { label: "已完成", cls: "border-emerald-200 bg-emerald-50 text-emerald-700" },
-  superseded: { label: "已被取代", cls: "border-gray-200 bg-gray-50 text-gray-400" },
+  active: { label: "進行中", cls: "border-accent/50 bg-surface-selected text-accent" },
+  done: { label: "已完成", cls: "border-ok/40 bg-ok-bg text-ok" },
+  superseded: { label: "已被取代", cls: "border-line bg-surface-raised text-fg-subtle" },
 };
 
 export interface DocFile {

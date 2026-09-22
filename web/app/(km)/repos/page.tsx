@@ -59,9 +59,9 @@ function githubUrl(repo: RepoEntry, org: string): string {
 
 function Chip({ children, tone = "gray" }: { children: React.ReactNode; tone?: "gray" | "sky" | "amber" }) {
   const cls = {
-    gray: "border-gray-200 bg-gray-50 text-gray-500",
-    sky: "border-sky-200 bg-sky-50 text-sky-700",
-    amber: "border-amber-200 bg-amber-50 text-amber-700",
+    gray: "border-line bg-surface-raised text-fg-muted",
+    sky: "border-accent/50 bg-surface-selected text-accent",
+    amber: "border-warn/40 bg-warn-bg text-warn",
   }[tone];
   return (
     <span className={`rounded-full border px-1.5 py-0.5 text-[11px] leading-none ${cls}`}>
@@ -79,10 +79,10 @@ function Chip({ children, tone = "gray" }: { children: React.ReactNode; tone?: "
  * 外接碟沒掛載時位置是**依清單推測**的，字尾加問號並改虛線更淡的樣式。
  */
 const PLACEMENT_STYLE: Record<RepoStorage["placement"], string> = {
-  local: "border-gray-900 bg-gray-900 text-white",
-  external: "border-dashed border-gray-400 bg-white text-gray-600",
-  both: "border-amber-300 bg-amber-100 text-amber-800",
-  absent: "border-dotted border-gray-200 bg-white text-gray-300",
+  local: "border-control bg-control text-on-solid",
+  external: "border-dashed border-line-strong bg-surface text-fg-muted",
+  both: "border-warn/40 bg-warn/30 text-warn",
+  absent: "border-dotted border-line bg-surface text-fg-disabled",
 };
 
 const PLACEMENT_ICON: Record<RepoStorage["placement"], "cpu" | "hardDrive" | "alert" | "x"> = {
@@ -118,23 +118,23 @@ function PlacementChip({ storage, known }: { storage: RepoStorage; known: boolea
 function MoveProgress({ job }: { job: MoveJob }) {
   const pct = progressPercent(job);
   return (
-    <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-      <div className="flex items-center gap-2 text-xs text-gray-600">
-        <Icon name="spinner" size={12} className="animate-spin text-gray-400" />
+    <div className="mt-2 rounded-lg border border-line bg-surface-raised px-3 py-2">
+      <div className="flex items-center gap-2 text-xs text-fg-muted">
+        <Icon name="spinner" size={12} className="animate-spin text-fg-subtle" />
         <span>{job.action === "offload" ? "搬往外接硬碟" : "搬回本機"}</span>
-        <span className="ml-auto tabular-nums text-gray-500">
+        <span className="ml-auto tabular-nums text-fg-muted">
           {pct === null
             ? "計算大小中…"
             : `${pct}%　${formatBytes(job.copiedBytes)} / ${formatBytes(job.totalBytes)}`}
         </span>
       </div>
-      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-gray-200">
+      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-sunken">
         <div
-          className={`h-full bg-gray-700 transition-all duration-500 ${pct === null ? "w-1/4 animate-pulse" : ""}`}
+          className={`h-full bg-control/80 transition-all duration-500 ${pct === null ? "w-1/4 animate-pulse" : ""}`}
           style={pct === null ? undefined : { width: `${pct}%` }}
         />
       </div>
-      <p className="mt-1.5 text-[11px] leading-relaxed text-gray-500">
+      <p className="mt-1.5 text-[11px] leading-relaxed text-fg-muted">
         複製完會逐檔比對，對得起來才刪來源 —— 中途失敗不會掉資料。
       </p>
     </div>
@@ -164,10 +164,10 @@ function RepoRow({
           href={githubUrl(repo, org)}
           target="_blank"
           rel="noreferrer"
-          className="group inline-flex items-center gap-1 font-mono text-sm text-gray-900 hover:underline"
+          className="group inline-flex items-center gap-1 font-mono text-sm text-fg hover:underline"
         >
           {repo.name}
-          <Icon name="external" size={12} className="text-gray-300 group-hover:text-gray-500" />
+          <Icon name="external" size={12} className="text-fg-disabled group-hover:text-fg-muted" />
         </a>
         {repo.archived && <Chip tone="amber">已封存</Chip>}
         {repo.type && <Chip>{repo.type}</Chip>}
@@ -177,7 +177,7 @@ function RepoRow({
         )}
         {repo.hostPrefix && (
           <Tooltip label="部署的 host 前綴">
-            <span className="font-mono text-[11px] text-gray-400">{repo.hostPrefix}.*</span>
+            <span className="font-mono text-[11px] text-fg-subtle">{repo.hostPrefix}.*</span>
           </Tooltip>
         )}
 
@@ -186,7 +186,7 @@ function RepoRow({
           <div className="ml-auto">
             {decision.action === null || !decision.enabled ? (
               <Tooltip label={decision.reason}>
-                <span className="inline-flex cursor-default items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-[11px] text-gray-400">
+                <span className="inline-flex cursor-default items-center gap-1 rounded-lg border border-line px-2 py-1 text-[11px] text-fg-subtle">
                   <Icon
                     name={storage.protectedReason ? "lock" : decision.action ? "clock" : "alert"}
                     size={11}
@@ -198,7 +198,7 @@ function RepoRow({
               <Tooltip label={decision.reason}>
                 <button
                   onClick={() => onMove(storage, decision.action as MoveAction)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-[11px] text-gray-700 hover:border-gray-500 hover:bg-gray-50"
+                  className="inline-flex items-center gap-1 rounded-lg border border-line-strong px-2 py-1 text-[11px] text-fg hover:border-line-strong hover:bg-surface-raised"
                 >
                   <Icon name={decision.action === "offload" ? "toBottom" : "toTop"} size={11} />
                   {decision.label}
@@ -210,7 +210,7 @@ function RepoRow({
       </div>
 
       {drift && (
-        <div className="mt-1.5 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] leading-relaxed text-amber-700">
+        <div className="mt-1.5 flex items-start gap-1.5 rounded-lg border border-warn/40 bg-warn-bg px-2 py-1 text-[11px] leading-relaxed text-warn">
           <Icon name="alert" size={11} className="mt-0.5" />
           <span>{drift}</span>
         </div>
@@ -220,20 +220,20 @@ function RepoRow({
 
       {(repo.aliases?.length ?? 0) > 0 && (
         <div className="mt-1 flex flex-wrap items-center gap-1">
-          <span className="text-[11px] text-gray-400">別名</span>
+          <span className="text-[11px] text-fg-subtle">別名</span>
           {repo.aliases!.map((a) => <Chip key={a}>{a}</Chip>)}
         </div>
       )}
 
-      <p className="mt-1 text-xs leading-relaxed text-gray-600">{repo.description}</p>
+      <p className="mt-1 text-xs leading-relaxed text-fg-muted">{repo.description}</p>
 
       {((repo.tech?.length ?? 0) > 0 || (repo.dependencies?.length ?? 0) > 0) && (
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
           {repo.tech?.map((t) => <Chip key={t} tone="sky">{t}</Chip>)}
           {repo.dependencies?.map((d) => (
             <Tooltip key={d.repo} label={d.note ?? "依賴"}>
-              <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 px-1.5 py-0.5 text-[11px] leading-none text-gray-500">
-                <Icon name="chevronRight" size={10} className="text-gray-400" />
+              <span className="inline-flex items-center gap-1 rounded-full border border-line px-1.5 py-0.5 text-[11px] leading-none text-fg-muted">
+                <Icon name="chevronRight" size={10} className="text-fg-subtle" />
                 {d.repo}
               </span>
             </Tooltip>
@@ -414,17 +414,17 @@ export default function ReposPage() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-4xl mx-auto px-4 py-6 sm:px-8 sm:py-10">
-        <h1 className="flex items-center gap-2.5 text-2xl font-semibold text-gray-900">
-          <Icon name="repos" size={22} className="text-gray-400" />
+        <h1 className="flex items-center gap-2.5 text-2xl font-semibold text-fg">
+          <Icon name="repos" size={22} className="text-fg-subtle" />
           Repos 總覽
         </h1>
-        <p className="mt-1.5 text-sm text-gray-500">
+        <p className="mt-1.5 text-sm text-fg-muted">
           {data?.overview._meta.description ?? "org 底下每個 repo 是做什麼的"}
           {data?.overview._meta.updated && `（內容標記更新於 ${data.overview._meta.updated}）`}
         </p>
 
         {error && (
-          <div className="mt-6 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mt-6 flex items-start gap-2 rounded-xl border border-danger/40 bg-danger-bg px-4 py-3 text-sm text-danger">
             <Icon name="alert" size={15} className="mt-0.5" />
             <div>
               {error}
@@ -434,31 +434,31 @@ export default function ReposPage() {
         )}
 
         {/* 儲存位置狀態列。高度固定，不隨掛載狀態變動 */}
-        <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-gray-200 px-4 py-2.5 text-xs text-gray-600">
+        <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-line px-4 py-2.5 text-xs text-fg-muted">
           <Icon
             name="hardDrive"
             size={14}
-            className={primary?.externalMounted ? "text-gray-400" : "text-amber-500"}
+            className={primary?.externalMounted ? "text-fg-subtle" : "text-pin"}
           />
           {primary ? (
             <>
               <span>
-                本機 <b className="font-semibold text-gray-900">{counts.local}</b>
-                　外接 <b className="font-semibold text-gray-900">{counts.external}</b>
+                本機 <b className="font-semibold text-fg">{counts.local}</b>
+                　外接 <b className="font-semibold text-fg">{counts.external}</b>
               </span>
-              <span className="text-gray-300">·</span>
-              <span className={primary.externalMounted ? "text-gray-500" : "text-amber-700"}>
+              <span className="text-fg-disabled">·</span>
+              <span className={primary.externalMounted ? "text-fg-muted" : "text-warn"}>
                 {primary.externalMounted
                   ? `${primary.externalVolume ?? primary.externalPath} 已掛載`
                   : `外接硬碟未掛載${primary.externalVolume ? `（${primary.externalVolume}）` : ""}，位置只能依清單推測`}
               </span>
               {driftCount > 0 && (
                 <>
-                  <span className="text-gray-300">·</span>
-                  <span className="text-amber-700">{driftCount} 筆清單與實際不符</span>
+                  <span className="text-fg-disabled">·</span>
+                  <span className="text-warn">{driftCount} 筆清單與實際不符</span>
                   <button
                     onClick={() => void runReconcile(primary.org)}
-                    className="rounded-lg border border-gray-300 px-2 py-0.5 text-[11px] text-gray-700 hover:border-gray-500 hover:bg-gray-50"
+                    className="rounded-lg border border-line-strong px-2 py-0.5 text-[11px] text-fg hover:border-line-strong hover:bg-surface-raised"
                   >
                     對齊清單
                   </button>
@@ -466,39 +466,39 @@ export default function ReposPage() {
               )}
               <Link
                 href="/repos/history"
-                className="ml-auto inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-0.5 text-[11px] text-gray-700 hover:border-gray-500 hover:bg-gray-50"
+                className="ml-auto inline-flex items-center gap-1 rounded-lg border border-line-strong px-2 py-0.5 text-[11px] text-fg hover:border-line-strong hover:bg-surface-raised"
               >
                 <Icon name="clock" size={11} />
                 搬遷紀錄
               </Link>
               <button
                 onClick={() => void loadStorage()}
-                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-0.5 text-[11px] text-gray-700 hover:border-gray-500 hover:bg-gray-50"
+                className="inline-flex items-center gap-1 rounded-lg border border-line-strong px-2 py-0.5 text-[11px] text-fg hover:border-line-strong hover:bg-surface-raised"
               >
                 <Icon name="refresh" size={11} />
                 重新偵測
               </button>
             </>
           ) : (
-            <span className="text-gray-400">偵測儲存位置中…</span>
+            <span className="text-fg-subtle">偵測儲存位置中…</span>
           )}
         </div>
 
         {storage?.error && (
-          <div className="mt-2 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-700">
+          <div className="mt-2 flex items-start gap-2 rounded-xl border border-warn/40 bg-warn-bg px-4 py-2.5 text-xs text-warn">
             <Icon name="alert" size={13} className="mt-0.5" />
             <span>{storage.error}</span>
           </div>
         )}
         {moveError && (
-          <div className="mt-2 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs text-red-700">
+          <div className="mt-2 flex items-start gap-2 rounded-xl border border-danger/40 bg-danger-bg px-4 py-2.5 text-xs text-danger">
             <Icon name="alert" size={13} className="mt-0.5" />
             <span className="whitespace-pre-wrap">{moveError}</span>
           </div>
         )}
         {notice && (
-          <div className="mt-2 flex items-start gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-xs text-gray-600">
-            <Icon name="check" size={13} className="mt-0.5 text-gray-400" />
+          <div className="mt-2 flex items-start gap-2 rounded-xl border border-line bg-surface-raised px-4 py-2.5 text-xs text-fg-muted">
+            <Icon name="check" size={13} className="mt-0.5 text-fg-subtle" />
             <span className="whitespace-pre-wrap">{notice}</span>
           </div>
         )}
@@ -506,24 +506,24 @@ export default function ReposPage() {
         {/* 篩選列：高度固定，不隨結果變動（版面不要跳） */}
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[16rem]">
-            <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle" />
             <input
               value={filters.query}
               onChange={(e) => setFilters((f) => ({ ...f, query: e.target.value }))}
               placeholder="搜尋 repo 名、別名、用途、技術、host…"
-              className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-gray-500"
+              className="w-full rounded-lg border border-line-strong py-2 pl-9 pr-3 text-sm outline-none focus:border-line-strong"
             />
           </div>
           <select
             value={storageFilter}
             onChange={(e) => setStorageFilter(e.target.value as StorageFilter)}
-            className="rounded-lg border border-gray-300 px-2 py-2 text-xs text-gray-700 outline-none focus:border-gray-500"
+            className="rounded-lg border border-line-strong px-2 py-2 text-xs text-fg outline-none focus:border-line-strong"
           >
             {(Object.keys(STORAGE_FILTER_LABEL) as StorageFilter[]).map((k) => (
               <option key={k} value={k}>{STORAGE_FILTER_LABEL[k]}</option>
             ))}
           </select>
-          <label className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+          <label className="inline-flex items-center gap-1.5 text-xs text-fg-muted">
             <input
               type="checkbox"
               checked={filters.showArchived}
@@ -531,7 +531,7 @@ export default function ReposPage() {
             />
             已封存
           </label>
-          <label className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+          <label className="inline-flex items-center gap-1.5 text-xs text-fg-muted">
             <input
               type="checkbox"
               checked={filters.showNonCode}
@@ -541,14 +541,14 @@ export default function ReposPage() {
           </label>
         </div>
 
-        <div className="mt-2 h-4 text-xs text-gray-400">
+        <div className="mt-2 h-4 text-xs text-fg-subtle">
           {data && `顯示 ${shown} / ${total} 個 repo · ${groups.length} 條產品線`}
         </div>
 
         {/* 產品分組 */}
         <div className="mt-4 space-y-3">
           {data && groups.length === 0 && (
-            <p className="rounded-xl border border-gray-200 px-4 py-8 text-center text-sm text-gray-400">
+            <p className="rounded-xl border border-line px-4 py-8 text-center text-sm text-fg-subtle">
               沒有符合的 repo。試試別名（例如 <code>cs backend</code>、<code>learn-swift</code>）。
             </p>
           )}
@@ -556,7 +556,7 @@ export default function ReposPage() {
             // 搜尋中一律展開 —— 收合起來會讓人以為沒找到
             const open = searching || !collapsed.has(g.key);
             return (
-              <section key={g.key} className="rounded-xl border border-gray-200">
+              <section key={g.key} className="rounded-xl border border-line">
                 <button
                   onClick={() =>
                     setCollapsed((prev) => {
@@ -572,21 +572,21 @@ export default function ReposPage() {
                   <Icon
                     name={open ? "chevronDown" : "chevronRight"}
                     size={15}
-                    className="mt-0.5 text-gray-400"
+                    className="mt-0.5 text-fg-subtle"
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-gray-900">{g.fullName}</span>
-                      <span className="text-xs text-gray-400">{g.repos.length}</span>
+                      <span className="text-sm font-semibold text-fg">{g.fullName}</span>
+                      <span className="text-xs text-fg-subtle">{g.repos.length}</span>
                       {g.aliases?.slice(0, 4).map((a) => <Chip key={a}>{a}</Chip>)}
                     </div>
                     {g.description && (
-                      <p className="mt-0.5 text-xs leading-relaxed text-gray-500">{g.description}</p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">{g.description}</p>
                     )}
                   </div>
                 </button>
                 {open && (
-                  <ul className="divide-y divide-gray-100 border-t border-gray-100">
+                  <ul className="divide-y divide-line border-t border-line">
                     {g.repos.map((r) => {
                       const entry =
                         storageByName.get(r.name) ??

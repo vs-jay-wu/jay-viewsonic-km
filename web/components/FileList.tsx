@@ -62,7 +62,7 @@ export function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: V
       <button
         onClick={() => onChange(view === "tree" ? "list" : "tree")}
         aria-label={view === "tree" ? "改成平鋪檢視" : "改成樹狀檢視"}
-        className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+        className="rounded p-1 text-fg-subtle hover:bg-surface-sunken hover:text-fg"
       >
         <Icon name={view === "tree" ? "tree" : "list"} size={15} />
       </button>
@@ -117,8 +117,8 @@ export function FileRow<T extends ChangedFile>({
     <button
       onClick={onOpen}
       style={{ paddingLeft: 16 + depth * 14 }}
-      className={`flex w-full items-center gap-2 whitespace-nowrap py-1 pr-4 text-left text-xs hover:bg-gray-50 ${
-        selected ? "bg-sky-50" : ""
+      className={`flex w-full items-center gap-2 whitespace-nowrap py-1 pr-4 text-left text-xs hover:bg-surface-raised ${
+        selected ? "bg-surface-selected" : ""
       }`}
     >
       <span
@@ -131,8 +131,8 @@ export function FileRow<T extends ChangedFile>({
       <span className="font-mono">
         {/* 目錄淡、檔名深 —— 一串同目錄的檔案裡，眼睛要抓的是右邊那一段。
             **不要用 dir="rtl" 截斷**：它會把開頭的標點吃掉，`.claude/…` 會變成 `claude/…` */}
-        {label === "path" && dir && <span className="text-gray-400">{dir}</span>}
-        <span className="text-gray-700">{file.path.split("/").pop()}</span>
+        {label === "path" && dir && <span className="text-fg-subtle">{dir}</span>}
+        <span className="text-fg">{file.path.split("/").pop()}</span>
       </span>
       {trailing}
     </button>
@@ -184,14 +184,14 @@ export function TreeRows<T extends ChangedFile>({
             <button
               onClick={() => onToggle(key)}
               style={{ paddingLeft: 16 + depth * 14 }}
-              className="flex w-full items-center gap-1.5 whitespace-nowrap py-1 pr-4 text-left text-xs hover:bg-gray-50"
+              className="flex w-full items-center gap-1.5 whitespace-nowrap py-1 pr-4 text-left text-xs hover:bg-surface-raised"
             >
               <Icon
                 name={open ? "chevronDown" : "chevronRight"}
                 size={12}
-                className="shrink-0 text-gray-400"
+                className="shrink-0 text-fg-subtle"
               />
-              <span className="font-mono text-gray-500">{n.name}</span>
+              <span className="font-mono text-fg-muted">{n.name}</span>
             </button>
             {open && (
               <TreeRows

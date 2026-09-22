@@ -117,8 +117,8 @@ export default function ImageDiffView({
   }, []);
 
   const dark = theme === "dark";
-  const surface = dark ? "bg-[#0d1117]" : "bg-white";
-  const label = dark ? "text-gray-400" : "text-gray-500";
+  const surface = dark ? "bg-[#0d1117]" : "bg-surface";
+  const label = dark ? "text-fg-subtle" : "text-fg-muted";
 
   const stacked = (children: React.ReactNode) => (
     <div className="px-4 py-4">
@@ -145,7 +145,7 @@ export default function ImageDiffView({
     <div className={surface}>
       <div
         className={`flex flex-wrap items-center gap-2 border-b px-4 py-2 ${
-          dark ? "border-gray-800" : "border-gray-200"
+          dark ? "border-line" : "border-line"
         }`}
       >
         {both ? (
@@ -162,11 +162,11 @@ export default function ImageDiffView({
                 className={`rounded-md border px-2.5 py-1 text-xs ${
                   effMode === m
                     ? dark
-                      ? "border-gray-500 bg-gray-700 text-white"
-                      : "border-gray-900 bg-gray-900 text-white"
+                      ? "border-line-strong bg-control/80 text-on-solid"
+                      : "border-control bg-control text-on-solid"
                     : dark
-                      ? "border-gray-700 text-gray-300 hover:bg-gray-800"
-                      : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                      ? "border-line-strong text-fg-disabled hover:bg-control/85"
+                      : "border-line-strong text-fg-muted hover:bg-surface-raised"
                 }`}
               >
                 {text}
@@ -185,11 +185,11 @@ export default function ImageDiffView({
             className={`rounded-md border px-2.5 py-1 text-xs ${
               effMode === "source"
                 ? dark
-                  ? "border-gray-500 bg-gray-700 text-white"
-                  : "border-gray-900 bg-gray-900 text-white"
+                  ? "border-line-strong bg-control/80 text-on-solid"
+                  : "border-control bg-control text-on-solid"
                 : dark
-                  ? "border-gray-700 text-gray-300 hover:bg-gray-800"
-                  : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                  ? "border-line-strong text-fg-disabled hover:bg-control/85"
+                  : "border-line-strong text-fg-muted hover:bg-surface-raised"
             }`}
           >
             原始碼
@@ -267,10 +267,10 @@ export default function ImageDiffView({
               />
             </div>
             <div
-              className="pointer-events-none absolute top-0 bottom-0 w-0.5 bg-sky-400"
+              className="pointer-events-none absolute top-0 bottom-0 w-0.5 bg-accent"
               style={{ left: `${swipe}%` }}
             >
-              <span className="absolute top-1/2 left-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-sky-400 shadow" />
+              <span className="absolute top-1/2 left-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-accent shadow" />
             </div>
           </div>
         )}
@@ -358,17 +358,17 @@ function Side({
     <figure className="min-w-0 flex-1">
       <figcaption
         className={`mb-1.5 text-[11px] ${
-          tone === "add" ? "text-emerald-500" : "text-red-400"
+          tone === "add" ? "text-ok" : "text-danger"
         }`}
       >
         {title}
-        {dim && <span className={`ml-2 font-mono ${dark ? "text-gray-500" : "text-gray-400"}`}>{dim.w}×{dim.h}</span>}
+        {dim && <span className={`ml-2 font-mono ${dark ? "text-fg-muted" : "text-fg-subtle"}`}>{dim.w}×{dim.h}</span>}
       </figcaption>
       <div
         className={`overflow-hidden rounded border ${
           tone === "add"
-            ? dark ? "border-emerald-900" : "border-emerald-200"
-            : dark ? "border-red-900" : "border-red-200"
+            ? dark ? "border-emerald-900" : "border-ok/40"
+            : dark ? "border-red-900" : "border-danger/40"
         }`}
         style={CHECKER}
       >

@@ -46,17 +46,17 @@ export interface ReviewRun {
 }
 
 export const VERDICT_STYLE: Record<ReviewVerdict, { label: string; cls: string }> = {
-  ready: { label: "可以送", cls: "border-emerald-200 bg-emerald-50 text-emerald-700" },
-  fix_first: { label: "先修再送", cls: "border-red-200 bg-red-50 text-red-700" },
-  needs_decision: { label: "要你決定", cls: "border-amber-200 bg-amber-50 text-amber-800" },
+  ready: { label: "可以送", cls: "border-ok/40 bg-ok-bg text-ok" },
+  fix_first: { label: "先修再送", cls: "border-danger/40 bg-danger-bg text-danger" },
+  needs_decision: { label: "要你決定", cls: "border-warn/40 bg-warn-bg text-warn" },
 };
 
 /** 嚴重度的顏色。MUST 紅、SHOULD 琥珀、其餘中性 —— 琥珀只給警告（web/AGENTS.md） */
 export const SEVERITY_CLS: Record<Severity, string> = {
-  MUST: "text-red-600",
-  SHOULD: "text-amber-600",
-  NIT: "text-gray-500",
-  QUESTION: "text-sky-600",
+  MUST: "text-danger",
+  SHOULD: "text-warn",
+  NIT: "text-fg-muted",
+  QUESTION: "text-accent",
 };
 
 export const SEVERITY_ORDER: Severity[] = ["MUST", "SHOULD", "QUESTION", "NIT"];

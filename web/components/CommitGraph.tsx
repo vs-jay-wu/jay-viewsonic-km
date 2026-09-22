@@ -87,8 +87,8 @@ export default function CommitGraph({
           <button
             onClick={wip.onToggle}
             style={{ height: ROW_H }}
-            className={`flex w-full items-center gap-2 overflow-hidden text-left hover:bg-gray-50 ${
-              wip.open ? "bg-sky-50" : ""
+            className={`flex w-full items-center gap-2 overflow-hidden text-left hover:bg-surface-raised ${
+              wip.open ? "bg-surface-selected" : ""
             }`}
           >
             <svg width={width} height={ROW_H} className="shrink-0" aria-hidden>
@@ -113,10 +113,10 @@ export default function CommitGraph({
               />
             </svg>
             <span className="flex min-w-0 flex-1 items-center gap-2 pr-3 text-xs">
-              <span className="shrink-0 rounded-full border border-dashed border-gray-300 px-1.5 font-mono text-[10px] leading-[14px] text-gray-500">
+              <span className="shrink-0 rounded-full border border-dashed border-line-strong px-1.5 font-mono text-[10px] leading-[14px] text-fg-muted">
                 未提交
               </span>
-              <span className="min-w-0 flex-1 truncate text-gray-700">
+              <span className="min-w-0 flex-1 truncate text-fg">
                 {wip.files.length} 個檔案還沒 commit
               </span>
               {/* 收起來的時候也要看得出「有東西已經 add 了」，不然要展開才知道 */}
@@ -124,10 +124,10 @@ export default function CommitGraph({
                 const n = countByStage(wip.files);
                 if (!n.staged && !n.partial) return null;
                 return (
-                  <span className="shrink-0 text-[11px] text-gray-500">
-                    {n.staged > 0 && <span className="text-emerald-600">{n.staged} staged</span>}
+                  <span className="shrink-0 text-[11px] text-fg-muted">
+                    {n.staged > 0 && <span className="text-ok">{n.staged} staged</span>}
                     {n.partial > 0 && (
-                      <span className="text-indigo-600">
+                      <span className="text-info">
                         {n.staged > 0 ? " · " : ""}
                         {n.partial} 部分 staged
                       </span>
@@ -174,15 +174,15 @@ export default function CommitGraph({
                     header={
                       <button
                         onClick={() => onToggleDir(key)}
-                        className="flex w-full items-center gap-1 text-left text-[11px] font-medium text-gray-500 hover:text-gray-800"
+                        className="flex w-full items-center gap-1 text-left text-[11px] font-medium text-fg-muted hover:text-fg"
                       >
                         <Icon
                           name={open ? "chevronDown" : "chevronRight"}
                           size={12}
-                          className="shrink-0 text-gray-400"
+                          className="shrink-0 text-fg-subtle"
                         />
                         {title}
-                        <span className="font-normal text-gray-400">{files.length}</span>
+                        <span className="font-normal text-fg-subtle">{files.length}</span>
                       </button>
                     }
                   />
@@ -213,8 +213,8 @@ export default function CommitGraph({
             <button
               onClick={() => onToggle(c.sha)}
               style={{ height: ROW_H }}
-              className={`flex w-full items-center gap-2 overflow-hidden text-left transition-colors hover:bg-gray-50 ${
-                flashSha === c.sha ? "bg-amber-100" : open ? "bg-sky-50" : ""
+              className={`flex w-full items-center gap-2 overflow-hidden text-left transition-colors hover:bg-surface-raised ${
+                flashSha === c.sha ? "bg-warn/20" : open ? "bg-surface-selected" : ""
               }`}
             >
               <svg width={width} height={ROW_H} className="shrink-0" aria-hidden>
@@ -264,24 +264,24 @@ export default function CommitGraph({
                     key={r.name}
                     className={`shrink-0 rounded-full border px-1.5 font-mono text-[10px] leading-[14px] ${
                       r.kind === "head"
-                        ? "border-sky-300 bg-sky-50 text-sky-700"
+                        ? "border-accent/50 bg-surface-selected text-accent"
                         : r.kind === "remote"
-                          ? "border-gray-200 bg-gray-50 text-gray-500"
+                          ? "border-line bg-surface-raised text-fg-muted"
                           : r.kind === "tag"
-                            ? "border-amber-200 bg-amber-50 text-amber-700"
-                            : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            ? "border-warn/40 bg-warn-bg text-warn"
+                            : "border-ok/40 bg-ok-bg text-ok"
                     }`}
                   >
                     {r.kind === "head" && "HEAD → "}
                     {r.name}
                   </span>
                 ))}
-                <span className="min-w-0 flex-1 truncate text-gray-800">{c.subject}</span>
-                <span className="shrink-0 font-mono text-[11px] text-gray-300">{c.shortSha}</span>
-                <span className="w-16 shrink-0 truncate text-right text-[11px] text-gray-400">
+                <span className="min-w-0 flex-1 truncate text-fg">{c.subject}</span>
+                <span className="shrink-0 font-mono text-[11px] text-fg-disabled">{c.shortSha}</span>
+                <span className="w-16 shrink-0 truncate text-right text-[11px] text-fg-subtle">
                   {c.author}
                 </span>
-                <span className="w-20 shrink-0 text-right text-[11px] text-gray-400">
+                <span className="w-20 shrink-0 text-right text-[11px] text-fg-subtle">
                   {c.date.slice(0, 10)}
                 </span>
               </span>
@@ -337,7 +337,7 @@ function Expanded({
     return (
       <ExpandedFiles width={width} lanes={(row?.down ?? []).map((l) => l.to)} files={[]} keyPrefix={commit.sha}
         view={view} collapsedDirs={collapsedDirs} onToggleDir={onToggleDir} openPath={null}
-        onOpenFile={onOpenFile} header={<span className="text-[11px] text-gray-400">讀取中…</span>} />
+        onOpenFile={onOpenFile} header={<span className="text-[11px] text-fg-subtle">讀取中…</span>} />
     );
   }
 
@@ -354,21 +354,21 @@ function Expanded({
       onOpenFile={onOpenFile}
       header={
         <>
-          <div className="flex items-center gap-2 text-[11px] text-gray-400">
+          <div className="flex items-center gap-2 text-[11px] text-fg-subtle">
             <span>{info.files.length} 個檔案</span>
             {hasBody && (
               <button
                 onClick={() => setShowMessage((v) => !v)}
-                className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-1.5 py-px text-gray-600 hover:bg-gray-50"
+                className="inline-flex items-center gap-1 rounded border border-line bg-surface px-1.5 py-px text-fg-muted hover:bg-surface-raised"
               >
                 <Icon name={showMessage ? "chevronDown" : "chevronRight"} size={10} />
                 訊息
               </button>
             )}
-            <span className="font-mono text-gray-300">{commit.sha}</span>
+            <span className="font-mono text-fg-disabled">{commit.sha}</span>
           </div>
           {showMessage && (
-            <pre className="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap rounded border border-gray-200 bg-white px-2 py-1.5 font-mono text-[11px] leading-relaxed text-gray-700">
+            <pre className="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap rounded border border-line bg-surface px-2 py-1.5 font-mono text-[11px] leading-relaxed text-fg">
               {info.message}
             </pre>
           )}
@@ -412,7 +412,7 @@ function ExpandedFiles({
   onlyPartialBadge?: boolean;
 }) {
   return (
-    <div className="relative flex bg-gray-50">
+    <div className="relative flex bg-surface-raised">
       {/* 展開區塊裡把線接下去。`preserveAspectRatio="none"` ＋ 直線，
           高度隨內容拉長也不會變形（曲線才會） */}
       <svg
@@ -438,7 +438,7 @@ function ExpandedFiles({
       </svg>
 
       <div style={{ width }} className="shrink-0" />
-      <div className="min-w-0 flex-1 border-y border-gray-100 py-1.5 pr-3">
+      <div className="min-w-0 flex-1 border-y border-line py-1.5 pr-3">
         {header}
         <div className="-ml-4 mt-1">
           {view === "list" ? (
@@ -453,7 +453,7 @@ function ExpandedFiles({
                   <>
                     {f.from && (
                       <Tooltip label={`從 ${f.from} 改名`}>
-                        <span className="shrink-0 text-[10px] text-sky-600">R</span>
+                        <span className="shrink-0 text-[10px] text-accent">R</span>
                       </Tooltip>
                     )}
                     <StageBadge file={f} onlyPartial={onlyPartialBadge} />

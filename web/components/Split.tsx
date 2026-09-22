@@ -126,7 +126,7 @@ export function DragHandle({ handleProps }: { handleProps: DragWidth["handleProp
     <div
       {...handleProps}
       title="拖曳改寬度（雙擊回預設）"
-      className="hidden w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-sky-300 active:bg-sky-400 lg:block"
+      className="hidden w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-accent/60 active:bg-accent lg:block"
     />
   );
 }

@@ -279,13 +279,13 @@ export default function ChangesPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-gray-200 px-4 py-3 sm:px-6">
+      <div className="border-b border-line px-4 py-3 sm:px-6">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-            <Icon name="code" size={18} className="text-gray-400" />
+          <h1 className="flex items-center gap-2 text-lg font-semibold text-fg">
+            <Icon name="code" size={18} className="text-fg-subtle" />
             未提交的改動
           </h1>
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-fg-subtle">
             {loading
               ? "掃描中…"
               : data
@@ -294,7 +294,7 @@ export default function ChangesPage() {
                 : ""}
           </span>
           <Tooltip label="只有檔案模式變了（100644 → 100755），內容沒改">
-            <label className="ml-auto inline-flex items-center gap-1.5 text-xs text-gray-600">
+            <label className="ml-auto inline-flex items-center gap-1.5 text-xs text-fg-muted">
               <input
                 type="checkbox"
                 checked={showModeOnly}
@@ -306,13 +306,13 @@ export default function ChangesPage() {
           <button
             onClick={() => void load()}
             disabled={loading}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-lg border border-line-strong px-3 py-1.5 text-xs text-fg hover:bg-surface-raised disabled:opacity-50"
           >
             重新掃描
           </button>
         </div>
         <div className="mt-1 h-4 text-xs">
-          {error && <span className="text-red-600">{error}</span>}
+          {error && <span className="text-danger">{error}</span>}
         </div>
       </div>
 
@@ -321,13 +321,13 @@ export default function ChangesPage() {
         <div
           ref={paneRef}
           style={wide ? { width: listPane.width, flex: "0 0 auto" } : undefined}
-          className={`flex min-h-0 flex-col border-gray-200 lg:border-r ${
+          className={`flex min-h-0 flex-col border-line lg:border-r ${
             selected ? "hidden lg:flex" : "flex-1"
           }`}
         >
           {/* 清單自己的工具列。檢視切換是**一顆按鈕直接切**（Jay 2026-09-14）——
               兩顆分頁按鈕佔掉的寬度跟它帶來的資訊不成比例 */}
-          <div className="flex shrink-0 items-center justify-end border-b border-gray-100 px-2 py-1">
+          <div className="flex shrink-0 items-center justify-end border-b border-line px-2 py-1">
             <ViewToggle view={view} onChange={switchView} />
           </div>
 
@@ -338,17 +338,17 @@ export default function ChangesPage() {
           <div className="min-h-0 flex-1 overflow-auto">
           <div className="w-max min-w-full">
           {!loading && repos.length === 0 && (
-            <p className="px-4 py-8 text-center text-sm text-gray-400">
+            <p className="px-4 py-8 text-center text-sm text-fg-subtle">
               沒有未提交的改動。
             </p>
           )}
           {repos.map((r) => (
-            <div key={r.repo} className="border-b border-gray-100">
+            <div key={r.repo} className="border-b border-line">
               {/* 標題跟著一起橫捲（VS Code 也是這樣）。試過 `sticky left-0` 把它釘住，
                   但一整條灰底停在原地、底下的檔名從它旁邊滑過去，看起來像卡住了
                   （Jay 2026-09-14 回報）。而且「現在在看哪個檔案」右邊 diff 的標題列
                   本來就寫著 repo／worktree／完整路徑，釘住並沒有換到資訊 */}
-              <div className="flex w-full items-center gap-2 bg-gray-50 px-4 py-2">
+              <div className="flex w-full items-center gap-2 bg-surface-raised px-4 py-2">
                 <button
                   onClick={() => toggleCollapsed(r.repo)}
                   // 不要 `flex-1`：整條列跟著最寬的路徑一起變寬，把 pin 推到捲軸的最右邊
@@ -358,10 +358,10 @@ export default function ChangesPage() {
                   <Icon
                     name={collapsed.has(r.repo) ? "chevronRight" : "chevronDown"}
                     size={13}
-                    className="shrink-0 text-gray-400"
+                    className="shrink-0 text-fg-subtle"
                   />
-                  <span className="whitespace-nowrap font-mono text-xs font-medium text-gray-900">{r.repo}</span>
-                  <span className="text-[11px] text-gray-400">{r.total}</span>
+                  <span className="whitespace-nowrap font-mono text-xs font-medium text-fg">{r.repo}</span>
+                  <span className="text-[11px] text-fg-subtle">{r.total}</span>
                 </button>
                 <Tooltip
                   side="left"
@@ -371,7 +371,7 @@ export default function ChangesPage() {
                     onClick={() => void togglePin(r.repo)}
                     aria-label={r.pinned ? `取消 pin ${r.repo}` : `pin ${r.repo}`}
                     className={`shrink-0 ${
-                      r.pinned ? "text-amber-500" : "text-gray-300 hover:text-amber-500"
+                      r.pinned ? "text-pin" : "text-fg-disabled hover:text-pin"
                     }`}
                   >
                     <Icon name="pin" size={13} />
@@ -394,23 +394,23 @@ export default function ChangesPage() {
                   <div key={w.path}>
                     <button
                       onClick={() => toggleCollapsed(soleWorktree ? r.repo : w.path)}
-                      className="flex w-full items-center gap-1.5 whitespace-nowrap px-4 py-1.5 text-left text-[11px] hover:bg-gray-50"
+                      className="flex w-full items-center gap-1.5 whitespace-nowrap px-4 py-1.5 text-left text-[11px] hover:bg-surface-raised"
                     >
                       <Icon
                         name={wOpen ? "chevronDown" : "chevronRight"}
                         size={11}
-                        className={`shrink-0 text-gray-300 ${soleWorktree ? "invisible" : ""}`}
+                        className={`shrink-0 text-fg-disabled ${soleWorktree ? "invisible" : ""}`}
                       />
                       {!w.isMain && (
                         <WorktreeBadge sessionBound={w.isSessionBound} />
                       )}
-                      <span className="whitespace-nowrap text-gray-500">{w.name}</span>
+                      <span className="whitespace-nowrap text-fg-muted">{w.name}</span>
                       {w.branch && (
-                        <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-gray-600">
+                        <span className="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-fg-muted">
                           {w.branch}
                         </span>
                       )}
-                      <span className="font-mono text-gray-300">
+                      <span className="font-mono text-fg-disabled">
                         {counts.modified > 0 && `M${counts.modified} `}
                         {counts.added > 0 && `A${counts.added} `}
                         {counts.deleted > 0 && `D${counts.deleted} `}
@@ -420,12 +420,12 @@ export default function ChangesPage() {
                       </span>
                       {/* 收起來的時候也要看得出「有東西已經 add 了」，不然要展開才知道 */}
                       {(stage.staged > 0 || stage.partial > 0) && (
-                        <span className="text-gray-500">
+                        <span className="text-fg-muted">
                           {stage.staged > 0 && (
-                            <span className="text-emerald-600">{stage.staged} staged</span>
+                            <span className="text-ok">{stage.staged} staged</span>
                           )}
                           {stage.partial > 0 && (
-                            <span className="text-indigo-600">
+                            <span className="text-info">
                               {stage.staged > 0 ? " · " : ""}
                               {stage.partial} 部分 staged
                             </span>
@@ -460,15 +460,15 @@ export default function ChangesPage() {
                             <Tooltip side="left" label={SIDE_DESC[side]}>
                               <button
                                 onClick={() => toggleCollapsed(secKey)}
-                                className="flex w-full items-center gap-1 whitespace-nowrap py-1 pl-6 pr-4 text-left text-[11px] font-medium text-gray-500 hover:text-gray-800"
+                                className="flex w-full items-center gap-1 whitespace-nowrap py-1 pl-6 pr-4 text-left text-[11px] font-medium text-fg-muted hover:text-fg"
                               >
                                 <Icon
                                   name={secOpen ? "chevronDown" : "chevronRight"}
                                   size={12}
-                                  className="shrink-0 text-gray-400"
+                                  className="shrink-0 text-fg-subtle"
                                 />
                                 {SIDE_TITLE[side]}
-                                <span className="font-normal text-gray-400">{files.length}</span>
+                                <span className="font-normal text-fg-subtle">{files.length}</span>
                               </button>
                             </Tooltip>
                             <div className={secOpen ? "" : "hidden"}>
@@ -521,24 +521,24 @@ export default function ChangesPage() {
         {/* diff */}
         <div className={`min-h-0 flex-1 overflow-y-auto ${selected ? "" : "hidden lg:block"}`}>
           {!selected ? (
-            <p className="px-6 py-10 text-sm text-gray-400">選一個檔案看 diff。</p>
+            <p className="px-6 py-10 text-sm text-fg-subtle">選一個檔案看 diff。</p>
           ) : (
             <>
-              <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-gray-200 bg-white px-4 py-2">
+              <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-line bg-surface px-4 py-2">
                 <button
                   onClick={() => setSelected(null)}
-                  className="text-gray-400 hover:text-gray-800 lg:hidden"
+                  className="text-fg-subtle hover:text-fg lg:hidden"
                   aria-label="回到清單"
                 >
                   <Icon name="chevronRight" size={16} className="rotate-180" />
                 </button>
-                <span className="font-mono text-xs text-gray-500">{selected.repo}</span>
+                <span className="font-mono text-xs text-fg-muted">{selected.repo}</span>
                 {selected.worktreeName !== selected.repo && (
-                  <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-600">
+                  <span className="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[11px] text-fg-muted">
                     {selected.worktreeName}
                   </span>
                 )}
-                <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-900">
+                <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg">
                   {selected.file.path}
                 </span>
                 <span
@@ -548,15 +548,15 @@ export default function ChangesPage() {
                   {KIND_LABEL[selected.file.kind]}
                 </span>
                 {/* 同一個檔案在兩區看到的 diff 不一樣，一定要標出現在看的是哪一邊 */}
-                <span className="shrink-0 font-mono text-[11px] text-gray-400">
+                <span className="shrink-0 font-mono text-[11px] text-fg-subtle">
                   {SIDE_DESC[selected.side]}
                 </span>
               </div>
 
               {diffLoading ? (
-                <p className="px-4 py-6 text-sm text-gray-400">讀取中…</p>
+                <p className="px-4 py-6 text-sm text-fg-subtle">讀取中…</p>
               ) : diff?.error ? (
-                <p className="px-4 py-6 text-sm text-red-600">{diff.error}</p>
+                <p className="px-4 py-6 text-sm text-danger">{diff.error}</p>
               ) : diff?.image ? (
                 <ImageDiffView
                   // 換檔案就重建，狀態（尺寸、滑桿位置）跟著歸零
@@ -580,7 +580,7 @@ export default function ChangesPage() {
                   }
                 />
               ) : diff?.binary ? (
-                <p className="px-4 py-6 text-sm text-gray-400">二進位檔，不顯示內容。</p>
+                <p className="px-4 py-6 text-sm text-fg-subtle">二進位檔，不顯示內容。</p>
               ) : diff ? (
                 <DiffView
                   lines={diff.lines}
@@ -620,7 +620,7 @@ export default function ChangesPage() {
 function FileBadges({ file }: { file: ChangedFile }) {
   return (
     <>
-      {file.modeOnly && <span className="shrink-0 text-[10px] text-gray-300">模式</span>}
+      {file.modeOnly && <span className="shrink-0 text-[10px] text-fg-disabled">模式</span>}
       <StageBadge file={file} onlyPartial />
     </>
   );

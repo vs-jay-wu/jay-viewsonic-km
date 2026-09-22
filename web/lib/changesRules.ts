@@ -88,12 +88,12 @@ export const KIND_TITLE: Record<ChangeKind, string> = {
 
 /** 顏色也照 VS Code：M 金、A／U 綠、D 紅、衝突深紅 */
 export const KIND_CLS: Record<ChangeKind, string> = {
-  modified: "text-amber-600",
-  added: "text-emerald-600",
-  deleted: "text-red-600",
-  renamed: "text-sky-600",
-  untracked: "text-emerald-500",
-  conflict: "text-red-700",
+  modified: "text-warn",
+  added: "text-ok",
+  deleted: "text-danger",
+  renamed: "text-accent",
+  untracked: "text-ok",
+  conflict: "text-danger",
 };
 
 /**
@@ -189,7 +189,7 @@ export const STAGE_TITLE: Record<StageState, string> = {
 
 /** 琥珀色只給警告，所以「部分 staged」用中性的靛色，不是黃色 */
 export const STAGE_CLS: Record<StageState, string> = {
-  staged: "text-emerald-600", partial: "text-indigo-600", unstaged: "", none: "",
+  staged: "text-ok", partial: "text-info", unstaged: "", none: "",
 };
 
 /** 一份清單裡各有幾個（畫面上的「N staged · M 未 staged」） */

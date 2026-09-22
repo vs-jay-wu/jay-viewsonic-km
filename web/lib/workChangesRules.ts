@@ -176,9 +176,9 @@ export function fileOrigin(f: LineFile): { label: string; title: string; cls: st
     return {
       label: "C+W",
       title: "已 commit，而且工作區還有沒提交的改動",
-      cls: "text-violet-600",
+      cls: "text-info",
     };
   }
-  if (f.inCommits) return { label: "C", title: "只在 commit 裡", cls: "text-sky-600" };
-  return { label: "W", title: "只在工作區（還沒 commit）", cls: "text-amber-600" };
+  if (f.inCommits) return { label: "C", title: "只在 commit 裡", cls: "text-accent" };
+  return { label: "W", title: "只在工作區（還沒 commit）", cls: "text-warn" };
 }

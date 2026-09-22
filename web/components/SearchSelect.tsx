@@ -205,10 +205,10 @@ export default function SearchSelect({
           }
         }}
         aria-label={ariaLabel}
-        className="inline-flex max-w-[16rem] items-center gap-1.5 rounded-lg border border-gray-300 px-2 py-1 text-left font-mono text-[11px] text-gray-700 hover:bg-gray-50"
+        className="inline-flex max-w-[16rem] items-center gap-1.5 rounded-lg border border-line-strong px-2 py-1 text-left font-mono text-[11px] text-fg hover:bg-surface-raised"
       >
         <span className="truncate">{current?.label ?? value}</span>
-        <Icon name="chevronDown" size={11} className="shrink-0 text-gray-400" />
+        <Icon name="chevronDown" size={11} className="shrink-0 text-fg-subtle" />
       </button>
 
       {open &&
@@ -222,14 +222,14 @@ export default function SearchSelect({
               left: pos.left,
               width,
             }}
-            className="fixed z-[120] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl"
+            className="fixed z-[120] overflow-hidden rounded-xl border border-line bg-surface shadow-xl"
           >
-            <div className="border-b border-gray-100 p-1.5">
+            <div className="border-b border-line p-1.5">
               <div className="relative">
                 <Icon
                   name="search"
                   size={13}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 text-fg-subtle"
                 />
                 <input
                   autoFocus
@@ -240,7 +240,7 @@ export default function SearchSelect({
                   }}
                   onKeyDown={onKey}
                   placeholder={placeholder}
-                  className="w-full rounded-lg border border-gray-200 py-1 pl-7 pr-2 text-xs outline-none focus:border-gray-400"
+                  className="w-full rounded-lg border border-line py-1 pl-7 pr-2 text-xs outline-none focus:border-line-strong"
                 />
               </div>
             </div>
@@ -252,11 +252,11 @@ export default function SearchSelect({
                     onClick={() => activate(row)}
                     style={{ paddingLeft: 10 + row.depth * 12 }}
                     className={`flex w-full items-center gap-1.5 py-1 pr-2.5 text-left font-mono text-[11px] ${
-                      i === active ? "bg-sky-50" : ""
+                      i === active ? "bg-surface-selected" : ""
                     } ${
                       row.kind === "option" && row.option.value === value
-                        ? "text-sky-700"
-                        : "text-gray-700"
+                        ? "text-accent"
+                        : "text-fg"
                     }`}
                   >
                     {row.kind === "group" ? (
@@ -264,10 +264,10 @@ export default function SearchSelect({
                         <Icon
                           name={row.expanded ? "chevronDown" : "chevronRight"}
                           size={11}
-                          className="shrink-0 text-gray-400"
+                          className="shrink-0 text-fg-subtle"
                         />
                         <span className="min-w-0 flex-1 truncate">{row.name}</span>
-                        <span className="shrink-0 text-gray-300">{row.count}</span>
+                        <span className="shrink-0 text-fg-disabled">{row.count}</span>
                       </>
                     ) : (
                       <>
@@ -282,7 +282,7 @@ export default function SearchSelect({
                 </li>
               ))}
               {!rows.length && (
-                <li className="px-2.5 py-2 text-center text-[11px] text-gray-400">沒有符合的</li>
+                <li className="px-2.5 py-2 text-center text-[11px] text-fg-subtle">沒有符合的</li>
               )}
             </ul>
           </div>,

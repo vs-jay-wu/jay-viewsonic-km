@@ -38,10 +38,10 @@ interface Scheduler {
 }
 
 const EVENT_META: Record<MyPrEvent["type"], { label: string; icon: IconName; cls: string }> = {
-  approved:          { label: "approve", icon: "check", cls: "text-emerald-600" },
-  changes_requested: { label: "要求修改", icon: "alert", cls: "text-amber-600" },
-  reviewed:          { label: "review",  icon: "search", cls: "text-sky-600" },
-  commented:         { label: "留言",    icon: "message", cls: "text-gray-500" },
+  approved:          { label: "approve", icon: "check", cls: "text-ok" },
+  changes_requested: { label: "要求修改", icon: "alert", cls: "text-warn" },
+  reviewed:          { label: "review",  icon: "search", cls: "text-accent" },
+  commented:         { label: "留言",    icon: "message", cls: "text-fg-muted" },
 };
 
 function fmtTime(iso: string | null): string {
@@ -74,19 +74,19 @@ function DecisionBadge({ pr }: { pr: MyPr }) {
   switch (pr.reviewDecision) {
     case "APPROVED":
       return (
-        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
+        <span className="rounded-full border border-ok/40 bg-ok-bg px-2 py-0.5 text-xs text-ok">
           approved{who(pr.approvedBy)}
         </span>
       );
     case "CHANGES_REQUESTED":
       return (
-        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
+        <span className="rounded-full border border-warn/40 bg-warn-bg px-2 py-0.5 text-xs text-warn">
           要求修改{who(pr.changesRequestedBy)}
         </span>
       );
     default:
       return (
-        <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-500">
+        <span className="rounded-full border border-line bg-surface-raised px-2 py-0.5 text-xs text-fg-muted">
           等 review
         </span>
       );
@@ -96,12 +96,12 @@ function DecisionBadge({ pr }: { pr: MyPr }) {
 function ChecksBadge({ state }: { state: string | null }) {
   if (!state) return null;
   const map: Record<string, { text: string; cls: string }> = {
-    SUCCESS: { text: "CI 綠", cls: "text-emerald-600" },
-    FAILURE: { text: "CI 紅", cls: "text-red-600" },
-    ERROR:   { text: "CI 錯", cls: "text-red-600" },
-    PENDING: { text: "CI 跑中", cls: "text-amber-600" },
+    SUCCESS: { text: "CI 綠", cls: "text-ok" },
+    FAILURE: { text: "CI 紅", cls: "text-danger" },
+    ERROR:   { text: "CI 錯", cls: "text-danger" },
+    PENDING: { text: "CI 跑中", cls: "text-warn" },
   };
-  const m = map[state] ?? { text: state, cls: "text-gray-400" };
+  const m = map[state] ?? { text: state, cls: "text-fg-subtle" };
   return <span className={`text-xs ${m.cls}`}>{m.text}</span>;
 }
 
@@ -127,32 +127,32 @@ function PrRow({
             href={pr.url}
             target="_blank"
             rel="noreferrer"
-            className="text-sm text-gray-900 hover:underline"
+            className="text-sm text-fg hover:underline"
           >
-            <span className="font-mono text-xs text-gray-500">
+            <span className="font-mono text-xs text-fg-muted">
               {pr.repo.split("/").pop()}#{pr.number}
             </span>{" "}
             {pr.title}
           </a>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             {pr.state === "MERGED" ? (
-              <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs text-violet-700">
+              <span className="rounded-full border border-info/40 bg-surface-sunken px-2 py-0.5 text-xs text-info">
                 merged {relTime(pr.mergedAt)}
               </span>
             ) : (
               <DecisionBadge pr={pr} />
             )}
-            {pr.isDraft && <span className="text-xs text-gray-400">draft</span>}
+            {pr.isDraft && <span className="text-xs text-fg-subtle">draft</span>}
             <ChecksBadge state={pr.checks} />
             {pr.openThreadsByOthers > 0 && (
-              <span className="text-xs text-amber-600">
+              <span className="text-xs text-warn">
                 未解決討論 {pr.openThreadsByOthers}
               </span>
             )}
             {pr.mergeable === "CONFLICTING" && (
-              <span className="text-xs text-red-600">有衝突</span>
+              <span className="text-xs text-danger">有衝突</span>
             )}
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-fg-subtle">
               +{pr.additions} −{pr.deletions} · {pr.changedFiles} 檔
             </span>
             {ticketKey && (
@@ -160,14 +160,14 @@ function PrRow({
                 href={ticketUrl(ticketKey)}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 font-mono text-[11px] leading-none text-sky-700 hover:bg-sky-100"
+                className="rounded-full border border-accent/50 bg-surface-selected px-2 py-0.5 font-mono text-[11px] leading-none text-accent hover:bg-accent-bg"
               >
                 {ticketKey}
               </a>
             )}
           </div>
         </div>
-        <div className="shrink-0 text-right text-xs text-gray-400">
+        <div className="shrink-0 text-right text-xs text-fg-subtle">
           <div>更新 {relTime(pr.updatedAt)}</div>
           {pr.theirLastActivity && <div>有人回 {relTime(pr.theirLastActivity)}</div>}
         </div>
@@ -185,8 +185,8 @@ function PrRow({
               disabled={busy}
               className={`mt-0.5 shrink-0 disabled:opacity-40 ${
                 sessionCount > 0
-                  ? "text-sky-500 hover:text-sky-700"
-                  : "text-gray-300 hover:text-sky-600"
+                  ? "text-accent hover:text-accent"
+                  : "text-fg-disabled hover:text-accent"
               }`}
             >
               <Icon name={sessionCount > 0 ? "external" : "play"} size={15} />
@@ -306,10 +306,10 @@ export default function MyPrsPage() {
       <div className="mx-auto max-w-4xl px-4 py-6 sm:px-8 sm:py-10">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">我的 PR</h1>
-            <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
+            <h1 className="text-2xl font-semibold text-fg">我的 PR</h1>
+            <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">
               我自己開的 PR（<code className="text-xs">author:@me</code>，
-              <strong className="font-medium text-gray-700">不限 repo</strong>）。
+              <strong className="font-medium text-fg">不限 repo</strong>）。
               server 定時抓，開這頁只讀快照、不會打 GitHub。有人 review、approve
               或留言就發通知。不用 AI。
             </p>
@@ -317,7 +317,7 @@ export default function MyPrsPage() {
           <button
             onClick={refreshNow}
             disabled={busy}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm text-fg hover:bg-surface-raised disabled:opacity-50"
           >
             <Icon name="refresh" size={15} className={busy || scheduler?.fetching ? "animate-spin" : ""} />
             立即更新
@@ -325,57 +325,57 @@ export default function MyPrsPage() {
         </div>
 
         {(error || sessionError) && (
-          <div className="mt-6 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mt-6 flex items-start gap-2 rounded-lg border border-danger/40 bg-danger-bg px-4 py-3 text-sm text-danger">
             <Icon name="alert" size={16} className="mt-0.5" />
             <span className="whitespace-pre-wrap">{error ?? sessionError}</span>
           </div>
         )}
         {(notice || sessionNotice) && (
-          <div className="mt-6 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+          <div className="mt-6 flex items-start gap-2 rounded-lg border border-accent/50 bg-surface-selected px-4 py-3 text-sm text-accent">
             <Icon name="check" size={16} className="mt-0.5" />
             {notice ?? sessionNotice}
           </div>
         )}
         {snapshot?.lastError && (
-          <div className="mt-6 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <div className="mt-6 flex items-start gap-2 rounded-lg border border-warn/40 bg-warn-bg px-4 py-3 text-sm text-warn">
             <Icon name="alert" size={16} className="mt-0.5" />
             <span className="whitespace-pre-wrap">上次抓取失敗：{snapshot.lastError}</span>
           </div>
         )}
 
         {/* 設定 */}
-        <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-xl border border-gray-200 px-5 py-4 text-sm">
+        <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-xl border border-line px-5 py-4 text-sm">
           <span className="inline-flex items-center gap-2">
             <span
               className={`inline-flex h-2.5 w-2.5 rounded-full ${
-                config?.enabled && scheduler?.timerOn ? "bg-emerald-500" : "bg-gray-300"
+                config?.enabled && scheduler?.timerOn ? "bg-ok" : "bg-fg-disabled"
               }`}
             />
-            <span className="font-medium text-gray-900">
+            <span className="font-medium text-fg">
               定時抓取 {config?.enabled ? "已開" : "已關"}
             </span>
           </span>
 
-          <label className="inline-flex items-center gap-1.5 text-gray-700">
+          <label className="inline-flex items-center gap-1.5 text-fg">
             每
             <input
               type="number"
               min={1}
               value={intervalMin}
               onChange={(e) => setIntervalMin(Number(e.target.value))}
-              className="w-16 rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900"
+              className="w-16 rounded-md border border-line-strong px-2 py-1 text-sm text-fg"
             />
             分
             <button
               onClick={() => saveConfig({ enabled: true, intervalSeconds: intervalMin * 60 })}
               disabled={busy}
-              className="ml-1 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              className="ml-1 rounded-md border border-line px-2 py-1 text-xs text-fg hover:bg-surface-raised disabled:opacity-50"
             >
               套用
             </button>
           </label>
 
-          <label className="inline-flex items-center gap-2 text-gray-700">
+          <label className="inline-flex items-center gap-2 text-fg">
             <input
               type="checkbox"
               checked={!!config?.notify}
@@ -386,7 +386,7 @@ export default function MyPrsPage() {
           <button
             onClick={testNotify}
             disabled={busy}
-            className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-md border border-line px-2 py-1 text-xs text-fg hover:bg-surface-raised disabled:opacity-50"
           >
             測試通知
           </button>
@@ -394,13 +394,13 @@ export default function MyPrsPage() {
           <button
             onClick={() => saveConfig({ enabled: !config?.enabled })}
             disabled={busy}
-            className="ml-auto rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="ml-auto rounded-lg border border-line px-3 py-2 text-sm text-fg hover:bg-surface-raised disabled:opacity-50"
           >
             {config?.enabled ? "停用定時抓取" : "啟用定時抓取"}
           </button>
         </div>
 
-        <p className="mt-2 text-xs text-gray-400">
+        <p className="mt-2 text-xs text-fg-subtle">
           最後抓取 {fmtTime(snapshot?.fetchedAt ?? null)}
           {scheduler?.nextRunAt && ` · 下次 ${fmtTime(scheduler.nextRunAt)}`}
           {snapshot && ` · merged 取近 ${snapshot.mergedWithinDays} 天`}
@@ -410,20 +410,20 @@ export default function MyPrsPage() {
         {/* 動靜 */}
         <div className="mt-8">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-900">
+            <h2 className="text-sm font-semibold text-fg">
               有人動我的 PR
               {unread.length > 0 && (
-                <span className="ml-2 rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-normal text-white">
+                <span className="ml-2 rounded-full bg-danger px-1.5 py-0.5 text-[11px] font-normal text-on-solid">
                   {unread.length} 則未讀
                 </span>
               )}
             </h2>
             {events.length > 0 && (
               <div className="flex gap-2">
-                <button onClick={markRead} className="text-xs text-gray-500 hover:text-gray-800">
+                <button onClick={markRead} className="text-xs text-fg-muted hover:text-fg">
                   全部標為已讀
                 </button>
-                <button onClick={clearEvents} className="text-xs text-gray-400 hover:text-red-600">
+                <button onClick={clearEvents} className="text-xs text-fg-subtle hover:text-danger">
                   清空
                 </button>
               </div>
@@ -431,32 +431,32 @@ export default function MyPrsPage() {
           </div>
 
           {events.length === 0 ? (
-            <p className="mt-3 rounded-xl border border-gray-200 px-5 py-5 text-sm text-gray-400">
+            <p className="mt-3 rounded-xl border border-line px-5 py-5 text-sm text-fg-subtle">
               還沒有新動靜。有人 review、approve 或留言時會出現在這裡，並跳一則通知。
             </p>
           ) : (
             /* 照 PR 分群 —— 同一張 PR 常常一次來好幾則，攤平會讀不出是哪幾張有動靜 */
-            <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200">
+            <ul className="mt-3 divide-y divide-line rounded-xl border border-line">
               {groupEventsByPr(events).slice(0, 12).map((g) => (
-                <li key={g.key} className={g.unread > 0 ? "bg-sky-50/50" : ""}>
+                <li key={g.key} className={g.unread > 0 ? "bg-surface-selected/50" : ""}>
                   <div className="flex items-center gap-2 px-4 pt-2.5">
                     <a
                       href={g.prUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="min-w-0 flex-1 truncate text-sm text-gray-800 hover:underline"
+                      className="min-w-0 flex-1 truncate text-sm text-fg hover:underline"
                     >
-                      <span className="font-mono text-xs text-gray-500">
+                      <span className="font-mono text-xs text-fg-muted">
                         {g.repo.split("/").pop()}#{g.number}
                       </span>{" "}
                       {g.title}
                     </a>
                     {g.unread > 0 && (
-                      <span className="shrink-0 rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] text-white">
+                      <span className="shrink-0 rounded-full bg-danger px-1.5 py-0.5 text-[11px] text-on-solid">
                         {g.unread}
                       </span>
                     )}
-                    <span className="shrink-0 text-xs text-gray-400">{relTime(g.latestAt)}</span>
+                    <span className="shrink-0 text-xs text-fg-subtle">{relTime(g.latestAt)}</span>
                   </div>
                   <ul className="px-4 pb-2.5 pt-1">
                     {g.events.map((e) => {
@@ -464,17 +464,17 @@ export default function MyPrsPage() {
                       return (
                         <li key={e.id} className="flex items-center gap-2 py-0.5 text-xs">
                           <Icon name={m.icon} size={13} className={m.cls} />
-                          <span className="text-gray-700">{e.actor}</span>
+                          <span className="text-fg">{e.actor}</span>
                           <span className={m.cls}>{m.label}</span>
                           <a
                             href={e.url}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-gray-400 hover:text-gray-700 hover:underline"
+                            className="text-fg-subtle hover:text-fg hover:underline"
                           >
                             {relTime(e.at)}
                           </a>
-                          {!e.read && <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />}
+                          {!e.read && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
                         </li>
                       );
                     })}
@@ -487,17 +487,17 @@ export default function MyPrsPage() {
 
         {/* Open */}
         <div className="mt-9">
-          <h2 className="text-sm font-semibold text-gray-900">
-            開著的 <span className="ml-1 font-normal text-gray-400">{open.length}</span>
+          <h2 className="text-sm font-semibold text-fg">
+            開著的 <span className="ml-1 font-normal text-fg-subtle">{open.length}</span>
           </h2>
           {loading ? (
-            <p className="mt-3 text-sm text-gray-400">載入中…</p>
+            <p className="mt-3 text-sm text-fg-subtle">載入中…</p>
           ) : open.length === 0 ? (
-            <p className="mt-3 rounded-xl border border-gray-200 px-5 py-5 text-sm text-gray-400">
+            <p className="mt-3 rounded-xl border border-line px-5 py-5 text-sm text-fg-subtle">
               沒有開著的 PR
             </p>
           ) : (
-            <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200">
+            <ul className="mt-3 divide-y divide-line rounded-xl border border-line">
               {open.map((pr) => (
                 <PrRow
                   key={pr.url}
@@ -513,16 +513,16 @@ export default function MyPrsPage() {
 
         {/* Merged */}
         <div className="mt-9">
-          <h2 className="text-sm font-semibold text-gray-900">
+          <h2 className="text-sm font-semibold text-fg">
             近期 merged
-            <span className="ml-1 font-normal text-gray-400">{merged.length}</span>
+            <span className="ml-1 font-normal text-fg-subtle">{merged.length}</span>
           </h2>
           {merged.length === 0 ? (
-            <p className="mt-3 rounded-xl border border-gray-200 px-5 py-5 text-sm text-gray-400">
+            <p className="mt-3 rounded-xl border border-line px-5 py-5 text-sm text-fg-subtle">
               這段時間沒有 merged 的 PR
             </p>
           ) : (
-            <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200">
+            <ul className="mt-3 divide-y divide-line rounded-xl border border-line">
               {merged.map((pr) => (
                 <PrRow key={pr.url} pr={pr} />
               ))}

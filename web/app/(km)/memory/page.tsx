@@ -33,22 +33,22 @@ function gb(mb: number): string {
 }
 
 function barColor(pct: number): string {
-  if (pct < 60) return "bg-emerald-500";
-  if (pct < 85) return "bg-amber-500";
-  return "bg-red-500";
+  if (pct < 60) return "bg-ok";
+  if (pct < 85) return "bg-warn/30";
+  return "bg-danger";
 }
 
 function Segments({ stats }: { stats: MemStats }) {
   const segs = [
-    { label: "App", mb: stats.appMB, color: "bg-sky-500" },
-    { label: "Wired", mb: stats.wiredMB, color: "bg-indigo-500" },
-    { label: "壓縮", mb: stats.compressedMB, color: "bg-violet-500" },
-    { label: "快取檔案", mb: stats.cachedMB, color: "bg-gray-300" },
-    { label: "可用", mb: stats.freeMB, color: "bg-gray-100" },
+    { label: "App", mb: stats.appMB, color: "bg-accent" },
+    { label: "Wired", mb: stats.wiredMB, color: "bg-info" },
+    { label: "壓縮", mb: stats.compressedMB, color: "bg-info" },
+    { label: "快取檔案", mb: stats.cachedMB, color: "bg-fg-disabled" },
+    { label: "可用", mb: stats.freeMB, color: "bg-surface-sunken" },
   ];
   return (
     <div>
-      <div className="flex h-3 w-full overflow-hidden rounded-full bg-gray-100">
+      <div className="flex h-3 w-full overflow-hidden rounded-full bg-surface-sunken">
         {segs.map((s) => (
           <div
             key={s.label}
@@ -58,7 +58,7 @@ function Segments({ stats }: { stats: MemStats }) {
           />
         ))}
       </div>
-      <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+      <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-muted">
         {segs.map((s) => (
           <span key={s.label} className="inline-flex items-center gap-1.5">
             <span className={`h-2 w-2 rounded-full ${s.color}`} />
@@ -145,8 +145,8 @@ export default function MemoryPage() {
       <div className="max-w-4xl mx-auto px-4 py-6 sm:px-8 sm:py-10">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">記憶體狀況</h1>
-            <p className="mt-1.5 text-sm text-gray-500">
+            <h1 className="text-2xl font-semibold text-fg">記憶體狀況</h1>
+            <p className="mt-1.5 text-sm text-fg-muted">
               數字來自 <code className="text-xs">vm_stat</code> / <code className="text-xs">top</code>；
               清理走的是同一支 <code className="text-xs">shell/memclean.py</code>，與終端機的
               <code className="text-xs"> memclean</code> 完全同源。
@@ -155,14 +155,14 @@ export default function MemoryPage() {
           <div className="flex gap-2 shrink-0">
             <button
               onClick={openScripts}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm text-fg hover:bg-surface-raised"
             >
               <Icon name="code" size={15} /> 檢視腳本
             </button>
             <button
               onClick={load}
               disabled={loading}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm text-fg hover:bg-surface-raised disabled:opacity-50"
             >
               <Icon name="refresh" size={15} className={loading ? "animate-spin" : ""} /> 重新掃描
             </button>
@@ -170,7 +170,7 @@ export default function MemoryPage() {
         </div>
 
         {error && (
-          <div className="mt-6 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mt-6 flex items-start gap-2 rounded-lg border border-danger/40 bg-danger-bg px-4 py-3 text-sm text-danger">
             <Icon name="alert" size={16} className="mt-0.5" />
             <span className="whitespace-pre-wrap">{error}</span>
           </div>
@@ -178,69 +178,69 @@ export default function MemoryPage() {
 
         {/* 記憶體與 swap */}
         <div className="mt-7 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-gray-200 p-5">
+          <div className="rounded-xl border border-line p-5">
             <div className="flex items-baseline justify-between">
-              <h2 className="text-sm font-semibold text-gray-900">實體記憶體</h2>
-              <span className="text-xs text-gray-400">
+              <h2 className="text-sm font-semibold text-fg">實體記憶體</h2>
+              <span className="text-xs text-fg-subtle">
                 {mem ? `${gb(mem.usedMB)} / ${gb(mem.totalMB)}（${mem.usedPercent}%）` : "—"}
               </span>
             </div>
-            <div className="mt-4">{mem ? <Segments stats={mem} /> : <div className="h-3 rounded-full bg-gray-100" />}</div>
+            <div className="mt-4">{mem ? <Segments stats={mem} /> : <div className="h-3 rounded-full bg-surface-sunken" />}</div>
           </div>
 
-          <div className="rounded-xl border border-gray-200 p-5">
+          <div className="rounded-xl border border-line p-5">
             <div className="flex items-baseline justify-between">
-              <h2 className="text-sm font-semibold text-gray-900">Swap</h2>
-              <span className="text-xs text-gray-400">
+              <h2 className="text-sm font-semibold text-fg">Swap</h2>
+              <span className="text-xs text-fg-subtle">
                 {data ? `${gb(data.swap.usedMB)} / ${gb(data.swap.totalMB)}` : "—"}
               </span>
             </div>
-            <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-gray-100">
+            <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-surface-sunken">
               <div className={`h-full ${barColor(swapPct)}`} style={{ width: `${Math.min(swapPct, 100)}%` }} />
             </div>
-            <p className="mt-2.5 text-xs text-gray-400">
+            <p className="mt-2.5 text-xs text-fg-subtle">
               swap 吃很深代表實體記憶體長期不夠；清完不會立刻降，macOS 要一段時間才收回 swapfile。
             </p>
           </div>
         </div>
 
         {/* 掃描條件 */}
-        <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-xl border border-gray-200 px-5 py-4 text-sm">
-          <label className="inline-flex items-center gap-2 text-gray-700">
+        <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-xl border border-line px-5 py-4 text-sm">
+          <label className="inline-flex items-center gap-2 text-fg">
             年齡門檻
             <input
               type="number"
               min={0}
               value={age}
               onChange={(e) => setAge(Number(e.target.value))}
-              className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900"
+              className="w-20 rounded-md border border-line-strong px-2 py-1 text-sm text-fg"
             />
             分鐘
           </label>
-          <label className="inline-flex items-center gap-2 text-gray-700">
+          <label className="inline-flex items-center gap-2 text-fg">
             <input type="checkbox" checked={gradle} onChange={(e) => setGradle(e.target.checked)} />
             含 Gradle / Kotlin daemon
-            <span className="text-xs text-amber-600">（build 中勿用）</span>
+            <span className="text-xs text-warn">（build 中勿用）</span>
           </label>
-          <label className="inline-flex items-center gap-2 text-gray-700">
+          <label className="inline-flex items-center gap-2 text-fg">
             <input type="checkbox" checked={langServer} onChange={(e) => setLangServer(e.target.checked)} />
             含編輯器持有的 dart language-server
-            <span className="text-xs text-gray-400">（會立刻重開；孤兒已預設納入）</span>
+            <span className="text-xs text-fg-subtle">（會立刻重開；孤兒已預設納入）</span>
           </label>
         </div>
 
         {/* 行程清單 */}
         <div className="mt-8">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-900">
+            <h2 className="text-sm font-semibold text-fg">
               符合清理條件的行程
-              {data && <span className="ml-2 font-normal text-gray-400">{data.processes.length} 個</span>}
+              {data && <span className="ml-2 font-normal text-fg-subtle">{data.processes.length} 個</span>}
             </h2>
             {data && data.processes.length > 0 && (
               <button
                 onClick={clean}
                 disabled={cleaning}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-black disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-control px-3.5 py-2 text-sm font-medium text-on-solid hover:bg-control/85 disabled:opacity-50"
               >
                 <Icon name={cleaning ? "spinner" : "trash"} size={15} className={cleaning ? "animate-spin" : ""} />
                 {cleaning ? "清理中…" : `執行清理（可回收 ${gb(data.reclaimableMB)}）`}
@@ -249,16 +249,16 @@ export default function MemoryPage() {
           </div>
 
           {loading ? (
-            <p className="mt-4 text-sm text-gray-400">掃描中…</p>
+            <p className="mt-4 text-sm text-fg-subtle">掃描中…</p>
           ) : !data || data.processes.length === 0 ? (
-            <div className="mt-4 flex items-center gap-2 rounded-xl border border-gray-200 px-5 py-6 text-sm text-gray-500">
-              <Icon name="check" size={16} className="text-emerald-500" />
+            <div className="mt-4 flex items-center gap-2 rounded-xl border border-line px-5 py-6 text-sm text-fg-muted">
+              <Icon name="check" size={16} className="text-ok" />
               沒有符合條件的行程
             </div>
           ) : (
-            <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200">
+            <div className="mt-4 overflow-x-auto rounded-xl border border-line">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-left text-xs text-gray-500">
+                <thead className="bg-surface-raised text-left text-xs text-fg-muted">
                   <tr>
                     <th className="px-4 py-2.5 font-medium">PID</th>
                     <th className="px-4 py-2.5 font-medium">類型</th>
@@ -267,18 +267,18 @@ export default function MemoryPage() {
                     <th className="px-4 py-2.5 font-medium">原因</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-line">
                   {data.processes.map((p) => (
                     <tr key={p.pid}>
-                      <td className="px-4 py-2.5 font-mono text-xs text-gray-500">{p.pid}</td>
-                      <td className="px-4 py-2.5 text-gray-800">{p.kind}</td>
-                      <td className="px-4 py-2.5 text-right font-medium text-gray-900">
+                      <td className="px-4 py-2.5 font-mono text-xs text-fg-muted">{p.pid}</td>
+                      <td className="px-4 py-2.5 text-fg">{p.kind}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-fg">
                         {p.footprintMB.toFixed(0)} MB
                       </td>
-                      <td className="px-4 py-2.5 text-gray-500">{p.age}</td>
-                      <td className="px-4 py-2.5 text-gray-500">
+                      <td className="px-4 py-2.5 text-fg-muted">{p.age}</td>
+                      <td className="px-4 py-2.5 text-fg-muted">
                         {p.reason}
-                        <div className="mt-0.5 truncate font-mono text-[11px] text-gray-300" title={p.command}>
+                        <div className="mt-0.5 truncate font-mono text-[11px] text-fg-disabled" title={p.command}>
                           {p.command}
                         </div>
                       </td>
@@ -293,23 +293,23 @@ export default function MemoryPage() {
         {/* 清理結果 */}
         {result?.killed && (
           <div className="mt-8">
-            <h2 className="text-sm font-semibold text-gray-900">上次清理結果</h2>
-            <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200 text-sm">
+            <h2 className="text-sm font-semibold text-fg">上次清理結果</h2>
+            <ul className="mt-3 divide-y divide-line rounded-xl border border-line text-sm">
               {result.killed.map((k) => (
                 <li key={k.pid} className="flex items-center gap-3 px-4 py-2.5">
                   <Icon
                     name={k.outcome === "denied" ? "x" : "check"}
                     size={15}
-                    className={k.outcome === "denied" ? "text-red-500" : "text-emerald-500"}
+                    className={k.outcome === "denied" ? "text-danger" : "text-ok"}
                   />
-                  <span className="font-mono text-xs text-gray-500">{k.pid}</span>
-                  <span className="text-gray-800">{k.kind}</span>
-                  <span className="text-gray-400">{k.message}</span>
-                  <span className="ml-auto text-gray-500">{k.footprintMB.toFixed(0)} MB</span>
+                  <span className="font-mono text-xs text-fg-muted">{k.pid}</span>
+                  <span className="text-fg">{k.kind}</span>
+                  <span className="text-fg-subtle">{k.message}</span>
+                  <span className="ml-auto text-fg-muted">{k.footprintMB.toFixed(0)} MB</span>
                 </li>
               ))}
               {result.killed.length === 0 && (
-                <li className="px-4 py-2.5 text-gray-400">沒有行程被清掉</li>
+                <li className="px-4 py-2.5 text-fg-subtle">沒有行程被清掉</li>
               )}
             </ul>
           </div>
@@ -317,28 +317,28 @@ export default function MemoryPage() {
 
         {/* 腳本內容 */}
         {showScripts && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6" onClick={() => setShowScripts(false)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6" onClick={() => setShowScripts(false)}>
             <div
-              className="flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-xl"
+              className="flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-surface shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3.5">
-                <h3 className="text-sm font-semibold text-gray-900">memclean 腳本內容</h3>
-                <button onClick={() => setShowScripts(false)} className="text-gray-400 hover:text-gray-700">
+              <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
+                <h3 className="text-sm font-semibold text-fg">memclean 腳本內容</h3>
+                <button onClick={() => setShowScripts(false)} className="text-fg-subtle hover:text-fg">
                   <Icon name="x" size={18} />
                 </button>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto p-5 space-y-5">
                 {!scripts ? (
-                  <p className="text-sm text-gray-400">載入中…</p>
+                  <p className="text-sm text-fg-subtle">載入中…</p>
                 ) : (
                   scripts.map((f) => (
                     <div key={f.path}>
                       <div className="flex items-baseline gap-2">
-                        <code className="text-xs font-semibold text-gray-900">{f.path}</code>
-                        <span className="text-xs text-gray-400">{f.note}</span>
+                        <code className="text-xs font-semibold text-fg">{f.path}</code>
+                        <span className="text-xs text-fg-subtle">{f.note}</span>
                       </div>
-                      <pre className="mt-2 overflow-x-auto rounded-lg bg-gray-50 p-4 font-mono text-[11px] leading-relaxed text-gray-800">
+                      <pre className="mt-2 overflow-x-auto rounded-lg bg-surface-raised p-4 font-mono text-[11px] leading-relaxed text-fg">
                         {f.content}
                       </pre>
                     </div>

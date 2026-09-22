@@ -61,36 +61,36 @@ function BlockView({ block, markdown }: { block: Block; markdown: boolean }) {
     return markdown ? (
       <div className="md-body">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{block.text}</ReactMarkdown>
-        {block.truncated && <p className="text-xs text-gray-400">…（已截斷）</p>}
+        {block.truncated && <p className="text-xs text-fg-subtle">…（已截斷）</p>}
       </div>
     ) : (
-      <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-800">
+      <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-fg">
         {block.text}
-        {block.truncated && <span className="text-xs text-gray-400">…（已截斷）</span>}
+        {block.truncated && <span className="text-xs text-fg-subtle">…（已截斷）</span>}
       </div>
     );
   }
 
   const meta: Record<Exclude<BlockKind, "text">, { label: string; cls: string }> = {
-    thinking:    { label: "思考",   cls: "text-violet-600" },
-    tool_use:    { label: block.name ?? "工具", cls: "text-sky-700" },
-    tool_result: { label: "工具輸出", cls: "text-gray-500" },
-    image:       { label: "圖片",   cls: "text-gray-500" },
+    thinking:    { label: "思考",   cls: "text-info" },
+    tool_use:    { label: block.name ?? "工具", cls: "text-accent" },
+    tool_result: { label: "工具輸出", cls: "text-fg-muted" },
+    image:       { label: "圖片",   cls: "text-fg-muted" },
   };
   const m = meta[block.kind as Exclude<BlockKind, "text">];
 
   return (
-    <div className="rounded-md bg-gray-50 ring-1 ring-gray-200">
+    <div className="rounded-md bg-surface-raised ring-1 ring-line">
       <button
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-xs"
       >
-        <Icon name={open ? "chevronDown" : "chevronRight"} size={12} className="text-gray-400" />
+        <Icon name={open ? "chevronDown" : "chevronRight"} size={12} className="text-fg-subtle" />
         <span className={`font-medium ${m.cls}`}>{m.label}</span>
-        <span className="text-gray-400">{block.text.split("\n")[0].slice(0, 60)}</span>
+        <span className="text-fg-subtle">{block.text.split("\n")[0].slice(0, 60)}</span>
       </button>
       {open && (
-        <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words border-t border-gray-200 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-gray-700">
+        <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words border-t border-line px-2.5 py-2 font-mono text-[11px] leading-relaxed text-fg">
           {block.text}
           {block.truncated && "\n…（已截斷）"}
         </pre>
@@ -298,12 +298,12 @@ export default function TranscriptPanel({
 
   return (
     <aside
-      className="fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-gray-200 bg-white shadow-2xl sm:w-[40rem] sm:max-w-[46vw]"
+      className="fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-line bg-surface shadow-2xl sm:w-[40rem] sm:max-w-[46vw]"
     >
-      <div className="flex items-start gap-3 border-b border-gray-200 px-4 py-3">
+      <div className="flex items-start gap-3 border-b border-line px-4 py-3">
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-sm font-semibold text-gray-900">{title}</h2>
-          <p className="mt-0.5 font-mono text-[11px] text-gray-400">
+          <h2 className="truncate text-sm font-semibold text-fg">{title}</h2>
+          <p className="mt-0.5 font-mono text-[11px] text-fg-subtle">
             {sessionId.slice(0, 8)}
             {range && ` · ${(range.sizeBytes / 1048576).toFixed(1)} MB`}
             {range?.hasMore && !range?.hasNewer && " · 顯示最近一段"}
@@ -318,17 +318,17 @@ export default function TranscriptPanel({
           <button
             onClick={() => void (range?.hasNewer ? jumpToEnd() : jumpToStart())}
             disabled={loading || loadingMore}
-            className="text-gray-400 hover:text-gray-700 disabled:opacity-40"
+            className="text-fg-subtle hover:text-fg disabled:opacity-40"
           >
             <Icon name={range?.hasNewer ? "toBottom" : "toTop"} size={18} />
           </button>
         </Tooltip>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-700" title="關閉">
+        <button onClick={onClose} className="text-fg-subtle hover:text-fg" title="關閉">
           <Icon name="x" size={18} />
         </button>
       </div>
 
-      <div className="flex items-center gap-4 border-b border-gray-100 px-4 py-2 text-xs text-gray-600">
+      <div className="flex items-center gap-4 border-b border-line px-4 py-2 text-xs text-fg-muted">
         <label className="inline-flex items-center gap-1.5">
           <input type="checkbox" checked={showMeta} onChange={(e) => setShowMeta(e.target.checked)} />
           系統訊息
@@ -341,7 +341,7 @@ export default function TranscriptPanel({
           <input type="checkbox" checked={showTools} onChange={(e) => setShowTools(e.target.checked)} />
           工具呼叫
         </label>
-        {hiddenCount > 0 && <span className="text-gray-400">隱藏 {hiddenCount} 則</span>}
+        {hiddenCount > 0 && <span className="text-fg-subtle">隱藏 {hiddenCount} 則</span>}
       </div>
 
       <div
@@ -350,22 +350,22 @@ export default function TranscriptPanel({
         className="min-h-0 flex-1 overflow-y-auto px-4 py-3"
       >
         {loading ? (
-          <p className="text-sm text-gray-400">載入中…</p>
+          <p className="text-sm text-fg-subtle">載入中…</p>
         ) : error ? (
-          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="flex items-start gap-2 rounded-lg border border-danger/40 bg-danger-bg px-3 py-2 text-sm text-danger">
             <Icon name="alert" size={15} className="mt-0.5" /> {error}
           </div>
         ) : (
           <>
             <div ref={topRef} />
             {range?.hasMore ? (
-              <div className="mb-3 flex items-center justify-center gap-1.5 py-1.5 text-xs text-gray-400">
+              <div className="mb-3 flex items-center justify-center gap-1.5 py-1.5 text-xs text-fg-subtle">
                 {loadingMore ? (
                   <>
                     <Icon name="spinner" size={13} className="animate-spin" /> 載入更早的內容…
                   </>
                 ) : autoFillRef.current >= 12 ? (
-                  <button onClick={loadEarlier} className="text-gray-500 underline">
+                  <button onClick={loadEarlier} className="text-fg-muted underline">
                     這一段沒有對話，繼續往前載
                   </button>
                 ) : (
@@ -373,7 +373,7 @@ export default function TranscriptPanel({
                 )}
               </div>
             ) : (
-              <div className="mb-3 text-center text-xs text-gray-300">—— 對話開頭 ——</div>
+              <div className="mb-3 text-center text-xs text-fg-disabled">—— 對話開頭 ——</div>
             )}
             <div className="space-y-4">
               {visible.map((m, i) => (
@@ -382,18 +382,18 @@ export default function TranscriptPanel({
                     <span
                       className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
                         m.role === "user"
-                          ? "bg-gray-900 text-white"
+                          ? "bg-control text-on-solid"
                           : m.role === "assistant"
-                            ? "bg-sky-100 text-sky-800"
-                            : "bg-gray-100 text-gray-500"
+                            ? "bg-accent-bg text-accent"
+                            : "bg-surface-sunken text-fg-muted"
                       }`}
                     >
                       {ROLE_LABEL[m.role]}
                     </span>
                     {m.isSidechain && (
-                      <span className="text-[11px] text-violet-500">subagent</span>
+                      <span className="text-[11px] text-info">subagent</span>
                     )}
-                    <span className="text-[11px] text-gray-400">{fmtTime(m.at)}</span>
+                    <span className="text-[11px] text-fg-subtle">{fmtTime(m.at)}</span>
                   </div>
                   <div className="space-y-1.5 pl-1">
                     {m.blocks.map((b, j) => (
@@ -403,13 +403,13 @@ export default function TranscriptPanel({
                 </div>
               ))}
               {visible.length === 0 && (
-                <p className="text-sm text-gray-400">
+                <p className="text-sm text-fg-subtle">
                   這一段沒有對話內容 —— 試著勾「工具呼叫」或「系統訊息」，或載入更早的內容。
                 </p>
               )}
             </div>
             {range?.hasNewer && (
-              <div className="mt-3 flex items-center justify-center gap-1.5 py-1.5 text-xs text-gray-400">
+              <div className="mt-3 flex items-center justify-center gap-1.5 py-1.5 text-xs text-fg-subtle">
                 {loadingNewer ? (
                   <>
                     <Icon name="spinner" size={13} className="animate-spin" /> 載入後面的內容…

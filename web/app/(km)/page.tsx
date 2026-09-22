@@ -144,21 +144,21 @@ export default async function Home() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-4xl mx-auto px-4 py-6 sm:px-8 sm:py-10">
-        <h1 className="text-2xl font-semibold text-gray-900">KM 工作台</h1>
-        <p className="mt-1.5 text-sm text-gray-500">
+        <h1 className="text-2xl font-semibold text-fg">KM 工作台</h1>
+        <p className="mt-1.5 text-sm text-fg-muted">
           本機知識庫的操作面板：Teams 歸檔瀏覽，加上幾個常用的維運工具。
         </p>
 
         {orca && !orca.installed && (
-          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-5 py-4">
-            <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-red-800">
+          <div className="mt-6 rounded-xl border border-danger/40 bg-danger-bg px-5 py-4">
+            <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-danger">
               <Icon name="alert" size={16} />
               找不到 Orca
-              <span className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-normal text-white">
+              <span className="rounded-full bg-danger px-2 py-0.5 text-xs font-normal text-on-solid">
                 需要你處理
               </span>
             </div>
-            <div className="mt-1.5 text-xs text-red-700">
+            <div className="mt-1.5 text-xs text-danger">
               <code>{orca.appPath}</code> 不存在，session 頁的「在 Orca 開啟」用不了。
               裝好之後首頁會自己恢復（偵測到有裝就不再重測）。
             </div>
@@ -167,12 +167,12 @@ export default async function Home() {
 
         {/* review 要用的 CLI 沒裝。沒裝哪個就講哪個，兩個都沒裝就兩則都出 */}
         {missingClis.map((c) => (
-          <div key={c.name} className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
-            <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-amber-800">
+          <div key={c.name} className="mt-6 rounded-xl border border-warn/40 bg-warn-bg px-5 py-4">
+            <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-warn">
               <Icon name="alert" size={16} />
               沒有安裝 <code className="font-mono">{c.name}</code>
             </div>
-            <div className="mt-1.5 text-xs text-amber-700">
+            <div className="mt-1.5 text-xs text-warn">
               {c.usedFor}用得到它；現在叫到的話會直接失敗。{c.installHint}。
               <Link href="/settings" className="ml-1 underline">
                 去設定頁改用另一個引擎
@@ -188,19 +188,19 @@ export default async function Home() {
             <div
               key={d.mount}
               className={`mt-6 rounded-xl border px-5 py-4 ${
-                critical ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"
+                critical ? "border-danger/40 bg-danger-bg" : "border-warn/40 bg-warn-bg"
               }`}
             >
               <div
                 className={`flex flex-wrap items-center gap-2 text-sm font-medium ${
-                  critical ? "text-red-800" : "text-amber-800"
+                  critical ? "text-danger" : "text-warn"
                 }`}
               >
                 <Icon name="alert" size={16} />
                 {d.label}硬碟快滿了
                 <span
                   className={`rounded-full px-2 py-0.5 text-xs font-normal ${
-                    critical ? "bg-red-600 text-white" : "bg-amber-200 text-amber-900"
+                    critical ? "bg-danger text-on-solid" : "bg-warn/30 text-warn"
                   }`}
                 >
                   剩 {d.freePercent.toFixed(1)}%
@@ -209,7 +209,7 @@ export default async function Home() {
                   {formatGB(d.freeBytes)} / {formatGB(d.totalBytes)} 可用
                 </span>
               </div>
-              <div className={`mt-1.5 text-xs ${critical ? "text-red-700" : "text-amber-700"}`}>
+              <div className={`mt-1.5 text-xs ${critical ? "text-danger" : "text-warn"}`}>
                 低於 {WARN_BELOW_PERCENT}% 就會出現這則提醒。
                 <Link href="/changes" className="ml-1 underline">
                   看未提交的改動
@@ -231,13 +231,13 @@ export default async function Home() {
                   key={h.source}
                   className={`rounded-xl border px-5 py-4 ${
                     needsYou
-                      ? "border-red-200 bg-red-50"
-                      : "border-amber-200 bg-amber-50"
+                      ? "border-danger/40 bg-danger-bg"
+                      : "border-warn/40 bg-warn-bg"
                   }`}
                 >
                   <div
                     className={`flex flex-wrap items-center gap-2 text-sm font-medium ${
-                      needsYou ? "text-red-800" : "text-amber-800"
+                      needsYou ? "text-danger" : "text-warn"
                     }`}
                   >
                     <Icon name="alert" size={16} />
@@ -247,8 +247,8 @@ export default async function Home() {
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-normal ${
                         needsYou
-                          ? "bg-red-600 text-white"
-                          : "bg-amber-200 text-amber-900"
+                          ? "bg-danger text-on-solid"
+                          : "bg-warn/30 text-warn"
                       }`}
                     >
                       {needsYou ? "需要你處理" : "持續失敗"}
@@ -263,7 +263,7 @@ export default async function Home() {
                   {(meta?.hint || h.lastError) && (
                     <div
                       className={`mt-1.5 text-xs ${
-                        needsYou ? "text-red-700" : "text-amber-700"
+                        needsYou ? "text-danger" : "text-warn"
                       }`}
                     >
                       {hintFor(h.lastError, meta?.hint)}
@@ -290,17 +290,17 @@ export default async function Home() {
             <Link
               key={t.href}
               href={t.href}
-              className="group rounded-xl border border-gray-200 p-4 hover:border-gray-400 hover:bg-gray-50 transition-colors"
+              className="group rounded-xl border border-line p-4 hover:border-line-strong hover:bg-surface-raised transition-colors"
             >
               <div className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-gray-600 group-hover:bg-gray-900 group-hover:text-white transition-colors">
+                <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-sunken text-fg-muted group-hover:bg-control group-hover:text-on-solid transition-colors">
                   <Icon name={t.icon} size={18} />
                 </span>
                 <div className="min-w-0">
-                  <div className="font-medium text-gray-900">
+                  <div className="font-medium text-fg">
                     {t.title}
                   </div>
-                  <p className="mt-1 text-xs leading-relaxed text-gray-500">{t.desc}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-fg-muted">{t.desc}</p>
                 </div>
               </div>
             </Link>
@@ -311,10 +311,10 @@ export default async function Home() {
         {openPrs.length > 0 && (
           <div className="mt-10">
             <div className="flex items-baseline justify-between">
-              <h2 className="text-sm font-semibold text-gray-900">
-                我開著的 PR <span className="font-normal text-gray-400">{openPrs.length}</span>
+              <h2 className="text-sm font-semibold text-fg">
+                我開著的 PR <span className="font-normal text-fg-subtle">{openPrs.length}</span>
               </h2>
-              <Link href="/my-prs" className="text-xs text-gray-400 hover:text-gray-700 hover:underline">
+              <Link href="/my-prs" className="text-xs text-fg-subtle hover:text-fg hover:underline">
                 全部（含近期 merged）→
               </Link>
             </div>
@@ -333,10 +333,10 @@ export default async function Home() {
         {/* 指派給我的隊的 PR。**放在「其他服務」前面**（Jay 2026-09-18）——
             要看得到，但不該跟真正輪到我的事混在一起 */}
         {teamReview && teamReview.prs.length > 0 && (
-          <div className="mt-10 rounded-xl border border-gray-200 bg-gray-50 px-5 py-4">
+          <div className="mt-10 rounded-xl border border-line bg-surface-raised px-5 py-4">
             <div className="flex flex-wrap items-baseline gap-2">
-              <h2 className="text-sm font-semibold text-gray-900">隊上有 PR 等 review</h2>
-              <span className="text-xs text-gray-500">
+              <h2 className="text-sm font-semibold text-fg">隊上有 PR 等 review</h2>
+              <span className="text-xs text-fg-muted">
                 {teamReview.prs.length} 筆 · 指派給你的隊，不是點名你 —— 巡邏不會去看
               </span>
             </div>
@@ -347,12 +347,12 @@ export default async function Home() {
                     href={p.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="font-mono text-gray-500 hover:underline"
+                    className="font-mono text-fg-muted hover:underline"
                   >
                     {p.repo.split("/").pop()}#{p.number}
                   </a>
-                  <span className="min-w-0 flex-1 truncate text-gray-700">{p.title}</span>
-                  <span className="shrink-0 text-gray-400">{p.author}</span>
+                  <span className="min-w-0 flex-1 truncate text-fg">{p.title}</span>
+                  <span className="shrink-0 text-fg-subtle">{p.author}</span>
                 </li>
               ))}
             </ul>
@@ -360,24 +360,24 @@ export default async function Home() {
         )}
 
         <div className="mt-10">
-          <h2 className="text-sm font-semibold text-gray-900">其他服務</h2>
-          <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200">
+          <h2 className="text-sm font-semibold text-fg">其他服務</h2>
+          <ul className="mt-3 divide-y divide-line rounded-xl border border-line">
             {OTHERS.map((o) => {
               const inner = (
                 <>
                   {/* gray-300 在白底上幾乎看不到（Jay 2026-09-11 回報），
                       拉到 gray-500：跟旁邊的標題文字同一個明度級別 */}
-                  <Icon name={o.icon} size={15} className="text-gray-500 group-hover:text-gray-900" />
-                  <span className="text-sm text-gray-800">{o.title}</span>
-                  <span className="min-w-0 flex-1 truncate text-xs text-gray-400">{o.desc}</span>
+                  <Icon name={o.icon} size={15} className="text-fg-muted group-hover:text-fg" />
+                  <span className="text-sm text-fg">{o.title}</span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-fg-subtle">{o.desc}</span>
                   <Icon
                     name={o.external ? "external" : "chevronRight"}
                     size={14}
-                    className="text-gray-400 group-hover:text-gray-700"
+                    className="text-fg-subtle group-hover:text-fg"
                   />
                 </>
               );
-              const cls = "group flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors";
+              const cls = "group flex items-center gap-3 px-4 py-3 hover:bg-surface-raised transition-colors";
               return (
                 <li key={o.href}>
                   {o.external ? (
@@ -398,29 +398,29 @@ export default async function Home() {
         {/* Teams Archive */}
         <div className="mt-10">
           <div className="flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold text-gray-900">Teams Archive</h2>
-            <span className="text-xs text-gray-400">
+            <h2 className="text-sm font-semibold text-fg">Teams Archive</h2>
+            <span className="text-xs text-fg-subtle">
               {chats.length} 個聊天室 · {totalMessages} 則訊息 · 最後同步 {fmtDate(lastSynced)}
             </span>
           </div>
 
           {chats.length === 0 ? (
-            <p className="mt-3 text-sm text-gray-400">
+            <p className="mt-3 text-sm text-fg-subtle">
               尚無聊天室資料 —— 先跑 <code className="text-xs">/teams-scrape</code>。
             </p>
           ) : (
-            <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200">
+            <ul className="mt-3 divide-y divide-line rounded-xl border border-line">
               {chats.map((chat) => (
                 <li key={chat.id}>
                   <Link
                     href={`/chat/${chat.id}`}
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-surface-raised transition-colors"
                   >
-                    <Icon name="hash" size={14} className="text-gray-300" />
-                    <span className="flex-1 truncate text-sm text-gray-800">
+                    <Icon name="hash" size={14} className="text-fg-disabled" />
+                    <span className="flex-1 truncate text-sm text-fg">
                       {chat.topic || "(無標題)"}
                     </span>
-                    <span className="text-xs text-gray-400 shrink-0">
+                    <span className="text-xs text-fg-subtle shrink-0">
                       {chat.message_count} 則
                     </span>
                   </Link>

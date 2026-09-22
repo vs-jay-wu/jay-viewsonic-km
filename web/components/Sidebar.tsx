@@ -50,6 +50,11 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
       active ? "bg-white/20 font-medium" : "text-white/80"
     }`;
 
+  /*
+   * **固定深底**：這一欄不跟主題翻（`bg-[#2d2d2d]`）。上面的顏色一律寫死白色，
+   * **不要換成 token** —— token 在深色主題會翻成近黑色，字就不見了。
+   * 2026-09-22 做深色模式時機械替換誤傷過一次。
+   */
   return (
     <aside className="w-64 shrink-0 bg-[#2d2d2d] text-white flex flex-col h-full overflow-hidden">
       <div className="px-4 py-4 border-b border-white/10">

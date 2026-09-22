@@ -47,7 +47,7 @@ type Mode = "overall" | "commits";
 
 export default function WorkPage() {
   return (
-    <Suspense fallback={<p className="px-6 py-10 text-sm text-gray-400">載入中…</p>}>
+    <Suspense fallback={<p className="px-6 py-10 text-sm text-fg-subtle">載入中…</p>}>
       <WorkChangesView />
     </Suspense>
   );
@@ -218,10 +218,10 @@ function WorkChangesView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-gray-200 px-4 py-3 sm:px-6">
+      <div className="border-b border-line px-4 py-3 sm:px-6">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-            <Icon name="layers" size={18} className="text-gray-400" />
+          <h1 className="flex items-center gap-2 text-lg font-semibold text-fg">
+            <Icon name="layers" size={18} className="text-fg-subtle" />
             這條線的改動
           </h1>
           {data?.ticketKey && (
@@ -229,15 +229,15 @@ function WorkChangesView() {
               href={ticketUrl(data.ticketKey)}
               target="_blank"
               rel="noreferrer"
-              className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 font-mono text-xs text-sky-700 hover:bg-sky-100"
+              className="rounded-full border border-accent/50 bg-surface-selected px-2 py-0.5 font-mono text-xs text-accent hover:bg-accent-bg"
             >
               {data.ticketKey}
             </a>
           )}
           {data && !data.ticketKey && (
-            <span className="font-mono text-xs text-gray-500">{data.key}</span>
+            <span className="font-mono text-xs text-fg-muted">{data.key}</span>
           )}
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-fg-subtle">
             {loading
               ? "掃描中…"
               : data
@@ -257,8 +257,8 @@ function WorkChangesView() {
                   onClick={() => setMode(m)}
                   className={`rounded-md border px-2.5 py-1 text-xs ${
                     mode === m
-                      ? "border-gray-900 bg-gray-900 text-white"
-                      : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                      ? "border-control bg-control text-on-solid"
+                      : "border-line-strong text-fg-muted hover:bg-surface-raised"
                   }`}
                 >
                   {text}
@@ -269,27 +269,27 @@ function WorkChangesView() {
           <button
             onClick={() => void load()}
             disabled={loading}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-lg border border-line-strong px-3 py-1.5 text-xs text-fg hover:bg-surface-raised disabled:opacity-50"
           >
             重新掃描
           </button>
         </div>
-        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        {error && <p className="mt-1 text-xs text-danger">{error}</p>}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div
-          className={`flex min-h-0 flex-col border-gray-200 lg:w-[26rem] lg:shrink-0 lg:border-r ${
+          className={`flex min-h-0 flex-col border-line lg:w-[26rem] lg:shrink-0 lg:border-r ${
             selected ? "hidden lg:flex" : "flex-1"
           }`}
         >
-          <div className="flex shrink-0 items-center justify-end border-b border-gray-100 px-2 py-1">
+          <div className="flex shrink-0 items-center justify-end border-b border-line px-2 py-1">
             <ViewToggle view={view} onChange={switchView} />
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
           <div className="w-max min-w-full">
             {data?.branches.length === 0 && !loading && (
-              <p className="px-4 py-8 text-center text-sm text-gray-400">
+              <p className="px-4 py-8 text-center text-sm text-fg-subtle">
                 沒有找到這條線的分支。
                 <br />
                 可以從下面的「其他 worktree」手動加一個。
@@ -297,12 +297,12 @@ function WorkChangesView() {
             )}
 
             {data?.branches.map((b) => (
-              <div key={b.worktree} className="border-b border-gray-100">
-                <div className="bg-gray-50 px-4 py-2">
+              <div key={b.worktree} className="border-b border-line">
+                <div className="bg-surface-raised px-4 py-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-xs font-medium text-gray-900">{b.repo}</span>
+                    <span className="font-mono text-xs font-medium text-fg">{b.repo}</span>
                     {b.branch && (
-                      <span className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px] text-gray-600">
+                      <span className="rounded bg-surface px-1.5 py-0.5 font-mono text-[11px] text-fg-muted">
                         {b.branch}
                       </span>
                     )}
@@ -310,7 +310,7 @@ function WorkChangesView() {
                       <WorktreeBadge />
                     )}
                   </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-400">
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-fg-subtle">
                     <Tooltip label="這條分支跟誰比（動態問 origin/HEAD，不是寫死 master）">
                       <span className="font-mono">
                         {b.base ?? "?"} … {b.mergeBase?.slice(0, 8) ?? "?"}
@@ -321,8 +321,8 @@ function WorkChangesView() {
                         <span
                           className={`rounded-full px-1.5 py-0.5 ${
                             w === "trailer"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "border border-gray-200 text-gray-500"
+                              ? "bg-ok/25 text-ok"
+                              : "border border-line text-fg-muted"
                           }`}
                         >
                           {w === "trailer" ? "● 精確" : REASON_LABEL[w]}
@@ -330,7 +330,7 @@ function WorkChangesView() {
                       </Tooltip>
                     ))}
                   </div>
-                  {b.error && <p className="mt-1 text-[11px] text-red-600">{b.error}</p>}
+                  {b.error && <p className="mt-1 text-[11px] text-danger">{b.error}</p>}
                 </div>
 
                 {mode === "overall"
@@ -355,12 +355,12 @@ function WorkChangesView() {
                       <div key={c.sha}>
                         <button
                           onClick={() => void loadCommitFiles(b, c.sha)}
-                          className="flex w-full items-center gap-2 whitespace-nowrap px-4 py-1.5 text-left text-xs hover:bg-gray-50"
+                          className="flex w-full items-center gap-2 whitespace-nowrap px-4 py-1.5 text-left text-xs hover:bg-surface-raised"
                         >
                           <Icon
                             name={openCommit === c.sha ? "chevronDown" : "chevronRight"}
                             size={12}
-                            className="shrink-0 text-gray-400"
+                            className="shrink-0 text-fg-subtle"
                           />
                           <Tooltip
                             label={
@@ -369,10 +369,10 @@ function WorkChangesView() {
                                 : "沒有 Claude-Session trailer（手動 commit，或別的 repo 的格式）"
                             }
                           >
-                            <span className={c.sessionId ? "text-emerald-500" : "text-gray-300"}>●</span>
+                            <span className={c.sessionId ? "text-ok" : "text-fg-disabled"}>●</span>
                           </Tooltip>
-                          <span className="font-mono text-[11px] text-gray-400">{c.shortSha}</span>
-                          <span className="text-gray-700">{c.subject}</span>
+                          <span className="font-mono text-[11px] text-fg-subtle">{c.shortSha}</span>
+                          <span className="text-fg">{c.subject}</span>
                         </button>
                         {openCommit === c.sha &&
                           renderFiles(
@@ -387,7 +387,7 @@ function WorkChangesView() {
                     ))}
 
                 {mode === "commits" && b.commits.length === 0 && (
-                  <p className="px-4 py-2 text-[11px] text-gray-400">
+                  <p className="px-4 py-2 text-[11px] text-fg-subtle">
                     這條分支還沒有 commit（改動全都還在工作區）。
                   </p>
                 )}
@@ -399,7 +399,7 @@ function WorkChangesView() {
               <div className="px-4 py-3">
                 <button
                   onClick={() => setShowCandidates((v) => !v)}
-                  className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-700"
+                  className="flex items-center gap-1.5 text-[11px] text-fg-subtle hover:text-fg"
                 >
                   <Icon name={showCandidates ? "chevronDown" : "chevronRight"} size={11} />
                   其他 worktree（{data.candidates.length}）—— 沒被收進這條線
@@ -410,12 +410,12 @@ function WorkChangesView() {
                       <li key={c.worktree} className="flex items-center gap-2 text-[11px]">
                         <button
                           onClick={() => void addManual(c.worktree)}
-                          className="rounded border border-gray-300 px-1.5 py-0.5 text-gray-600 hover:bg-gray-50"
+                          className="rounded border border-line-strong px-1.5 py-0.5 text-fg-muted hover:bg-surface-raised"
                         >
                           加入
                         </button>
-                        <span className="font-mono text-gray-500">{c.repo}</span>
-                        <span className="font-mono text-gray-400">{c.branch ?? "(detached)"}</span>
+                        <span className="font-mono text-fg-muted">{c.repo}</span>
+                        <span className="font-mono text-fg-subtle">{c.branch ?? "(detached)"}</span>
                       </li>
                     ))}
                   </ul>
@@ -428,30 +428,30 @@ function WorkChangesView() {
 
         <div className={`min-h-0 flex-1 overflow-y-auto ${selected ? "" : "hidden lg:block"}`}>
           {!selected ? (
-            <p className="px-6 py-10 text-sm text-gray-400">選一個檔案看 diff。</p>
+            <p className="px-6 py-10 text-sm text-fg-subtle">選一個檔案看 diff。</p>
           ) : (
             <>
-              <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-gray-200 bg-white px-4 py-2">
+              <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-line bg-surface px-4 py-2">
                 <button
                   onClick={() => setSelected(null)}
-                  className="text-gray-400 hover:text-gray-800 lg:hidden"
+                  className="text-fg-subtle hover:text-fg lg:hidden"
                   aria-label="回到清單"
                 >
                   <Icon name="chevronRight" size={16} className="rotate-180" />
                 </button>
-                <span className="font-mono text-xs text-gray-500">{selected.branch.repo}</span>
-                <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-900">
+                <span className="font-mono text-xs text-fg-muted">{selected.branch.repo}</span>
+                <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg">
                   {selected.file.path}
                 </span>
-                <span className="shrink-0 font-mono text-[11px] text-gray-400">
+                <span className="shrink-0 font-mono text-[11px] text-fg-subtle">
                   {selected.sha ? `commit ${selected.sha.slice(0, 8)}` : "整體（含未提交）"}
                 </span>
               </div>
 
               {diffLoading ? (
-                <p className="px-4 py-6 text-sm text-gray-400">讀取中…</p>
+                <p className="px-4 py-6 text-sm text-fg-subtle">讀取中…</p>
               ) : diff?.error ? (
-                <p className="px-4 py-6 text-sm text-red-600">{diff.error}</p>
+                <p className="px-4 py-6 text-sm text-danger">{diff.error}</p>
               ) : diff?.image ? (
                 <ImageDiffView
                   key={`${selected.branch.worktree}:${selected.file.path}:${selected.sha ?? "overall"}`}
@@ -470,7 +470,7 @@ function WorkChangesView() {
                   }
                 />
               ) : diff?.binary ? (
-                <p className="px-4 py-6 text-sm text-gray-400">二進位檔，不顯示內容。</p>
+                <p className="px-4 py-6 text-sm text-fg-subtle">二進位檔，不顯示內容。</p>
               ) : diff ? (
                 <DiffView
                   lines={diff.lines}

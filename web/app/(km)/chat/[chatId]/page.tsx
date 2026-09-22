@@ -98,27 +98,27 @@ function ChatPageInner() {
   return (
     <div className="flex flex-col h-full">
       {/* Search */}
-      <div className="px-4 py-2 border-b border-gray-200 bg-white shrink-0">
+      <div className="px-4 py-2 border-b border-line bg-surface shrink-0">
         <input
           type="text"
           placeholder="搜尋訊息..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400"
+          className="w-full px-3 py-1.5 text-sm border border-line-strong rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
         />
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-0.5">
         <div ref={topRef} className="h-4 flex items-center justify-center">
-          {loadingMore && <span className="text-xs text-gray-400">載入更多...</span>}
+          {loadingMore && <span className="text-xs text-fg-subtle">載入更多...</span>}
           {!hasMore && messages.length > 0 && (
-            <span className="text-xs text-gray-300">— 已到最早訊息 —</span>
+            <span className="text-xs text-fg-disabled">— 已到最早訊息 —</span>
           )}
         </div>
 
         {loading && (
-          <div className="flex items-center justify-center h-40 text-gray-400">載入中...</div>
+          <div className="flex items-center justify-center h-40 text-fg-subtle">載入中...</div>
         )}
 
         {filtered.map((msg, i) => {
@@ -137,7 +137,7 @@ function ChatPageInner() {
           if (isSystem) {
             return (
               <div key={msg.id} className="flex justify-center py-1">
-                <span className="text-xs text-gray-400 bg-gray-100 px-3 py-0.5 rounded-full">
+                <span className="text-xs text-fg-subtle bg-surface-sunken px-3 py-0.5 rounded-full">
                   系統訊息
                 </span>
               </div>
@@ -151,7 +151,7 @@ function ChatPageInner() {
               ref={isHighlighted ? highlightRef : undefined}
               className={`flex gap-2.5 rounded-lg px-2 transition-colors ${
                 isSameSender ? "mt-0.5" : "mt-3"
-              } ${isHighlighted ? "bg-amber-50 ring-2 ring-amber-300" : ""}`}
+              } ${isHighlighted ? "bg-warn-bg ring-2 ring-warn/60" : ""}`}
             >
               {/* Avatar */}
               <div className="w-9 shrink-0">
@@ -162,13 +162,13 @@ function ChatPageInner() {
               <div className="flex-1 min-w-0 py-0.5">
                 {!isSameSender && (
                   <div className="flex items-baseline gap-2 mb-0.5">
-                    <span className="text-sm font-semibold text-gray-900">{name}</span>
-                    <span className="text-xs text-gray-400">{formatTime(msg.composed_at)}</span>
+                    <span className="text-sm font-semibold text-fg">{name}</span>
+                    <span className="text-xs text-fg-subtle">{formatTime(msg.composed_at)}</span>
                   </div>
                 )}
 
                 {msg.is_deleted ? (
-                  <p className="text-sm text-gray-400 italic">此訊息已刪除</p>
+                  <p className="text-sm text-fg-subtle italic">此訊息已刪除</p>
                 ) : (
                   <MessageContent html={msg.content ?? ""} />
                 )}
@@ -181,8 +181,8 @@ function ChatPageInner() {
                         return acc;
                       }, {})
                     ).map(([emoji, count]) => (
-                      <span key={emoji} className="inline-flex items-center gap-0.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-full px-2 py-0.5 cursor-default">
-                        {emoji} {count > 1 && <span className="text-gray-600">{count}</span>}
+                      <span key={emoji} className="inline-flex items-center gap-0.5 text-xs bg-surface-sunken hover:bg-surface-sunken rounded-full px-2 py-0.5 cursor-default">
+                        {emoji} {count > 1 && <span className="text-fg-muted">{count}</span>}
                       </span>
                     ))}
                   </div>
@@ -200,7 +200,7 @@ function ChatPageInner() {
 
 export default function ChatPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400">載入中...</div>}>
+    <Suspense fallback={<div className="flex items-center justify-center h-full text-fg-subtle">載入中...</div>}>
       <ChatPageInner />
     </Suspense>
   );

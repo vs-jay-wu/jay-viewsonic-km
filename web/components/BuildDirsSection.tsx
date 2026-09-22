@@ -145,10 +145,10 @@ export default function BuildDirsSection() {
   return (
     <div className="mt-10">
       <div className="flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold text-gray-900">
+        <h2 className="text-sm font-semibold text-fg">
           佔空間的 build 產物
           {data && data.repos.length > 0 && (
-            <span className="ml-2 font-normal text-gray-400">
+            <span className="ml-2 font-normal text-fg-subtle">
               {formatBytes(data.totalBytes)}
             </span>
           )}
@@ -161,7 +161,7 @@ export default function BuildDirsSection() {
               onClick={cleanAll}
               disabled={loading || !!busy || !data?.repos.length}
               aria-label="全部清理"
-              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600 disabled:opacity-40"
+              className="rounded p-1 text-fg-subtle hover:bg-surface-sunken hover:text-danger disabled:opacity-40"
             >
               <Icon name="trash" size={15} />
             </button>
@@ -171,7 +171,7 @@ export default function BuildDirsSection() {
               onClick={() => load(true)}
               disabled={loading || !!busy}
               aria-label="重新掃描"
-              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40"
+              className="rounded p-1 text-fg-subtle hover:bg-surface-sunken hover:text-fg disabled:opacity-40"
             >
               <Icon name="refresh" size={15} className={loading ? "animate-spin" : ""} />
             </button>
@@ -180,10 +180,10 @@ export default function BuildDirsSection() {
       </div>
 
       <div className="mt-1 min-h-[1rem] text-xs">
-        {notice && <span className="text-emerald-700">{notice}</span>}
-        {error && <span className="text-red-600">{error}</span>}
+        {notice && <span className="text-ok">{notice}</span>}
+        {error && <span className="text-danger">{error}</span>}
         {!notice && !error && data && (
-          <span className="text-gray-400">
+          <span className="text-fg-subtle">
             超過 {formatBytes(SIZE_THRESHOLD_BYTES)} 的才列出來 · 掃了 {data.repoCount} 個 repo ·
             {" "}{fmtTime(data.scannedAt)}
           </span>
@@ -191,16 +191,16 @@ export default function BuildDirsSection() {
       </div>
 
       {data && data.repos.length > 0 && (
-        <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200">
+        <ul className="mt-3 divide-y divide-line rounded-xl border border-line">
           {data.repos.map((r) => (
             <li key={r.repo} className="flex items-start gap-3 px-4 py-3">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-sm text-gray-900">{r.repo}</span>
-                  <span className="text-[11px] text-gray-400">
+                  <span className="font-mono text-sm text-fg">{r.repo}</span>
+                  <span className="text-[11px] text-fg-subtle">
                     {r.kinds.map((k) => KIND_LABEL[k] ?? k).join("／")}
                   </span>
-                  <span className="text-xs text-gray-500">{formatBytes(r.totalBytes)}</span>
+                  <span className="text-xs text-fg-muted">{formatBytes(r.totalBytes)}</span>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   {r.dirs.map((d) => (
@@ -208,8 +208,8 @@ export default function BuildDirsSection() {
                       key={d.path}
                       className={`rounded-full border px-1.5 py-0.5 font-mono text-[11px] leading-none ${
                         d.notIgnored
-                          ? "border-amber-200 bg-amber-50 text-amber-700"
-                          : "border-gray-200 bg-gray-50 text-gray-600"
+                          ? "border-warn/40 bg-warn-bg text-warn"
+                          : "border-line bg-surface-raised text-fg-muted"
                       }`}
                       title={d.notIgnored ? "沒有被 gitignore —— 不會被清掉" : undefined}
                     >
@@ -222,7 +222,7 @@ export default function BuildDirsSection() {
                 <button
                   onClick={() => cleanRepo(r)}
                   disabled={!!busy}
-                  className="mt-0.5 shrink-0 text-gray-300 hover:text-red-600 disabled:opacity-40"
+                  className="mt-0.5 shrink-0 text-fg-disabled hover:text-danger disabled:opacity-40"
                 >
                   <Icon name={busy === r.repo ? "spinner" : "trash"} size={16}
                         className={busy === r.repo ? "animate-spin" : ""} />

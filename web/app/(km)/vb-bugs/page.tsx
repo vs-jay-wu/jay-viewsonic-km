@@ -44,40 +44,40 @@ interface Scheduler {
  */
 const STATUS_CHIP: Record<string, string> = {
   // 待處理 —— 灰，愈接近可以動工愈深
-  "DISCOVERY/REFINEMENT": "border-slate-200 bg-slate-50 text-slate-500",
-  "BACKLOG": "border-slate-200 bg-slate-100 text-slate-600",
-  "待辦事項": "border-slate-300 bg-slate-100 text-slate-700",
-  "READY FOR DEV": "border-slate-400 bg-slate-200 text-slate-800",
+  "DISCOVERY/REFINEMENT": "border-line bg-surface-raised text-fg-muted",
+  "BACKLOG": "border-line bg-surface-sunken text-fg-muted",
+  "待辦事項": "border-line bg-surface-sunken text-fg",
+  "READY FOR DEV": "border-line-strong bg-surface-sunken text-fg",
   // 進行中 —— 藍
-  "進行中": "border-sky-200 bg-sky-50 text-sky-700",
-  "IN CODE REVIEW": "border-sky-300 bg-sky-100 text-sky-800",
-  "PR MERGED": "border-sky-400 bg-sky-200 text-sky-900",
+  "進行中": "border-accent/50 bg-surface-selected text-accent",
+  "IN CODE REVIEW": "border-accent/50 bg-accent-bg text-accent",
+  "PR MERGED": "border-accent/60 bg-accent text-accent",
   // 待驗證 —— 紫；被打回票的另外標紅
-  "STAGE READY(READY FOR QA)": "border-violet-200 bg-violet-50 text-violet-700",
-  "TRACKING BY QA": "border-violet-300 bg-violet-100 text-violet-800",
-  "VERIFYING": "border-violet-300 bg-violet-100 text-violet-800",
+  "STAGE READY(READY FOR QA)": "border-info/40 bg-surface-sunken text-info",
+  "TRACKING BY QA": "border-info/50 bg-surface-sunken text-info",
+  "VERIFYING": "border-info/50 bg-surface-sunken text-info",
   "QA REJECT": "border-rose-300 bg-rose-50 text-rose-700",
   // 完成 —— 綠
-  "QA ACCEPTED": "border-emerald-200 bg-emerald-50 text-emerald-700",
-  "PRODUCTION READY": "border-emerald-300 bg-emerald-100 text-emerald-800",
+  "QA ACCEPTED": "border-ok/40 bg-ok-bg text-ok",
+  "PRODUCTION READY": "border-ok/40 bg-ok/25 text-ok",
   // 擱置 —— 琥珀；Blocked 比 Pending 嚴重，標紅
-  "Pending": "border-amber-200 bg-amber-50 text-amber-800",
-  "Blocked": "border-red-300 bg-red-50 text-red-700",
+  "Pending": "border-warn/40 bg-warn-bg text-warn",
+  "Blocked": "border-danger/50 bg-danger-bg text-danger",
 };
 
 /** 分組的底色，給分組表沒列到的新狀態當退路 */
 const GROUP_FALLBACK: Record<string, string> = {
-  todo: "border-slate-200 bg-slate-100 text-slate-600",
-  in_progress: "border-sky-200 bg-sky-50 text-sky-700",
-  verifying: "border-violet-200 bg-violet-50 text-violet-700",
-  production_ready: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  on_hold: "border-amber-200 bg-amber-50 text-amber-800",
+  todo: "border-line bg-surface-sunken text-fg-muted",
+  in_progress: "border-accent/50 bg-surface-selected text-accent",
+  verifying: "border-info/40 bg-surface-sunken text-info",
+  production_ready: "border-ok/40 bg-ok-bg text-ok",
+  on_hold: "border-warn/40 bg-warn-bg text-warn",
 };
 
 function chipClass(status: string): string {
   if (STATUS_CHIP[status]) return STATUS_CHIP[status];
   const g = groupOfStatus(status);
-  return (g && GROUP_FALLBACK[g]) || "border-gray-200 bg-gray-50 text-gray-500";
+  return (g && GROUP_FALLBACK[g]) || "border-line bg-surface-raised text-fg-muted";
 }
 
 function fmtTime(iso: string | null): string {
@@ -177,10 +177,10 @@ export default function VbBugsPage() {
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-10">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">VB Bug 總覽</h1>
-            <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
+            <h1 className="text-2xl font-semibold text-fg">VB Bug 總覽</h1>
+            <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">
               <code className="text-xs">project = VB AND issuetype = Bug</code>，未完成的票，
-              依<strong className="font-medium text-gray-700">產品 × 狀態 × 優先度</strong>聚合。
+              依<strong className="font-medium text-fg">產品 × 狀態 × 優先度</strong>聚合。
               server 定時抓快照，開這頁不會打 Jira。點數字可以直接看是哪幾張票。
             </p>
           </div>
@@ -189,14 +189,14 @@ export default function VbBugsPage() {
               onClick={() => refreshNow(true)}
               disabled={busy}
               title="忽略增量，整份重抓（處理被硬刪或搬走的幽靈票）。排程只在台北時間 20:00–07:00 自動做一次，過了不補"
-              className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              className="rounded-lg border border-line px-3 py-2 text-sm text-fg-muted hover:bg-surface-raised disabled:opacity-50"
             >
               全同步
             </button>
             <button
               onClick={() => refreshNow(false)}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm text-fg hover:bg-surface-raised disabled:opacity-50"
             >
               <Icon name="refresh" size={15} className={busy || scheduler?.fetching ? "animate-spin" : ""} />
               立即更新
@@ -205,12 +205,12 @@ export default function VbBugsPage() {
         </div>
 
         {hasNewer && (
-          <div className="mt-6 flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm text-sky-800">
+          <div className="mt-6 flex items-center gap-2 rounded-lg border border-accent/50 bg-surface-selected px-4 py-2.5 text-sm text-accent">
             <Icon name="refresh" size={15} />
             server 已經抓到更新的資料
             <button
               onClick={() => load()}
-              className="ml-auto rounded-md bg-sky-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-sky-800"
+              className="ml-auto rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-on-solid hover:bg-accent"
             >
               更新畫面
             </button>
@@ -218,19 +218,19 @@ export default function VbBugsPage() {
         )}
 
         {error && (
-          <div className="mt-6 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mt-6 flex items-start gap-2 rounded-lg border border-danger/40 bg-danger-bg px-4 py-3 text-sm text-danger">
             <Icon name="alert" size={16} className="mt-0.5" />
             <span className="whitespace-pre-wrap">{error}</span>
           </div>
         )}
         {snapshot?.lastError && (
-          <div className="mt-6 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <div className="mt-6 flex items-start gap-2 rounded-lg border border-warn/40 bg-warn-bg px-4 py-3 text-sm text-warn">
             <Icon name="alert" size={16} className="mt-0.5" />
             <span className="whitespace-pre-wrap">上次抓取失敗：{snapshot.lastError}</span>
           </div>
         )}
         {snapshot && Object.keys(snapshot.unmappedStatuses).length > 0 && (
-          <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <div className="mt-6 rounded-lg border border-warn/40 bg-warn-bg px-4 py-3 text-sm text-warn">
             <div className="flex items-start gap-2">
               <Icon name="alert" size={16} className="mt-0.5" />
               <div>
@@ -248,8 +248,8 @@ export default function VbBugsPage() {
         )}
 
         {/* 設定 */}
-        <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-xl border border-gray-200 px-5 py-3.5 text-sm">
-          <label className="inline-flex items-center gap-2 text-gray-700">
+        <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-xl border border-line px-5 py-3.5 text-sm">
+          <label className="inline-flex items-center gap-2 text-fg">
             <input
               type="checkbox"
               checked={!!config?.showProductionReady}
@@ -257,7 +257,7 @@ export default function VbBugsPage() {
             />
             顯示 Production Ready 那一列
           </label>
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-fg-subtle">
             {snapshot
               ? `${snapshot.issueCount} 張未完成的 bug · ${fmtTime(snapshot.fetchedAt)}` +
                 `（${snapshot.mode === "incremental" ? "增量" : "全同步"}，這輪抓了 ${snapshot.fetchedCount} 筆）`
@@ -266,7 +266,7 @@ export default function VbBugsPage() {
             {snapshot?.lastFullSyncAt && ` · 上次全同步 ${fmtTime(snapshot.lastFullSyncAt)}`}
           </span>
           {pinned.length > 0 && (
-            <span className="ml-auto text-xs text-gray-400">
+            <span className="ml-auto text-xs text-fg-subtle">
               已 pin：{pinned.join("、")}
             </span>
           )}
@@ -274,15 +274,15 @@ export default function VbBugsPage() {
 
         {/* 開 session 的結果。固定佔一行，不要讓下面的矩陣上下跳 */}
         <div className="mt-1 h-4 text-xs">
-          {session.notice && <span className="text-sky-700">{session.notice}</span>}
-          {session.error && <span className="text-red-600">{session.error}</span>}
+          {session.notice && <span className="text-accent">{session.notice}</span>}
+          {session.error && <span className="text-danger">{session.error}</span>}
         </div>
 
         {/* 矩陣 */}
         {loading ? (
-          <p className="mt-8 text-sm text-gray-400">載入中…</p>
+          <p className="mt-8 text-sm text-fg-subtle">載入中…</p>
         ) : !snapshot ? (
-          <p className="mt-8 rounded-xl border border-gray-200 px-5 py-6 text-sm text-gray-400">
+          <p className="mt-8 rounded-xl border border-line px-5 py-6 text-sm text-fg-subtle">
             還沒有快照。按「立即更新」抓一次。
           </p>
         ) : (
@@ -290,42 +290,42 @@ export default function VbBugsPage() {
             {products.map((p) => {
               const isPinned = pinned.includes(p.name);
               return (
-                <div key={p.name} className="overflow-hidden rounded-xl border border-gray-200">
-                  <div className="flex items-center gap-2.5 border-b border-gray-200 bg-gray-50 px-4 py-2.5">
+                <div key={p.name} className="overflow-hidden rounded-xl border border-line">
+                  <div className="flex items-center gap-2.5 border-b border-line bg-surface-raised px-4 py-2.5">
                     <button
                       onClick={() => save({ togglePin: p.name })}
                       disabled={busy}
                       title={isPinned ? "取消 pin" : "pin 住（排到前面）"}
-                      className={isPinned ? "text-amber-500" : "text-gray-300 hover:text-amber-500"}
+                      className={isPinned ? "text-pin" : "text-fg-disabled hover:text-pin"}
                     >
                       <Icon name="pin" size={15} />
                     </button>
-                    <h2 className="text-sm font-semibold text-gray-900">{p.name}</h2>
-                    <span className="text-xs text-gray-400">{p.total} 張</span>
+                    <h2 className="text-sm font-semibold text-fg">{p.name}</h2>
+                    <span className="text-xs text-fg-subtle">{p.total} 張</span>
                   </div>
 
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="text-left text-xs text-gray-500">
+                        <tr className="text-left text-xs text-fg-muted">
                           <th className="px-4 py-2 font-medium">狀態</th>
                           {priorities.map((pr) => (
                             <th key={pr.key} className="px-3 py-2 text-right font-medium">
                               {pr.label}
-                              <span className="ml-1 font-normal text-gray-300">{pr.sub}</span>
+                              <span className="ml-1 font-normal text-fg-disabled">{pr.sub}</span>
                             </th>
                           ))}
                           <th className="px-4 py-2 text-right font-medium">小計</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-100">
+                      <tbody className="divide-y divide-line">
                         {groups.map((g) => {
                           const rowTotal = priorities.reduce(
                             (n, pr) => n + (p.cells[`${g.key}|${pr.key}`]?.count ?? 0), 0
                           );
                           return (
                             <tr key={g.key}>
-                              <td className="px-4 py-2 text-gray-700" title={g.statuses.join("、")}>
+                              <td className="px-4 py-2 text-fg" title={g.statuses.join("、")}>
                                 {g.label}
                               </td>
                               {priorities.map((pr) => {
@@ -337,7 +337,7 @@ export default function VbBugsPage() {
                                   <td key={pr.key} className="px-3 py-2 text-right">
                                     {n === 0 ? (
                                       // 0 不要搶注意力 —— 這張表大部分格子都是 0
-                                      <span className="text-gray-200">0</span>
+                                      <span className="text-fg-disabled">0</span>
                                     ) : (
                                       <button
                                         onClick={() =>
@@ -345,8 +345,8 @@ export default function VbBugsPage() {
                                         }
                                         className={`rounded px-1.5 py-0.5 font-medium ${
                                           isOpen
-                                            ? "bg-gray-900 text-white"
-                                            : "text-gray-900 hover:bg-gray-100"
+                                            ? "bg-control text-on-solid"
+                                            : "text-fg hover:bg-surface-sunken"
                                         }`}
                                       >
                                         {n}
@@ -355,9 +355,9 @@ export default function VbBugsPage() {
                                   </td>
                                 );
                               })}
-                              <td className="px-4 py-2 text-right text-gray-500">
+                              <td className="px-4 py-2 text-right text-fg-muted">
                                 {rowTotal === 0 ? (
-                                  <span className="text-gray-200">0</span>
+                                  <span className="text-fg-disabled">0</span>
                                 ) : (
                                   rowTotal
                                 )}
@@ -370,18 +370,18 @@ export default function VbBugsPage() {
                   </div>
 
                   {open?.product === p.name && openCell && (
-                    <ul className="divide-y divide-gray-100 border-t border-gray-200 bg-gray-50/60">
+                    <ul className="divide-y divide-line border-t border-line bg-surface-raised/60">
                       {openCell.issues.map((i) => (
                         <li key={i.key} className="flex items-baseline gap-3 px-4 py-2">
                           <a
                             href={i.url}
                             target="_blank"
                             rel="noreferrer"
-                            className="font-mono text-xs text-sky-700 hover:underline"
+                            className="font-mono text-xs text-accent hover:underline"
                           >
                             {i.key}
                           </a>
-                          <span className="min-w-0 flex-1 truncate text-sm text-gray-800">
+                          <span className="min-w-0 flex-1 truncate text-sm text-fg">
                             {i.summary}
                           </span>
                           {/* 這張單已經有的 PR（來自 lib/workIndex.ts 的關聯） */}
@@ -391,7 +391,7 @@ export default function VbBugsPage() {
                               href={pr.url}
                               target="_blank"
                               rel="noreferrer"
-                              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-gray-200 bg-white px-1.5 py-0.5 text-[11px] leading-none text-gray-600 hover:bg-gray-50"
+                              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line bg-surface px-1.5 py-0.5 text-[11px] leading-none text-fg-muted hover:bg-surface-raised"
                             >
                               <Icon name="gitPr" size={10} />
                               {pr.number}
@@ -418,8 +418,8 @@ export default function VbBugsPage() {
                                   disabled={session.busy}
                                   className={`shrink-0 disabled:opacity-40 ${
                                     count > 0
-                                      ? "text-sky-500 hover:text-sky-700"
-                                      : "text-gray-300 hover:text-sky-600"
+                                      ? "text-accent hover:text-accent"
+                                      : "text-fg-disabled hover:text-accent"
                                   }`}
                                 >
                                   <Icon name={count > 0 ? "external" : "play"} size={14} />

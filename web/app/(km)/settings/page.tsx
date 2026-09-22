@@ -3,8 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "@/components/Icon";
 import {
-  DEFAULT_UI_SETTINGS, REVIEW_ENGINES, type DiffTheme, type UiSettings,
+  DEFAULT_UI_SETTINGS, REVIEW_ENGINES, THEMES,
+  type DiffThemePref, type Theme, type UiSettings,
 } from "@/lib/uiSettingsRules";
+import { resolveDiffTheme } from "@/lib/uiSettingsRules";
+import { useResolvedTheme } from "@/components/useResolvedTheme";
+
+const THEME_LABEL: Record<Theme, string> = { system: "跟隨系統", light: "淺色", dark: "深色" };
 
 /**
  * 設定。
@@ -17,6 +22,8 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<UiSettings>(DEFAULT_UI_SETTINGS);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  /** 預覽要顯示**實際**會用到的配色 —— `follow` 時得先把全域的三態解析出來 */
+  const previewTheme = resolveDiffTheme(settings.diffTheme, useResolvedTheme(settings.theme));
 
   const load = useCallback(async () => {
     const res = await fetch("/api/settings", { cache: "no-store" });
@@ -44,27 +51,55 @@ export default function SettingsPage() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="mx-auto max-w-4xl px-4 py-6 sm:px-8 sm:py-10">
-        <h1 className="flex items-center gap-2.5 text-2xl font-semibold text-gray-900">
-          <Icon name="cpu" size={22} className="text-gray-400" />
+        <h1 className="flex items-center gap-2.5 text-2xl font-semibold text-fg">
+          <Icon name="cpu" size={22} className="text-fg-subtle" />
           設定
         </h1>
-        <p className="mt-1.5 text-sm text-gray-500">
+        <p className="mt-1.5 text-sm text-fg-muted">
           存在 server，所以換瀏覽器或從別的裝置開也一致。
         </p>
 
-        <div className="mt-6 rounded-xl border border-gray-200 p-5">
+        <div className="mt-6 rounded-xl border border-line p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-sm font-medium text-gray-900">
+              <div className="text-sm font-medium text-fg">配色</div>
+              <p className="mt-0.5 max-w-xl text-xs text-fg-muted">
+                「跟隨系統」是純 CSS 判斷、明確指定的由 server 在輸出 HTML 時就決定，
+                所以兩種都<b className="text-fg">不會先閃一下</b>。
+              </p>
+            </div>
+            <div className="flex gap-1">
+              {THEMES.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => save({ theme: t })}
+                  disabled={busy || !loaded}
+                  className={`rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50 ${
+                    settings.theme === t
+                      ? "border-control bg-control text-on-solid"
+                      : "border-line text-fg-muted hover:bg-surface-raised"
+                  }`}
+                >
+                  {THEME_LABEL[t]}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-line p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium text-fg">
                 <code className="font-mono">/review-local</code> 用哪個引擎
               </div>
-              <p className="mt-0.5 max-w-xl text-xs text-gray-500">
-                commit／push 之前的交叉驗證要交給誰跑。<b className="text-gray-700">兩邊的輸出格式一模一樣</b>
+              <p className="mt-0.5 max-w-xl text-xs text-fg-muted">
+                commit／push 之前的交叉驗證要交給誰跑。<b className="text-fg">兩邊的輸出格式一模一樣</b>
                 （同一份 schema），所以舊的紀錄照樣讀得懂；差別只在 codex 沒有金額可回報。
                 在終端機打 <code className="font-mono">/review-local</code> 也會讀這裡的設定。
               </p>
-              <p className="mt-1.5 max-w-xl text-xs text-gray-500">
-                <b className="text-gray-700">PR 巡邏也吃這個設定</b>（2026-09-21 起）。兩邊拿到的是同一份指示：
+              <p className="mt-1.5 max-w-xl text-xs text-fg-muted">
+                <b className="text-fg">PR 巡邏也吃這個設定</b>（2026-09-21 起）。兩邊拿到的是同一份指示：
                 claude 走 <code className="font-mono">/handle-pr-inbox</code> slash command，codex 沒有這個機制，
                 所以改成叫它先讀那份 <code className="font-mono">.md</code> 再照做。
                 codex 那側沒有金額可回報，巡邏紀錄的花費會是空的。
@@ -78,8 +113,8 @@ export default function SettingsPage() {
                   disabled={busy || !loaded}
                   className={`rounded-lg border px-3 py-1.5 font-mono text-xs disabled:opacity-50 ${
                     settings.reviewEngine === e
-                      ? "border-gray-900 bg-gray-900 text-white"
-                      : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                      ? "border-control bg-control text-on-solid"
+                      : "border-line text-fg-muted hover:bg-surface-raised"
                   }`}
                 >
                   {e}
@@ -89,27 +124,29 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="mt-4 rounded-xl border border-gray-200 p-5">
+        <div className="mt-4 rounded-xl border border-line p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-sm font-medium text-gray-900">看 diff 的配色</div>
-              <p className="mt-0.5 text-xs text-gray-500">
-                「未提交的改動」頁的程式碼區塊要用深色還是淺色。
+              <div className="text-sm font-medium text-fg">看 diff 的配色</div>
+              <p className="mt-0.5 max-w-xl text-xs text-fg-muted">
+                程式碼區塊要用深色還是淺色。
+                <b className="text-fg">「跟隨全域」</b>就是跟上面那格走；
+                要維持「淺色頁面配深色 diff」就自己指定 —— 它是獨立設定，不會被覆蓋。
               </p>
             </div>
             <div className="flex gap-1">
-              {(["dark", "light"] as DiffTheme[]).map((t) => (
+              {(["follow", "dark", "light"] as DiffThemePref[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => save({ diffTheme: t })}
                   disabled={busy || !loaded}
                   className={`rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50 ${
                     settings.diffTheme === t
-                      ? "border-gray-900 bg-gray-900 text-white"
-                      : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                      ? "border-control bg-control text-on-solid"
+                      : "border-line text-fg-muted hover:bg-surface-raised"
                   }`}
                 >
-                  {t === "dark" ? "深色" : "淺色"}
+                  {t === "follow" ? "跟隨全域" : t === "dark" ? "深色" : "淺色"}
                 </button>
               ))}
             </div>
@@ -118,7 +155,7 @@ export default function SettingsPage() {
           {/* 預覽：讓你不用切過去就看得出差別 */}
           <div
             className={`mt-4 overflow-hidden rounded-lg border ${
-              settings.diffTheme === "dark" ? "border-gray-800 bg-[#0d1117]" : "border-gray-200 bg-white"
+              previewTheme === "dark" ? "border-line bg-[#0d1117]" : "border-line bg-surface"
             }`}
           >
             <table className="w-full border-collapse font-mono text-[12px] leading-[1.55]">
@@ -132,29 +169,29 @@ export default function SettingsPage() {
                   <tr
                     key={i}
                     className={
-                      settings.diffTheme === "dark"
+                      previewTheme === "dark"
                         ? l.kind === "add"
                           ? "bg-emerald-950/60"
                           : l.kind === "del"
                             ? "bg-red-950/60"
                             : ""
                         : l.kind === "add"
-                          ? "bg-emerald-50"
+                          ? "bg-ok-bg"
                           : l.kind === "del"
-                            ? "bg-red-50"
+                            ? "bg-danger-bg"
                             : ""
                     }
                   >
-                    <td className={`w-10 px-2 text-right ${settings.diffTheme === "dark" ? "text-gray-600" : "text-gray-300"}`}>
+                    <td className={`w-10 px-2 text-right ${previewTheme === "dark" ? "text-fg-muted" : "text-fg-disabled"}`}>
                       {l.no[0] ?? ""}
                     </td>
-                    <td className={`w-10 px-2 text-right ${settings.diffTheme === "dark" ? "text-gray-600" : "text-gray-300"}`}>
+                    <td className={`w-10 px-2 text-right ${previewTheme === "dark" ? "text-fg-muted" : "text-fg-disabled"}`}>
                       {l.no[1] ?? ""}
                     </td>
-                    <td className={`w-4 text-center ${l.kind === "add" ? "text-emerald-500" : l.kind === "del" ? "text-red-400" : "text-gray-500"}`}>
+                    <td className={`w-4 text-center ${l.kind === "add" ? "text-ok" : l.kind === "del" ? "text-danger" : "text-fg-muted"}`}>
                       {l.sign}
                     </td>
-                    <td className={`px-2 ${settings.diffTheme === "dark" ? "text-gray-200" : "text-gray-800"}`}>
+                    <td className={`px-2 ${previewTheme === "dark" ? "text-fg-disabled" : "text-fg"}`}>
                       {l.text}
                     </td>
                   </tr>

@@ -66,11 +66,11 @@ export function findItemBySession<T extends WorkItem>(
 export function prStateStyle(state: IndexedPr["state"]): { label: string; cls: string } {
   switch (state) {
     case "OPEN":
-      return { label: "open", cls: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+      return { label: "open", cls: "border-ok/40 bg-ok-bg text-ok" };
     case "MERGED":
-      return { label: "merged", cls: "border-violet-200 bg-violet-50 text-violet-700" };
+      return { label: "merged", cls: "border-info/40 bg-surface-sunken text-info" };
     default:
-      return { label: "closed", cls: "border-gray-200 bg-gray-50 text-gray-500" };
+      return { label: "closed", cls: "border-line bg-surface-raised text-fg-muted" };
   }
 }
 

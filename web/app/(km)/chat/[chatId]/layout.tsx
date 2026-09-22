@@ -27,11 +27,11 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-4 pt-3 pb-0 border-b border-gray-200 shrink-0">
+      <div className="px-4 pt-3 pb-0 border-b border-line shrink-0">
         <div className="flex items-end justify-between">
           <div className="mb-2">
-            <h2 className="font-semibold text-gray-900">{chat?.topic || "..."}</h2>
-            <p className="text-xs text-gray-400">{chat?.message_count ?? 0} 則訊息</p>
+            <h2 className="font-semibold text-fg">{chat?.topic || "..."}</h2>
+            <p className="text-xs text-fg-subtle">{chat?.message_count ?? 0} 則訊息</p>
           </div>
           {/* Tabs */}
           <div className="flex gap-1">
@@ -39,8 +39,8 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
               onClick={() => router.push(`/chat/${chatId}`)}
               className={`px-4 py-2 text-sm rounded-t-lg transition-colors ${
                 !isSummary
-                  ? "bg-white border border-b-white border-gray-200 font-medium text-gray-900 -mb-px"
-                  : "text-gray-400 hover:text-gray-600"
+                  ? "bg-surface border border-b-white border-line font-medium text-fg -mb-px"
+                  : "text-fg-subtle hover:text-fg-muted"
               }`}
             >
               <span className="inline-flex items-center gap-1.5"><Icon name="message" size={14} /> 對話</span>
@@ -49,8 +49,8 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
               onClick={() => router.push(`/chat/${chatId}/summary`)}
               className={`px-4 py-2 text-sm rounded-t-lg transition-colors ${
                 isSummary
-                  ? "bg-white border border-b-white border-gray-200 font-medium text-gray-900 -mb-px"
-                  : "text-gray-400 hover:text-gray-600"
+                  ? "bg-surface border border-b-white border-line font-medium text-fg -mb-px"
+                  : "text-fg-subtle hover:text-fg-muted"
               }`}
             >
               <span className="inline-flex items-center gap-1.5"><Icon name="clipboard" size={14} /> 摘要</span>

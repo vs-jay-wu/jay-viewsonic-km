@@ -115,22 +115,22 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
         toast.leaving || !entered
           ? "translate-y-3 scale-95 opacity-0"
           : "translate-y-0 scale-100 opacity-100"
-      } ${toast.ok ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"}`}
+      } ${toast.ok ? "border-ok/40 bg-ok-bg" : "border-danger/40 bg-danger-bg"}`}
     >
       <div className="flex items-start gap-2.5">
         <Icon
           name={toast.ok ? "check" : "alert"}
           size={15}
-          className={`mt-px shrink-0 ${toast.ok ? "text-emerald-600" : "text-red-600"}`}
+          className={`mt-px shrink-0 ${toast.ok ? "text-ok" : "text-danger"}`}
         />
         <div className="min-w-0 flex-1">
-          <p className={`text-[13px] font-medium leading-5 ${toast.ok ? "text-emerald-800" : "text-red-800"}`}>
+          <p className={`text-[13px] font-medium leading-5 ${toast.ok ? "text-ok" : "text-danger"}`}>
             {toast.text}
           </p>
           {toast.detail && (
             <pre
               className={`mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed ${
-                toast.ok ? "text-emerald-700" : "text-red-700"
+                toast.ok ? "text-ok" : "text-danger"
               }`}
             >
               {toast.detail}
@@ -140,7 +140,7 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
         <button
           onClick={onDismiss}
           aria-label="關閉通知"
-          className={`shrink-0 ${toast.ok ? "text-emerald-400 hover:text-emerald-700" : "text-red-400 hover:text-red-700"}`}
+          className={`shrink-0 ${toast.ok ? "text-ok hover:text-ok" : "text-danger hover:text-danger"}`}
         >
           <Icon name="x" size={13} />
         </button>

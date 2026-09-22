@@ -303,8 +303,8 @@ export default function SessionsPage() {
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-8 sm:py-10">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Claude Sessions</h1>
-            <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
+            <h1 className="text-2xl font-semibold text-fg">Claude Sessions</h1>
+            <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">
               本機 <code className="text-xs">~/.claude/projects</code> 底下的 session 記錄。
               目前 {sessions.length} 個、共 {mb(totalBytes)}。
               pin 住的 session 不能被刪 —— pin 在這裡就是「別動它」的意思。
@@ -312,31 +312,31 @@ export default function SessionsPage() {
           </div>
           <button
             onClick={load}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm text-fg hover:bg-surface-raised"
           >
             <Icon name="refresh" size={15} className={loading ? "animate-spin" : ""} /> 重新掃描
           </button>
         </div>
 
         {error && (
-          <div className="mt-6 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mt-6 flex items-start gap-2 rounded-lg border border-danger/40 bg-danger-bg px-4 py-3 text-sm text-danger">
             <Icon name="alert" size={16} className="mt-0.5" />
             <span>{error}</span>
           </div>
         )}
 
         {results && (
-          <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-            <div className="flex items-center gap-2 text-gray-800">
-              <Icon name="check" size={16} className="text-emerald-600" />
+          <div className="mt-6 rounded-lg border border-line bg-surface-raised px-4 py-3 text-sm">
+            <div className="flex items-center gap-2 text-fg">
+              <Icon name="check" size={16} className="text-ok" />
               已刪除 {results.filter((r) => r.ok).length} 個，釋放{" "}
               {mb(results.reduce((n, r) => n + r.freedBytes, 0))}
-              <button onClick={() => setResults(null)} className="ml-auto text-gray-400 hover:text-gray-700">
+              <button onClick={() => setResults(null)} className="ml-auto text-fg-subtle hover:text-fg">
                 <Icon name="x" size={15} />
               </button>
             </div>
             {failed.length > 0 && (
-              <ul className="mt-2 space-y-1 text-xs text-red-700">
+              <ul className="mt-2 space-y-1 text-xs text-danger">
                 {failed.map((r) => (
                   <li key={r.id}>
                     <span className="font-mono">{r.id.slice(0, 8)}</span>：{r.error}
@@ -350,18 +350,18 @@ export default function SessionsPage() {
         {/* 篩選 */}
         <div className="mt-7 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[11rem]">
-            <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="搜尋標題／id／分支"
-              className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-500 focus:border-gray-500 focus:outline-none"
+              className="w-full rounded-lg border border-line-strong py-2 pl-9 pr-3 text-sm text-fg placeholder:text-fg-muted focus:border-line-strong focus:outline-none"
             />
           </div>
           <select
             value={project}
             onChange={(e) => setProject(e.target.value)}
-            className="max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800"
+            className="max-w-xs rounded-lg border border-line-strong px-3 py-2 text-sm text-fg"
           >
             <option value="all">全部專案（{sessions.length}）</option>
             {projects.map(([cwd, n]) => (
@@ -370,7 +370,7 @@ export default function SessionsPage() {
               </option>
             ))}
           </select>
-          <div className="inline-flex overflow-hidden rounded-lg border border-gray-300 text-sm">
+          <div className="inline-flex overflow-hidden rounded-lg border border-line-strong text-sm">
             {([
               ["all", `全部（${sessions.length}）`],
               ["stale", `久沒用（${stale.length}）`],
@@ -381,8 +381,8 @@ export default function SessionsPage() {
                 onClick={() => setView(key)}
                 className={`min-w-[6.5rem] px-3 py-2 text-center ${
                   view === key
-                    ? "bg-gray-900 text-white"
-                    : "bg-white text-gray-600 hover:bg-gray-50"
+                    ? "bg-control text-on-solid"
+                    : "bg-surface text-fg-muted hover:bg-surface-raised"
                 }`}
               >
                 {label}
@@ -393,8 +393,8 @@ export default function SessionsPage() {
         </div>
 
         {/* 操作列 */}
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg bg-gray-50 px-4 py-2.5 text-sm">
-          <label className="inline-flex items-center gap-2 text-gray-700">
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg bg-surface-raised px-4 py-2.5 text-sm">
+          <label className="inline-flex items-center gap-2 text-fg">
             <input
               type="checkbox"
               checked={allVisibleSelected}
@@ -403,7 +403,7 @@ export default function SessionsPage() {
             />
             全選（{selectable.length} 個可刪）
           </label>
-          <span className="text-gray-400">
+          <span className="text-fg-subtle">
             已選 {selected.size} 個{selected.size > 0 ? ` · ${mb(selectedBytes)}` : ""}
           </span>
           <button
@@ -411,8 +411,8 @@ export default function SessionsPage() {
             disabled={selected.size === 0 || busy}
             className={`ml-auto inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium ${
               selected.size === 0 || busy
-                ? "cursor-not-allowed bg-gray-200 text-gray-400"
-                : "bg-red-600 text-white hover:bg-red-700"
+                ? "cursor-not-allowed bg-surface-sunken text-fg-subtle"
+                : "bg-danger text-on-solid hover:bg-danger"
             }`}
           >
             <Icon name={busy ? "spinner" : "trash"} size={15} className={busy ? "animate-spin" : ""} />
@@ -421,13 +421,13 @@ export default function SessionsPage() {
         </div>
 
         {view === "stale" && (
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-warn/40 bg-warn-bg px-4 py-2.5 text-xs text-warn">
             <label className="inline-flex items-center gap-1.5">
               超過
               <select
                 value={staleDays}
                 onChange={(e) => setStaleDays(Number(e.target.value))}
-                className="rounded-md border border-amber-300 bg-white px-2 py-1 text-xs text-gray-800"
+                className="rounded-md border border-warn/40 bg-surface px-2 py-1 text-xs text-fg"
               >
                 {[30, 60, 90, 180].map((d) => (
                   <option key={d} value={d}>{d}</option>
@@ -436,7 +436,7 @@ export default function SessionsPage() {
               天沒動過、且沒有 pin 住的
             </label>
             <span>共 {stale.length} 個、{mb(staleBytes)}</span>
-            <span className="text-amber-700/80">
+            <span className="text-warn/80">
               只是幫你挑出來，不會自動刪；要留的先 pin 起來再全選
             </span>
           </div>
@@ -444,12 +444,12 @@ export default function SessionsPage() {
 
         {/* 已收尾：對應的 PR 全部 merged／closed。用中性灰底，因為這不是警告 */}
         {view === "settled" && (
-          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-xs text-gray-600">
-            <span className="font-medium text-gray-800">
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-line bg-surface-raised px-4 py-2.5 text-xs text-fg-muted">
+            <span className="font-medium text-fg">
               對應的 PR 都已經 merged 或 closed 的 session
             </span>
             <span>共 {settled.length} 個、{mb(settledBytes)}</span>
-            <span className="text-gray-500">
+            <span className="text-fg-muted">
               沒有 PR 的不算在內（可能是還沒送出的調查）；要留的先 pin 起來
             </span>
           </div>
@@ -457,23 +457,23 @@ export default function SessionsPage() {
 
         {/* 清單 */}
         {loading ? (
-          <p className="mt-6 text-sm text-gray-400">掃描中…</p>
+          <p className="mt-6 text-sm text-fg-subtle">掃描中…</p>
         ) : visible.length === 0 ? (
-          <p className="mt-6 rounded-xl border border-gray-200 px-5 py-6 text-sm text-gray-400">
+          <p className="mt-6 rounded-xl border border-line px-5 py-6 text-sm text-fg-subtle">
             沒有符合條件的 session
           </p>
         ) : (
-          <ul className="mt-4 divide-y divide-gray-100 rounded-xl border border-gray-200">
+          <ul className="mt-4 divide-y divide-line rounded-xl border border-line">
             {visible.map((s) => (
               <li
                 key={s.id}
                 className={`flex items-start gap-3 px-4 py-3 ${
                   openId === s.id
-                    ? "bg-sky-50"
+                    ? "bg-surface-selected"
                     : selected.has(s.id)
-                      ? "bg-red-50/40"
+                      ? "bg-danger-bg/40"
                       : s.pinned
-                        ? "bg-gray-50"
+                        ? "bg-surface-raised"
                         : ""
                 }`}
               >
@@ -489,7 +489,7 @@ export default function SessionsPage() {
                 <Tooltip label={s.pinned ? "取消 pin" : "pin 住（防止被刪）"}>
                   <button
                     onClick={() => togglePin(s)}
-                    className={`mt-0.5 ${s.pinned ? "text-amber-500" : "text-gray-300 hover:text-amber-500"}`}
+                    className={`mt-0.5 ${s.pinned ? "text-pin" : "text-fg-disabled hover:text-pin"}`}
                   >
                     <Icon name="pin" size={16} />
                   </button>
@@ -501,22 +501,22 @@ export default function SessionsPage() {
                   className="min-w-0 flex-1 text-left"
                 >
                   <div className="flex items-baseline gap-2">
-                    <span className="truncate text-sm text-gray-900 hover:underline">{s.title}</span>
+                    <span className="truncate text-sm text-fg hover:underline">{s.title}</span>
                     {s.titleSource !== "custom" && (
-                      <span className="shrink-0 text-[11px] text-gray-400">
+                      <span className="shrink-0 text-[11px] text-fg-subtle">
                         {SOURCE_LABEL[s.titleSource]}
                       </span>
                     )}
                   </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-400">
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-fg-subtle">
                     <span className="font-mono">{s.id.slice(0, 8)}</span>
                     <span>{s.cwd.split("/").slice(-2).join("/")}</span>
                     {s.gitBranch && (
-                      <span className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-500">{s.gitBranch}</span>
+                      <span className="rounded bg-surface-sunken px-1.5 py-0.5 text-fg-muted">{s.gitBranch}</span>
                     )}
                     {s.version && <span>v{s.version}</span>}
                     {s.hasSidecar && <span>sidecar {mb(s.sidecarBytes)}</span>}
-                    {opened[s.id] && <span className="text-sky-600">{opened[s.id]}</span>}
+                    {opened[s.id] && <span className="text-accent">{opened[s.id]}</span>}
                   </div>
                 </button>
 
@@ -536,7 +536,7 @@ export default function SessionsPage() {
                         <Tooltip side="left" label={`看這條線總共改了什麼（跨 repo，commit ＋ 還沒 commit 的）`}>
                           <a
                             href={`/work?key=${encodeURIComponent(item.key)}`}
-                            className="inline-flex items-center rounded-full border border-gray-200 px-1.5 py-0.5 text-[11px] leading-none text-gray-500 hover:bg-gray-50 hover:text-gray-800"
+                            className="inline-flex items-center rounded-full border border-line px-1.5 py-0.5 text-[11px] leading-none text-fg-muted hover:bg-surface-raised hover:text-fg"
                           >
                             <Icon name="layers" size={10} />
                           </a>
@@ -570,15 +570,15 @@ export default function SessionsPage() {
                 })()}
 
                 <div className="shrink-0 text-right">
-                  <div className="text-sm text-gray-700">{mb(s.sizeBytes + s.sidecarBytes)}</div>
-                  <div className="text-[11px] text-gray-400">{relTime(s.modifiedAt)}</div>
+                  <div className="text-sm text-fg">{mb(s.sizeBytes + s.sidecarBytes)}</div>
+                  <div className="text-[11px] text-fg-subtle">{relTime(s.modifiedAt)}</div>
                 </div>
 
                 <Tooltip label="在 Orca 開一個終端，resume 這個 session" side="left">
                   <button
                     onClick={() => openInOrca(s)}
                     disabled={busy}
-                    className="mt-0.5 shrink-0 text-gray-300 hover:text-sky-600 disabled:opacity-40"
+                    className="mt-0.5 shrink-0 text-fg-disabled hover:text-accent disabled:opacity-40"
                   >
                     <Icon name="external" size={15} />
                   </button>
@@ -593,8 +593,8 @@ export default function SessionsPage() {
                     disabled={s.pinned || busy}
                     className={`mt-0.5 shrink-0 ${
                       s.pinned
-                        ? "cursor-not-allowed text-gray-200"
-                        : "text-gray-300 hover:text-red-600"
+                        ? "cursor-not-allowed text-fg-disabled"
+                        : "text-fg-disabled hover:text-danger"
                     }`}
                   >
                     <Icon name="trash" size={15} />

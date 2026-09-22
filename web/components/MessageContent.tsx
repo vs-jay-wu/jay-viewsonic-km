@@ -25,10 +25,10 @@ export default function MessageContent({ html }: { html: string }) {
   return (
     <div
       ref={ref}
-      className="prose prose-sm max-w-none text-gray-800
-        [&_blockquote]:border-l-4 [&_blockquote]:border-gray-300 [&_blockquote]:pl-3 [&_blockquote]:text-gray-500 [&_blockquote]:my-1
-        [&_p]:my-0.5 [&_a]:text-blue-600 [&_at]:text-blue-600 [&_at]:font-medium
-        [&_pre]:bg-gray-100 [&_pre]:rounded [&_pre]:p-2 [&_code]:bg-gray-100 [&_code]:rounded [&_code]:px-1"
+      className="prose prose-sm max-w-none text-fg
+        [&_blockquote]:border-l-4 [&_blockquote]:border-line-strong [&_blockquote]:pl-3 [&_blockquote]:text-fg-muted [&_blockquote]:my-1
+        [&_p]:my-0.5 [&_a]:text-accent [&_at]:text-accent [&_at]:font-medium
+        [&_pre]:bg-surface-sunken [&_pre]:rounded [&_pre]:p-2 [&_code]:bg-surface-sunken [&_code]:rounded [&_code]:px-1"
     />
   );
 }

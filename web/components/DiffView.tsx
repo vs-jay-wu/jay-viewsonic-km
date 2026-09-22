@@ -25,9 +25,9 @@ import type { DiffTheme } from "@/lib/uiSettingsRules";
  */
 
 const ROW_LIGHT: Record<string, string> = {
-  add: "bg-emerald-50",
-  del: "bg-red-50",
-  hunk: "bg-gray-100 text-gray-500 select-none",
+  add: "bg-ok-bg",
+  del: "bg-danger-bg",
+  hunk: "bg-surface-sunken text-fg-muted select-none",
   context: "",
   meta: "hidden",
 };
@@ -35,7 +35,7 @@ const ROW_LIGHT: Record<string, string> = {
 const ROW_DARK: Record<string, string> = {
   add: "bg-emerald-950/60",
   del: "bg-red-950/60",
-  hunk: "bg-gray-800 text-gray-400 select-none",
+  hunk: "bg-control/90 text-fg-subtle select-none",
   context: "",
   meta: "hidden",
 };
@@ -165,10 +165,10 @@ export default function DiffView({
       .map((l) => l.text)
       .filter((t) => /^(old mode|new mode|rename |similarity index|new file|deleted file)/.test(t));
     return (
-      <div className="px-4 py-6 text-sm text-gray-500">
+      <div className="px-4 py-6 text-sm text-fg-muted">
         <p>沒有內容差異。</p>
         {notes.length > 0 && (
-          <ul className="mt-2 font-mono text-xs text-gray-400">
+          <ul className="mt-2 font-mono text-xs text-fg-subtle">
             {notes.map((n) => (
               <li key={n}>{n}</li>
             ))}
@@ -179,18 +179,18 @@ export default function DiffView({
   }
 
   return (
-    <div className={`overflow-x-auto ${dark ? "bg-[#0d1117]" : "bg-white"}`}>
+    <div className={`overflow-x-auto ${dark ? "bg-[#0d1117]" : "bg-surface"}`}>
       {loadLines && gaps.length > 0 && (
         <div
           className={`sticky top-0 z-10 flex items-center gap-2 border-b px-3 py-1.5 text-[11px] ${
-            dark ? "border-gray-800 bg-[#0d1117] text-gray-400" : "border-gray-200 bg-white text-gray-500"
+            dark ? "border-line bg-[#0d1117] text-fg-subtle" : "border-line bg-surface text-fg-muted"
           }`}
         >
           <button
             onClick={showWholeFile}
             disabled={busy}
             className={`rounded border px-2 py-0.5 disabled:opacity-40 ${
-              dark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-50"
+              dark ? "border-line-strong hover:bg-control/85" : "border-line-strong hover:bg-surface-raised"
             }`}
           >
             {busy ? "載入中…" : "顯示整個檔案"}
@@ -201,7 +201,7 @@ export default function DiffView({
                 setFilled(new Map());
                 setTotal(null);
               }}
-              className="underline hover:text-gray-700"
+              className="underline hover:text-fg"
             >
               只看改動
             </button>
@@ -217,7 +217,7 @@ export default function DiffView({
               const size = g.to === null ? null : g.to - g.from + 1;
               const big = size === null || size > EXPAND_STEP;
               return (
-                <tr key={`g${k}`} className={dark ? "bg-gray-800/60" : "bg-gray-100"}>
+                <tr key={`g${k}`} className={dark ? "bg-control/90/60" : "bg-surface-sunken"}>
                   <td colSpan={3} className="select-none px-1 py-0.5 text-center">
                     <span className="flex items-center justify-center gap-0.5">
                       {big && g.to !== null && (
@@ -226,7 +226,7 @@ export default function DiffView({
                             onClick={() => void fetchRange(...rangeOf(expandStep(g, "up")))}
                             disabled={busy}
                             aria-label="往上展開"
-                            className={dark ? "text-gray-400 hover:text-white" : "text-gray-500 hover:text-gray-900"}
+                            className={dark ? "text-fg-subtle hover:text-on-solid" : "text-fg-muted hover:text-fg"}
                           >
                             <Icon name="toTop" size={11} />
                           </button>
@@ -245,7 +245,7 @@ export default function DiffView({
                           onClick={() => void fetchRange(...rangeOf(expandStep(g, big ? "down" : "all")))}
                           disabled={busy}
                           aria-label="展開更多"
-                          className={dark ? "text-gray-400 hover:text-white" : "text-gray-500 hover:text-gray-900"}
+                          className={dark ? "text-fg-subtle hover:text-on-solid" : "text-fg-muted hover:text-fg"}
                         >
                           {big ? <Icon name="toBottom" size={11} /> : <span className="px-1">⋯</span>}
                         </button>
@@ -253,7 +253,7 @@ export default function DiffView({
                     </span>
                   </td>
                   <td
-                    className={`select-none px-2 text-[11px] ${dark ? "text-gray-500" : "text-gray-400"}`}
+                    className={`select-none px-2 text-[11px] ${dark ? "text-fg-muted" : "text-fg-subtle"}`}
                   >
                     {size === null ? `第 ${g.from} 行之後` : `藏了 ${size} 行（${g.from}–${g.to}）`}
                   </td>
@@ -264,13 +264,13 @@ export default function DiffView({
             if (row.kind === "filled") {
               const html = highlight(row.text);
               return (
-                <tr key={`f${k}`} className={dark ? "bg-gray-900/40" : "bg-gray-50/60"}>
-                  <td className={`w-10 select-none px-2 text-right align-top ${dark ? "text-gray-700" : "text-gray-300"}`} />
-                  <td className={`w-10 select-none px-2 text-right align-top ${dark ? "text-gray-600" : "text-gray-300"}`}>
+                <tr key={`f${k}`} className={dark ? "bg-control/40" : "bg-surface-raised/60"}>
+                  <td className={`w-10 select-none px-2 text-right align-top ${dark ? "text-fg" : "text-fg-disabled"}`} />
+                  <td className={`w-10 select-none px-2 text-right align-top ${dark ? "text-fg-muted" : "text-fg-disabled"}`}>
                     {row.no}
                   </td>
                   <td className="w-4 select-none pl-1 text-center align-top" />
-                  <td className={`whitespace-pre-wrap break-all px-2 align-top ${dark ? "text-gray-400" : "text-gray-500"}`}>
+                  <td className={`whitespace-pre-wrap break-all px-2 align-top ${dark ? "text-fg-subtle" : "text-fg-muted"}`}>
                     {html ? <span dangerouslySetInnerHTML={{ __html: html }} /> : row.text || " "}
                   </td>
                 </tr>
@@ -281,24 +281,24 @@ export default function DiffView({
             const html = highlight(l.kind === "hunk" ? "" : l.text);
             return (
               <tr key={`d${row.index}`} className={KIND_ROW[l.kind]}>
-                <td className={`w-10 select-none px-2 text-right align-top ${dark ? "text-gray-600" : "text-gray-300"}`}>
+                <td className={`w-10 select-none px-2 text-right align-top ${dark ? "text-fg-muted" : "text-fg-disabled"}`}>
                   {l.oldNo ?? ""}
                 </td>
-                <td className={`w-10 select-none px-2 text-right align-top ${dark ? "text-gray-600" : "text-gray-300"}`}>
+                <td className={`w-10 select-none px-2 text-right align-top ${dark ? "text-fg-muted" : "text-fg-disabled"}`}>
                   {l.newNo ?? ""}
                 </td>
                 <td
                   className={`w-4 select-none pl-1 text-center align-top ${
                     l.kind === "add"
-                      ? "text-emerald-500"
+                      ? "text-ok"
                       : l.kind === "del"
-                        ? "text-red-400"
-                        : dark ? "text-gray-600" : "text-gray-300"
+                        ? "text-danger"
+                        : dark ? "text-fg-muted" : "text-fg-disabled"
                   }`}
                 >
                   {KIND_SIGN[l.kind]}
                 </td>
-                <td className={`whitespace-pre-wrap break-all px-2 align-top ${dark ? "text-gray-200" : "text-gray-800"}`}>
+                <td className={`whitespace-pre-wrap break-all px-2 align-top ${dark ? "text-fg-disabled" : "text-fg"}`}>
                   {html ? <span dangerouslySetInnerHTML={{ __html: html }} /> : l.text || " "}
                 </td>
               </tr>
@@ -307,7 +307,7 @@ export default function DiffView({
         </tbody>
       </table>
       {truncated && (
-        <p className={`border-t px-4 py-2 text-xs text-gray-400 ${dark ? "border-gray-800" : "border-gray-200"}`}>
+        <p className={`border-t px-4 py-2 text-xs text-fg-subtle ${dark ? "border-line" : "border-line"}`}>
           這個 diff 太大，只顯示前面一段。
         </p>
       )}

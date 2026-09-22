@@ -37,12 +37,12 @@ function relTime(iso: string | null): string {
 function decision(pr: HomePr): { text: string; cls: string } {
   const who = (n: string[]) => (n.length ? ` · ${n.join("、")}` : "");
   if (pr.reviewDecision === "APPROVED") {
-    return { text: `approved${who(pr.approvedBy)}`, cls: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+    return { text: `approved${who(pr.approvedBy)}`, cls: "border-ok/40 bg-ok-bg text-ok" };
   }
   if (pr.reviewDecision === "CHANGES_REQUESTED") {
-    return { text: `要求修改${who(pr.changesRequestedBy)}`, cls: "border-amber-200 bg-amber-50 text-amber-700" };
+    return { text: `要求修改${who(pr.changesRequestedBy)}`, cls: "border-warn/40 bg-warn-bg text-warn" };
   }
-  return { text: "等 review", cls: "border-gray-200 bg-gray-50 text-gray-500" };
+  return { text: "等 review", cls: "border-line bg-surface-raised text-fg-muted" };
 }
 
 export default function HomeOpenPrs({ prs }: { prs: HomePr[] }) {
@@ -52,11 +52,11 @@ export default function HomeOpenPrs({ prs }: { prs: HomePr[] }) {
     <>
       {/* 開 session 的結果固定佔一行，不讓下面的區塊跳動 */}
       <div className="mt-1 h-4 text-xs">
-        {notice && <span className="text-sky-700">{notice}</span>}
-        {error && <span className="text-red-600">{error}</span>}
+        {notice && <span className="text-accent">{notice}</span>}
+        {error && <span className="text-danger">{error}</span>}
       </div>
 
-      <ul className="mt-1 divide-y divide-gray-100 rounded-xl border border-gray-200">
+      <ul className="mt-1 divide-y divide-line rounded-xl border border-line">
         {prs.map((pr) => {
           const d = decision(pr);
           const ticketKey = parsePrTicketKey(pr);
@@ -67,9 +67,9 @@ export default function HomeOpenPrs({ prs }: { prs: HomePr[] }) {
                 href={pr.url}
                 target="_blank"
                 rel="noreferrer"
-                className="min-w-0 flex-1 truncate text-sm text-gray-800 hover:underline"
+                className="min-w-0 flex-1 truncate text-sm text-fg hover:underline"
               >
-                <span className="font-mono text-xs text-gray-500">
+                <span className="font-mono text-xs text-fg-muted">
                   {pr.repo.split("/").pop()}#{pr.number}
                 </span>{" "}
                 {pr.title}
@@ -79,7 +79,7 @@ export default function HomeOpenPrs({ prs }: { prs: HomePr[] }) {
                   href={ticketUrl(ticketKey)}
                   target="_blank"
                   rel="noreferrer"
-                  className="shrink-0 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 font-mono text-[11px] leading-none text-sky-700 hover:bg-sky-100"
+                  className="shrink-0 rounded-full border border-accent/50 bg-surface-selected px-2 py-0.5 font-mono text-[11px] leading-none text-accent hover:bg-accent-bg"
                 >
                   {ticketKey}
                 </a>
@@ -87,7 +87,7 @@ export default function HomeOpenPrs({ prs }: { prs: HomePr[] }) {
               <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs ${d.cls}`}>
                 {d.text}
               </span>
-              <span className="shrink-0 text-xs text-gray-400">{relTime(pr.updatedAt)}</span>
+              <span className="shrink-0 text-xs text-fg-subtle">{relTime(pr.updatedAt)}</span>
               <Tooltip
                 side="left"
                 label={
@@ -101,8 +101,8 @@ export default function HomeOpenPrs({ prs }: { prs: HomePr[] }) {
                   disabled={busy}
                   className={`shrink-0 disabled:opacity-40 ${
                     sessionCount > 0
-                      ? "text-sky-500 hover:text-sky-700"
-                      : "text-gray-300 hover:text-sky-600"
+                      ? "text-accent hover:text-accent"
+                      : "text-fg-disabled hover:text-accent"
                   }`}
                 >
                   <Icon name={sessionCount > 0 ? "external" : "play"} size={15} />

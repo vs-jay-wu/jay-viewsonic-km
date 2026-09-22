@@ -146,7 +146,7 @@ export default function Tooltip({
                 // 量寬度那一幀先別讓人看到它在左上角
                 visibility: placed || effSide === "left" ? "visible" : "hidden",
               }}
-              className="pointer-events-none fixed z-[200] whitespace-pre-wrap rounded-md bg-gray-900 px-2 py-1 text-xs text-white shadow-lg"
+              className="pointer-events-none fixed z-[200] whitespace-pre-wrap rounded-md bg-control px-2 py-1 text-xs text-on-solid shadow-lg"
             >
               {label}
             </span>,

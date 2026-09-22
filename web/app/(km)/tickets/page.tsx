@@ -20,10 +20,10 @@ interface Scheduler {
 }
 
 const GROUP_CLS: Record<string, string> = {
-  in_progress: "border-sky-200 bg-sky-50 text-sky-700",
-  verifying: "border-violet-200 bg-violet-50 text-violet-700",
-  todo: "border-gray-200 bg-gray-50 text-gray-600",
-  on_hold: "border-amber-200 bg-amber-50 text-amber-700",
+  in_progress: "border-accent/50 bg-surface-selected text-accent",
+  verifying: "border-info/40 bg-surface-sunken text-info",
+  todo: "border-line bg-surface-raised text-fg-muted",
+  on_hold: "border-warn/40 bg-warn-bg text-warn",
 };
 
 function fmtTime(iso: string | null | undefined): string {
@@ -138,8 +138,8 @@ export default function TicketsPage() {
                   onClick={() => togglePin(t.key)}
                   className={`mt-0.5 shrink-0 ${
                     pinnedKeys.includes(t.key)
-                      ? "text-amber-500"
-                      : "text-gray-300 hover:text-amber-500"
+                      ? "text-pin"
+                      : "text-fg-disabled hover:text-pin"
                   }`}
                 >
                   <Icon name="pin" size={15} />
@@ -152,19 +152,19 @@ export default function TicketsPage() {
                     href={t.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="font-mono text-xs text-sky-700 hover:underline"
+                    className="font-mono text-xs text-accent hover:underline"
                   >
                     {t.key}
                   </a>
                   <span
                     className={`rounded-full border px-2 py-0.5 text-[11px] leading-none ${
-                      GROUP_CLS[groupKey ?? ""] ?? "border-gray-200 bg-white text-gray-500"
+                      GROUP_CLS[groupKey ?? ""] ?? "border-line bg-surface text-fg-muted"
                     }`}
                     title={group ? `${group.label}／${t.status}` : t.status}
                   >
                     {statusLabel(t.status)}
                   </span>
-                  <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
+                  <span className="inline-flex items-center gap-1 text-[11px] text-fg-muted">
                     <Icon
                       name={issueTypeStyle(t.issueType).icon}
                       size={13}
@@ -172,21 +172,21 @@ export default function TicketsPage() {
                     />
                     {t.issueType}
                   </span>
-                  <span className="text-[11px] text-gray-400">{t.priority}</span>
+                  <span className="text-[11px] text-fg-subtle">{t.priority}</span>
                   {/* 指派給誰。別人的單用不同的底色，掃過去就看得出球不在我這裡 */}
                   <span
                     className={`rounded-full border px-1.5 py-0.5 text-[11px] leading-none ${
                       t.assignedToMe
-                        ? "border-gray-200 bg-gray-50 text-gray-500"
-                        : "border-violet-200 bg-violet-50 text-violet-700"
+                        ? "border-line bg-surface-raised text-fg-muted"
+                        : "border-info/40 bg-surface-sunken text-info"
                     }`}
                     title={`回報者：${t.reporter?.name || "—"}`}
                   >
                     {t.assignee?.name || "未指派"}
                   </span>
                 </div>
-                <p className="mt-1 text-sm text-gray-800">{t.summary}</p>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-gray-400">
+                <p className="mt-1 text-sm text-fg">{t.summary}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-fg-subtle">
                   <span>更新 {relTime(t.updated)}</span>
                   {item?.prs.map((pr) => (
                     <a
@@ -194,17 +194,17 @@ export default function TicketsPage() {
                       href={pr.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1 rounded-full border border-gray-200 px-1.5 py-0.5 text-gray-600 hover:bg-gray-50"
+                      className="inline-flex items-center gap-1 rounded-full border border-line px-1.5 py-0.5 text-fg-muted hover:bg-surface-raised"
                     >
                       <Icon name="gitPr" size={10} />
                       {pr.repo.split("/").pop()}#{pr.number}
                       {pr.state !== "OPEN" && (
-                        <span className="text-gray-400">{pr.state.toLowerCase()}</span>
+                        <span className="text-fg-subtle">{pr.state.toLowerCase()}</span>
                       )}
                     </a>
                   ))}
                   {sessionCount > 0 && (
-                    <span className="rounded-full border border-gray-200 px-1.5 py-0.5 text-gray-600">
+                    <span className="rounded-full border border-line px-1.5 py-0.5 text-fg-muted">
                       {sessionCount} 個 session
                     </span>
                   )}
@@ -216,7 +216,7 @@ export default function TicketsPage() {
                 <Tooltip side="left" label="這條線總共改了什麼（跨 repo，commit ＋ 還沒 commit 的）">
                   <a
                     href={`/work?key=${encodeURIComponent(item.key)}`}
-                    className="mt-0.5 shrink-0 text-gray-300 hover:text-gray-700"
+                    className="mt-0.5 shrink-0 text-fg-disabled hover:text-fg"
                   >
                     <Icon name="layers" size={16} />
                   </a>
@@ -236,8 +236,8 @@ export default function TicketsPage() {
                   disabled={busy || sessionBusy}
                   className={`mt-0.5 shrink-0 disabled:opacity-40 ${
                     sessionCount > 0
-                      ? "text-sky-500 hover:text-sky-700"
-                      : "text-gray-300 hover:text-sky-600"
+                      ? "text-accent hover:text-accent"
+                      : "text-fg-disabled hover:text-accent"
                   }`}
                 >
                   <Icon name={sessionCount > 0 ? "external" : "play"} size={16} />
@@ -250,31 +250,31 @@ export default function TicketsPage() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-4xl mx-auto px-4 py-6 sm:px-8 sm:py-10">
-        <h1 className="flex items-center gap-2.5 text-2xl font-semibold text-gray-900">
-          <Icon name="clipboard" size={22} className="text-gray-400" />
+        <h1 className="flex items-center gap-2.5 text-2xl font-semibold text-fg">
+          <Icon name="clipboard" size={22} className="text-fg-subtle" />
           單追蹤
         </h1>
-        <p className="mt-1.5 text-sm text-gray-500">
-          VB 上<b className="font-medium text-gray-700">所有</b>未完成的單，預設只看指派給我的
+        <p className="mt-1.5 text-sm text-fg-muted">
+          VB 上<b className="font-medium text-fg">所有</b>未完成的單，預設只看指派給我的
           —— 要看別人的就切「指派」或直接搜名字，不用挑人。
           點單號到 Jira，點右邊的按鈕直接在 Orca 開（或接續）對應的 Claude session。
         </p>
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[16rem]">
-            <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle" />
             <input
               value={view.query}
               onChange={(e) => setView((v) => ({ ...v, query: e.target.value }))}
               placeholder="搜尋單號、標題、狀態、指派人…"
-              className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-gray-500"
+              className="w-full rounded-lg border border-line-strong py-2 pl-9 pr-3 text-sm outline-none focus:border-line-strong"
             />
           </div>
           <Tooltip label="只抓上次之後有更新的（便宜）">
             <button
               onClick={() => refresh(false)}
               disabled={busy}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              className="rounded-lg border border-line-strong px-3 py-2 text-xs text-fg hover:bg-surface-raised disabled:opacity-50"
             >
               立即更新
             </button>
@@ -283,7 +283,7 @@ export default function TicketsPage() {
             <button
               onClick={() => refresh(true)}
               disabled={busy}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+              className="rounded-lg border border-line-strong px-3 py-2 text-xs text-fg-muted hover:bg-surface-raised disabled:opacity-50"
             >
               全同步
             </button>
@@ -292,7 +292,7 @@ export default function TicketsPage() {
 
         {/* 過濾與排序。整列高度固定，選了條件也不會把下面的清單推走 */}
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
-          <span className="text-gray-400">排序</span>
+          <span className="text-fg-subtle">排序</span>
           <div className="flex flex-wrap gap-1">
             {TICKET_SORTS.map((s) => (
               <button
@@ -300,8 +300,8 @@ export default function TicketsPage() {
                 onClick={() => setView((v) => ({ ...v, sort: s.key as TicketSort }))}
                 className={`rounded-full border px-2 py-0.5 ${
                   view.sort === s.key
-                    ? "border-gray-900 bg-gray-900 text-white"
-                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                    ? "border-control bg-control text-on-solid"
+                    : "border-line text-fg-muted hover:bg-surface-raised"
                 }`}
               >
                 {s.label}
@@ -309,7 +309,7 @@ export default function TicketsPage() {
             ))}
           </div>
 
-          <span className="ml-2 text-gray-400">指派</span>
+          <span className="ml-2 text-fg-subtle">指派</span>
           <div className="flex flex-wrap gap-1">
             {([
               ["mine", "我的"],
@@ -322,19 +322,19 @@ export default function TicketsPage() {
                 onClick={() => setView((v) => ({ ...v, assignee: key }))}
                 className={`rounded-full border px-2 py-0.5 ${
                   view.assignee === key
-                    ? "border-gray-900 bg-gray-900 text-white"
-                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                    ? "border-control bg-control text-on-solid"
+                    : "border-line text-fg-muted hover:bg-surface-raised"
                 }`}
               >
                 {label}{" "}
-                <span className={view.assignee === key ? "text-gray-300" : "text-gray-400"}>
+                <span className={view.assignee === key ? "text-fg-disabled" : "text-fg-subtle"}>
                   {applyView(rest, { ...DEFAULT_VIEW, query: view.query, assignee: key }).length}
                 </span>
               </button>
             ))}
           </div>
 
-          <span className="ml-2 text-gray-400">狀態</span>
+          <span className="ml-2 text-fg-subtle">狀態</span>
           <div className="flex flex-wrap gap-1">
             {TICKET_GROUPS.map((g) => {
               const on = view.groups.includes(g.key);
@@ -344,16 +344,16 @@ export default function TicketsPage() {
                   key={g.key}
                   onClick={() => toggle("groups", g.key)}
                   className={`rounded-full border px-2 py-0.5 ${
-                    on ? "border-sky-500 bg-sky-50 text-sky-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                    on ? "border-accent/60 bg-surface-selected text-accent" : "border-line text-fg-muted hover:bg-surface-raised"
                   }`}
                 >
-                  {g.label} <span className="text-gray-400">{n}</span>
+                  {g.label} <span className="text-fg-subtle">{n}</span>
                 </button>
               );
             })}
           </div>
 
-          <span className="ml-2 text-gray-400">優先度</span>
+          <span className="ml-2 text-fg-subtle">優先度</span>
           <div className="flex flex-wrap gap-1">
             {PRIORITY_ORDER.map((p) => {
               const on = view.priorities.includes(p);
@@ -364,10 +364,10 @@ export default function TicketsPage() {
                   key={p}
                   onClick={() => toggle("priorities", p)}
                   className={`rounded-full border px-2 py-0.5 ${
-                    on ? "border-sky-500 bg-sky-50 text-sky-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                    on ? "border-accent/60 bg-surface-selected text-accent" : "border-line text-fg-muted hover:bg-surface-raised"
                   }`}
                 >
-                  {p} <span className="text-gray-400">{n}</span>
+                  {p} <span className="text-fg-subtle">{n}</span>
                 </button>
               );
             })}
@@ -378,7 +378,7 @@ export default function TicketsPage() {
               onClick={() =>
                 setView((v) => ({ ...v, groups: [], priorities: [], assignee: "mine" }))
               }
-              className="text-gray-400 hover:text-gray-700"
+              className="text-fg-subtle hover:text-fg"
             >
               清掉篩選
             </button>
@@ -386,7 +386,7 @@ export default function TicketsPage() {
         </div>
 
         <div className="mt-2 min-h-[2.5rem] text-xs">
-          <div className="text-gray-400">
+          <div className="text-fg-subtle">
             {snapshot
               ? `${tickets.length} / ${snapshot.issueCount} 筆 · ${snapshot.fetchedAs} · 最後抓取 ${fmtTime(snapshot.fetchedAt)}（${snapshot.mode === "full" ? "全同步" : "增量"}）`
               : loading ? "載入中…" : "還沒有資料"}
@@ -394,30 +394,30 @@ export default function TicketsPage() {
             {config && !config.enabled && " · 定時抓取已停用"}
           </div>
           {(notice || sessionNotice) && (
-            <div className="mt-1 text-sky-700">{notice ?? sessionNotice}</div>
+            <div className="mt-1 text-accent">{notice ?? sessionNotice}</div>
           )}
           {(error || sessionError || snapshot?.lastError) && (
-            <div className="mt-1 text-red-600">
+            <div className="mt-1 text-danger">
               {error ?? sessionError ?? snapshot?.lastError}
             </div>
           )}
         </div>
 
         {tickets.length === 0 && (
-          <p className="mt-4 rounded-xl border border-gray-200 px-4 py-8 text-center text-sm text-gray-400">
+          <p className="mt-4 rounded-xl border border-line px-4 py-8 text-center text-sm text-fg-subtle">
             {snapshot ? "沒有符合的單" : "—"}
           </p>
         )}
 
         {pinnedTickets.length > 0 && (
           <section className="mt-4">
-            <h2 className="flex items-baseline gap-2 px-1 text-xs font-semibold text-gray-700">
-              <Icon name="pin" size={13} className="text-amber-500" />
+            <h2 className="flex items-baseline gap-2 px-1 text-xs font-semibold text-fg">
+              <Icon name="pin" size={13} className="text-pin" />
               已 pin
-              <span className="font-normal text-gray-400">{pinnedTickets.length}</span>
-              <span className="font-normal text-gray-300">· 不受篩選影響</span>
+              <span className="font-normal text-fg-subtle">{pinnedTickets.length}</span>
+              <span className="font-normal text-fg-disabled">· 不受篩選影響</span>
             </h2>
-            <ul className="mt-1.5 divide-y divide-gray-100 rounded-xl border border-gray-200">
+            <ul className="mt-1.5 divide-y divide-line rounded-xl border border-line">
               {pinnedTickets.map(renderRow)}
             </ul>
           </section>
@@ -426,18 +426,18 @@ export default function TicketsPage() {
         {/* 依 Jira 的「Project」欄位分群；群內順序由上面選的排序決定 */}
         {groupByProduct(capped.shown).map((g) => (
         <section key={g.product} className="mt-4">
-          <h2 className="flex items-baseline gap-2 px-1 text-xs font-semibold text-gray-700">
+          <h2 className="flex items-baseline gap-2 px-1 text-xs font-semibold text-fg">
             {g.product}
-            <span className="font-normal text-gray-400">{g.tickets.length}</span>
+            <span className="font-normal text-fg-subtle">{g.tickets.length}</span>
           </h2>
-          <ul className="mt-1.5 divide-y divide-gray-100 rounded-xl border border-gray-200">
+          <ul className="mt-1.5 divide-y divide-line rounded-xl border border-line">
           {g.tickets.map(renderRow)}
           </ul>
         </section>
         ))}
 
         {capped.hidden > 0 && (
-          <p className="mt-3 rounded-xl border border-dashed border-gray-200 px-4 py-3 text-center text-xs text-gray-400">
+          <p className="mt-3 rounded-xl border border-dashed border-line px-4 py-3 text-center text-xs text-fg-subtle">
             還有 {capped.hidden} 筆沒顯示 —— 用搜尋或篩選收斂（例如打指派人的名字）。
           </p>
         )}

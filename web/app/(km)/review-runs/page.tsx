@@ -64,12 +64,12 @@ export default function ReviewRunsPage() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="mx-auto max-w-4xl px-4 py-6 sm:px-8 sm:py-10">
-        <h1 className="flex items-center gap-2.5 text-2xl font-semibold text-gray-900">
-          <Icon name="check" size={22} className="text-gray-400" />
+        <h1 className="flex items-center gap-2.5 text-2xl font-semibold text-fg">
+          <Icon name="check" size={22} className="text-fg-subtle" />
           交叉驗證紀錄
         </h1>
-        <p className="mt-1.5 text-sm text-gray-500">
-          <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">/review-local</code>{" "}
+        <p className="mt-1.5 text-sm text-fg-muted">
+          <code className="rounded bg-surface-sunken px-1 py-0.5 text-xs">/review-local</code>{" "}
           每次跑完留下的結論（verdict、findings、是誰跑的）。
           只存結論，不存 diff。引擎在
           <a href="/settings" className="mx-1 underline">設定頁</a>
@@ -78,16 +78,16 @@ export default function ReviewRunsPage() {
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <div className="relative min-w-[16rem] flex-1">
-            <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="搜尋 repo、分支、摘要、finding 標題…"
-              className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-gray-500"
+              className="w-full rounded-lg border border-line-strong py-2 pl-9 pr-3 text-sm outline-none focus:border-line-strong"
             />
           </div>
           <Tooltip label="同一個 repo＋分支只看最後一次跑的結果">
-            <label className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+            <label className="inline-flex items-center gap-1.5 text-xs text-fg-muted">
               <input
                 type="checkbox"
                 checked={latestOnly}
@@ -98,13 +98,13 @@ export default function ReviewRunsPage() {
           </Tooltip>
           <button
             onClick={() => void load()}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-line-strong px-3 py-2 text-xs text-fg hover:bg-surface-raised"
           >
             重新整理
           </button>
         </div>
 
-        <div className="mt-2 h-4 text-xs text-gray-400">
+        <div className="mt-2 h-4 text-xs text-fg-subtle">
           {loading
             ? "讀取中…"
             : `${shown.length} / ${runs.length} 次 · codex ${byEngine.codex ?? 0}、claude ${byEngine.claude ?? 0}` +
@@ -112,9 +112,9 @@ export default function ReviewRunsPage() {
         </div>
 
         {!loading && runs.length === 0 && (
-          <p className="mt-4 rounded-xl border border-gray-200 px-4 py-8 text-center text-sm text-gray-400">
+          <p className="mt-4 rounded-xl border border-line px-4 py-8 text-center text-sm text-fg-subtle">
             還沒有紀錄。在終端機跑一次{" "}
-            <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">/review-local</code> 就會出現。
+            <code className="rounded bg-surface-sunken px-1 py-0.5 text-xs">/review-local</code> 就會出現。
           </p>
         )}
 
@@ -122,12 +122,12 @@ export default function ReviewRunsPage() {
           {shown.map((r) => {
             const v = VERDICT_STYLE[r.verdict] ?? {
               label: r.verdict,
-              cls: "border-gray-200 bg-gray-50 text-gray-600",
+              cls: "border-line bg-surface-raised text-fg-muted",
             };
             const counts = countBySeverity(r.findings ?? []);
             const isOpen = open === r.id;
             return (
-              <li key={r.id} className="rounded-xl border border-gray-200">
+              <li key={r.id} className="rounded-xl border border-line">
                 <button
                   onClick={() => setOpen(isOpen ? null : r.id)}
                   className="flex w-full flex-wrap items-center gap-2 px-4 py-3 text-left"
@@ -135,16 +135,16 @@ export default function ReviewRunsPage() {
                   <Icon
                     name={isOpen ? "chevronDown" : "chevronRight"}
                     size={13}
-                    className="shrink-0 text-gray-400"
+                    className="shrink-0 text-fg-subtle"
                   />
                   <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] leading-none ${v.cls}`}>
                     {v.label}
                   </span>
-                  <span className="font-mono text-xs text-gray-900">{r.repo}</span>
-                  <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-600">
+                  <span className="font-mono text-xs text-fg">{r.repo}</span>
+                  <span className="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[11px] text-fg-muted">
                     {r.branch}
                   </span>
-                  <span className="font-mono text-[11px] text-gray-400">{r.scope}</span>
+                  <span className="font-mono text-[11px] text-fg-subtle">{r.scope}</span>
 
                   {SEVERITY_ORDER.filter((s) => counts[s] > 0).map((s) => (
                     <span key={s} className={`font-mono text-[11px] ${SEVERITY_CLS[s]}`}>
@@ -153,9 +153,9 @@ export default function ReviewRunsPage() {
                     </span>
                   ))}
 
-                  <span className="ml-auto flex shrink-0 items-center gap-2 text-[11px] text-gray-400">
+                  <span className="ml-auto flex shrink-0 items-center gap-2 text-[11px] text-fg-subtle">
                     <Tooltip label={r.engine === "codex" ? "codex 沒有金額可回報" : `花費 $${(r.costUsd ?? 0).toFixed(2)}`}>
-                      <span className="rounded-full border border-gray-200 px-1.5 py-0.5 font-mono">
+                      <span className="rounded-full border border-line px-1.5 py-0.5 font-mono">
                         {r.engine}
                         {r.costUsd != null && ` $${r.costUsd.toFixed(2)}`}
                       </span>
@@ -165,56 +165,56 @@ export default function ReviewRunsPage() {
                 </button>
 
                 {isOpen && (
-                  <div className="border-t border-gray-100 px-4 py-3">
-                    <p className="whitespace-pre-wrap text-xs leading-relaxed text-gray-700">
+                  <div className="border-t border-line px-4 py-3">
+                    <p className="whitespace-pre-wrap text-xs leading-relaxed text-fg">
                       {r.summary}
                     </p>
 
-                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11px] text-gray-400">
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11px] text-fg-subtle">
                       <span>{r.head}</span>
                       <span>base {r.base}</span>
                       {r.model && <span>model {r.model}</span>}
-                      {r.onDefaultBranch && <span className="text-amber-700">在預設分支上</span>}
-                      {r.diffTruncated && <span className="text-amber-700">diff 被截斷</span>}
+                      {r.onDefaultBranch && <span className="text-warn">在預設分支上</span>}
+                      {r.diffTruncated && <span className="text-warn">diff 被截斷</span>}
                       {r.sensitiveFilesTouched.length > 0 && (
-                        <span className="text-amber-700">
+                        <span className="text-warn">
                           動到機敏檔 {r.sensitiveFilesTouched.length} 個（內容沒進 diff）
                         </span>
                       )}
                     </div>
 
                     {(r.blockers ?? []).map((b) => (
-                      <p key={b} className="mt-2 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] text-red-700">
+                      <p key={b} className="mt-2 rounded-lg border border-danger/40 bg-danger-bg px-2.5 py-1.5 text-[11px] text-danger">
                         ⛔ {b}
                       </p>
                     ))}
 
                     <ul className="mt-2 space-y-2">
                       {(r.findings ?? []).map((f, i) => (
-                        <li key={i} className="rounded-lg bg-gray-50 px-3 py-2">
+                        <li key={i} className="rounded-lg bg-surface-raised px-3 py-2">
                           <div className="flex flex-wrap items-baseline gap-2 text-xs">
                             <span className={`font-mono font-semibold ${SEVERITY_CLS[f.severity]}`}>
                               {f.severity}
                             </span>
                             {f.confidence && (
-                              <span className="font-mono text-[10px] text-gray-400">{f.confidence}</span>
+                              <span className="font-mono text-[10px] text-fg-subtle">{f.confidence}</span>
                             )}
-                            <span className="font-medium text-gray-900">{f.title}</span>
+                            <span className="font-medium text-fg">{f.title}</span>
                             {f.file && (
-                              <span className="font-mono text-[11px] text-gray-500">
+                              <span className="font-mono text-[11px] text-fg-muted">
                                 {f.file}
                                 {f.line ? `:${f.line}` : ""}
                               </span>
                             )}
                           </div>
-                          <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-gray-600">
+                          <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-fg-muted">
                             {f.detail}
                           </p>
-                          <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-gray-400">
+                          <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-fg-subtle">
                             證據：{f.evidence}
                           </p>
                           {f.suggestion && (
-                            <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-sky-700">
+                            <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-accent">
                               建議：{f.suggestion}
                             </p>
                           )}
@@ -223,10 +223,10 @@ export default function ReviewRunsPage() {
                     </ul>
 
                     {(r.claims_without_tests ?? []).map((c) => (
-                      <p key={c} className="mt-2 text-[11px] text-gray-500">🧪 宣稱但沒有測試釘住：{c}</p>
+                      <p key={c} className="mt-2 text-[11px] text-fg-muted">🧪 宣稱但沒有測試釘住：{c}</p>
                     ))}
                     {(r.unresolved_questions ?? []).map((q) => (
-                      <p key={q} className="mt-1 text-[11px] text-gray-500">❓ {q}</p>
+                      <p key={q} className="mt-1 text-[11px] text-fg-muted">❓ {q}</p>
                     ))}
                   </div>
                 )}

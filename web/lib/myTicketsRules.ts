@@ -219,11 +219,11 @@ export interface IssueTypeStyle {
 
 export function issueTypeStyle(issueType: string): IssueTypeStyle {
   const t = issueType.toLowerCase();
-  if (t.includes("漏洞") || t.includes("bug")) return { icon: "bug", cls: "text-red-600" };
-  if (t.includes("故事") || t.includes("story")) return { icon: "story", cls: "text-emerald-600" };
-  if (t.includes("spike")) return { icon: "spike", cls: "text-violet-600" };
-  if (t.includes("ops")) return { icon: "ops", cls: "text-amber-600" };
-  return { icon: "task", cls: "text-sky-600" };
+  if (t.includes("漏洞") || t.includes("bug")) return { icon: "bug", cls: "text-danger" };
+  if (t.includes("故事") || t.includes("story")) return { icon: "story", cls: "text-ok" };
+  if (t.includes("spike")) return { icon: "spike", cls: "text-info" };
+  if (t.includes("ops")) return { icon: "ops", cls: "text-warn" };
+  return { icon: "task", cls: "text-accent" };
 }
 
 // ─── 依 Project 分群 ─────────────────────────────────────────────────────────
