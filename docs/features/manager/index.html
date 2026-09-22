@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>Manager（DM）產品生態總覽</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="../../assets/icons/layers.svg">
+<meta name="km-doc-kind" content="overview">
+<meta name="km-doc-status" content="active">
+<meta name="km-doc-icon" content="repo">
+<link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#what">這份文件是什麼（先讀）</a></li>
+      <li><a href="#product">1. Manager 是什麼</a></li>
+      <li><a href="#kb">2. 規格的正解在 KB，不在這裡</a></li>
+      <li><a href="#map">3. Repo 地圖</a>
+        <ul>
+          <li><a href="#map-front">3.1 前端</a></li>
+          <li><a href="#map-back">3.2 後端</a></li>
+          <li><a href="#map-device">3.3 裝置端</a></li>
+          <li><a href="#map-infra">3.4 基礎設施 / SRE</a></li>
+          <li><a href="#map-test">3.5 測試</a></li>
+          <li><a href="#map-ai">3.6 AI / 工具</a></li>
+        </ul>
+      </li>
+      <li><a href="#archived">4. 已封存的（別照著做）</a></li>
+      <li><a href="#aosp-edla">5. AOSP vs EDLA：貫穿全線的分歧</a></li>
+      <li><a href="#mvb">6. 與 myViewBoard 的接點</a></li>
+      <li><a href="#jira">7. 在 Jira 裡的份量</a></li>
+      <li><a href="#evidence">8. 證據等級與查證方式</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Manager（DM）產品生態總覽</h1>
+    <div class="meta">
+      建立 2026-09-22 &middot; 用途：<strong>入門地圖</strong>，給不熟 Manager 的人建立全貌
+      &middot; 不是規格文件（規格見 <a href="#kb">§2</a>）
+    </div>
+    <div class="doc-nav">
+      <a href="index.html" class="active">📘 總覽 (overview)</a>
+      <a href="local-dev.html">💾 本機開發與空間</a>
+    </div>
+
+    <h2 id="what">這份文件是什麼（先讀）</h2>
+    <div class="callout warn">
+      <strong>邊界：這裡<u>刻意不寫</u>功能規格與 API 細節。</strong>
+      那些由 <code>edu-dm-knowledge-base</code> 維護（見 <a href="#kb">§2</a>），
+      是<strong>團隊資產、會持續更新</strong>。km 複製一份就會漂移，而且漂了不會有人發現。
+      <br />本文只負責兩件 KB 不做的事：<strong>跨 repo 的地圖</strong>（含 infra 與已封存的），
+      以及 <strong>Jay 本機環境的實測限制</strong>（見 <a href="local-dev.html">本機開發與空間</a>）。
+    </div>
+
+    <h2 id="product">1. Manager 是什麼</h2>
+    <p><strong>myViewBoard Manager＝賣給學校／企業 IT 的裝置管理 SaaS（MDM）。</strong>
+    管 ViewSonic 的 IFP（互動大螢幕）機隊，以及機器上跑的軟體設定。
+    <strong>內部代號 DM</strong>（Device Management）——這點對讀 repo 名很關鍵：
+    <code>edu-dm-*</code> 全都是 Manager，不是別的產品。</p>
+
+    <table>
+      <thead><tr><th>介面</th><th>管什麼</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Devices 頁</strong></td><td>機隊清單。主鍵是 <strong>serial number</strong>，agent 回報完整硬體／韌體／狀態</td></tr>
+        <tr><td><strong>Software Instances 頁</strong></td><td>管機器上 myViewBoard 的設定（Check for Update、Local Save、Embedded Browser、Sign-in Function 等），可用 template 批次套用</td></tr>
+        <tr><td><strong>遠端桌面</strong></td><td>從 Dashboard 直接看／控 IFP（WebRTC）</td></tr>
+      </tbody>
+    </table>
+
+    <p>雲端掛在 myViewBoard 的網域底下，<strong>不是獨立產品線</strong>：</p>
+    <pre><code>https://api.stage.myviewboard.com/api/dm/v2/api-docs   ← Swagger
+https://dm.dev.myviewboard.cloud/api-docs</code></pre>
+
+    <h2 id="kb">2. 規格的正解在 KB，不在這裡</h2>
+    <div class="callout ok">
+      <strong><code>Viewsonic-EDU/edu-dm-knowledge-base</code> 是 Manager 的官方結構化知識庫。</strong>
+      涵蓋 <strong>18 個 feature 規格、355 個 API endpoint</strong>、跨平台對照、sprint 追溯。
+      自述<strong>主要消費者是 AI agent</strong>，人類透過 <code>dm-kb</code> plugin 存取。
+    </div>
+
+    <p>要理解 Manager 的功能面，<strong>裝這個 plugin 比讀任何文件都快</strong>：</p>
+    <pre><code>gh repo clone Viewsonic-EDU/edu-dm-knowledge-base
+# 在 Claude Code 內：
+#   /plugin marketplace add Viewsonic-EDU/edu-dm-knowledge-base
+#   /plugin install dm-kb@viewsonic-edu-dm-kb
+#   /dm-kb:setup</code></pre>
+
+    <table>
+      <thead><tr><th>命令</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><code>/dm-kb:spec</code></td><td>問「這個功能怎麼運作」，PM 語言回答，標示信心度</td></tr>
+        <tr><td><code>/dm-kb:spec-deep</code></td><td>同上但<strong>強制查 code 佐證</strong>（spec ↔ L1 ↔ code 三方交叉驗證）</td></tr>
+        <tr><td><code>/dm-kb:feature-map</code></td><td>feature 跨 frontend／backend／android 對照表</td></tr>
+        <tr><td><code>/dm-kb:review-story</code></td><td>評 Jira ticket 是否 ready for dev</td></tr>
+      </tbody>
+    </table>
+
+    <p>另有 <code>edu-dm-opskit</code>：DM 的 <strong>operation 任務工具箱</strong>，
+    同時是 Claude Code plugin、marketplace 與團隊 operation 知識庫。
+    解決的問題是「業務端的資料匯出、log 查詢除錯可能交給任何一位工程師，
+    而 session 結束就忘了」——讓過程中學到的東西以 PR 回寫、審核後分發。</p>
+
+    <h2 id="map">3. Repo 地圖</h2>
+    <p>約 <strong>30 個 repo</strong>。<code>pushed_at</code> 取自 GitHub API（2026-09-22 查）。</p>
+
+    <h3 id="map-front">3.1 前端</h3>
+    <table>
+      <thead><tr><th>Repo</th><th>內容</th><th>語言</th><th>預設分支</th><th>最後 push</th></tr></thead>
+      <tbody>
+        <tr><td><code>edu-dm-dashboard</code></td><td><strong>主控台</strong>。從 website-mydashboard 拆出來的 monorepo</td><td>TypeScript</td><td><code>dev</code></td><td>2026-09-18</td></tr>
+        <tr><td><code>edu-dm-dashboard-mobile</code></td><td>給 IT 管理者的 <strong>Mobile PWA</strong></td><td>TypeScript</td><td><code>dev</code></td><td>2026-09-21</td></tr>
+        <tr><td><code>edu-dm-dashboard-lang</code></td><td>i18n 快照。<strong>generated artifact mirror，不是 source of truth</strong></td><td>—</td><td><code>main</code></td><td>2026-06-04</td></tr>
+        <tr><td><code>edu-dm-remote-desktop</code></td><td>Web 遠端桌面，<strong>Svelte + WebRTC</strong></td><td>TypeScript</td><td><code>dev</code></td><td>2026-08-14</td></tr>
+        <tr><td><code>edu-dm-resource</code></td><td>靜態資源</td><td>JavaScript</td><td><code>dev</code></td><td>2026-09-18</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="map-back">3.2 後端</h3>
+    <div class="callout warn">
+      <strong>⚠️ 有四個名字很像的 API repo，而且都還活著。</strong>
+      我沒有查證它們之間的取代關係——不要從名字猜（<code>-next</code> 不必然取代 <code>-nestjs</code>）。
+      要動到後端之前先問人或查 KB。
+    </div>
+    <table>
+      <thead><tr><th>Repo</th><th>內容</th><th>語言</th><th>最後 push</th></tr></thead>
+      <tbody>
+        <tr><td><code>edu-dm-api</code></td><td>Swagger 掛 <code>dm.dev.myviewboard.cloud/api-docs</code></td><td>JavaScript</td><td>2026-09-21</td></tr>
+        <tr><td><code>edu-dm-api-nestjs</code></td><td>NestJS。有 <code>docker-bake.hcl</code> ＋ 4 個 Dockerfile（含 <code>.lambda</code>）</td><td>TypeScript</td><td>2026-09-19</td></tr>
+        <tr><td><code>edu-dm-api-next</code></td><td>uService monorepo：<strong>NestJS + gRPC + Lerna</strong></td><td>TypeScript</td><td>2026-09-18</td></tr>
+        <tr><td><code>edu-dm-iot-nestjs</code></td><td><strong>IoT／MQTT 側服務</strong>。Docker 化</td><td>TypeScript</td><td>2026-09-21</td></tr>
+        <tr><td><code>edu-software-manager-api</code></td><td>NestJS。<strong>推論</strong>：Software Instances 頁的後端。已半年沒動</td><td>TypeScript</td><td>2026-03-26</td></tr>
+        <tr><td><code>edu-dm-file-converter</code></td><td>Node Lambda</td><td>JavaScript</td><td>2026-09-18</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="map-device">3.3 裝置端</h3>
+    <table>
+      <thead><tr><th>Repo</th><th>內容</th><th>語言</th><th>預設分支</th><th>最後 push</th></tr></thead>
+      <tbody>
+        <tr><td><code>edu-dm-agent-monorepo</code></td><td><strong>dm agent</strong>，<code>com.viewsonic.dmagent</code>。俗稱 <strong>dm</strong></td><td>Kotlin</td><td><code>develop</code></td><td>2026-09-21</td></tr>
+        <tr><td><code>edu-dm-agent-mqtt-prebuild-script</code></td><td>OpenSSL + Paho MQTT C 的 native prebuild</td><td>Shell</td><td><code>main</code></td><td>2026-09-15</td></tr>
+      </tbody>
+    </table>
+
+    <p>agent 的形狀（讀自該 repo 的 <code>CLAUDE.md</code>／<code>README.md</code>）：</p>
+    <ul>
+      <li><strong>兩個 app 變體</strong>：<code>:app_aosp</code>（<code>sharedUserId="android.uid.system"</code>）／
+        <code>:app_edla</code>（Device Owner 模式，多使用者靠 <code>CommandTarget</code> 路由）。
+        共用 applicationId，各有 <code>dev</code>／<code>stage</code>／<code>production</code> flavor</li>
+      <li><strong>MQTT 雙向</strong>：雲端下 command → <code>Dispatcher</code>；agent 回報 → <code>DynamicResponser</code>。
+        MQTT client 是 <strong>JNI 包的 native Paho C</strong>，不是 Java 版。另有 Retrofit HTTP 層</li>
+      <li><strong><code>:function</code> 模組管得到硬體</strong>：<code>VendorApi</code>（VSApi／SystemApi）抽象出
+        螢幕、音量、背光、訊號源、電源、開機模式、WiFi、RS232、OTA</li>
+      <li>Kotlin 2.4.10 / JDK 21 / Koin / Moshi / Coroutines，測試 JUnit5 + Kotest + Mockk + Robolectric，錯誤追蹤 Sentry</li>
+    </ul>
+    <div class="callout">
+      ⚠️ agent 的 MQTT 協議 wiki 在 <strong>Azure DevOps</strong>（<code>viewsonic-ssi.visualstudio.com</code>），
+      不在 GitHub。README 裡有 Server-to-Agent／Agent-to-Server 兩頁的連結。
+    </div>
+
+    <h3 id="map-infra">3.4 基礎設施 / SRE</h3>
+    <p>這一塊的存在本身就是資訊：<strong>Manager 有自己的 SRE 線</strong>，不是附屬功能。</p>
+    <table>
+      <thead><tr><th>Repo</th><th>內容</th><th>最後 push</th></tr></thead>
+      <tbody>
+        <tr><td><code>edu-dm-terragrunt-infra</code></td><td>AWS 基礎設施，Terragrunt 多環境多區域</td><td>2026-09-17</td></tr>
+        <tr><td><code>edu-dm-devops-monorepo</code></td><td>可觀測性 IaC 的<strong>統一入口</strong>（Terraform + Terragrunt）</td><td>2026-09-07</td></tr>
+        <tr><td><code>edu-dm-lgtm-observability</code></td><td>LGTM stack IaC，SRE team 維護</td><td>2026-04-14</td></tr>
+        <tr><td><code>edu-dm-pipeline</code></td><td>各 DM repo <strong>共用的 CI/CD</strong>：部署腳本、可重用 workflow、release 自動化</td><td>2026-09-17</td></tr>
+        <tr><td><code>edu-dm-log-compactor</code></td><td>把 <code>myviewboardstorage-log</code> 的百萬個小檔壓成每天一檔</td><td>2026-04-14</td></tr>
+        <tr><td><code>edu-dm-collab-standards</code></td><td>可重用的 GitHub Actions：<strong>自動 PR code review</strong></td><td>2026-08-13</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="map-test">3.5 測試</h3>
+    <table>
+      <thead><tr><th>Repo</th><th>內容</th><th>最後 push</th></tr></thead>
+      <tbody>
+        <tr><td><code>edu-manager-automation</code></td><td>Manager web 的測試框架：<strong>Playwright（web）＋ Appium／UiAutomator2（Android）</strong>，跑 Azure Pipelines</td><td>2026-05-28</td></tr>
+        <tr><td><code>edu-dm-test-automation</code></td><td>Manager – Test Automation</td><td>2026-09-16</td></tr>
+        <tr><td><code>edu-dm-playwright</code></td><td>Playwright（README 還是 TODO 樣板）</td><td>2026-06-15</td></tr>
+        <tr><td><code>edu-dm-websocket-stresstest</code></td><td>MQTT broker 壓測：跨多台 EC2 <strong>模擬數千台 IoT 裝置連線</strong></td><td>2026-04-23</td></tr>
+        <tr><td><code>edu-dm-test-amapi-restful</code></td><td><strong>Google AMAPI 測試客戶端</strong>（Kotlin）——見下方註</td><td>2026-05-07</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>值得留意的策略訊號：</strong><code>edu-dm-test-amapi-restful</code> 是
+      <strong>Google Android Management API</strong> 的操作範例（服務帳號認證、政策管理、token、遠端指令）。
+      這跟 agent 的 <code>app_edla</code>（Device Owner）是同一條線——EDLA 裝置不能用 system uid，
+      往 Google 官方企業管理 API 靠。
+      <strong>是否要取代自家 agent，我沒有證據，不下結論。</strong>
+    </div>
+
+    <h3 id="map-ai">3.6 AI / 工具</h3>
+    <table>
+      <thead><tr><th>Repo</th><th>內容</th><th>最後 push</th></tr></thead>
+      <tbody>
+        <tr><td><code>edu-dm-knowledge-base</code></td><td><strong>官方知識庫 ＋ <code>dm-kb</code> plugin</strong>（見 <a href="#kb">§2</a>）</td><td>2026-07-27</td></tr>
+        <tr><td><code>edu-dm-opskit</code></td><td>operation 工具箱 ＋ <code>dm-opskit</code> plugin ＋ marketplace</td><td>2026-09-21</td></tr>
+        <tr><td><code>manager-ai-features-service</code></td><td><strong>ManagerAI</strong>：自然語言下指令。Python + uv，LLM 走 Ollama 或 Gemini，<strong>SSS Core AI team</strong> 做。⚠️ <strong>近一年沒 push</strong></td><td>2025-11-05</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="archived">4. 已封存的（別照著做）</h2>
+    <div class="callout warn">
+      這四個 repo 在 GitHub 上是 <code>archived</code>。本機 checkout 看不出來——
+      <strong>只看資料夾和 git log 會把它們當現役</strong>（我第一次就看錯了）。
+    </div>
+    <table>
+      <thead><tr><th>Repo</th><th>原本是什麼</th><th>最後 push</th></tr></thead>
+      <tbody>
+        <tr><td><code>edu-device-manager-mobile</code></td><td><strong>Kotlin Multiplatform</strong>（Android + iOS）原生行動 app。<br />→ 行動端現在走 <code>edu-dm-dashboard-mobile</code>（PWA）</td><td>2026-01-09</td></tr>
+        <tr><td><code>edu-dm-synthetics</code></td><td>CloudWatch Synthetics canary（headless Selenium 定時跑 sign-in 等關鍵流程）</td><td>2026-04-09</td></tr>
+        <tr><td><code>edu-dm-alert-config</code></td><td>CloudWatch 告警，Terraform 管理</td><td>2026-03-20</td></tr>
+        <tr><td><code>edu-dm-ecs-task-def-validator</code></td><td>ECS task def 註冊時檢查合規，違規發 OpsGenie</td><td>2026-01-14</td></tr>
+      </tbody>
+    </table>
+    <p>三個 infra repo 同期封存，而 <code>edu-dm-devops-monorepo</code> 自稱
+    「<strong>unified observability repository</strong>」——<strong>推論</strong>：它們被收斂進去了。未查證。</p>
+
+    <h2 id="aosp-edla">5. AOSP vs EDLA：貫穿全線的分歧</h2>
+    <p>這是理解 Manager 技術決策最有用的一把鑰匙，而且它<strong>不只影響 agent</strong>。</p>
+    <table>
+      <thead><tr><th></th><th>AOSP（傳統 IFP 韌體）</th><th>EDLA（GMS 認證裝置）</th></tr></thead>
+      <tbody>
+        <tr><td>agent 取得權限的方式</td><td><code>sharedUserId="android.uid.system"</code>，系統 app</td><td><strong>Device Owner</strong> 模式</td></tr>
+        <tr><td>為什麼要分</td><td>—</td><td>GMS 認證裝置<strong>不能玩 system uid</strong></td></tr>
+        <tr><td>讀得到 serial number 嗎</td><td>平台簽章 system app 讀得到</td><td>只有 Device Owner（＝dm）讀得到</td></tr>
+      </tbody>
+    </table>
+    <p>最後一列直接決定了 <a href="#mvb">§6</a> 那條整合的<strong>方向</strong>。</p>
+
+    <h2 id="mvb">6. 與 myViewBoard 的接點</h2>
+    <p>兩個方向，都是同一台裝置上的 <strong>ContentProvider IPC</strong>：</p>
+    <table>
+      <thead><tr><th>方向</th><th>內容</th><th>狀態</th></tr></thead>
+      <tbody>
+        <tr><td><strong>dm → MVB</strong></td><td>MVB 讀 <code>content://com.viewsonic.dmagent.provider/entity</code> 拿 entity name 做 auto-enroll</td><td>既有</td></tr>
+        <tr><td><strong>MVB → dm</strong></td><td>MVB 開唯讀 provider 給 dm 讀 <code>instance_id</code></td><td>VSFT-9654 / VB-1399</td></tr>
+      </tbody>
+    </table>
+
+    <p><strong>為什麼需要第二條</strong>——這解釋了兩個產品的關係：
+    Manager 雲端從 MVB 後端拿得到 instance 清單，但那是一排 hex 字串，
+    <strong>對不上「哪個 ID 在哪台機器」</strong>。缺的不是資料，是兩個資料世界的 <strong>join key</strong>：</p>
+    <ul>
+      <li><strong>Manager 的世界</strong>：裝置紀錄，主鍵 serial number＝IT 眼中的機隊</li>
+      <li><strong>myViewBoard 的世界</strong>：instance 紀錄，主鍵 instance ID</li>
+    </ul>
+    <p><strong>為什麼方向是 MVB 給 dm、不是 MVB enroll 時帶 serial</strong>：
+    EDLA 上 MVB 讀不到 serial（要 <code>READ_PRIVILEGED_PHONE_STATE</code> 或 Device Owner 身分），
+    而 dm 是 Device Owner 永遠讀得到——<strong>能讀 serial 的一方必須是學到 instance ID 的一方</strong>。
+    方向是被 <a href="#aosp-edla">§5</a> 的技術限制逼出來的，不是偏好。</p>
+
+    <div class="callout ok">
+      這條整合的完整調查（含 headless Flutter engine、存取控制、實測競態）在
+      <a href="../manager-mvb-instance-id-provider/index.html">docs/features/manager-mvb-instance-id-provider/</a>，
+      那份是<strong>從 MVB 側看過去</strong>的視角。
+    </div>
+
+    <h2 id="jira">7. 在 Jira 裡的份量</h2>
+    <p>VB 專案 242 張未完成 bug 裡，<code>Project</code> 欄位是 <code>Manager</code> 的有 <strong>110 張</strong>
+    ——最大的一塊（myViewBoard 59、AirSync 20）。
+    實務上這代表在 VB 看板上會一直撞到它。（數字來源：<code>.claude/skills/jira-vb/SKILL.md</code>，2026-09-11 實測）</p>
+
+    <h2 id="evidence">8. 證據等級與查證方式</h2>
+    <table>
+      <thead><tr><th>本文的宣稱</th><th>等級</th><th>怎麼來的</th></tr></thead>
+      <tbody>
+        <tr><td>repo 清單、語言、預設分支、<code>pushed_at</code>、archived 狀態</td><td><span class="badge badge-ok">實查</span></td><td><code>gh api orgs/Viewsonic-EDU/repos</code>（2026-09-22）</td></tr>
+        <tr><td>各 repo 的用途</td><td><span class="badge badge-ok">讀碼</span></td><td>各 repo 的 <code>README.md</code>／<code>CLAUDE.md</code></td></tr>
+        <tr><td>agent 的模組結構與技術棧</td><td><span class="badge badge-ok">讀碼</span></td><td><code>edu-dm-agent-monorepo/CLAUDE.md</code></td></tr>
+        <tr><td>MVB 整合的方向與理由</td><td><span class="badge badge-ok">讀碼</span></td><td><a href="../manager-mvb-instance-id-provider/index.html">既有 km 調查</a></td></tr>
+        <tr><td><code>edu-software-manager-api</code> ＝ Software Instances 後端</td><td><span class="badge badge-warn">推論</span></td><td>只從 repo 名推的，<strong>未查證</strong></td></tr>
+        <tr><td>三個 infra repo 被 <code>devops-monorepo</code> 收斂</td><td><span class="badge badge-warn">推論</span></td><td>封存時間相近 ＋ 後者自稱 unified，<strong>未查證</strong></td></tr>
+        <tr><td>AMAPI 是否要取代自家 agent</td><td><span class="badge badge-na">不下結論</span></td><td>只有一個測試 repo，不足以支撐</td></tr>
+        <tr><td>四個 API repo 之間的取代關係</td><td><span class="badge badge-na">不下結論</span></td><td>名字像但沒查，<strong>不要用名字猜</strong></td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout warn">
+      <strong>重跑這份地圖的指令</strong>（repo 會增減，數字會過期）：
+      <pre><code>gh api "orgs/Viewsonic-EDU/repos?per_page=100&amp;sort=pushed" --paginate \
+  --jq '.[] | select(.name|test("dm|manager|device-manager";"i"))
+        | [.name, (.pushed_at|split("T")[0]), .default_branch,
+           (.language//"-"), (if .archived then "ARCHIVED" else "" end)] | @tsv'</code></pre>
+      對照組：輸出裡要掃得到 <code>edu-dm-agent-monorepo</code>（已知一定在）。掃不到就是 filter 壞了。
+    </div>
+  </main>
+</div>
+</body>
+</html>

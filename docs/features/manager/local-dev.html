@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>Manager 本機開發與磁碟空間</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="../../assets/icons/clipboard.svg">
+<meta name="km-doc-kind" content="findings">
+<meta name="km-doc-status" content="active">
+<meta name="km-doc-icon" content="chart">
+<link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#tldr">結論（先看這個）</a></li>
+      <li><a href="#sizes">1. repo 到底多大——外接上的數字是假的</a></li>
+      <li><a href="#budget">2. 真正的空間大戶</a></li>
+      <li><a href="#exfat">3. 外接硬碟是 exFAT，四個實測限制</a></li>
+      <li><a href="#answer">4. 「repo 本機、build/docker 外接」可行嗎</a></li>
+      <li><a href="#sparsebundle">5. 真要搬：APFS sparsebundle</a></li>
+      <li><a href="#colima">6. 先回收 Colima 的 14G</a></li>
+      <li><a href="#probes">7. 探針與對照組</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Manager 本機開發與磁碟空間</h1>
+    <div class="meta">
+      實測於 2026-09-22 &middot; 機器：Jay 的 macOS（內建 APFS ＋ Crucial X9 外接）
+      &middot; 用途：決定要不要／怎麼在本機跑 Manager 前後端
+    </div>
+    <div class="doc-nav">
+      <a href="index.html">📘 總覽 (overview)</a>
+      <a href="local-dev.html" class="active">💾 本機開發與空間</a>
+    </div>
+
+    <h2 id="tldr">結論（先看這個）</h2>
+    <div class="callout ok">
+      <strong>1. repo 不是問題。</strong>26 個 Manager repo 的<strong>真實內容總共 1.1 GB</strong>
+      （31,280 個檔案）。全部放本機完全不需要考慮。
+      <br /><strong>2. 「把 build／docker 放外接」這個方向，在<u>這顆</u>硬碟上不成立</strong>
+      ——它是 exFAT：不支援 hardlink、cluster 256K（小檔膨脹 18 倍）、小檔寫入慢 13 倍。
+      <br /><strong>3. 該回收的是 Colima</strong>：它已經佔掉本機 14 GB，而且那是<u>現在</u>就能拿回來的。
+    </div>
+
+    <h2 id="sizes">1. repo 到底多大——外接上的數字是假的</h2>
+    <p><code>du -sh</code> 在外接硬碟上報的數字<strong>嚴重灌水</strong>，因為 exFAT 的
+    allocation cluster 是 <strong>256 KB</strong>（APFS 是 4 KB）。一個 1-byte 的檔案在外接佔 256 KB。</p>
+
+    <table>
+      <thead><tr><th>Repo</th><th>檔案數</th><th>真實內容</th><th>exFAT 實佔</th><th>放 APFS 估</th></tr></thead>
+      <tbody>
+        <tr><td><code>edu-dm-test-automation</code></td><td>489</td><td>773 M</td><td>889 M</td><td>773 M</td></tr>
+        <tr><td><code>edu-dm-dashboard</code></td><td>9,573</td><td><strong>110 M</strong></td><td>2,431 M</td><td>123 M</td></tr>
+        <tr><td><code>edu-dm-dashboard-mobile</code></td><td>3,181</td><td>56 M</td><td>837 M</td><td>60 M</td></tr>
+        <tr><td><code>edu-dm-api-next</code></td><td>2,663</td><td>39 M</td><td>694 M</td><td>43 M</td></tr>
+        <tr><td><code>edu-dm-api</code></td><td>2,021</td><td>29 M</td><td>526 M</td><td>32 M</td></tr>
+        <tr><td><code>edu-dm-api-nestjs</code></td><td>4,147</td><td><strong>18 M</strong></td><td>1,038 M</td><td>24 M</td></tr>
+        <tr><td><code>edu-dm-terragrunt-infra</code></td><td>3,059</td><td>10 M</td><td>765 M</td><td>14 M</td></tr>
+        <tr><td colspan="5" style="text-align:center">…（其餘 19 個都在 15 M 以下）</td></tr>
+        <tr><td><strong>26 個合計</strong></td><td><strong>31,280</strong></td><td><strong>1,086 M</strong></td><td><strong>8,722 M</strong></td><td><strong>1,131 M</strong></td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout warn">
+      <strong>看 <code>edu-dm-api-nestjs</code> 那列：真實 18 M，exFAT 上佔 1,038 M——58 倍。</strong>
+      原因是它有 4,147 個檔案，而且大多很小。
+      <br />⚠️ <strong>不要用外接上的 <code>du</code> 數字規劃本機空間</strong>，會高估一個數量級。
+      我第一輪就是這樣報出「<code>edu-dm-dashboard</code> 2.7 G」的——那個數字對本機完全不適用。
+    </div>
+
+    <p>另外：這些 checkout <strong>都沒有 <code>node_modules</code></strong>（實測 <code>find</code> 掃不到任何一個），
+    所以上表<strong>不含依賴</strong>。</p>
+
+    <h2 id="budget">2. 真正的空間大戶</h2>
+    <p>本機目前：<strong>460 Gi 總量，可用 84 Gi</strong>。</p>
+    <table>
+      <thead><tr><th>項目</th><th>大小</th><th>等級</th><th>說明</th></tr></thead>
+      <tbody>
+        <tr><td>26 個 repo 的原始碼</td><td><strong>~1.1 G</strong></td><td><span class="badge badge-ok">實測</span></td><td>不是問題</td></tr>
+        <tr><td><code>~/.colima</code></td><td><strong>16 G</strong><br />（<code>_disks</code> 14 G ＋ <code>colima</code> 1.4 G）</td><td><span class="badge badge-ok">實測</span></td><td><strong>目前最大的一塊</strong>，而且 Colima 現在是停的</td></tr>
+        <tr><td><code>node_modules</code> × 6 個要跑的服務</td><td>粗估 3–6 G</td><td><span class="badge badge-warn">估計</span></td><td><strong>未實測</strong>。Angular monorepo 通常 1–2 G，NestJS 各 300–600 M</td></tr>
+        <tr><td>Docker images（Node base、MongoDB／Postgres、MQTT broker…）</td><td>粗估 3–8 G</td><td><span class="badge badge-warn">估計</span></td><td><strong>未實測</strong>，取決於要起幾個服務</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>量級感：</strong>就算依賴與 image 都往高估算，總共約 <strong>15–20 G</strong>，
+      而本機還有 84 G。<strong>空間不是這件事的瓶頸</strong>——前提是先把 Colima 那 14 G 處理掉（<a href="#colima">§6</a>）。
+    </div>
+
+    <h2 id="exfat">3. 外接硬碟是 exFAT，四個實測限制</h2>
+    <p><code>diskutil info "/Volumes/Crucial X9"</code> → <code>File System Personality: ExFAT</code>。
+    這決定了它能放什麼、不能放什麼：</p>
+    <table>
+      <thead><tr><th>能力</th><th>結果</th><th>後果</th></tr></thead>
+      <tbody>
+        <tr><td>symlink</td><td><span class="badge badge-ok">可以</span></td><td>macOS 用擴充屬性模擬，能用</td></tr>
+        <tr><td><code>chmod +x</code> ／ 執行</td><td><span class="badge badge-ok">可以</span></td><td>腳本跑得動</td></tr>
+        <tr><td><strong>hardlink</strong></td><td><span class="badge badge-err">不行</span><br /><code>Operation not supported</code></td><td><strong>pnpm 預設用 hardlink 做 store → 會壞</strong>。<code>git clone --local</code> 也用 hardlink</td></tr>
+        <tr><td><strong>sparse file</strong></td><td><span class="badge badge-err">不支援</span><br />500 M 宣告＝實佔 500 M</td><td><strong>VM disk image 放上去會立刻實佔宣告大小</strong>（見 <a href="#answer">§4</a>）</td></tr>
+        <tr><td><strong>大小寫</strong></td><td><span class="badge badge-warn">不敏感</span></td><td><code>Case.txt</code> 與 <code>case.txt</code> 是同一個檔。JS 生態的經典雷（<code>import './Foo'</code> vs <code>'./foo'</code> 在本機過、CI 掛）</td></tr>
+        <tr><td><strong>cluster 大小</strong></td><td><span class="badge badge-err">256 K</span><br />（APFS 為 4 K）</td><td>小檔膨脹 18–58 倍（<a href="#sizes">§1</a>）</td></tr>
+        <tr><td>小檔寫入速度（300 檔）</td><td><span class="badge badge-err">0.261 s</span><br />本機 APFS 0.020 s</td><td><strong>慢 13 倍</strong>。<code>node_modules</code> 動輒數萬個檔</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="answer">4. 「repo 本機、build/docker 外接」可行嗎</h2>
+    <p>拆成三個不同的東西回答，因為它們的答案不一樣：</p>
+
+    <h3>4.1 <code>node_modules</code> ／ build 產物 → <span class="badge badge-err">不建議</span></h3>
+    <p>三個理由疊加：<strong>hardlink 不支援</strong>（pnpm 直接壞）、<strong>膨脹 18–58 倍</strong>
+    （搬過去反而更耗空間，只是耗在外接）、<strong>小檔慢 13 倍</strong>
+    （<code>npm install</code> 與 webpack／Angular build 都是大量小檔 I/O，正是最痛的存取模式）。</p>
+    <p>而且本來就沒必要——依賴撐死 6 G，本機有 84 G。</p>
+
+    <h3>4.2 Docker／Colima 的 VM disk → <span class="badge badge-err">不要直接搬</span></h3>
+    <p>Colima 的 datadisk 實測是：</p>
+    <pre><code>~/.colima/_lima/_disks/colima/datadisk
+  apparent: 100G   ← 宣告大小
+  actual  :  14G   ← 實際佔用（sparse）</code></pre>
+    <div class="callout warn">
+      <strong>exFAT 不支援 sparse file，所以把它搬過去會從實佔 14 G 變成實佔 100 G。</strong>
+      而且外接只剩 505 G、沒有 TRIM 回收，寫入還更慢。這是<strong>反效果</strong>。
+    </div>
+
+    <h3>4.3 冷資料（不常用的 repo、image tar、備份）→ <span class="badge badge-ok">適合</span></h3>
+    <p>外接硬碟現在的用途（offloaded repo）本來就是對的：<strong>冷資料、整包存取、不做小檔隨機 I/O</strong>。
+    exFAT 的缺點在這個模式下都不痛。</p>
+
+    <h2 id="sparsebundle">5. 真要搬：APFS sparsebundle</h2>
+    <p>如果之後真的需要把熱資料放外接（例如同時開多個大型 monorepo），
+    正解是在外接硬碟上建一個 <strong>APFS 稀疏磁碟映像</strong>，掛載後就是一個正常的 APFS 卷宗。
+    <strong>已實測可行</strong>：</p>
+    <pre><code>hdiutil create -size 200g -type SPARSEBUNDLE -fs "APFS" \
+  -volname DevVol "/Volumes/Crucial X9/dev.sparsebundle"
+hdiutil attach "/Volumes/Crucial X9/dev.sparsebundle" -nobrowse</code></pre>
+    <table>
+      <thead><tr><th>能力</th><th>exFAT 直接放</th><th>APFS sparsebundle</th></tr></thead>
+      <tbody>
+        <tr><td>hardlink</td><td><span class="badge badge-err">不行</span></td><td><span class="badge badge-ok">可以</span></td></tr>
+        <tr><td>sparse file</td><td><span class="badge badge-err">不支援</span></td><td><span class="badge badge-ok">支援</span>（500 M 宣告＝實佔 0 B）</td></tr>
+        <tr><td>小檔寫入（300 檔）</td><td>0.261 s</td><td><span class="badge badge-ok">0.020 s</span>（與本機同級）</td></tr>
+        <tr><td>實際佔用</td><td>—</td><td>宣告 2 G 的映像，建立後實佔 <strong>28 M</strong>（隨用量長）</td></tr>
+        <tr><td>大小寫敏感</td><td><span class="badge badge-warn">否</span></td><td><span class="badge badge-warn">否</span>（預設；要敏感得用 <code>Case-sensitive APFS</code>）</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>代價，先想清楚再用：</strong>
+      <ul>
+        <li>硬碟沒掛載時，裡面的東西<strong>整個消失</strong>——路徑還在但目錄是空的，
+          而且<u>不會有明確錯誤</u>（同 Colima 的 <code>$HOME</code> 掛載陷阱）</li>
+        <li>sparsebundle 只會<strong>長大不會自己縮</strong>，要 <code>hdiutil compact</code> 回收</li>
+        <li>拔硬碟前沒 <code>detach</code> ＝ 檔案系統層級的損壞風險，比 exFAT 直接放檔嚴重</li>
+      </ul>
+      <strong>我沒有實測把 Colima 的 datadisk 搬進 sparsebundle</strong>——上表只驗到
+      「sparsebundle 本身支援 hardlink／sparse／速度正常」。真要做要另外驗一次 Colima 起得來。
+    </div>
+
+    <h2 id="colima">6. 先回收 Colima 的 14G</h2>
+    <p>這是<strong>現在</strong>就能拿回來的空間，而且不影響任何 Manager 的工作。
+    Colima 目前<strong>是停的</strong>（<code>colima is not running</code>），那 14 G 是躺著的舊資料。</p>
+    <pre><code># 先看裡面有什麼（要先啟動）
+colima start &amp;&amp; unset DOCKER_HOST
+docker system df
+
+# 溫和：清掉沒在用的 image／build cache／volume
+docker system prune -a --volumes
+
+# 激烈：整個 VM 砍掉重建，順便把 disk 宣告調小
+colima delete
+colima start --disk 60 --cpu 4 --memory 8</code></pre>
+    <div class="callout warn">
+      ⚠️ <code>colima delete</code> <strong>會刪掉所有 image、container 與 volume</strong>。
+      確認沒有只存在本機、沒 push 過的 image 再做。
+      <br />⚠️ <code>colima start</code> 之後<strong>一律 <code>unset DOCKER_HOST</code></strong>
+      ——它只會印 warning，然後你所有指令連到錯的地方。見
+      <a href="../../../.claude/skills/colima/SKILL.md">colima skill</a>。
+    </div>
+
+    <div class="callout">
+      <strong>另一個跟 Manager 直接相關的 Colima 限制：</strong>Lima 預設<strong>只掛載 <code>$HOME</code></strong>。
+      <code>/Volumes/*</code>（外接硬碟）與 <code>/private/tmp</code> 在容器內<strong>看不到</strong>，
+      症狀是空目錄或 <code>No such file or directory</code>，<u>不會</u>說「路徑沒掛載」。
+      <br />→ 所以就算把 repo 放外接，<strong><code>docker compose</code> 也 bind mount 不到它</strong>。
+      這條單獨就否定了「repo 放外接跑 docker」。
+    </div>
+
+    <h2 id="probes">7. 探針與對照組</h2>
+    <p>本文每個數字的取得方式，可重跑：</p>
+    <table>
+      <thead><tr><th>宣稱</th><th>指令</th><th>對照組</th></tr></thead>
+      <tbody>
+        <tr><td>檔案系統是 exFAT</td><td><code>diskutil info "/Volumes/Crucial X9"</code></td><td>—</td></tr>
+        <tr><td>hardlink 不支援</td><td><code>ln real.txt hard.txt</code></td><td>同一段在 sparsebundle 內成功 → 證明是 exFAT 的限制、不是我的指令錯</td></tr>
+        <tr><td>sparse 不支援</td><td><code>dd if=/dev/zero of=sp.img bs=1 count=0 seek=500M</code> 後比 <code>ls -lh</code> 與 <code>du -h</code></td><td>sparsebundle 內同指令得 apparent 500 M／actual 0 B</td></tr>
+        <tr><td>cluster 256 K</td><td>寫 1-byte 檔後 <code>du -h</code></td><td>本機 APFS 同指令得 4 K</td></tr>
+        <tr><td>真實 vs 實佔大小</td><td>Python <code>os.lstat</code>：<code>st_size</code> vs <code>st_blocks*512</code></td><td>兩者在本機 APFS 上應接近，在 exFAT 上差 18 倍</td></tr>
+        <tr><td>小檔寫入速度</td><td><code>time (for i in $(seq 1 300); do echo x &gt; f$i; done)</code></td><td>同指令在本機 APFS 跑一次</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      ⚠️ <strong>速度那條的絕對值不要引用。</strong>單次、未 <code>sync</code>、受 cache 影響，
+      只有「外接 vs 本機」的<strong>相對比較</strong>是有效的（同條件、同指令）。
+      要準確數字得用 <code>fio</code> 之類的工具另外量。
+    </div>
+  </main>
+</div>
+</body>
+</html>
