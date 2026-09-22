@@ -359,6 +359,96 @@ plural 的 placeholder 漂移原本也只是 warning、不影響結束碼，VB-2
 
 ---
 
+## 在融合版上疊一個 demo／除錯用的浮動工具
+
+2026-09-22 做 VB-2116「出題視窗 1.2x」的現場對比工具時走完一輪，整段**不用改 mvbf 一行**。
+可重用的成果留在 ragdoll-cat 的分支 `jay/demo-0922-quiz-ui-scale`（commit `9ece40147`，
+從 `origin/develop` 98be5cc81 開），另存一份 patch 在 `~/Downloads/cs-demo-0922-quiz-ui-scale.patch`。
+
+### 放哪：CS 的 `app/src/debug/` 會被融合版 debug APK 納入
+
+`edu-droid-flutter/android/classswift/build.gradle` 的 `sourceSets.debug` 把
+`${csRoot}/app/src/debug/java` 與那份 `AndroidManifest.xml` 掛進 debug variant（release 不含）。
+所以 demo／除錯用的 Activity、浮動視窗都寫在 CS 的 debug sourceset 就好，**mvbf 端零改動**。
+repo 裡本來就有這個用法的前例：`SketchReviewPreviewActivity`（`exported=true`，供 `adb shell am start`）。
+
+### 進入點不要是「會留在前景的一頁」
+
+**由來**：第一版把切換鈕做成一個正常的 Activity，結果 Jay 一按就整頁蓋在 mVB 上 ——
+而 CS 的擷取出題是**從畫面上框**，於是框到的變成那一頁而不是白板內容。
+之後就算離開那一頁，它仍以 `FLAG_ACTIVITY_NEW_TASK` 留著一個 task
+（`dumpsys activity activities` 看得到），擷取流程切 task 時系統又把它帶回前景。
+
+做法：
+
+- 桌面圖示指向一個**只做事、不顯示畫面**的 Activity：`onCreate` 裡掛／收浮動視窗後立刻 `finish()`
+- 那個 Activity 用 `@android:style/Theme.Translucent.NoTitleBar`，而且**必須繼承 `Activity`
+  不能繼承 `AppCompatActivity`** —— AppCompat 會檢查 theme 並丟
+  「You need to use a Theme.AppCompat theme (or descendant) with this activity」
+- 真的需要一頁（例如並排預覽），給它 `android:noHistory="true"` ＋ `android:excludeFromRecents="true"`，
+  離開就結束，不留 task
+- ⚠️ 多掛一個 LAUNCHER activity 之後，`cmd package resolve-activity --brief <pkg>` 會回
+  `ResolverActivity`。要起 mVB 改用 `am start -n com.viewsonic.droid/.MainActivity`
+
+### overlay 的疊放是「加入順序」，所以你的工具會被 CS 視窗蓋住
+
+浮動工具跟 CS 的視窗一樣是 `TYPE_APPLICATION_OVERLAY`（融合版已有 `SYSTEM_ALERT_WINDOW`，
+沒有的話是靜默失敗，見 [[mvbf-fusion-overlay-permission-silent-fail]]），**同型別之間由加入順序決定
+誰在上面**，沒有任何 z-order 參數可以贏過它。
+
+- **實測**：擷取遮罩一開，浮動鈕就被壓在下面 —— 點不到，而且看起來只是「按了沒反應」。
+  判斷方式：截圖取膠囊上的像素，被遮罩的暗化層蓋住時顏色會變（實測 `#3D5AFE` → `(40,59,165)`）。
+- **`wm.removeViewImmediate(view)` ＋ `wm.addView(view, params)` 會重新變成最後加入的那個**，
+  馬上浮回最上面（實測顏色回到 `(61,90,254)`）。
+- ❌ **掛 `CSWindowManager.addOnWindowChangedListener` 去做自動置頂，實測沒有生效**
+  （遮罩／出題面板開起來之後膠囊仍在下面）。原因未定案 —— 讀碼看到
+  `notifyWindowCountChanged()` 只在 `addWindow` / `removeWindow` 兩處呼叫，但那兩處理論上
+  createWindow 也會走到，所以更可能是通知時機早於對方真正 `addView`（加了 350ms 延遲仍失敗）。
+  **要可靠就別靠事件**：定時（例如每 0.8 秒）比對 `CSWindowManager.getAllWindows().size`，
+  變了就重新加入一次。
+- **MediaProjection 的「Share your screen?」系統對話框在所有 app overlay 之上**，
+  它出現時浮動工具一定點不到，這是正常的。
+
+### 已經開著的視窗改不了密度，只能做等比縮放
+
+dp／sp 在 **inflate 當下**就被解析成 px 寫進 view 的 padding、LayoutParams、字級裡，
+事後改 Context 的 `densityDpi` 不會讓既有的樹重算 —— 只有重新 inflate 才會，而重建會把視窗
+狀態清掉（出題面板重建＝剛擷取的那張圖沒了）。所以「按一下就即時生效」只能對 view 做
+`scaleX/scaleY` ＋ 同步視窗的 `LayoutParams`：
+
+- 幾何結果與密度加權**相同**（兩者都是所有尺寸乘同一個倍率，連換行位置都不變），
+  差別只在文字是「畫完再放大」而非「以放大後密度重畫」
+- 每個視窗**自己的 Context 密度就記著它是用哪個倍率建的**，所以要補的倍數算得出來不用猜：
+  `視覺倍數 = 目標倍率 ÷ (視窗 Context 的 densityDpi ÷ app 的 densityDpi)`
+- `view.measuredWidth` 不受 `scaleX` 影響，拿它當未縮放基準，重複套用不會累乘
+
+### demo 用的狀態要用 `commit()` 寫，不要 `apply()`
+
+**由來**：倍率存在 SharedPreferences，用 `apply()`（非同步）。按完 1.2x、畫面也顯示 1.2x，
+但緊接著 `adb install -r` 把 process SIGKILL 掉，那次寫檔還沒落地就沒了，檔案停在更早的值。
+台上同樣會踩到（mVB 被系統收掉就靜默退回）。
+**驗證方式**：設一個與現值不同的值 → 立刻 `am force-stop` → `run-as <pkg> cat
+/data/data/<pkg>/shared_prefs/<name>.xml`。設回**同一個值**的那次沒有鑑別力。
+
+### 量「有沒有真的放大」用像素，不要用肉眼
+
+截圖後量目標視窗的寬度（掃描列上最長的一段近白像素即可）。實測出題面板
+**1.0x = 542 px、1.2x = 649 px，比值 1.1974** —— 差的 0.0026 是 `densityDpi` 四捨五入，
+`Context.scaledBy()` 的註解本來就寫了這件事。
+
+### 裝置：先確認簽章與記憶體
+
+- **簽章**：機器上若是 release 簽章的版本，`install -r` 會被
+  `INSTALL_FAILED_UPDATE_INCOMPATIBLE` 擋下，只能先解除安裝（**登入狀態與班級資料一起沒**）。
+  原本就是 debug 簽章的機器可以直接覆蓋，登入保留。demo 前先在目標機器上試一次。
+- **記憶體**：融合版 **debug** APK 有 539 MB（Dart JIT ＋ 全 ABI ＋ 除錯符號），
+  Galaxy Tab S7 FE（SM-T733，3.4 GB RAM）一開就被 low-memory killer 砍掉，
+  看起來像 crash 但 **logcat 沒有任何 `FATAL EXCEPTION`**，只有
+  `ActivityManager_kpm: ... Killed com.viewsonic.droid_0` 與 `mem-pressure-event`。
+  Pixel Tablet（7.6 GB）沒問題。見 [[fusion-debug-build-killed-by-lmk]]。
+
+---
+
 ## 架構速記（細節以 `CLAUDE.md` 為準）
 
 - **UI 是 Android Views + ViewBinding，沒有 Compose**；Koin DI、Moshi、Retrofit、Room、Socket.IO
