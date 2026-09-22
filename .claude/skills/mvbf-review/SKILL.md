@@ -5,7 +5,8 @@ description: "Use when reviewing code in edu-droid-flutter (mvbf) — own change
 
 # mvbf code review
 
-**先讀 `mvbf` skill**（步驟 0–2、註解標準、引號、headless 邊界）。這裡只放 review 特有的部分。
+**先讀 `mvbf` skill**（步驟 0–2、註解標準、引號）＋ 它的 `platform.md`（headless 邊界）。
+這裡只放 review 特有的部分。
 
 ---
 
@@ -103,7 +104,7 @@ grep -n "pattern" $F      # ← ugrep: No such file or directory，然後你看�
    → **新增永久性狀態時，回頭 grep 所有以「結果為空」為條件的早退／重試。**
 
 2. **「這個非同步流程的每條路都會收工嗎？」**
-   有回報完成訊號的設計（見 `mvbf` skill 的 headless 段），要逐條檢查
+   有回報完成訊號的設計（見 `mvbf` skill 的 `platform.md`），要逐條檢查
    **新增的分支有沒有回報**。漏掉的話不是壞掉，是**空轉到 timeout**——症狀很輕，成本很高。
 
 3. **「post 出去的東西取消得掉嗎？」**
