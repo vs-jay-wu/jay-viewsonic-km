@@ -3,7 +3,15 @@
  *
  * 同一個 repo 的 worktree 在檔案系統上是分開的目錄（`edu-droid-flutter-vb-2267`），
  * 攤平列出來時它們散在各處、而且看起來像不同的專案。**照主 repo 收在一起**
- * （Jay 2026-09-18），pin 也是 pin 整組。
+ * （Jay 2026-09-18）。
+ *
+ * **pin 分兩層**（Jay 2026-09-23）：
+ * - pin **主 repo** → 那一組排到 repo 清單最前面，它的 worktree 跟著走。
+ * - pin **worktree** → 只影響那個 repo 底下 worktree 的順序，**不會**把整組往上推。
+ *
+ * 之前是「成員有一個被 pin 就整組算 pin」。那在「選 repo → 再選 worktree」的
+ * 兩層介面下會變得莫名其妙：你為了方便切換 pin 了一條分支，結果整個 repo
+ * 跳到清單最上面，而 repo 清單那一層根本看不到你 pin 的是誰。
  */
 
 export interface GroupableRepo {
@@ -22,17 +30,20 @@ export interface RepoGroup<T extends GroupableRepo> {
    *  只有 worktree 在清單裡（例如 `~/.mvb-worktrees/…`） */
   main: T | null;
   worktrees: T[];
-  /** 整組有沒有被 pin（任一成員被 pin 就算） */
+  /** 整組有沒有被 pin ——「**主 repo** 被 pin」才算，worktree 的 pin 不往上傳染 */
   pinned: boolean;
   /** 組內最新的一次 commit —— 排序用 */
   latestAt: string | null;
 }
 
 /**
- * 分組並排序：pin 住的整組在最前面，其餘照組內最新的 commit 時間。
+ * 分組並排序。
  *
- * **pin 是整組的**：pin 了 `edu-droid-flutter` 之後，它的 9 個 worktree 會跟著
- * 排到前面 —— 分開的話等於沒有分組。
+ * - 組跟組之間：pin 了主 repo 的在最前面，其餘照組內最新的 commit 時間。
+ * - 組**內**的 worktree：pin 過的在前面，其餘照最後 commit 時間。
+ *
+ * 主 repo 不在清單裡時（被 offload、或在掃描範圍外），退回「任一 worktree 被 pin
+ * 就算整組 pin」—— 否則那種組**永遠沒辦法被 pin**，因為根本沒有主 repo 可以 pin。
  */
 export function groupRepos<T extends GroupableRepo>(repos: T[]): RepoGroup<T>[] {
   const byName = new Map<string, RepoGroup<T>>();
@@ -49,12 +60,16 @@ export function groupRepos<T extends GroupableRepo>(repos: T[]): RepoGroup<T>[] 
     const g = take(r.worktreeOf ?? r.name);
     if (r.worktreeOf) g.worktrees.push(r);
     else g.main = r;
-    if (r.pinned) g.pinned = true;
     if (!g.latestAt || (r.lastCommitAt ?? "") > g.latestAt) g.latestAt = r.lastCommitAt;
   }
 
   for (const g of byName.values()) {
-    g.worktrees.sort((a, b) => ((a.lastCommitAt ?? "") < (b.lastCommitAt ?? "") ? 1 : -1));
+    // 主 repo 在 → 只看它；主 repo 不在 → 任一 worktree 被 pin 就算（否則這種組 pin 不了）
+    g.pinned = g.main ? g.main.pinned : g.worktrees.some((w) => w.pinned);
+    g.worktrees.sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      return (a.lastCommitAt ?? "") < (b.lastCommitAt ?? "") ? 1 : -1;
+    });
   }
 
   return [...byName.values()].sort((a, b) => {

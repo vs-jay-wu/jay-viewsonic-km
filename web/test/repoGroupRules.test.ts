@@ -29,13 +29,36 @@ describe("groupRepos", () => {
     expect(g[0].worktrees).toHaveLength(1);
   });
 
-  it("pin 的是 worktree 時整組也算 pin", () => {
+  it("pin worktree **不會**把整組推到最前面（pin 分兩層）", () => {
+    // 為了方便切換 pin 一條分支，不該讓整個 repo 跳到清單最上面 ——
+    // 而且 repo 清單那一層根本看不到你 pin 的是誰
     const g = groupRepos([
       r({ name: "a", lastCommitAt: "2026-09-18T00:00:00Z" }),
-      r({ name: "mvbf" }),
-      r({ name: "mvbf-wt", worktreeOf: "mvbf", pinned: true }),
+      r({ name: "mvbf", lastCommitAt: "2026-09-01T00:00:00Z" }),
+      r({ name: "mvbf-wt", worktreeOf: "mvbf", pinned: true, lastCommitAt: "2026-09-02T00:00:00Z" }),
     ]);
-    expect(g[0].name).toBe("mvbf");
+    expect(g[0].name).toBe("a");
+    expect(g.find((x) => x.name === "mvbf")!.pinned).toBe(false);
+  });
+
+  it("pin 過的 worktree 排在組內最前面", () => {
+    const g = groupRepos([
+      r({ name: "mvbf" }),
+      r({ name: "mvbf-old", worktreeOf: "mvbf", pinned: true, lastCommitAt: "2026-01-01T00:00:00Z" }),
+      r({ name: "mvbf-new", worktreeOf: "mvbf", lastCommitAt: "2026-09-20T00:00:00Z" }),
+    ]);
+    // 沒有 pin 的話 mvbf-new 會在前面（它比較新）
+    expect(g[0].worktrees.map((w) => w.name)).toEqual(["mvbf-old", "mvbf-new"]);
+  });
+
+  it("主 repo 不在清單裡時，worktree 的 pin 仍然算整組 pin", () => {
+    // 那種組沒有主 repo 可以 pin，不退回去的話它永遠 pin 不了
+    const g = groupRepos([
+      r({ name: "a", lastCommitAt: "2026-09-18T00:00:00Z" }),
+      r({ name: "poc", worktreeOf: "mac-playground", pinned: true, lastCommitAt: "2026-09-01T00:00:00Z" }),
+    ]);
+    expect(g[0].name).toBe("mac-playground");
+    expect(g[0].pinned).toBe(true);
   });
 
   it("主 repo 不在清單裡時也要成組（被 offload 或在工作區外）", () => {
