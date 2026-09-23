@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveRefresh } from "@/components/useLiveRefresh";
+import { useConfirm } from "@/components/Confirm";
+import { useToast } from "@/components/Toast";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import WorktreeBadge from "@/components/WorktreeBadge";
@@ -64,6 +66,8 @@ interface DiffPayload {
 
 export default function ChangesPage() {
   const wide = useWideLayout();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [data, setData] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [showModeOnly, setShowModeOnly] = useState(false);
@@ -195,6 +199,37 @@ export default function ChangesPage() {
     },
     { dir: selectedWorktree, enabled: !!selectedWorktree }
   );
+
+  /**
+   * 移除一個 linked worktree。**這是這頁唯一會刪東西的動作**，所以一定跳確認，
+   * 而且文案要講清楚失去什麼（工作區）與保留什麼（分支與 commit）。
+   * 不提供 `--force` —— 有未提交改動時讓 git 擋下來是刻意的，而這頁列的
+   * 正是那些改動。
+   */
+  const removeWorktree = async (dir: string, name: string) => {
+    const ok = await confirm({
+      title: `移除 worktree ${name}？`,
+      message:
+        `會刪掉這個工作目錄。分支與 commit 都還在，之後可以重新 git worktree add 回來。\n\n` +
+        `裡面若有未提交的改動或未追蹤的檔案，git 會擋下來不刪 —— 那些東西刪掉就沒了。`,
+      danger: true,
+    });
+    if (!ok) return;
+    const res = await fetch("/api/git/worktree", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dir }),
+    });
+    const json = (await res.json()) as { ok?: boolean; summary?: string; detail?: string };
+    if (!res.ok || !json.ok) {
+      toast({ ok: false, text: json.detail?.split("\n").pop() || json.summary || "刪不掉" });
+      return;
+    }
+    toast({ ok: true, text: `${name}：${json.summary}` });
+    // 刪掉的是目前開著的那個檔所在的 worktree —— 右邊要清掉，不然停在讀不到的東西上
+    if (selected?.worktree === dir) setSelected(null);
+    await load(true);
+  };
 
   const openFile = async (sel: Selected) => {
     setSelected(sel);
@@ -433,9 +468,10 @@ export default function ChangesPage() {
                 const wOpen = soleWorktree || !collapsed.has(w.path);
                 return (
                   <div key={w.path}>
+                    <div className="group flex items-center hover:bg-surface-raised">
                     <button
                       onClick={() => toggleCollapsed(soleWorktree ? r.repo : w.path)}
-                      className="flex w-full items-center gap-1.5 whitespace-nowrap px-4 py-1.5 text-left text-[11px] hover:bg-surface-raised"
+                      className="flex min-w-0 flex-1 items-center gap-1.5 whitespace-nowrap px-4 py-1.5 text-left text-[11px]"
                     >
                       <Icon
                         name={wOpen ? "chevronDown" : "chevronRight"}
@@ -474,6 +510,23 @@ export default function ChangesPage() {
                         </span>
                       )}
                     </button>
+                    {/*
+                      * 移除 worktree。**只有 linked worktree 有**（主 checkout 不能刪），
+                      * 而且平常是隱形的（`opacity-0`）—— 這頁是拿來看改動的，一排刪除鈕
+                      * 擺在那裡只會讓人手滑。滑到那一列才浮出來。
+                      */}
+                    {!w.isMain && (
+                      <Tooltip label="移除這個 worktree（會跳確認）">
+                        <button
+                          onClick={() => void removeWorktree(w.path, w.name)}
+                          aria-label={`移除 worktree ${w.name}`}
+                          className="mr-3 shrink-0 text-fg-disabled opacity-0 transition-opacity hover:text-danger focus:opacity-100 group-hover:opacity-100"
+                        >
+                          <Icon name="trash" size={12} />
+                        </button>
+                      </Tooltip>
+                    )}
+                    </div>
 
                     {/*
                       * 照 VS Code 分成 Staged Changes／Changes 兩區。
