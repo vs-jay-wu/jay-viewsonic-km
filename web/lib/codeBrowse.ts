@@ -4,7 +4,7 @@ import { run } from "@/lib/repo";
 import { isKnownWorktree } from "@/lib/changes";
 import { isExternalRepo } from "@/lib/externalRepos";
 import {
-  isSensitivePath, looksBinary, parseGrepOutput, sortEntries,
+  isHardBlocked, isSensitivePath, looksBinary, maskEnvValues, parseGrepOutput, sortEntries,
   type SearchHit, type TreeEntry,
 } from "@/lib/codeBrowseRules";
 
@@ -71,22 +71,49 @@ export interface FileContent {
   text: string;
   sizeBytes: number;
   truncated: boolean;
+  /** 這個檔是機敏檔案（畫面上要標出來，提醒別在分享螢幕時開著） */
+  sensitive?: boolean;
+  /** 這次是用哪種方式解鎖的 */
+  revealed?: Reveal;
 }
+
+/**
+ * `full` ＝ 明碼、`masked` ＝ 只留欄位名、不給就是預設的「不顯示」。
+ *
+ * **要帶明確的參數才會拿到內容**（`/api/code/file?reveal=…`）—— 預設路徑
+ * 的行為跟以前一模一樣。這樣「有人真的解鎖了」在程式與 log 裡都 grep 得到，
+ * 而不是靠某個布林預設值的歷史。
+ */
+export type Reveal = "full" | "masked";
 
 export async function readFileIn(
   dir: string,
-  rel: string
+  rel: string,
+  reveal?: Reveal
 ): Promise<FileContent | { error: string }> {
   const repo = await openRepo(dir);
   if (!repo) return { error: "不認得這個 repo" };
   const abs = await resolveIn(repo, rel);
   if (!abs || !rel) return { error: "路徑不在這個 repo 底下" };
 
-  // 機敏檔案在**讀取這一層**就擋掉，不是靠畫面不顯示（sensitive-files.md）
-  if (isSensitivePath(rel)) {
-    return { error: "這是機敏檔案，不顯示內容。要看有哪些欄位請看同目錄的 .env.example" };
+  /*
+   * 機敏檔案在**讀取這一層**把關，不是靠畫面不顯示（sensitive-files.md）。
+   *
+   * keystore 那一類連解鎖都不給；其餘的預設仍然不給，要帶 `reveal` 才讀 ——
+   * 也就是「使用者在自己的瀏覽器上明確按了一下」。
+   */
+  if (isHardBlocked(rel)) {
+    return { error: "這個目錄受保護（excluded-dirs.md），一律不讀取" };
   }
+  // 二進位要**排在機敏之前**：keystore 那種檔解鎖也只是亂碼，
+  // 給解鎖按鈕等於把原因講錯（Jay 2026-09-23 點 .jks 時看到的就是那個）
   if (looksBinary(rel)) return { error: "二進位檔，不顯示內容" };
+  if (isSensitivePath(rel) && !reveal) {
+    return {
+      error: "這是機敏檔案，預設不顯示內容。要看有哪些欄位請看同目錄的 .env.example",
+      sensitive: true,
+    };
+  }
 
   const st = await stat(abs).catch(() => null);
   if (!st?.isFile()) return { error: "不是檔案" };
@@ -99,7 +126,10 @@ export async function readFileIn(
   // 副檔名認不出來的二進位檔：前 8KB 有 NUL 就當二進位
   if (buf.subarray(0, 8192).includes(0)) return { error: "二進位檔，不顯示內容" };
 
-  return { path: rel, text: buf.toString("utf8"), sizeBytes: st.size, truncated: false };
+  const sensitive = isSensitivePath(rel);
+  // 遮罩一定要在這裡做 —— 前端遮的話值還在回應裡，開 DevTools 就看得到
+  const text = sensitive && reveal === "masked" ? maskEnvValues(buf.toString("utf8")) : buf.toString("utf8");
+  return { path: rel, text, sizeBytes: st.size, truncated: false, sensitive, revealed: reveal };
 }
 
 /**

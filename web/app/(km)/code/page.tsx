@@ -39,6 +39,10 @@ interface FileContent {
   text: string;
   sizeBytes: number;
   error?: string;
+  /** 機敏檔案（`.env` 之類）。畫面上要標出來 */
+  sensitive?: boolean;
+  /** 這次是用哪種方式解鎖的；沒有就是還沒解 */
+  revealed?: "full" | "masked";
 }
 
 const DEFAULT_TREE_W = 320;
@@ -288,14 +292,19 @@ function CodeBrowser() {
     });
   };
 
-  const openFile = async (rel: string, line?: number) => {
+  /**
+   * 開一個檔案。`reveal` 只在使用者按了解鎖按鈕時才帶 ——
+   * 機敏檔案的預設路徑仍然拿不到內容（見 lib/codeBrowseRules.ts）。
+   */
+  const openFile = async (rel: string, line?: number, reveal?: "full" | "masked") => {
     setLoadingFile(true);
     setGotoLine(line ?? null);
     try {
       const qs = new URLSearchParams({ dir, path: rel });
+      if (reveal) qs.set("reveal", reveal);
       const res = await fetch(`/api/code/file?${qs}`);
       const json = await res.json();
-      setFile(res.ok ? json : { path: rel, text: "", sizeBytes: 0, error: json.error });
+      setFile(res.ok ? json : { path: rel, text: "", sizeBytes: 0, ...json });
     } finally {
       setLoadingFile(false);
     }
@@ -535,11 +544,52 @@ function CodeBrowser() {
               <div className="px-6 py-10">
                 <p className="font-mono text-xs text-fg-muted">{file.path}</p>
                 <p className="mt-2 text-sm text-warn">{file.error}</p>
+                {/*
+                  機敏檔案才給這兩顆。**按下去才會去打 API 拿內容** ——
+                  在這之前值根本沒離開磁碟。解鎖不會被記住：換檔案、重整都會回到遮蔽。
+                */}
+                {file.sensitive && (
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => void openFile(file.path, undefined, "masked")}
+                      className="rounded-lg border border-line px-3 py-1.5 text-xs text-fg hover:bg-surface-raised"
+                    >
+                      只顯示欄位名
+                    </button>
+                    <button
+                      onClick={() => void openFile(file.path, undefined, "full")}
+                      className="rounded-lg border border-warn px-3 py-1.5 text-xs text-warn hover:bg-surface-raised"
+                    >
+                      顯示內容
+                    </button>
+                    <span className="text-xs text-fg-subtle">
+                      正在分享螢幕的話先別按
+                    </span>
+                  </div>
+                )}
               </div>
             ) : (
               <>
                 <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-line bg-surface px-4 py-2">
                   <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg">{file.path}</span>
+                  {file.sensitive && (
+                    <span className="flex shrink-0 items-center gap-1 rounded-md border border-warn px-1.5 py-0.5 text-[11px] text-warn">
+                      <Icon name="alert" size={11} />
+                      {file.revealed === "masked" ? "只有欄位名" : "機敏內容已顯示"}
+                    </span>
+                  )}
+                  {/* 遮罩態要能往上解到明碼，明碼態要能收回 —— 兩個方向都留在標題列，
+                      不然只遮一半的時候會卡住（實測：從遮罩態按不到「顯示內容」） */}
+                  {file.sensitive && (
+                    <button
+                      onClick={() =>
+                        void openFile(file.path, undefined, file.revealed === "full" ? "masked" : "full")
+                      }
+                      className="shrink-0 rounded-md border border-line px-1.5 py-0.5 text-[11px] text-fg-muted hover:text-fg"
+                    >
+                      {file.revealed === "full" ? "收回" : "顯示完整內容"}
+                    </button>
+                  )}
                   <span className="shrink-0 font-mono text-[11px] text-fg-subtle">
                     {lines.length} 行 · {(file.sizeBytes / 1024).toFixed(1)} KB
                   </span>

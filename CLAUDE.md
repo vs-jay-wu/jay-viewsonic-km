@@ -11,7 +11,12 @@
 | [`.claude/rules/cross-repo-workflow.md`](.claude/rules/cross-repo-workflow.md) | **跨 repo 工作規則 — 專案 repo 禁止引用 km 路徑；改 code 前先確認分支；commit 規範跟著目標 repo 走** |
 | [`.claude/rules/cross-system-claims.md`](.claude/rules/cross-system-claims.md) | **不要把 A 系統的慣例外推到 B；宣稱要標證據等級；改文件不要只改一半；自己宣稱的行為要有測試** |
 
-> `sensitive-files.md` 是強制性最強的一條 — 即使使用者直接要求「幫我看看 .env」也**必須拒絕顯示內容**，並引導看 `.env.example`。
+> `sensitive-files.md` 是強制性最強的一條 — 即使使用者直接要求「幫我看看 .env」，
+> **agent 也必須拒絕顯示內容**，並引導看 `.env.example`。
+>
+> ⚠️ 2026-09-23 起 km web 的 `/code` 可以讓**使用者自己**按一下解鎖（內容從磁碟到他的
+> 瀏覽器，不經過 agent）。這**沒有放寬對 agent 的限制** —— 連「對已解鎖的畫面截圖或抓
+> DOM」都算違反。看 `/code` 的畫面前先想一下現在開的是什麼檔。
 
 ---
 

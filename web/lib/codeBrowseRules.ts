@@ -38,20 +38,72 @@ export function looksBinary(path: string): boolean {
 }
 
 /**
- * 這個檔名要不要遮起來。
+ * 這個檔名算不算機敏（預設遮起來）。
  *
- * **機敏檔案一律不給看內容**（`.claude/rules/sensitive-files.md`）——
- * 那條規則說的是「即使使用者直接要求也必須拒絕顯示內容」，
- * 所以這裡不能只靠 UI 不點，要在讀取那一層就擋掉。
+ * 機敏檔案**預設不給看內容**（`.claude/rules/sensitive-files.md`）。
+ * 2026-09-23 起這一頁多了「明確按一下才顯示」那條路（見 `isHardBlocked`）——
+ * 但預設值不變，而且**不能只靠 UI 不點**：沒有帶明確的解鎖參數時，
+ * 讀取那一層就要擋掉。
  */
 export function isSensitivePath(path: string): boolean {
   const name = path.split("/").pop() ?? "";
   if (name === ".env" || name.startsWith(".env.")) return !name.endsWith(".example");
   if (/\.(jks|keystore|p12|pem|key)$/i.test(name)) return true;
-  if (name === "key.properties" || name === "google-services.json") return true;
+  // ⚠️ `keystore.properties`（ragdoll-cat）與 `key.properties`（mvbf）是同一種東西：
+  // 簽章用的密碼。只列其中一個等於另一個完全沒擋 —— 2026-09-23 實測 ragdoll-cat 的
+  // 那份 695 bytes 直接讀得到。加名字時**兩個 repo 都要查一次叫什麼**。
+  if (/^(key|keystore)\.properties$/.test(name) || name === "google-services.json") return true;
   if (/-firebase-adminsdk-.*\.json$/.test(name)) return true;
   // excluded-dirs.md：keystore 目錄整個不碰
   return /(^|\/)(mvbf_keystore|playstore_keystore)(\/|$)/.test(path);
+}
+
+/**
+ * **連「按一下解鎖」都不給**的那一類：`excluded` 的那兩個 keystore 目錄。
+ *
+ * 只有它們，因為 `excluded-dirs.md` 寫的是「**禁止讀取**」—— 那是 Jay 自己定的、
+ * 比「預設不顯示」更強的一條，這個解鎖機制不推翻它。
+ *
+ * ⚠️ **不要把副檔名（`.jks` / `.p12`…）也放進來。** 一開始是那樣寫的，結果
+ * 點 `MVBA_PlatForm.jks` 只會看到「受保護，一律不顯示」，而真正的理由是
+ * **它是二進位、顯示出來只是亂碼** —— 訊息講錯了原因，看起來也像功能壞了
+ * （Jay 2026-09-23 回報）。二進位由 `looksBinary` 那條負責講，講得比較誠實。
+ */
+export function isHardBlocked(path: string): boolean {
+  return /(^|\/)(mvbf_keystore|playstore_keystore)(\/|$)/.test(path);
+}
+
+/**
+ * 機敏、但可以按一下看（＝畫面上要給解鎖按鈕的那些）。
+ *
+ * 二進位不算：那種檔解鎖也只是亂碼，按鈕只會浪費一次點擊。
+ */
+export function isRevealable(path: string): boolean {
+  return isSensitivePath(path) && !isHardBlocked(path) && !looksBinary(path);
+}
+
+/**
+ * 只留欄位名，值一律換成 `••••`。
+ *
+ * `.env` 這種 `KEY=VALUE` 的檔，**key 名不機敏、值才是** —— 多數時候你要找的是
+ * 「有沒有這個欄位」，那不必真的解鎖。註解與空行原樣保留（它們常寫著這個欄位
+ * 要去哪裡拿）。
+ *
+ * ⚠️ 遮罩是在 **server 端**做的，不是前端拿到全文再遮：前端遮的話，
+ * 值仍然在回應裡，開 DevTools 就看得到，等於沒遮。
+ */
+export function maskEnvValues(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => {
+      const t = line.trimStart();
+      if (!t || t.startsWith("#")) return line;
+      const eq = line.indexOf("=");
+      if (eq === -1) return line;
+      const value = line.slice(eq + 1).trim();
+      return value ? `${line.slice(0, eq + 1)}••••` : line;
+    })
+    .join("\n");
 }
 
 /** 目錄在前、同類照名字。`.` 開頭的排在後面 —— 它們多半不是你要找的 */
