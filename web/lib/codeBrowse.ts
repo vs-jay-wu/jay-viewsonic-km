@@ -2,6 +2,7 @@ import { readFile, readdir, stat } from "fs/promises";
 import path from "path";
 import { run } from "@/lib/repo";
 import { isKnownWorktree } from "@/lib/changes";
+import { isExternalRepo } from "@/lib/externalRepos";
 import {
   isSensitivePath, looksBinary, parseGrepOutput, sortEntries,
   type SearchHit, type TreeEntry,
@@ -26,9 +27,17 @@ async function resolveIn(repo: string, rel: string): Promise<string | null> {
   return abs;
 }
 
+/**
+ * 這三支 API 的唯一入口守衛。
+ *
+ * 認兩種：本機工作區（含 worktree），以及**外接碟上的 repo**——
+ * `/code` 是唯讀瀏覽，offloaded 的東西也該看得到（Jay 2026-09-22）。
+ * 外接那條限制得比本機更窄（只認外接根目錄正下方的一層），見 lib/externalRepos.ts。
+ */
 export async function openRepo(dir: string): Promise<string | null> {
   const abs = path.resolve(dir);
-  return (await isKnownWorktree(abs)) ? abs : null;
+  if (await isKnownWorktree(abs)) return abs;
+  return (await isExternalRepo(abs)) ? abs : null;
 }
 
 export async function listDir(

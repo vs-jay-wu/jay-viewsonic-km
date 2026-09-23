@@ -30,6 +30,8 @@ interface RepoBrief {
   worktreeOf: string | null;
   pinned: boolean;
   lastCommitAt: string | null;
+  /** 外接碟上的（offloaded）只拿得到名字 —— 那條路徑上不跑 git */
+  external?: boolean;
 }
 
 interface FileContent {
@@ -93,13 +95,29 @@ function CodeBrowser() {
 
   const [rescanning, setRescanning] = useState(false);
 
+  const [externalMounted, setExternalMounted] = useState(true);
+
   /** `fresh` 會等 server 重新掃完（那支 API 平常走快取，見 lib/repoCacheRules.ts） */
   const loadRepos = useCallback(async (fresh = false) => {
     if (fresh) setRescanning(true);
     try {
-      const res = await fetch(`/api/git/repos${fresh ? "?fresh=1" : ""}`, { cache: "no-store" });
-      const d = (await res.json()) as { repos: RepoBrief[] };
-      setRepos(d.repos);
+      const res = await fetch(`/api/code/repos${fresh ? "?fresh=1" : ""}`, { cache: "no-store" });
+      const d = (await res.json()) as {
+        local: RepoBrief[];
+        external: { dir: string; name: string }[];
+        externalMounted: boolean;
+      };
+      setExternalMounted(d.externalMounted);
+      setRepos([
+        ...d.local,
+        ...d.external.map((r) => ({
+          ...r,
+          worktreeOf: null,
+          pinned: false,
+          lastCommitAt: null,
+          external: true,
+        })),
+      ]);
     } catch {
       // 抓不到就維持現狀，畫面上的「選一個 repo（0 個）」自己會說明
     } finally {
@@ -144,19 +162,98 @@ function CodeBrowser() {
     link.href = hljsHref(diffTheme);
   }, [diffTheme]);
 
-  const repoOptions = useMemo<SearchOption[]>(() => {
-    // 分組只是為了讓 worktree 帶上主 repo 名當搜尋關鍵字（SearchSelect 自己有搜尋框）
-    const groups = groupRepos(repos);
-    return groups.flatMap((g) => [
-      ...(g.main ? [{ value: g.main.dir, label: g.main.name }] : []),
-      ...g.worktrees.map((w) => ({
-        value: w.dir,
-        label: w.name,
-        keywords: g.name,
-        hint: <WorktreeBadge />,
+  /**
+   * 清單的每一列。分組是為了讓 worktree 帶上主 repo 名當搜尋關鍵字
+   * （打 `mvbf` 也要找得到 `edu-droid-flutter-vb-2146`）。
+   *
+   * pin 是**整組**的（跟 `/git` 一樣）：pin 住主 repo，它的 worktree 會跟著
+   * 排到前面 —— 分開 pin 只會讓同一個專案散在清單的兩端。
+   */
+  const repoRows = useMemo(
+    () => [
+      ...groupRepos(repos.filter((r) => !r.external)).flatMap((g) => [
+        ...(g.main
+          ? [{ dir: g.main.dir, name: g.main.name, keywords: "", worktree: false, pinned: g.pinned, group: g.name, external: false }]
+          : []),
+        ...g.worktrees.map((w) => ({
+          dir: w.dir,
+          name: w.name,
+          keywords: g.name,
+          worktree: true,
+          pinned: g.pinned,
+          group: g.name,
+          external: false,
+        })),
+      ]),
+      ...repos
+        .filter((r) => r.external)
+        .map((r) => ({
+          dir: r.dir,
+          name: r.name,
+          keywords: "",
+          worktree: false,
+          pinned: false,
+          group: r.name,
+          external: true,
+        })),
+    ],
+    [repos]
+  );
+
+  const repoOptions = useMemo<SearchOption[]>(
+    () =>
+      repoRows.map((r) => ({
+        value: r.dir,
+        label: r.name,
+        keywords: r.keywords,
+        hint: r.worktree ? <WorktreeBadge /> : undefined,
       })),
-    ]);
-  }, [repos]);
+    [repoRows]
+  );
+
+  /** 清單上的搜尋框。比對名字與主 repo 名，跟 SearchSelect 同一套 */
+  const [repoQuery, setRepoQuery] = useState("");
+  /** 本機／外接。外接的是 offloaded 那批，唯讀瀏覽沒問題，但不能 pin、也沒有 worktree */
+  const [place, setPlace] = useState<"all" | "local" | "external">("all");
+  const counts = useMemo(
+    () => ({
+      all: repoRows.length,
+      local: repoRows.filter((r) => !r.external).length,
+      external: repoRows.filter((r) => r.external).length,
+    }),
+    [repoRows]
+  );
+  const visibleRows = useMemo(() => {
+    const q = repoQuery.trim().toLowerCase();
+    return repoRows.filter(
+      (r) =>
+        (place === "all" || (place === "external") === !!r.external) &&
+        (!q || `${r.name} ${r.keywords}`.toLowerCase().includes(q))
+    );
+  }, [repoRows, repoQuery, place]);
+
+  const [busyPin, setBusyPin] = useState(false);
+  /** pin／取消 pin。整組一起（傳主 repo 的路徑，沒有主 repo 就用第一個 worktree） */
+  const togglePin = useCallback(
+    async (row: { group: string }) => {
+      const target = repoRows.find((r) => r.group === row.group && !r.worktree) ??
+        repoRows.find((r) => r.group === row.group);
+      if (!target) return;
+      setBusyPin(true);
+      try {
+        await fetch("/api/git/pin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dir: target.dir }),
+        });
+        // pin 會改排序，而那支 API 有快取 —— 要最新的順序就得強制重掃
+        await loadRepos(true);
+      } finally {
+        setBusyPin(false);
+      }
+    },
+    [repoRows, loadRepos]
+  );
 
   const loadDir = useCallback(
     async (rel: string) => {
@@ -276,32 +373,98 @@ function CodeBrowser() {
          * 這件事**看得見**：清單空的時候這裡會講出來，不必開 devtools 猜。
          */
         <div className="min-h-0 flex-1 overflow-auto px-6 py-6">
-          <p className="flex items-center gap-1.5 text-sm text-fg-muted">
-            選一個 repo（{repoOptions.length} 個）
-            <Tooltip label="重新掃描工作區">
-              <button
-                onClick={() => void loadRepos(true)}
-                disabled={rescanning}
-                aria-label="重新掃描"
-                className="text-fg-subtle hover:text-fg disabled:opacity-40"
-              >
-                <Icon name="refresh" size={14} className={rescanning ? "animate-spin" : ""} />
-              </button>
-            </Tooltip>
-          </p>
-          {repoOptions.length === 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="flex items-center gap-1.5 text-sm text-fg-muted">
+              選一個 repo（
+              {visibleRows.length === repoRows.length
+                ? repoRows.length
+                : `${visibleRows.length} / ${repoRows.length}`}
+               個）
+              <Tooltip label="重新掃描工作區">
+                <button
+                  onClick={() => void loadRepos(true)}
+                  disabled={rescanning}
+                  aria-label="重新掃描"
+                  className="text-fg-subtle hover:text-fg disabled:opacity-40"
+                >
+                  <Icon name="refresh" size={14} className={rescanning ? "animate-spin" : ""} />
+                </button>
+              </Tooltip>
+            </p>
+            <div className="flex items-center gap-1 rounded-lg border border-line p-0.5 text-xs">
+              {([
+                ["all", "全部"],
+                ["local", "本機"],
+                ["external", "外接"],
+              ] as const).map(([k, label]) => (
+                <button
+                  key={k}
+                  onClick={() => setPlace(k)}
+                  className={`rounded-md px-2 py-1 ${
+                    place === k ? "bg-surface-selected text-fg" : "text-fg-muted hover:text-fg"
+                  }`}
+                >
+                  {label}
+                  <span className="ml-1 text-fg-subtle">{counts[k]}</span>
+                </button>
+              ))}
+            </div>
+            {!externalMounted && (
+              <span className="text-xs text-fg-subtle">外接碟沒掛載，只看得到本機的</span>
+            )}
+            <div className="relative ml-auto w-full sm:w-72">
+              <Icon
+                name="search"
+                size={13}
+                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle"
+              />
+              <input
+                value={repoQuery}
+                onChange={(e) => setRepoQuery(e.target.value)}
+                placeholder="搜尋 repo…"
+                className="w-full rounded-lg border border-line py-1.5 pl-8 pr-2 text-xs outline-none focus:border-line-strong"
+              />
+            </div>
+          </div>
+          {repoRows.length === 0 ? (
             <p className="mt-3 text-sm text-fg-subtle">還在抓 repo 清單…</p>
+          ) : visibleRows.length === 0 ? (
+            <p className="mt-3 text-sm text-fg-subtle">沒有符合「{repoQuery}」的 repo。</p>
           ) : (
             <div className="mt-3 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
-              {repoOptions.map((o) => (
-                <button
-                  key={o.value}
-                  onClick={() => setDir(o.value)}
-                  className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-left font-mono text-xs text-fg hover:bg-surface-raised"
+              {visibleRows.map((r) => (
+                <div
+                  key={r.dir}
+                  className="flex items-center gap-1.5 rounded-lg border border-line pr-2 hover:bg-surface-raised"
                 >
-                  <span className="min-w-0 flex-1 truncate">{o.label}</span>
-                  {o.hint}
-                </button>
+                  {r.external ? (
+                    /* 外接的不給 pin：pin 是排序偏好，而 `/git` 的清單裡沒有外接的 repo，
+                       pin 了也只有這一頁看得到 —— 留一個等寬的位置讓兩種列對齊 */
+                    <Tooltip label="在外接碟上（offloaded）。可以看，但不會出現在其他頁">
+                      <span className="shrink-0 pl-2 text-fg-disabled">
+                        <Icon name="package" size={12} />
+                      </span>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip label={r.pinned ? "取消 pin（整組）" : "pin 住這個 repo（worktree 會跟著排到前面）"}>
+                      <button
+                        onClick={() => void togglePin(r)}
+                        disabled={busyPin}
+                        aria-label={r.pinned ? `取消 pin ${r.group}` : `pin ${r.group}`}
+                        className={`shrink-0 pl-2 ${r.pinned ? "text-pin" : "text-fg-disabled hover:text-pin"}`}
+                      >
+                        <Icon name="pin" size={12} />
+                      </button>
+                    </Tooltip>
+                  )}
+                  <button
+                    onClick={() => setDir(r.dir)}
+                    className="flex min-w-0 flex-1 items-center gap-1.5 py-2 pl-1 text-left font-mono text-xs text-fg"
+                  >
+                    <span className="min-w-0 flex-1 truncate">{r.name}</span>
+                    {r.worktree && <WorktreeBadge />}
+                  </button>
+                </div>
               ))}
             </div>
           )}
