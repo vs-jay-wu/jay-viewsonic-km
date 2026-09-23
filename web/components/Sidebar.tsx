@@ -9,8 +9,6 @@ import { NAV, isActiveNav } from "@/lib/navRules";
 interface Pinned {
   dir: string;
   name: string;
-  /** linked worktree（`edu-droid-flutter-vb-2193` 這種）—— 標一下才分得出來 */
-  worktree: boolean;
 }
 
 
@@ -34,22 +32,21 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
    * pin 住的 repo 直接放到側邊欄（Jay 2026-09-23，取代原本的 Teams 頻道清單）。
    *
    * 只打 `/api/git/pin`（一個 JSON 檔）而不是整份 repo 清單 —— 側邊欄每頁都會
-   * 掛，不該為了幾個名字去觸發 2.6 秒的掃描。名字直接從路徑取，`worktree` 則是
-   * 看它是不是某個同層 repo 的前綴 ＋ 後綴（`<repo>-<topic>`）——
-   * 這裡只是要決定畫不畫那顆圖示，判錯了也只是圖示不對。
+   * 掛，不該為了幾個名字去觸發 2.6 秒的掃描。
+   *
+   * **worktree 不列**（Jay 2026-09-23）：側邊欄是「常去的幾個地方」，
+   * 分支層級的東西屬於工作台裡面的那顆下拉。哪些是 worktree 由 server 判斷
+   * （看 `.git` 是檔案還是目錄），不是從名字猜 —— 猜錯會讓真的 repo 消失。
    */
   useEffect(() => {
     fetch("/api/git/pin")
       .then((r) => r.json())
-      .then((d: { pinned?: string[] }) => {
-        const dirs = d.pinned ?? [];
-        const names = dirs.map((p) => p.split("/").pop() ?? p);
+      .then((d: { pinned?: string[]; worktrees?: string[] }) => {
+        const skip = new Set(d.worktrees ?? []);
         setPinned(
-          dirs.map((dir, i) => ({
-            dir,
-            name: names[i],
-            worktree: names.some((n) => n !== names[i] && names[i].startsWith(`${n}-`)),
-          }))
+          (d.pinned ?? [])
+            .filter((dir) => !skip.has(dir))
+            .map((dir) => ({ dir, name: dir.split("/").pop() ?? dir }))
         );
       })
       .catch(() => undefined);
@@ -120,11 +117,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
                 onClick={onNavigate}
                 className={itemClass(false)}
               >
-                <Icon
-                  name={p.worktree ? "worktree" : "repos"}
-                  size={14}
-                  className="text-white/40"
-                />
+                <Icon name="repos" size={14} className="text-white/40" />
                 <span className="truncate flex-1 font-mono text-[13px]">{p.name}</span>
               </Link>
             ))}

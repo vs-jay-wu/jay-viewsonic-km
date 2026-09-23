@@ -1,3 +1,5 @@
+import { stat } from "fs/promises";
+import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { isKnownWorktree } from "@/lib/changes";
 import { isExternalRepo } from "@/lib/externalRepos";
@@ -12,9 +14,25 @@ export const dynamic = "force-dynamic";
  * **pin 的語意由讀取端決定**（`lib/repoGroupRules.ts`：主 repo 的 pin 管 repo
  * 清單的順序，worktree 的 pin 只管那個 repo 底下的順序）。
  */
-/** 目前 pin 住哪些路徑。側邊欄與 repo 總覽都要知道 */
+/**
+ * 目前 pin 住哪些路徑，以及其中哪些是 **linked worktree**。
+ *
+ * 判斷方式是看 `<dir>/.git` 是檔案還是目錄 —— linked worktree 的 `.git` 是一個
+ * 寫著 `gitdir: …` 的**檔案**。不跑 git，只 stat 一次。
+ *
+ * ⚠️ **不要用名字猜**（`<repo>-<topic>` 的前綴關係）。那只夠決定畫哪個圖示；
+ * 側邊欄拿它決定「顯不顯示」的話，名字剛好長那樣的真 repo 會整個消失。
+ */
 export async function GET() {
-  return NextResponse.json({ pinned: await readPinned() });
+  const pinned = await readPinned();
+  const worktrees: string[] = [];
+  await Promise.all(
+    pinned.map(async (dir) => {
+      const st = await stat(path.join(dir, ".git")).catch(() => null);
+      if (st?.isFile()) worktrees.push(dir);
+    })
+  );
+  return NextResponse.json({ pinned, worktrees });
 }
 
 export async function POST(req: NextRequest) {
