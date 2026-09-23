@@ -46,6 +46,23 @@ if (!(await confirm({ title: "刪掉這筆？", message: "無法復原。", dang
 
 另外 `hover:bg-black` 這種也不行 —— 深色下 hover 會變成純黑，等於消失。
 
+### `fg-disabled` 只給真正停用的東西
+
+**「看起來比較淡」不是挑它的理由。** 深色下它是 `#52525b`，在多數底色上
+**連 3.0 都不到**；要「低調但看得見」請用 `fg-muted`（次要文字）或
+`fg-subtle`（更次要）。
+
+這條是 2026-09-23 一天內連犯三次才寫下來的：
+
+| 犯在哪 | 對比 | 表現 |
+|---|---|---|
+| diff 的內文（深色） | 2.60 | 只剩被語法上色的 token 看得到，其餘像糊掉 |
+| 程式碼檢視的內文（深色） | 2.60 | 同上，而且修 diff 那次漏掉這一支 |
+| session 清單的單狀態點 | 1.89 | 那個點根本看不見 |
+
+**判準**：這個東西使用者要不要看得到？要 → 不能用 `fg-disabled`。
+`disabled` 講的是「這個控制項現在不能按」，不是「這段字比較不重要」。
+
 ### 驗證用算的，不要用看的
 
 對比門檻：內文 AA 4.5、次要文字 3.0。**兩個主題各算一次**，不是只看深色 ——
@@ -56,6 +73,12 @@ if (!(await confirm({ title: "刪掉這筆？", message: "無法復原。", dang
 讓瀏覽器把顏色解析成 sRGB** 再算對比。不要自己 parse `getComputedStyle().color`：
 Tailwind v4 對帶透明度的顏色吐 `oklab()`，當成 RGB 解析會得到完全錯誤的數字
 （白字被算成 1.52，而且看起來很像真的）。
+
+⚠️ **判斷「看得見」用 `getClientRects().length`，不要用 `offsetParent`** ——
+`position: fixed` 的元素 `offsetParent` 是 `null`，掃描會**整個跳過浮動面板**
+而且不會報錯。2026-09-23 掃 session 的對話紀錄時就是這樣：掃到 114 個文字節點、
+回報「只有 5 個不達標」，換掉判斷後是 259 個、109 個不達標，最差的 1.12。
+**掃描器掃不到東西時，先懷疑掃描器。**
 
 ---
 
@@ -91,6 +114,29 @@ Tailwind v4 對帶透明度的顏色吐 `oklab()`，當成 RGB 解析會得到�
 | `lib/health.ts` | `lib/healthRules.ts` |
 
 純規則檔也是**測試的落點**（`npm test`）—— 判準會變，要有東西守著。
+
+## ⚠️ dev server 開著時，不要對同一個 `.next` 跑 build
+
+`npm run build` 已經改成寫到 `.next-build`（`package.json` 的 `NEXT_DIST_DIR` ＋
+`next.config.ts`），**不要改回去**。這個版本的 Next 沒有 `--distDir` 這個 CLI 旗標
+（實測 `unknown option`），只能從設定檔給。
+
+共用同一個目錄時，dev server 會開始送**舊的產物**，而且沒有任何徵兆：
+2026-09-23 實測，對話紀錄面板的 CSS 停在做深色模式之前的版本
+（`.md-body { color: #1f2937 }`，淺色的灰畫在深色面板上，對比 **1.12**），
+而 `app/globals.css` 的源碼一直是 `var(--fg)`。
+
+**徵兆**：畫面跟源碼對不起來，但 `git status` 乾淨、`tsc` 與測試全綠。
+
+**怎麼確認**：直接抓 dev server 送出去的那份 CSS 來看，不要只讀源碼 ——
+
+```bash
+CSS=$(curl -s http://localhost:3000/<某頁> | grep -o '/_next/static/[^"]*\.css' | head -1)
+curl -s "http://localhost:3000$CSS" | grep -A 3 '^\.md-body {'
+```
+
+⚠️ **`touch` 叫不醒它**，要真的改到內容才會重編（加一行註解再刪掉即可）。
+保險起見重開 dev server。
 
 ## 新增巢狀 API route 後 Turbopack 可能不認得
 

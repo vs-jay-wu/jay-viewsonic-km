@@ -32,7 +32,9 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    "**/*.mts",
+    // 正式建置寫到 .next-build（見 next.config.ts），產生的路由型別也在那裡
+    ".next-build/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

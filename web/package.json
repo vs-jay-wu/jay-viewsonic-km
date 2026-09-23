@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
-    "build": "next build",
-    "start": "next start --hostname 127.0.0.1",
+    "build": "NEXT_DIST_DIR=.next-build next build",
+    "start": "NEXT_DIST_DIR=.next-build next start --hostname 127.0.0.1",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest"
