@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Icon from "@/components/Icon";
+import FileIcon from "@/components/FileIcon";
 import Tooltip from "@/components/Tooltip";
 import {
   KIND_CLS, KIND_LABEL, KIND_TITLE, STAGE_CLS, STAGE_LABEL, STAGE_TITLE, stageState,
@@ -128,6 +129,9 @@ export function FileRow<T extends ChangedFile>({
         {KIND_LABEL[file.kind]}
       </span>
       {leading}
+      {/* 檔案類型的圖示（Material Icon Theme）。放在狀態字母之後、檔名之前 ——
+          狀態是這一頁的主角，類型是輔助 */}
+      <FileIcon path={file.path} size={13} />
       <span className="font-mono">
         {/* 目錄淡、檔名深 —— 一串同目錄的檔案裡，眼睛要抓的是右邊那一段。
             **不要用 dir="rtl" 截斷**：它會把開頭的標點吃掉，`.claude/…` 會變成 `claude/…` */}
@@ -191,6 +195,7 @@ export function TreeRows<T extends ChangedFile>({
                 size={12}
                 className="shrink-0 text-fg-subtle"
               />
+              <FileIcon path={n.name} folder size={13} />
               <span className="font-mono text-fg-muted">{n.name}</span>
             </button>
             {open && (

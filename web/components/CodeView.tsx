@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useRouter, useSearchParams } from "next/navigation";
 import hljs from "@/lib/highlight";
 import Icon from "@/components/Icon";
+import FileIcon from "@/components/FileIcon";
 import WorktreeBadge from "@/components/WorktreeBadge";
 import Tooltip from "@/components/Tooltip";
 import SearchSelect, { type SearchOption } from "@/components/SearchSelect";
@@ -338,6 +339,7 @@ export default function CodeView({ dir }: { dir: string }) {
             ) : (
               <>
                 <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-line bg-surface px-4 py-2">
+                  <FileIcon path={file.path} size={14} />
                   <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg">{file.path}</span>
                   {file.sensitive && (
                     <span className="flex shrink-0 items-center gap-1 rounded-md border border-warn px-1.5 py-0.5 text-[11px] text-warn">
@@ -465,6 +467,7 @@ function TreeLevel({
               ) : (
                 <span className="w-[11px] shrink-0" />
               )}
+              <FileIcon path={e.name} folder={e.kind === "dir"} size={14} />
               <span
                 className={`font-mono ${
                   e.kind === "dir"
@@ -518,7 +521,10 @@ function SearchResults({
       </p>
       {groups.map((g) => (
         <div key={g.path} className="border-b border-line">
-          <p className="truncate bg-surface-raised px-3 py-1 font-mono text-[11px] text-fg">{g.path}</p>
+          <p className="flex items-center gap-1.5 truncate bg-surface-raised px-3 py-1 font-mono text-[11px] text-fg">
+            <FileIcon path={g.path} size={12} />
+            {g.path}
+          </p>
           {g.hits.map((h, i) => (
             <button
               key={i}
