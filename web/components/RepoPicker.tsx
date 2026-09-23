@@ -5,6 +5,7 @@ import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import WorktreeBadge from "@/components/WorktreeBadge";
 import type { RepoList, RepoRow } from "@/components/useRepoList";
+import { SORT_LABEL, sortDateLabel, type SortKey } from "@/lib/repoSortRules";
 
 /**
  * 「先選一個 repo」那一步的清單：搜尋、本機／外接、pin、重新掃描。
@@ -28,7 +29,7 @@ export default function RepoPicker({
   onPick: (dir: string) => void;
   showWorktrees?: boolean;
 }) {
-  const { rows, externalMounted, rescanning, reload, togglePin, busyPin } = list;
+  const { rows, sort, setSort, loadingFirstCommit, externalMounted, rescanning, reload, togglePin, busyPin } = list;
   const [query, setQuery] = useState("");
   const [place, setPlace] = useState<"all" | "local" | "external">("all");
 
@@ -98,6 +99,29 @@ export default function RepoPicker({
           <span className="text-xs text-fg-subtle">外接碟沒掛載，只看得到本機的</span>
         )}
 
+        <label className="flex items-center gap-1.5 text-xs text-fg-muted">
+          排序
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortKey)}
+            className="rounded-lg border border-line bg-surface px-2 py-1 text-xs text-fg outline-none focus:border-line-strong"
+          >
+            {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
+              <option key={k} value={k}>
+                {SORT_LABEL[k]}
+              </option>
+            ))}
+          </select>
+          {loadingFirstCommit && (
+            <Tooltip label="第一次要對每個 repo 跑一次 git log，之後就有快取了">
+              <span className="flex items-center gap-1 text-fg-subtle">
+                <Icon name="refresh" size={12} className="animate-spin" />
+                算建立時間…
+              </span>
+            </Tooltip>
+          )}
+        </label>
+
         <div className="relative ml-auto w-full sm:w-72">
           <Icon
             name="search"
@@ -120,7 +144,7 @@ export default function RepoPicker({
       ) : (
         <div className="mt-3 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((r) => (
-            <Row key={r.dir} row={r} onPick={onPick} onPin={togglePin} busyPin={busyPin} />
+            <Row key={r.dir} row={r} sort={sort} onPick={onPick} onPin={togglePin} busyPin={busyPin} />
           ))}
         </div>
       )}
@@ -130,15 +154,19 @@ export default function RepoPicker({
 
 function Row({
   row,
+  sort,
   onPick,
   onPin,
   busyPin,
 }: {
   row: RepoRow;
+  sort: SortKey;
   onPick: (dir: string) => void;
   onPin: (row: RepoRow) => Promise<void>;
   busyPin: boolean;
 }) {
+  // 只有跟時間有關的排序才標日期 —— 其餘情況它只會讓名字更難掃
+  const date = sortDateLabel(sort, row);
   return (
     <div className="flex items-center gap-1.5 rounded-lg border border-line pr-2 hover:bg-surface-raised">
       <Tooltip
@@ -164,6 +192,11 @@ function Row({
         className="flex min-w-0 flex-1 items-center gap-1.5 py-2 pl-1 text-left font-mono text-xs text-fg"
       >
         <span className="min-w-0 flex-1 truncate">{row.name}</span>
+        {date && (
+          <Tooltip label={date.title}>
+            <span className="shrink-0 font-mono text-[11px] text-fg-subtle">{date.text}</span>
+          </Tooltip>
+        )}
         {row.worktree && <WorktreeBadge />}
         {row.external && (
           <Tooltip label="在外接碟上（offloaded）">

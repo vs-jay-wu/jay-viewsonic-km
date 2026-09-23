@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { groupRepos } from "@/lib/repoGroupRules";
+import { needsFirstCommit, sortRepos, type SortKey } from "@/lib/repoSortRules";
 
 /**
  * 工作區的 repo 清單（本機 ＋ 外接），給「先選 repo」那一步用。
@@ -23,6 +24,10 @@ export interface RepoRow {
   group: string;
   /** 外接碟上的（offloaded）。不跑 git，所以沒有 worktree／分支資訊 */
   external: boolean;
+  /** 最後一顆 commit（外接的沒有） */
+  lastCommitAt: string | null;
+  /** 第一顆 commit ＝ 專案何時開始。選到「建立時間」排序才會去算 */
+  firstCommitAt: string | null;
 }
 
 interface Brief {
@@ -36,6 +41,10 @@ interface Brief {
 
 export interface RepoList {
   rows: RepoRow[];
+  sort: SortKey;
+  setSort: (k: SortKey) => void;
+  /** 正在算第一顆 commit（第一次要 9 秒，之後走快取） */
+  loadingFirstCommit: boolean;
   externalMounted: boolean;
   rescanning: boolean;
   /** `fresh` 會等 server 重新掃完（「重新掃描」按鈕要的是這個） */
@@ -50,6 +59,9 @@ export function useRepoList(): RepoList {
   const [externalMounted, setExternalMounted] = useState(true);
   const [rescanning, setRescanning] = useState(false);
   const [busyPin, setBusyPin] = useState(false);
+  const [sort, setSort] = useState<SortKey>("default");
+  const [firstCommit, setFirstCommit] = useState<Record<string, string | null>>({});
+  const [loadingFirstCommit, setLoadingFirstCommit] = useState(false);
 
   const reload = useCallback(async (fresh = false) => {
     if (fresh) setRescanning(true);
@@ -82,7 +94,21 @@ export function useRepoList(): RepoList {
     void reload();
   }, [reload]);
 
-  const rows = useMemo<RepoRow[]>(
+  /**
+   * 「建立時間」排序才需要第一顆 commit。那支 API **第一次要 9 秒**（475 個 repo
+   * 各跑一次 git log），之後讀磁碟快取只要 130ms —— 所以用到才抓，而且抓過就留著。
+   */
+  useEffect(() => {
+    if (!needsFirstCommit(sort) || Object.keys(firstCommit).length) return;
+    setLoadingFirstCommit(true);
+    fetch("/api/git/first-commit", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: { firstCommitAt: Record<string, string | null> }) => setFirstCommit(d.firstCommitAt))
+      .catch(() => undefined)
+      .finally(() => setLoadingFirstCommit(false));
+  }, [sort, firstCommit]);
+
+  const grouped = useMemo<RepoRow[]>(
     () => [
       // 本機的照主 repo 分組（worktree 收在它底下）；外接的不分組 —— 那條路徑不跑 git
       ...groupRepos(repos.filter((r) => !r.external)).flatMap((g) => [
@@ -90,11 +116,13 @@ export function useRepoList(): RepoList {
           ? [{
               dir: g.main.dir, name: g.main.name, keywords: "",
               worktree: false, pinned: g.main.pinned, group: g.name, external: false,
+              lastCommitAt: g.main.lastCommitAt, firstCommitAt: firstCommit[g.main.dir] ?? null,
             }]
           : []),
         ...g.worktrees.map((w) => ({
           dir: w.dir, name: w.name, keywords: g.name,
           worktree: true, pinned: w.pinned, group: g.name, external: false,
+          lastCommitAt: w.lastCommitAt, firstCommitAt: firstCommit[w.dir] ?? null,
         })),
       ]),
       ...repos
@@ -102,10 +130,18 @@ export function useRepoList(): RepoList {
         .map((r) => ({
           dir: r.dir, name: r.name, keywords: "",
           worktree: false, pinned: r.pinned, group: r.name, external: true,
+          lastCommitAt: r.lastCommitAt, firstCommitAt: firstCommit[r.dir] ?? null,
         })),
     ],
-    [repos]
+    [repos, firstCommit]
   );
+
+  /**
+   * 排序在**分組之後**才做：分組負責「worktree 收在主 repo 底下」，這裡是把攤平
+   * 之後的清單重排。工作台的清單不列 worktree（`showWorktrees={false}`），
+   * 所以攤平沒差；有列的話 worktree 會跟著自己的日期排，那也合理。
+   */
+  const rows = useMemo(() => sortRepos(grouped, sort), [grouped, sort]);
 
   const togglePin = useCallback(
     async (row: RepoRow) => {
@@ -125,5 +161,5 @@ export function useRepoList(): RepoList {
     [reload]
   );
 
-  return { rows, externalMounted, rescanning, reload, togglePin, busyPin };
+  return { rows, sort, setSort, loadingFirstCommit, externalMounted, rescanning, reload, togglePin, busyPin };
 }
