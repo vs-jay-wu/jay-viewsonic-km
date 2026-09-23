@@ -16,6 +16,7 @@ import { languageOf } from "@/lib/changesRules";
 import {
   groupHits, looksBinary, revealSecondsLeft, type SearchHit, type TreeEntry,
 } from "@/lib/codeBrowseRules";
+import { foldRanges, hiddenLines } from "@/lib/foldRules";
 
 /**
  * 程式碼瀏覽（唯讀）。
@@ -219,6 +220,28 @@ export default function CodeView({ dir }: { dir: string }) {
     }
   }, [file, lang]);
 
+  /**
+   * JSON 的收合。**換檔案就清掉** —— 行號是跟著檔案的，留著會把新檔案的
+   * 不相干區段收起來。
+   */
+  const [folded, setFolded] = useState<Set<number>>(new Set());
+  useEffect(() => setFolded(new Set()), [file?.path]);
+
+  const ranges = useMemo(
+    () => (lang === "json" && lines.length ? foldRanges(lines) : []),
+    [lang, lines]
+  );
+  const foldStart = useMemo(() => new Map(ranges.map((r) => [r.start, r])), [ranges]);
+  const hidden = useMemo(() => hiddenLines(ranges, folded), [ranges, folded]);
+
+  const toggleFold = (start: number) =>
+    setFolded((prev) => {
+      const next = new Set(prev);
+      if (next.has(start)) next.delete(start);
+      else next.add(start);
+      return next;
+    });
+
   const dark = diffTheme === "dark";
 
   return (
@@ -343,7 +366,11 @@ export default function CodeView({ dir }: { dir: string }) {
                 <div className={dark ? "bg-[#0d1117]" : "bg-surface"}>
                   <table className="w-full border-collapse font-mono text-[12px] leading-[1.55]">
                     <tbody>
-                      {lines.map((l, i) => (
+                      {lines.map((l, i) => {
+                        if (hidden.has(i)) return null;
+                        const r = foldStart.get(i);
+                        const isFolded = !!r && folded.has(i);
+                        return (
                         <tr
                           key={i}
                           data-line={i + 1}
@@ -356,15 +383,34 @@ export default function CodeView({ dir }: { dir: string }) {
                           >
                             {i + 1}
                           </td>
-                          <td className={`whitespace-pre-wrap break-all px-2 align-top ${dark ? "text-fg-disabled" : "text-fg"}`}>
+                          {/* 收合把手。沒有可收的那幾行也要佔位，不然行首會抖 */}
+                          <td className="w-4 select-none align-top">
+                            {r && (
+                              <button
+                                onClick={() => toggleFold(i)}
+                                aria-label={`${isFolded ? "展開" : "收合"}第 ${i + 1} 行`}
+                                aria-expanded={!isFolded}
+                                className={dark ? "text-fg-muted hover:text-on-solid" : "text-fg-subtle hover:text-fg"}
+                              >
+                                <Icon name={isFolded ? "chevronRight" : "chevronDown"} size={11} />
+                              </button>
+                            )}
+                          </td>
+                          <td className={`whitespace-pre-wrap break-all px-2 align-top ${dark ? "text-[#e6edf3]" : "text-fg"}`}>
                             {highlighted ? (
                               <span dangerouslySetInnerHTML={{ __html: highlighted[i] ?? "" }} />
                             ) : (
                               l || " "
                             )}
+                            {isFolded && r && (
+                              <span className={`ml-1 rounded px-1 text-[11px] ${dark ? "bg-[#161b22] text-[#8b949e]" : "bg-surface-sunken text-fg-muted"}`}>
+                                … {r.end - r.start} 行
+                              </span>
+                            )}
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
