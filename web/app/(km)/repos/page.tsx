@@ -142,7 +142,7 @@ function MoveProgress({ job }: { job: MoveJob }) {
 }
 
 function RepoRow({
-  repo, org, storage, snapshot, ctx, job, onMove,
+  repo, org, storage, snapshot, ctx, job, onMove, pinned, busyPin, onPin,
 }: {
   repo: RepoEntry;
   org: string;
@@ -151,7 +151,20 @@ function RepoRow({
   ctx: MoveContext;
   job: MoveJob | null;
   onMove: (repo: RepoStorage, action: MoveAction) => void;
+  pinned: string[];
+  busyPin: boolean;
+  onPin: (dir: string) => void;
 }) {
+  /*
+   * 這一列的實際路徑。**要跟 placement 一致**：搬到外接的 repo 本機沒有那個
+   * 目錄，拿本機路徑去 pin 會被 API 擋掉（它會檢查路徑存不存在）。
+   * `both` 的情況以本機為準 —— 那是你實際會打開的那一份。
+   */
+  const dir =
+    storage && snapshot
+      ? `${storage.placement === "external" ? snapshot.externalPath : snapshot.localPath}/${storage.name}`
+      : null;
+  const isPinned = !!dir && pinned.includes(dir);
   const decision = storage ? moveDecision(storage, ctx) : null;
   const drift = storage && snapshot ? driftOf(storage, snapshot) : null;
   const activeJob =
@@ -160,6 +173,18 @@ function RepoRow({
   return (
     <li className="px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {dir && (
+          <Tooltip label={isPinned ? "取消 pin" : "pin 住這個 repo（工作台與側邊欄都會排到前面）"}>
+            <button
+              onClick={() => onPin(dir)}
+              disabled={busyPin}
+              aria-label={isPinned ? `取消 pin ${repo.name}` : `pin ${repo.name}`}
+              className={`shrink-0 ${isPinned ? "text-pin" : "text-fg-disabled hover:text-pin"}`}
+            >
+              <Icon name="pin" size={12} />
+            </button>
+          </Tooltip>
+        )}
         <a
           href={githubUrl(repo, org)}
           target="_blank"
@@ -256,6 +281,43 @@ export default function ReposPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
   const confirm = useConfirm();
+  /**
+   * pin 住的路徑。這頁的資料沒有路徑（只有 name ＋ org），所以要自己拼
+   * `localPath/name`（外接的是 `externalPath/name`）—— 跟 repo-storage 的
+   * placement 一致才 pin 得到對的那一份。
+   */
+  const [pinned, setPinned] = useState<string[]>([]);
+  const [busyPin, setBusyPin] = useState(false);
+
+  const loadPinned = useCallback(async () => {
+    try {
+      const d = (await (await fetch("/api/git/pin")).json()) as { pinned?: string[] };
+      setPinned(d.pinned ?? []);
+    } catch {
+      /* 抓不到就當作沒有 pin，圖示留在灰色 */
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPinned();
+  }, [loadPinned]);
+
+  const togglePin = useCallback(
+    async (dir: string) => {
+      setBusyPin(true);
+      try {
+        await fetch("/api/git/pin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dir }),
+        });
+        await loadPinned();
+      } finally {
+        setBusyPin(false);
+      }
+    },
+    [loadPinned]
+  );
   /** 上一次看到的工作狀態；用來偵測「剛剛從進行中變成結束」那一刻 */
   const lastJobState = useRef<string | null>(null);
 
@@ -601,6 +663,9 @@ export default function ReposPage() {
                           ctx={ctx}
                           job={job}
                           onMove={(s, a) => void startMove(s, a)}
+                          pinned={pinned}
+                          busyPin={busyPin}
+                          onPin={(dir) => void togglePin(dir)}
                         />
                       );
                     })}
