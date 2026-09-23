@@ -10,7 +10,7 @@ import {
   findItemBySession, isSettled, prDecisionLabel, prStateStyle, settledSummary,
 } from "@/lib/workIndexRules";
 import { useTicketSession } from "@/lib/useTicketSession";
-import { isStale, STALE_DAYS } from "@/lib/sessionRules";
+import { isDefaultWorkContext, isStale, STALE_DAYS } from "@/lib/sessionRules";
 import TranscriptPanel from "@/components/TranscriptPanel";
 
 interface SessionInfo {
@@ -295,6 +295,28 @@ export default function SessionsPage() {
 
   const failed = results?.filter((r) => !r.ok) ?? [];
 
+  /**
+   * 畫面上這幾張單的 Jira 狀態。**只問看得到的那幾把 key** ——
+   * `/api/my-tickets` 回的是整份快照（783 張、400 KB），這裡只要十幾個字串。
+   */
+  const [ticketStatus, setTicketStatus] = useState<Record<string, string>>({});
+  const ticketKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const s of visible) {
+      const k = parseSessionTitle(s.title).ticketKey;
+      if (k) keys.add(k);
+    }
+    return [...keys].sort().join(",");
+  }, [visible]);
+
+  useEffect(() => {
+    if (!ticketKeys) return;
+    fetch(`/api/my-tickets/status?keys=${encodeURIComponent(ticketKeys)}`)
+      .then((r) => r.json())
+      .then((d: { statuses?: Record<string, string> }) => setTicketStatus(d.statuses ?? {}))
+      .catch(() => undefined);
+  }, [ticketKeys]);
+
   const openSession = sessions.find((s) => s.id === openId) ?? null;
 
   return (
@@ -508,11 +530,23 @@ export default function SessionsPage() {
                       </span>
                     )}
                   </div>
+                  {/*
+                    * session id 不顯示（Jay 2026-09-23）：那串 uuid 前八碼沒有人在讀，
+                    * 要用的時候是複製整串，而那在下面的面板裡。
+                    *
+                    * repo 與分支**只在不是日常的那組時顯示**（km 主 checkout ＋ master）——
+                    * 幾乎每一列都一樣的話，它就不是資訊，只是佔位置。
+                    */}
                   <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-fg-subtle">
-                    <span className="font-mono">{s.id.slice(0, 8)}</span>
-                    <span>{s.cwd.split("/").slice(-2).join("/")}</span>
-                    {s.gitBranch && (
-                      <span className="rounded bg-surface-sunken px-1.5 py-0.5 text-fg-muted">{s.gitBranch}</span>
+                    {!isDefaultWorkContext(s.cwd, s.gitBranch) && (
+                      <>
+                        <span>{s.cwd.split("/").slice(-2).join("/")}</span>
+                        {s.gitBranch && (
+                          <span className="rounded bg-surface-sunken px-1.5 py-0.5 text-fg-muted">
+                            {s.gitBranch}
+                          </span>
+                        )}
+                      </>
                     )}
                     {s.version && <span>v{s.version}</span>}
                     {s.hasSidecar && <span>sidecar {mb(s.sidecarBytes)}</span>}
@@ -542,7 +576,13 @@ export default function SessionsPage() {
                           </a>
                         </Tooltip>
                       )}
-                      <WorkRefChips refs={parseSessionTitle(s.title)} showPr={prs.length === 0} />
+                      <WorkRefChips
+                        refs={parseSessionTitle(s.title)}
+                        showPr={prs.length === 0}
+                        ticketStatus={
+                          ticketStatus[parseSessionTitle(s.title).ticketKey ?? ""] ?? undefined
+                        }
+                      />
                       {prs.map((pr) => {
                         const st = prStateStyle(pr.state);
                         const decision = prDecisionLabel(pr);

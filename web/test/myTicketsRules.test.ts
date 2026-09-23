@@ -4,6 +4,7 @@ import {
   groupByProduct, groupKeyOf,
   issueTypeStyle, matchesTicketQuery, priorityIndexOf, sortBy, sortTickets, splitPinned,
   type MyTicket,
+  GROUP_DOT_CLASS, TICKET_GROUPS, groupDotClass,
 } from "@/lib/myTicketsRules";
 
 // 狀態與 issueType 逐字取自實際抓到的 VB 單
@@ -283,5 +284,24 @@ describe("splitPinned — pin 的獨立一區", () => {
   it("pin 了不存在的單號不會炸", () => {
     expect(splitPinned(list, ["VB-999"]).pinned).toEqual([]);
     expect(splitPinned([], ["VB-1"]).pinned).toEqual([]);
+  });
+});
+
+describe("groupDotClass", () => {
+  it("每個分組都有顏色（新增分組漏填會紅）", () => {
+    for (const g of TICKET_GROUPS) expect(GROUP_DOT_CLASS[g.key], g.key).toBeTruthy();
+  });
+
+  it("認不得的狀態也有顏色 —— VB 加新狀態時不會變成看不見的點", () => {
+    expect(groupDotClass("SOME NEW STATUS")).toBeTruthy();
+  });
+
+  it("不用 fg-disabled（坐在 chip 底色上只有 1.89 的對比）", () => {
+    const used = [...Object.values(GROUP_DOT_CLASS), groupDotClass("???")];
+    expect(used.some((c) => c.includes("disabled"))).toBe(false);
+  });
+
+  it("不用琥珀色 —— 那是警告專用", () => {
+    expect(Object.values(GROUP_DOT_CLASS).some((c) => c.includes("warn"))).toBe(false);
   });
 });

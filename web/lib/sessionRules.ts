@@ -25,3 +25,16 @@ export function isStale(
   if (!Number.isFinite(t)) return false; // 時間讀不到就不要歸類成可刪
   return now - t > days * 86_400_000;
 }
+
+/**
+ * 這個 session 的「工作環境」是不是**日常的那個**（km 的主 checkout ＋ master）。
+ *
+ * 是的話清單上不必顯示 repo 與分支：Jay 幾乎都在那裡做事，每一列都寫一次
+ * 只是雜訊 —— 值得被看到的是**例外**（在別的 repo、或在某條 feature 分支上）。
+ *
+ * 比對的是 cwd 的最後一段，不是整條路徑：worktree（`jay-viewsonic-km-xxx`）
+ * 與別的 clone 都不算日常，那些要顯示。
+ */
+export function isDefaultWorkContext(cwd: string, branch: string | null): boolean {
+  return cwd.split("/").filter(Boolean).pop() === "jay-viewsonic-km" && branch === "master";
+}

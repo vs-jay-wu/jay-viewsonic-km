@@ -65,6 +65,32 @@ export function groupKeyOf(status: string): string | null {
   return i < TICKET_GROUPS.length ? TICKET_GROUPS[i].key : null;
 }
 
+/**
+ * 進度分組的顏色（給「一個點就好」的地方用，例如 session 清單）。
+ *
+ * **狀態字串太長不能直接寫在列上**（`STAGE READY(READY FOR QA)`、
+ * `NEXT SPRINT CANDIDATE`），所以只畫一個點、完整狀態放 tooltip。
+ * 分組沿用 `TICKET_GROUPS`，不另外發明一套 —— 兩套遲早會對不起來。
+ *
+ * ⚠️ **不用琥珀色**：那是警告專用（`web/AGENTS.md`）。`on_hold` 是一種狀態，
+ * 不是警告，所以走中性灰。
+ *
+ * ⚠️ **中性的那兩個不要用 `fg-disabled`**：這個點坐在 chip 的底色上
+ * （`surface-selected`），`fg-disabled` 量出來只有 **1.89** 的對比，等於看不見
+ * （2026-09-23 第一版就是這樣，跟 diff／程式碼檢視踩的是同一個錯）。
+ */
+export const GROUP_DOT_CLASS: Record<string, string> = {
+  in_progress: "bg-accent",
+  verifying: "bg-info",
+  todo: "bg-fg-muted",
+  on_hold: "bg-fg-subtle",
+};
+
+/** 認不得的狀態也要有顏色（VB 加了新狀態時不會變成看不見的點） */
+export function groupDotClass(status: string): string {
+  return GROUP_DOT_CLASS[groupKeyOf(status) ?? ""] ?? "bg-fg-muted";
+}
+
 /** 依「進度分組 → 最近更新」排。手上要做的事排在前面，擱置的墊底。 */
 export function sortTickets(tickets: MyTicket[]): MyTicket[] {
   return [...tickets].sort((a, b) => {

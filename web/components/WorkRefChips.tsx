@@ -3,6 +3,7 @@
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import { canonicalRepo, ticketUrl, type WorkRef } from "@/lib/workItemRules";
+import { groupDotClass } from "@/lib/myTicketsRules";
 
 /**
  * 把 session 標題解析出來的關聯（ticket／PR）顯示成可點的小標籤。
@@ -15,11 +16,17 @@ export default function WorkRefChips({
   refs,
   org = "Viewsonic-EDU",
   showPr = true,
+  ticketStatus,
 }: {
   refs: WorkRef;
   org?: string;
   /** 關聯索引已經有真正的 PR 資料時設 false —— 不要畫兩顆同號的 PR 標籤 */
   showPr?: boolean;
+  /**
+   * 這張單的 Jira 狀態。**只畫一個點**，完整狀態放 tooltip ——
+   * 狀態字串長到會撐爆一列（`STAGE READY(READY FOR QA)`）。
+   */
+  ticketStatus?: string;
 }) {
   if (!refs.ticketKey && (refs.prNumber === null || !showPr)) return null;
   const repo = canonicalRepo(refs.repo);
@@ -30,9 +37,14 @@ export default function WorkRefChips({
         <Tooltip
           side="left"
           label={
-            refs.ticketGuessed
-              ? `標題只寫了數字，推定是 ${refs.ticketKey}（可能猜錯）`
-              : `到 Jira 看 ${refs.ticketKey}`
+            [
+              refs.ticketGuessed
+                ? `標題只寫了數字，推定是 ${refs.ticketKey}（可能猜錯）`
+                : `到 Jira 看 ${refs.ticketKey}`,
+              ticketStatus && `狀態：${ticketStatus}`,
+            ]
+              .filter(Boolean)
+              .join("\n")
           }
         >
           <a
@@ -46,6 +58,11 @@ export default function WorkRefChips({
                 : "border-accent/50 bg-surface-selected text-accent"
             }`}
           >
+            {ticketStatus && (
+              <span
+                className={`mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle ${groupDotClass(ticketStatus)}`}
+              />
+            )}
             {refs.ticketKey}
             {refs.ticketGuessed && "?"}
           </a>
