@@ -88,7 +88,7 @@ export default function RepoMoveHistoryPage() {
           className="inline-flex items-center gap-1 text-xs text-fg-muted hover:text-fg"
         >
           <Icon name="chevronRight" size={12} className="rotate-180" />
-          Repos 總覽
+          Repositories 總覽
         </Link>
 
         <h1 className="mt-2 flex items-center gap-2.5 text-2xl font-semibold text-fg">
@@ -129,7 +129,7 @@ export default function RepoMoveHistoryPage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜尋 repo 名或備註…"
+              placeholder="搜尋 repository 名或備註…"
               className="w-full rounded-lg border border-line-strong py-2 pl-9 pr-3 text-sm outline-none focus:border-line-strong"
             />
           </div>
@@ -159,7 +159,7 @@ export default function RepoMoveHistoryPage() {
           {data && shown.length === 0 ? (
             <p className="px-4 py-10 text-center text-sm text-fg-subtle">
               {data.empty
-                ? "還沒有搬移過任何 repo。到 Repos 總覽點「搬到外接」或「搬回本機」就會留下紀錄。"
+                ? "還沒有搬移過任何 repository。到 Repositories 總覽點「搬到外接」或「搬回本機」就會留下紀錄。"
                 : "沒有符合的紀錄。"}
             </p>
           ) : (

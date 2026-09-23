@@ -228,14 +228,37 @@ export async function listReposCached(
     else await p;
   }
 
+  const data = cache.data as RepoList;
+  /*
+   * **pin 不進快取，每次回應現讀。**
+   *
+   * pin 只是一份路徑清單，跟 git 狀態無關（Jay 2026-09-23：「我感覺不需要重掃吧？」）
+   * —— 為了讓 pin 生效而作廢快取，等於每按一次 pin 就付 2.6 秒重掃 148 個 repo。
+   * 讀那個 JSON 是 0.1ms 等級，疊上去便宜得多，而且順序也一起正確。
+   */
+  const pinned = await readPinned();
+  const repos = data.repos
+    .map((r) => ({ ...r, pinned: pinned.includes(r.dir) }))
+    .sort((x, y) => {
+      if (x.pinned !== y.pinned) return x.pinned ? -1 : 1;
+      return (x.lastCommitAt ?? "") < (y.lastCommitAt ?? "") ? 1 : -1;
+    });
+
   return {
-    ...(cache.data as RepoList),
+    ...data,
+    repos,
+    pinned,
     computedAt: cache.computedAt ? new Date(cache.computedAt).toISOString() : null,
     stale: serveCached && state === "stale",
   };
 }
 
-/** 內容確定變了就把快取作廢（pin、fetch、push、移除 worktree 之後） */
+/**
+ * git 那一面確定變了就把快取作廢（fetch、push、移除 worktree 之後）。
+ *
+ * ⚠️ **pin 不要呼叫這個** —— 它不改 git 狀態，而作廢的代價是下一次請求要等
+ * 2.6 秒重掃。pin 是在 `listReposCached` 回應時疊上去的。
+ */
 export function invalidateRepoCache(): void {
   cache.computedAt = null;
 }

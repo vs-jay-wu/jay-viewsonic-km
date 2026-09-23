@@ -20,7 +20,7 @@ export default function RepoPicker({
   /**
    * 要不要把 worktree 也列成獨立的一列。
    *
-   * 「先選 repo、再選 worktree」的兩層介面上要關掉（選取單位是 repo）；
+   * 「先選 repository、再選 worktree」的兩層介面上要關掉（選取單位是 repo）；
    * 還沒分兩層的頁面要留著，否則會變成開不了 worktree。
    */
   showWorktrees = true,
@@ -60,7 +60,7 @@ export default function RepoPicker({
     <div className="min-h-0 flex-1 overflow-auto px-6 py-6">
       <div className="flex flex-wrap items-center gap-2">
         <p className="flex items-center gap-1.5 text-sm text-fg-muted">
-          選一個 repo（
+          選一個 repository（
           {visible.length === listed.length ? listed.length : `${visible.length} / ${listed.length}`}
           {" "}個）
           <Tooltip label="重新掃描工作區">
@@ -113,7 +113,7 @@ export default function RepoPicker({
             ))}
           </select>
           {loadingFirstCommit && (
-            <Tooltip label="第一次要對每個 repo 跑一次 git log，之後就有快取了">
+            <Tooltip label="第一次要對每個 repository 跑一次 git log，之後就有快取了">
               <span className="flex items-center gap-1 text-fg-subtle">
                 <Icon name="refresh" size={12} className="animate-spin" />
                 算建立時間…
@@ -131,16 +131,16 @@ export default function RepoPicker({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜尋 repo…"
+            placeholder="搜尋 repositories…"
             className="w-full rounded-lg border border-line py-1.5 pl-8 pr-2 text-xs outline-none focus:border-line-strong"
           />
         </div>
       </div>
 
       {listed.length === 0 ? (
-        <p className="mt-3 text-sm text-fg-subtle">還在抓 repo 清單…</p>
+        <p className="mt-3 text-sm text-fg-subtle">還在抓 repositories 清單…</p>
       ) : visible.length === 0 ? (
-        <p className="mt-3 text-sm text-fg-subtle">沒有符合「{query}」的 repo。</p>
+        <p className="mt-3 text-sm text-fg-subtle">沒有符合「{query}」的 repository。</p>
       ) : (
         <div className="mt-3 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((r) => (
@@ -175,7 +175,7 @@ function Row({
             ? "取消 pin"
             : row.worktree
               ? "pin 住這個 worktree（只影響它在這個 repo 裡的順序）"
-              : "pin 住這個 repo（排到最前面）"
+              : "pin 住這個 repository（排到最前面）"
         }
       >
         <button

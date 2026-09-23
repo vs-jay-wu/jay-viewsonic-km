@@ -33,8 +33,11 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts",
-    // 正式建置寫到 .next-build（見 next.config.ts），產生的路由型別也在那裡
-    ".next-build/types/**/*.ts"
+    // 正式建置寫到 .next-build（見 next.config.ts），產生的路由型別也在那裡。
+    // ⚠️ 這兩行是 `next build` 自己加的，它同時會把所有陣列展開成多行 ——
+    // 內容留著（不留下次又被加回來），格式還原，不要讓那種雜訊進 diff。
+    ".next-build/types/**/*.ts",
+    ".next-build/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

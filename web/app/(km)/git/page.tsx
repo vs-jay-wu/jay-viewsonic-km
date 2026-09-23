@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 /**
  * `/git` 已經併進 `/repo`（Jay 2026-09-23）。留著轉址是為了**舊書籤與舊連結**
- * ——「選 repo → 看 history」的網址被貼在 Jira 留言與 session 標題裡。
+ * ——「選 repository → 看 history」的網址被貼在 Jira 留言與 session 標題裡。
  *
  * `repo=` 是舊參數名，新的叫 `dir=`；`sha`／`file`／`side` 原樣帶過去。
  */

@@ -150,7 +150,7 @@ export default function RepoSyncPage() {
             </div>
             {last.summary ? (
               <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-fg-muted">
-                <span>共 <b className="text-fg">{last.summary.total}</b> 個 repo</span>
+                <span>共 <b className="text-fg">{last.summary.total}</b> 個 repository</span>
                 <span>pull {last.summary.pulled}</span>
                 {last.summary.cloned > 0 && <span>新 clone {last.summary.cloned}</span>}
                 {last.summary.fetchedDirty > 0 && (
@@ -173,7 +173,7 @@ export default function RepoSyncPage() {
             )}
             {last.summary && last.summary.dirtyRepos.length > 0 && (
               <div className="mt-3 rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">
-                <div className="font-medium">這些 repo 工作區有改動，只 fetch 沒 pull：</div>
+                <div className="font-medium">這些 repository 工作區有改動，只 fetch 沒 pull：</div>
                 <div className="mt-1 font-mono">{last.summary.dirtyRepos.join("、")}</div>
               </div>
             )}

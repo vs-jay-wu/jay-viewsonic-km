@@ -241,7 +241,7 @@ function WorkChangesView() {
             {loading
               ? "掃描中…"
               : data
-                ? `${totals.repos} 個 repo · ${totals.commits} 個 commit · ${totals.files} 個檔案（${totals.wip} 個還沒 commit）`
+                ? `${totals.repos} 個 repository · ${totals.commits} 個 commit · ${totals.files} 個檔案（${totals.wip} 個還沒 commit）`
                 : ""}
           </span>
 

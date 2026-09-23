@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { groupRepos } from "@/lib/repoGroupRules";
 import { needsFirstCommit, sortRepos, type SortKey } from "@/lib/repoSortRules";
+import { emitPinChanged, onPinChanged } from "@/lib/pinEvents";
 
 /**
  * 工作區的 repo 清單（本機 ＋ 外接），給「先選 repo」那一步用。
@@ -94,6 +95,9 @@ export function useRepoList(): RepoList {
     void reload();
   }, [reload]);
 
+  // 別的元件改了 pin（工作台的 header、Repo 總覽）也要跟上
+  useEffect(() => onPinChanged(() => void reload()), [reload]);
+
   /**
    * 「建立時間」排序才需要第一顆 commit。那支 API **第一次要 9 秒**（475 個 repo
    * 各跑一次 git log），之後讀磁碟快取只要 130ms —— 所以用到才抓，而且抓過就留著。
@@ -146,14 +150,23 @@ export function useRepoList(): RepoList {
   const togglePin = useCallback(
     async (row: RepoRow) => {
       setBusyPin(true);
+      /*
+       * **先在本地翻過來**：後面那次重抓要等 server 掃完（2.6 秒），
+       * 中間沒有回饋的話按起來像沒反應（Jay 2026-09-23）。
+       * 重抓回來的資料才是真相，樂觀更新只是把那 2.6 秒填起來。
+       */
+      setRepos((prev) =>
+        prev.map((r) => (r.dir === row.dir ? { ...r, pinned: !r.pinned } : r))
+      );
       try {
         await fetch("/api/git/pin", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ dir: row.dir }),
         });
-        // pin 會改排序，而那支 API 有快取 —— 要最新的順序就得強制重掃
-        await reload(true);
+        emitPinChanged();
+        // 不用 `fresh` —— pin 是在回應時疊上去的，走快取就已經是新的順序
+        await reload();
       } finally {
         setBusyPin(false);
       }

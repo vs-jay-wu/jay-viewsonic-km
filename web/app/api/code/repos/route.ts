@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { listReposCached } from "@/lib/gitView";
 import { listExternalRepos } from "@/lib/externalRepos";
 
@@ -11,8 +11,11 @@ export const dynamic = "force-dynamic";
  * 5 個 git 指令（2.6 秒，所以有快取），外接那批只是 scandir 拿名字（74ms／
  * 快取後 1ms）。`/code` 只需要名字就能列，git 那些資訊它一個都用不到。
  */
-export async function GET() {
-  const [local, ext] = await Promise.all([listReposCached(), listExternalRepos()]);
+export async function GET(req: NextRequest) {
+  // ⚠️ 以前這裡沒收參數，前端傳了 `?fresh=1` 也被安靜忽略 —— 要重掃的時候
+  // 拿到的是快取，而呼叫端無從得知
+  const fresh = req.nextUrl.searchParams.get("fresh") === "1";
+  const [local, ext] = await Promise.all([listReposCached(fresh), listExternalRepos()]);
   return NextResponse.json({
     local: local.repos.map((r) => ({
       dir: r.dir,

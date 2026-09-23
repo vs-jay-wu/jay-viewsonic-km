@@ -26,7 +26,7 @@ export const NAV: NavItem[] = [
    * 點它一律回到 repo 清單（不帶 `dir`），但會**記住你上次看的是哪個視圖**
    * ——「回清單」是 nav 的語意，「看 code 還是看 history」是偏好，兩件事。
    */
-  { href: "/repo", label: "Repo", icon: "repos" },
+  { href: "/repo", label: "Repositories", icon: "repos" },
   { href: "/docs", label: "文件", icon: "clipboard" },
   { href: "/sessions", label: "Claude Sessions", icon: "layers" },
   { href: "/settings", label: "設定", icon: "settings" },
@@ -37,10 +37,10 @@ const EXTRA_TITLES: Record<string, string> = {
   "/my-prs": "我的 PR",
   "/pr-inbox": "PR 巡邏",
   "/review-runs": "本地 review 紀錄",
-  "/repos": "Repo 清單",
+  "/repos": "Repositories 總覽",
   // 工作台的兩個視圖各有標題（側邊欄只有一個項目，所以要在這裡補）
   "/repo/code": "程式碼",
-  "/repo/git": "Repo 檢視",
+  "/repo/git": "版本",
   "/repo-sync": "Repo 同步",
   "/work": "工作彙整",
   "/memory": "記憶體",

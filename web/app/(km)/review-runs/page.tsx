@@ -82,11 +82,11 @@ export default function ReviewRunsPage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜尋 repo、分支、摘要、finding 標題…"
+              placeholder="搜尋 repository、分支、摘要、finding 標題…"
               className="w-full rounded-lg border border-line-strong py-2 pl-9 pr-3 text-sm outline-none focus:border-line-strong"
             />
           </div>
-          <Tooltip label="同一個 repo＋分支只看最後一次跑的結果">
+          <Tooltip label="同一個 repository＋分支只看最後一次跑的結果">
             <label className="inline-flex items-center gap-1.5 text-xs text-fg-muted">
               <input
                 type="checkbox"

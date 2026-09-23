@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { rememberView, type RepoView as View } from "@/lib/repoViewPref";
+import { emitPinChanged } from "@/lib/pinEvents";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import WorktreeBadge from "@/components/WorktreeBadge";
@@ -15,7 +16,7 @@ import CodeView from "@/components/CodeView";
 import GitView from "@/components/GitView";
 
 /**
- * Repo 工作台：先選 repo → 再選 worktree → 切「檔案／版本」兩個視圖。
+ * Repo 工作台：先選 repository → 再選 worktree → 切「檔案／版本」兩個視圖。
  *
  * **選取的單位是 repo，不是 checkout**（Jay 2026-09-23）：清單上一個 repo 一列，
  * 選完直接進它的主 checkout，要看別的 worktree 用麵包屑第二顆下拉切 ——
@@ -137,13 +138,18 @@ export default function RepoWorkbench({ view }: { view: View }) {
 
   const togglePinWorktree = useCallback(async () => {
     if (!current) return;
+    // 先在本地翻過來 —— 後面的重抓要等 server 掃完，中間沒有回饋會像沒反應
+    setWorktrees((prev) =>
+      prev.map((w) => (w.dir === current.dir ? { ...w, pinned: !w.pinned } : w))
+    );
     await fetch("/api/git/pin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ dir: current.dir }),
     });
-    await Promise.all([loadWorktrees(dir), repoList.reload(true)]);
-  }, [current, dir, loadWorktrees, repoList]);
+    emitPinChanged(); // 側邊欄的「已 pin」要跟著動
+    await loadWorktrees(dir);
+  }, [current, dir, loadWorktrees]);
 
   /**
    * 移除一個 linked worktree。**這是這頁唯一會刪東西的動作**，所以一定跳確認，
@@ -195,7 +201,7 @@ export default function RepoWorkbench({ view }: { view: View }) {
         showSwitch
         left={
           <>
-            <Tooltip label="回到 repo 清單">
+            <Tooltip label="回到 repositories 清單">
               <button
                 onClick={() => go({ dir: null })}
                 className="flex items-center gap-1.5 font-mono text-sm font-medium text-fg hover:text-accent"
@@ -261,7 +267,7 @@ function Header({
       {left ?? (
         <h1 className="flex items-center gap-2 text-lg font-semibold text-fg">
           <Icon name="repos" size={18} className="text-fg-subtle" />
-          Repo
+          Repositories
         </h1>
       )}
       {showSwitch && (

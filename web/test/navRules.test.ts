@@ -13,8 +13,8 @@ describe("titleForPath — 分頁標題跟著頁面走", () => {
 
   it("工作台的兩個視圖各有自己的標題（側邊欄只有一個入口，標題仍要分）", () => {
     expect(titleForPath("/repo/code")).toBe(`程式碼 · ${APP_NAME}`);
-    expect(titleForPath("/repo/git")).toBe(`Repo 檢視 · ${APP_NAME}`);
-    expect(titleForPath("/repo")).toBe(`Repo · ${APP_NAME}`);
+    expect(titleForPath("/repo/git")).toBe(`版本 · ${APP_NAME}`);
+    expect(titleForPath("/repo")).toBe(`Repositories · ${APP_NAME}`);
   });
 
   it("不在側邊欄的頁也有自己的標題", () => {
@@ -27,13 +27,13 @@ describe("titleForPath — 分頁標題跟著頁面走", () => {
    * 會同時符合 `/` 與 `/repos`。取最長的那個才對，不然所有子頁都會叫「首頁」。
    */
   it("子頁落到最長的前綴，不是落到首頁", () => {
-    expect(titleForPath("/repos/history")).toBe(`Repo 清單 · ${APP_NAME}`);
+    expect(titleForPath("/repos/history")).toBe(`Repositories 總覽 · ${APP_NAME}`);
     expect(titleForPath("/chat/19:abc@thread.v2")).toBe(`Teams 歸檔 · ${APP_NAME}`);
   });
 
   it("相符要以「段」為單位，不是字串開頭", () => {
     // `/repo/codex` 不是 `/repo/code` 的子頁，但它**是** `/repo` 的 —— 落到父層才對
-    expect(titleForPath("/repo/codex")).toBe(`Repo · ${APP_NAME}`);
+    expect(titleForPath("/repo/codex")).toBe(`Repositories · ${APP_NAME}`);
     // `/repository` 跟 `/repo` 只是字串開頭相同，不該被當成它的子頁
     expect(titleForPath("/repository")).toBe(APP_NAME);
   });
@@ -53,7 +53,7 @@ describe("titleForPath — 分頁標題跟著頁面走", () => {
 });
 
 describe("isActiveNav — 側邊欄哪一項該亮", () => {
-  const repo = NAV.find((n) => n.label === "Repo")!;
+  const repo = NAV.find((n) => n.label === "Repositories")!;
   const changes = NAV.find((n) => n.label === "未提交的改動")!;
 
   it("工作台的兩個視圖都算在同一個項目上", () => {

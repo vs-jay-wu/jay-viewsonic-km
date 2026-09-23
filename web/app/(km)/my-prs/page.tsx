@@ -309,7 +309,7 @@ export default function MyPrsPage() {
             <h1 className="text-2xl font-semibold text-fg">我的 PR</h1>
             <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">
               我自己開的 PR（<code className="text-xs">author:@me</code>，
-              <strong className="font-medium text-fg">不限 repo</strong>）。
+              <strong className="font-medium text-fg">不限 repository</strong>）。
               server 定時抓，開這頁只讀快照、不會打 GitHub。有人 review、approve
               或留言就發通知。不用 AI。
             </p>

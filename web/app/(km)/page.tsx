@@ -38,7 +38,7 @@ const TOOLS: { href: string; icon: IconName; title: string; desc: string }[] = [
     href: "/changes",
     icon: "code",
     title: "未提交的改動",
-    desc: "跨所有 repo 與 worktree 的未提交改動；直接看 diff，不用開 VS Code",
+    desc: "跨所有 repositories 與 worktree 的未提交改動；直接看 diff，不用開 VS Code",
   },
   {
     href: "/docs",
@@ -67,7 +67,7 @@ const OTHERS: {
     href: "/repo-sync",
     icon: "refresh",
     title: "Repo 同步",
-    desc: "每晚自動把 org 的 repo pull 一次；有掛外接就連 offloaded 的一起",
+    desc: "每晚自動把 org 的 repositories pull 一次；有掛外接就連 offloaded 的一起",
   },
   {
     href: "/memory",
@@ -90,8 +90,8 @@ const OTHERS: {
   {
     href: "/repos",
     icon: "repos",
-    title: "Repos 總覽",
-    desc: "org 底下每個 repo 是做什麼的、別名、技術與依賴；也在這裡搬進搬出外接硬碟",
+    title: "Repositories 總覽",
+    desc: "org 底下每個 repository 是做什麼的、別名、技術與依賴；也在這裡搬進搬出外接硬碟",
   },
   {
     href: "/repos/history",

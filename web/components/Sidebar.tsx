@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Icon, { type IconName } from "@/components/Icon";
 import { NAV, isActiveNav } from "@/lib/navRules";
+import { onPinChanged } from "@/lib/pinEvents";
 
 interface Pinned {
   dir: string;
@@ -38,7 +39,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
    * 分支層級的東西屬於工作台裡面的那顆下拉。哪些是 worktree 由 server 判斷
    * （看 `.git` 是檔案還是目錄），不是從名字猜 —— 猜錯會讓真的 repo 消失。
    */
-  useEffect(() => {
+  const loadPinned = useCallback(() => {
     fetch("/api/git/pin")
       .then((r) => r.json())
       .then((d: { pinned?: string[]; worktrees?: string[] }) => {
@@ -50,7 +51,12 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
         );
       })
       .catch(() => undefined);
-  }, [pathname]);
+  }, []);
+
+  // 換頁時重抓（pin 可能在別頁被改過），另外聽「pin 變了」——
+  // 在工作台按 pin 不會換頁，只靠 pathname 的話側邊欄不會動（Jay 2026-09-23）
+  useEffect(() => loadPinned(), [pathname, loadPinned]);
+  useEffect(() => onPinChanged(loadPinned), [loadPinned]);
 
   const itemClass = (active: boolean) =>
     `flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-white/10 transition-colors ${

@@ -5,6 +5,7 @@ import Link from "next/link";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import { useConfirm } from "@/components/Confirm";
+import { emitPinChanged } from "@/lib/pinEvents";
 import { formatBytes } from "@/lib/buildDirRules";
 import {
   DEFAULT_FILTERS, UNGROUPED, filterRepos, groupByProduct,
@@ -174,7 +175,7 @@ function RepoRow({
     <li className="px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         {dir && (
-          <Tooltip label={isPinned ? "取消 pin" : "pin 住這個 repo（工作台與側邊欄都會排到前面）"}>
+          <Tooltip label={isPinned ? "取消 pin" : "pin 住這個 repository（工作台與側邊欄都會排到前面）"}>
             <button
               onClick={() => onPin(dir)}
               disabled={busyPin}
@@ -311,6 +312,7 @@ export default function ReposPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ dir }),
         });
+        emitPinChanged(); // 側邊欄與工作台的清單要跟著動
         await loadPinned();
       } finally {
         setBusyPin(false);
@@ -398,7 +400,7 @@ export default function ReposPage() {
         `整個目錄會搬過去（含 .git 與未 commit 的改動），` +
         `並同步更新 local.workspace.json 的 offloaded 清單。\n` +
         `複製完成後會逐檔比對，對得起來才刪掉來源；比對不過就原地保留，不會掉資料。\n` +
-        `大的 repo 走 USB 可能要好幾分鐘，過程中不要拔硬碟。`,
+        `大的 repository 走 USB 可能要好幾分鐘，過程中不要拔硬碟。`,
       confirmLabel: toExternal ? "搬到外接" : "搬回本機",
     });
     if (!ok) return;
@@ -478,10 +480,10 @@ export default function ReposPage() {
       <div className="max-w-4xl mx-auto px-4 py-6 sm:px-8 sm:py-10">
         <h1 className="flex items-center gap-2.5 text-2xl font-semibold text-fg">
           <Icon name="repos" size={22} className="text-fg-subtle" />
-          Repos 總覽
+          Repositories 總覽
         </h1>
         <p className="mt-1.5 text-sm text-fg-muted">
-          {data?.overview._meta.description ?? "org 底下每個 repo 是做什麼的"}
+          {data?.overview._meta.description ?? "org 底下每個 repository 是做什麼的"}
           {data?.overview._meta.updated && `（內容標記更新於 ${data.overview._meta.updated}）`}
         </p>
 
@@ -572,7 +574,7 @@ export default function ReposPage() {
             <input
               value={filters.query}
               onChange={(e) => setFilters((f) => ({ ...f, query: e.target.value }))}
-              placeholder="搜尋 repo 名、別名、用途、技術、host…"
+              placeholder="搜尋 repository 名、別名、用途、技術、host…"
               className="w-full rounded-lg border border-line-strong py-2 pl-9 pr-3 text-sm outline-none focus:border-line-strong"
             />
           </div>
@@ -604,7 +606,7 @@ export default function ReposPage() {
         </div>
 
         <div className="mt-2 h-4 text-xs text-fg-subtle">
-          {data && `顯示 ${shown} / ${total} 個 repo · ${groups.length} 條產品線`}
+          {data && `顯示 ${shown} / ${total} 個 repository · ${groups.length} 條產品線`}
         </div>
 
         {/* 產品分組 */}

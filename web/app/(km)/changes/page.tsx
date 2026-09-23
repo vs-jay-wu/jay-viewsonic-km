@@ -365,7 +365,7 @@ export default function ChangesPage() {
             {loading
               ? "掃描中…"
               : data
-                ? `${repos.length} 個 repo · ${totalFiles} 個檔案 · 掃了 ${data.scanned} 個工作區` +
+                ? `${repos.length} 個 repository · ${totalFiles} 個檔案 · 掃了 ${data.scanned} 個工作區` +
                   (data.skippedOffloaded > 0 ? `（offloaded 的 ${data.skippedOffloaded} 個沒掃）` : "")
                 : ""}
           </span>
@@ -441,7 +441,7 @@ export default function ChangesPage() {
                 </button>
                 <Tooltip
                   side="left"
-                  label={r.pinned ? "取消 pin" : "pin 住這個 repo（排到最前面，不會藏起任何東西）"}
+                  label={r.pinned ? "取消 pin" : "pin 住這個 repository（排到最前面，不會藏起任何東西）"}
                 >
                   <button
                     onClick={() => void togglePin(r.repo)}

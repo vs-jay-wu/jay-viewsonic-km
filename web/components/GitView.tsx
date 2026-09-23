@@ -504,7 +504,7 @@ export default function GitView({
         >
           {!detail ? (
             <p className="px-6 py-10 text-sm text-fg-subtle">
-              {loading ? "讀取中…" : "讀不到這個 repo。"}
+              {loading ? "讀取中…" : "讀不到這個 repository。"}
             </p>
           ) : (
             <div className="min-w-[56rem]">

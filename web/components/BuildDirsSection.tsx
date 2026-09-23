@@ -66,11 +66,11 @@ export default function BuildDirsSection() {
       (n, x) => n + x.dirs.reduce((m, d) => m + d.bytes, 0), 0
     );
     const ok = await confirm({
-      title: `清掉全部 ${cleanable.length} 個 repo 的 build 產物？`,
+      title: `清掉全部 ${cleanable.length} 個 repository 的 build 產物？`,
       message:
         `${cleanable.map((x) => `${x.repo.repo}（${formatBytes(x.dirs.reduce((m, d) => m + d.bytes, 0))}）`).join("、")}\n` +
         `共會釋出約 ${formatBytes(total)}。\n` +
-        `這些 repo 下次 build 都要整包重來（node_modules 還要重新 install）。`,
+        `這些 repository 下次 build 都要整包重來（node_modules 還要重新 install）。`,
       confirmLabel: "全部清掉",
       danger: true,
     });
@@ -96,7 +96,7 @@ export default function BuildDirsSection() {
       count += 1;
     }
     setBusy(null);
-    setNotice(`清掉 ${count} 個 repo，釋出 ${formatBytes(freed)}`);
+    setNotice(`清掉 ${count} 個 repository，釋出 ${formatBytes(freed)}`);
     await load();
   };
 
@@ -156,7 +156,7 @@ export default function BuildDirsSection() {
         <div className="flex items-center gap-1">
           {/* 只有圖示的按鈕一定要包 Tooltip（web/AGENTS.md）—— 原生 title 要停留快一秒
               才出現，隔幾個月回來會看不出這顆會做什麼，而其中一顆是刪東西的 */}
-          <Tooltip label="全部清理：刪掉所有 repo 的 build 產物">
+          <Tooltip label="全部清理：刪掉所有 repository 的 build 產物">
             <button
               onClick={cleanAll}
               disabled={loading || !!busy || !data?.repos.length}

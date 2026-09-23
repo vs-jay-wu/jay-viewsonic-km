@@ -3,7 +3,7 @@ import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { isKnownWorktree } from "@/lib/changes";
 import { isExternalRepo } from "@/lib/externalRepos";
-import { invalidateRepoCache, readPinned, togglePinned } from "@/lib/gitView";
+import { readPinned, togglePinned } from "@/lib/gitView";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +41,6 @@ export async function POST(req: NextRequest) {
   if (!(await isKnownWorktree(dir)) && !(await isExternalRepo(dir))) {
     return NextResponse.json({ error: "不認得這個 repo" }, { status: 403 });
   }
-  const pinned = await togglePinned(dir);
-  invalidateRepoCache(); // 排序會變
-  return NextResponse.json({ pinned });
+  // 不作廢 repo 清單的快取：pin 不改 git 狀態，清單那支是在回應時才疊上 pin 的
+  return NextResponse.json({ pinned: await togglePinned(dir) });
 }
