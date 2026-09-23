@@ -1,12 +1,13 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import WorktreeBadge from "@/components/WorktreeBadge";
 import DiffView from "@/components/DiffView";
 import ImageDiffView from "@/components/ImageDiffView";
 import { FileRow, TreeRows, ViewToggle, useFileView } from "@/components/FileList";
+import { DragHandle, useDragWidth, useWideLayout } from "@/components/Split";
 import { hljsHref, type DiffTheme } from "@/lib/uiSettingsRules";
 import { buildTree, type ChangedFile, type DiffLine } from "@/lib/changesRules";
 import { REASON_LABEL, fileOrigin, type LineBranch, type WorkChanges } from "@/lib/workChangesRules";
@@ -53,7 +54,20 @@ export default function WorkPage() {
   );
 }
 
+/** 左欄的預設寬度（px）。原本寫死 `lg:w-[26rem]` */
+const DEFAULT_LIST_W = 416;
+
 function WorkChangesView() {
+  const wide = useWideLayout();
+  const rowRef = useRef<HTMLDivElement>(null);
+  /** 左邊的清單可以拖寬 —— 分支與檔名都長，26rem 常常不夠（Jay 2026-09-23） */
+  const listPane = useDragWidth({
+    storageKey: "km.work.listW",
+    defaultWidth: DEFAULT_LIST_W,
+    min: 260,
+    max: 900,
+    measure: (clientX) => clientX - (rowRef.current?.getBoundingClientRect().left ?? 0),
+  });
   const [data, setData] = useState<WorkChanges | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -277,9 +291,10 @@ function WorkChangesView() {
         {error && <p className="mt-1 text-xs text-danger">{error}</p>}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <div ref={rowRef} className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div
-          className={`flex min-h-0 flex-col border-line lg:w-[26rem] lg:shrink-0 lg:border-r ${
+          style={wide ? { width: listPane.width, flex: "0 0 auto" } : undefined}
+          className={`flex min-h-0 flex-col border-line lg:border-r ${
             selected ? "hidden lg:flex" : "flex-1"
           }`}
         >
@@ -425,6 +440,8 @@ function WorkChangesView() {
           </div>
           </div>
         </div>
+
+        <DragHandle handleProps={listPane.handleProps} />
 
         <div className={`min-h-0 flex-1 overflow-y-auto ${selected ? "" : "hidden lg:block"}`}>
           {!selected ? (

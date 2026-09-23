@@ -55,12 +55,18 @@ export function useDragWidth(opts: {
   const { storageKey, defaultWidth, min, max } = opts;
   const [width, setWidth] = useState(defaultWidth);
   const dragging = useRef(false);
+  /** 目前的寬度。放開時存這個，不要再量一次滑鼠位置 —— 見 onUp 的註解 */
+  const widthRef = useRef(defaultWidth);
   // measure 由呼叫端每次 render 重建，用 ref 拿最新的，監聽才不用重掛。
   // 指派要放在 effect 裡（render 期間寫 ref 會被 lint 擋，也不保證安全）
   const measureRef = useRef(opts.measure);
   useEffect(() => {
     measureRef.current = opts.measure;
   });
+
+  useEffect(() => {
+    widthRef.current = width;
+  }, [width]);
 
   const clamp = useCallback((w: number) => Math.min(max, Math.max(min, Math.round(w))), [min, max]);
 
@@ -86,11 +92,17 @@ export function useDragWidth(opts: {
       e.preventDefault();
       setWidth(clamp(measureRef.current(e.clientX)));
     };
-    const onUp = (e: PointerEvent) => {
+    const onUp = () => {
       if (!dragging.current) return;
       dragging.current = false;
       document.body.style.removeProperty("user-select");
-      save(clamp(measureRef.current(e.clientX)));
+      /*
+       * 存**目前的寬度**，不要拿放開那一刻的 `clientX` 再量一次。
+       * 那個事件不一定帶得到有意義的座標（`pointercancel`、程式觸發的、
+       * 某些觸控裝置），量出來會是 0 → clamp 成最小值，於是拖完放開反而
+       * 縮到最窄，而且下次開啟才會發現。
+       */
+      save(widthRef.current);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
