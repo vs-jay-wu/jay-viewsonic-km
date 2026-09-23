@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  REVEAL_TTL_MS, isHardBlocked, isRevealable, isSensitivePath, maskEnvValues,
+  REVEAL_TTL_MS, isHardBlocked, sortEntries, type TreeEntry, isRevealable, isSensitivePath, maskEnvValues,
   revealSecondsLeft,
 } from "@/lib/codeBrowseRules";
 
@@ -101,5 +101,27 @@ describe("解鎖的自動收回", () => {
   it("時鐘倒退時夾在 TTL，不會倒數出一個更大的數字", () => {
     // 睡眠喚醒或改系統時間會讓 now 比 revealedAt 早
     expect(revealSecondsLeft(10_000, 5_000)).toBe(REVEAL_TTL_MS / 1000);
+  });
+});
+
+describe("sortEntries", () => {
+  const e = (name: string, kind: "dir" | "file" = "file") => ({ name, path: name, kind }) as TreeEntry;
+
+  it("目錄在檔案前面", () => {
+    const out = sortEntries([e("zzz.ts"), e("aaa", "dir")]).map((x) => x.name);
+    expect(out).toEqual(["aaa", "zzz.ts"]);
+  });
+
+  it("點開頭的排在最前面，不是最後面（跟 VS Code 一樣）", () => {
+    // 排到最後面時 `.claude`、`.github` 看起來像被藏起來了
+    const out = sortEntries([
+      e("android", "dir"), e(".claude", "dir"), e("assets", "dir"), e(".github", "dir"),
+    ]).map((x) => x.name);
+    expect(out).toEqual([".claude", ".github", "android", "assets"]);
+  });
+
+  it("檔案也一樣", () => {
+    const out = sortEntries([e("README.md"), e(".gitignore")]).map((x) => x.name);
+    expect(out[0]).toBe(".gitignore");
   });
 });

@@ -7,7 +7,7 @@
  */
 
 import {
-  EXT_ICON, FALLBACK_FILE_ICON, FALLBACK_FOLDER_ICON, FOLDER_ICON, NAME_ICON,
+  EXT_ICON, FALLBACK_FILE_ICON, FALLBACK_FOLDER_ICON, FOLDER_ICON, FOLDER_OPEN_ICON, NAME_ICON,
 } from "@/lib/fileIconsData";
 
 /**
@@ -37,7 +37,10 @@ export function fileIconOf(path: string): string {
  * **開頭的點要去掉再查** —— 上游的表裡寫的是 `github`、`claude`，而目錄叫
  * `.github`、`.claude`；不去點的話這些最好認的資料夾反而吃預設圖示。
  */
-export function folderIconOf(name: string): string {
+export function folderIconOf(name: string, open = false): string {
   const key = (name.split("/").filter(Boolean).pop() ?? "").toLowerCase();
-  return FOLDER_ICON[key.replace(/^\./, "")] ?? FALLBACK_FOLDER_ICON;
+  const icon = FOLDER_ICON[key.replace(/^\./, "")];
+  if (icon) return icon;
+  // 沒有對照的才分開／關 —— 有專屬圖示的（`folder-src` 之類）上游也只有一種樣子
+  return open ? FOLDER_OPEN_ICON : FALLBACK_FOLDER_ICON;
 }

@@ -467,14 +467,21 @@ function TreeLevel({
               ) : (
                 <span className="w-[11px] shrink-0" />
               )}
-              <FileIcon path={e.name} folder={e.kind === "dir"} size={14} />
+              <FileIcon path={e.name} folder={e.kind === "dir"} open={isOpen} size={14} />
+              {/*
+                * 顏色的分法跟 VS Code 一樣：**被 gitignore 的調暗**，其餘是一般亮度
+                * （Jay 2026-09-23）。原本是「所有檔案都偏暗、只有目錄亮」，
+                * 等於把最常看的東西壓得最暗。
+                */}
               <span
                 className={`font-mono ${
-                  e.kind === "dir"
-                    ? "text-fg"
-                    : looksBinary(e.path)
-                      ? "text-fg-subtle"
-                      : "text-fg-muted"
+                  e.ignored
+                    ? "text-fg-disabled"
+                    : e.kind === "dir"
+                      ? "text-fg"
+                      : looksBinary(e.path)
+                        ? "text-fg-subtle"
+                        : "text-fg"
                 }`}
               >
                 {e.name}

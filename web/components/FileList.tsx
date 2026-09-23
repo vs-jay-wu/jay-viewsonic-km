@@ -195,7 +195,7 @@ export function TreeRows<T extends ChangedFile>({
                 size={12}
                 className="shrink-0 text-fg-subtle"
               />
-              <FileIcon path={n.name} folder size={13} />
+              <FileIcon path={n.name} folder open={open} size={13} />
               <span className="font-mono text-fg-muted">{n.name}</span>
             </button>
             {open && (

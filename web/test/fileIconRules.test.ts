@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fileIconOf, folderIconOf } from "@/lib/fileIconRules";
-import { FALLBACK_FILE_ICON, FALLBACK_FOLDER_ICON } from "@/lib/fileIconsData";
+import { FALLBACK_FILE_ICON, FALLBACK_FOLDER_ICON, FOLDER_OPEN_ICON } from "@/lib/fileIconsData";
 
 describe("fileIconOf", () => {
   it("常見的副檔名對得到各自的圖示", () => {
@@ -77,5 +77,10 @@ describe("folderIconOf", () => {
   it("認不得的名字用預設資料夾圖示", () => {
     expect(folderIconOf("images_bgv")).toBe(FALLBACK_FOLDER_ICON);
     expect(folderIconOf("")).toBe(FALLBACK_FOLDER_ICON);
+  });
+
+  it("只有沒對照的資料夾分開／關 —— 有專屬圖示的上游只有一種樣子", () => {
+    expect(folderIconOf("images_bgv", true)).toBe(FOLDER_OPEN_ICON);
+    expect(folderIconOf("src", true)).toBe("folder-src");
   });
 });

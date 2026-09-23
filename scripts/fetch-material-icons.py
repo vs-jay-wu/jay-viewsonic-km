@@ -44,50 +44,43 @@ WANTED_EXT = [
     "png", "jpg", "jpeg", "gif", "webp", "svg", "ico", "pdf",
     "ttf", "otf", "woff", "woff2", "zip", "lock", "env", "log",
 ]
-# 資料夾也一樣用數的（`git ls-files` 的目錄層），不是憑印象列。
-# 上游有 949 個資料夾名，這裡只抓工作區實際會出現的。
-WANTED_FOLDER = [
-    "actions", "agents", "android", "api", "app", "apps", "archive", "assets", "audio",
-    "auth", "backend", "base", "batch", "bin", "bloc", "browser", "certs", "changes",
-    "chat", "chats", "ci", "classes", "claude", "code", "color", "colors", "command",
-    "commands", "common", "components", "concepts", "config", "configs", "configurations",
-    "constant", "container", "containers", "content", "controller", "controllers",
-    "controls", "core", "cubit", "cursor", "data", "database", "debug", "delta", "dev",
-    "dialog", "dist", "doc", "docs", "document", "documents", "e2e", "elements", "enum",
-    "enums", "error", "event", "events", "example", "export", "extension", "extensions",
-    "fastlane", "features", "filters", "fixtures", "flutter", "font", "fonts", "generated",
-    "git", "githooks", "github", "gradle", "handler", "helper", "helpers", "history",
-    "hooks", "i18n", "icon", "icons", "idea", "image", "images", "img", "import", "include",
-    "infra", "input", "interceptor", "interfaces", "io", "ios", "java", "json", "kotlin",
-    "l10n", "layout", "lib", "libraries", "libs", "link", "links", "linux", "locale",
-    "locales", "log", "logging", "lottie", "mac", "macos", "main", "manager", "media",
-    "message", "messages", "migration", "misc", "mock", "model", "models", "modules",
-    "navigation", "next", "note", "notes", "option", "others", "output", "packages", "page",
-    "pages", "patches", "pdf", "perf", "playground", "plugin", "plugins", "preferences",
-    "presentation", "preview", "projects", "properties", "proto", "providers", "proxy",
-    "public", "release", "repo", "repos", "repositories", "repository", "res", "resources",
-    "review", "rules", "sample", "screen", "screens", "screenshots", "script", "scripts",
-    "security", "server", "service", "services", "settings", "shared", "sketch", "skills",
-    "snapshots", "sounds", "sources", "specs", "src", "start", "state", "static", "store",
-    "storybook", "style", "svg", "switch", "tasks", "templates", "test", "testing", "tests",
-    "theme", "themes", "tickets", "token", "tools", "transition", "translation", "types",
-    "ui", "uploads", "util", "utilities", "utils", "validation", "video", "view", "views",
-    "vscode", "web", "widget", "widgets", "windows",
-]
+# ⚠️ **資料夾名單用上游的全部，不要拿工作區當樣本。**
+#
+# 第一版是用 `git ls-files` 的目錄層去交集，結果 `build`、`ide`、`azure_dev`
+# 這些通通沒對到 —— 它們是 **gitignore 的目錄**，`ls-files` 當然看不到，
+# 而檔案樹列的是**檔案系統**。樣本跟畫面看的不是同一個東西。
+#
+# 全收是 949 個名字 → 270 個圖示，比挑過的多約 110 KB；換掉的是一整類
+# 「為什麼這個沒有圖示」的問題，划算。
+#
 WANTED_NAME = [
     "readme.md", "license", "package.json", "tsconfig.json", "dockerfile",
     "makefile", ".gitignore", ".gitattributes", "next.config.ts", "vitest.config.ts",
     "eslint.config.mjs", "postcss.config.mjs", ".eslintrc.json", "yarn.lock",
     "package-lock.json", "pnpm-lock.yaml", "settings.gradle", "build.gradle",
 ]
-# 對不到的用這兩個。
-# ⚠️ 上游的**預設資料夾圖示叫 `folder-base`**，不是 `folder`——
-# `folderIcons.ts` 裡寫的是 `defaultIcon: { name: 'folder' }`，但 `icons/` 底下
-# 只有 `folder-base.svg`（那個 `-base` 是打包時加的）。照 ts 檔抓會 404。
-# 展開／收合也沒有兩套圖（整個 repo 沒有任何 `*-open.svg`），所以收合狀態
-# 由我們自己的 chevron 表示。
 FALLBACK_FILE = "document"
-FALLBACK_FOLDER = "folder-base"
+
+# ⚠️ **預設資料夾圖示不在 `icons/` 裡，是打包時產生的。**
+#
+# `folderIcons.ts` 寫 `defaultIcon: { name: 'folder' }`，但那支 SVG 不存在；
+# `folderGenerator.ts` 的 `generateFolderIcons(color)` 會用下面這兩條路徑、
+# 填上設定的顏色即時產生。預設色是 `#90a4ae`（`defaultConfig.ts` 的
+# `defaultColor`，blue-gray-300）。
+#
+# 照 `icons/folder-base.svg` 抓會拿到**咖啡色** `#8d6e63` —— 那是別的東西，
+# 畫面上跟 VS Code 差很多（Jay 2026-09-23 兩張截圖比對出來的）。
+FOLDER_COLOR = "#90a4ae"
+FOLDER_PATH = (
+    "m6.922 3.768-.644-.536A1 1 0 0 0 5.638 3H2a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 "
+    "1-1V5a1 1 0 0 0-1-1H7.562a1 1 0 0 1-.64-.232"
+)
+FOLDER_OPEN_PATH = (
+    "M14.483 6H4.721a1 1 0 0 0-.949.684L2 12V5h12a1 1 0 0 0-1-1H7.562a1 1 0 0 1-.64-.232l-.644-.536"
+    "A1 1 0 0 0 5.638 3H2a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h11l2.403-5.606A1 1 0 0 0 14.483 6"
+)
+FALLBACK_FOLDER = "folder"
+FOLDER_OPEN = "folder-open"
 
 
 def clone_dir() -> Path:
@@ -215,7 +208,7 @@ def main() -> None:
     for keys, src_map, out, label in (
         (WANTED_EXT, ext_map, ext_out, "副檔名"),
         (WANTED_NAME, name_map, name_out, "檔名"),
-        (WANTED_FOLDER, folder_map, folder_out, "資料夾"),
+        (sorted(folder_map), folder_map, folder_out, "資料夾"),
     ):
         for k in keys:
             icon = src_map.get(k)
@@ -229,7 +222,7 @@ def main() -> None:
             out[k] = real
 
     needed = sorted({*ext_out.values(), *name_out.values(), *folder_out.values(),
-                     FALLBACK_FILE, FALLBACK_FOLDER})
+                     FALLBACK_FILE})
     missing_files = [n for n in needed if n not in have]
     if missing_files:
         raise SystemExit(f"這些圖示在 icons/ 找不到檔案：{missing_files}")
@@ -240,6 +233,11 @@ def main() -> None:
         vb, inner = svg_body((icons_dir / f"{icon}.svg").read_bytes())
         view_boxes[icon] = vb
         icons[icon] = inner
+
+    # 預設資料夾：照上游 `generateFolderIcons` 的做法即時產生（見上面的註解）
+    for name, path_d in ((FALLBACK_FOLDER, FOLDER_PATH), (FOLDER_OPEN, FOLDER_OPEN_PATH)):
+        icons[name] = f'<path d="{path_d}" fill="{FOLDER_COLOR}"/>'
+        view_boxes[name] = "0 0 16 16"
 
     lines = [
         "// 這個檔案是產生出來的，不要手改 —— 跑 `scripts/fetch-material-icons.py`。",
@@ -275,6 +273,7 @@ def main() -> None:
         "",
         f'export const FALLBACK_FILE_ICON = "{FALLBACK_FILE}";',
         f'export const FALLBACK_FOLDER_ICON = "{FALLBACK_FOLDER}";',
+        f'export const FOLDER_OPEN_ICON = "{FOLDER_OPEN}";',
         f'export const UPSTREAM_COMMIT = "{UPSTREAM_COMMIT}";',
         "",
     ]

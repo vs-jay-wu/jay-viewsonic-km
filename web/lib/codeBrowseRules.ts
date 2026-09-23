@@ -12,6 +12,8 @@ export interface TreeEntry {
   kind: "dir" | "file";
   /** 檔案才有 */
   sizeBytes?: number;
+  /** 被 gitignore 掉。畫面上調暗（VS Code 也是這樣分） */
+  ignored?: boolean;
 }
 
 export interface SearchHit {
@@ -106,13 +108,17 @@ export function maskEnvValues(text: string): string {
     .join("\n");
 }
 
-/** 目錄在前、同類照名字。`.` 開頭的排在後面 —— 它們多半不是你要找的 */
+/**
+ * 目錄在前、同類照名字 —— 跟 VS Code 一樣。
+ *
+ * **`.` 開頭的不特別往後排。** 原本有一條「它們多半不是你要找的」，結果
+ * `.claude`、`.github` 這些跑到清單最尾端，看起來像被藏起來了
+ * （Jay 2026-09-23：「.claude folder 被隱藏了耶？」）。VS Code 就是單純照
+ * 名字排，點在字母前面，所以它們自然在最上面 —— 那也是你會去找它們的地方。
+ */
 export function sortEntries(entries: TreeEntry[]): TreeEntry[] {
   return [...entries].sort((a, b) => {
     if ((a.kind === "dir") !== (b.kind === "dir")) return a.kind === "dir" ? -1 : 1;
-    const ad = a.name.startsWith(".");
-    const bd = b.name.startsWith(".");
-    if (ad !== bd) return ad ? 1 : -1;
     return a.name.localeCompare(b.name);
   });
 }

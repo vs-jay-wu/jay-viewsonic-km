@@ -15,15 +15,18 @@ import { ICON_SVG, ICON_VIEWBOX } from "@/lib/fileIconsData";
 export default function FileIcon({
   path,
   folder = false,
+  open = false,
   size = 14,
   className = "",
 }: {
   path: string;
   folder?: boolean;
+  /** 資料夾展開中。只有「沒有專屬圖示」的資料夾看得出差別 */
+  open?: boolean;
   size?: number;
   className?: string;
 }) {
-  const name = folder ? folderIconOf(path) : fileIconOf(path);
+  const name = folder ? folderIconOf(path, open) : fileIconOf(path);
   const inner = ICON_SVG[name];
   if (!inner) return null;
   return (

@@ -40,6 +40,29 @@ export async function openRepo(dir: string): Promise<string | null> {
   return (await isExternalRepo(abs)) ? abs : null;
 }
 
+/**
+ * 標出哪些被 gitignore 掉 —— 畫面上調暗，跟 VS Code 一樣
+ * （Jay 2026-09-23：「被 ignore 會比較不明顯的顏色」）。
+ *
+ * 一次問一整層（路徑當參數帶進去），不是一個一個問。
+ *
+ * ⚠️ 兩個會**安靜失效**的地方：
+ * - **`check-ignore` 在「沒有任何一個被忽略」時回傳 1**，那是正常結果不是錯誤；
+ *   真正的錯誤是 128。把 1 當失敗的話，乾淨的目錄會整層失去標記。
+ * - **`-z` 只能配 `--stdin`**（`fatal: -z only makes sense with --stdin`）。
+ *   路徑當參數帶時不能加，否則整個指令失敗、一個都標不到 —— 而畫面上只是
+ *   「沒有任何檔案是灰的」，跟「這個 repo 沒忽略任何東西」長得一模一樣。
+ */
+async function markIgnored(repo: string, entries: TreeEntry[]): Promise<TreeEntry[]> {
+  if (!entries.length) return entries;
+  const r = await run("git", ["-C", repo, "check-ignore", "--", ...entries.map((e) => e.path)], {
+    timeoutMs: 20_000,
+  });
+  if (r.code !== 0 && r.code !== 1) return entries; // repo 壞了之類 —— 不標就是了
+  const ignored = new Set(r.stdout.split("\n").map((x) => x.trim()).filter(Boolean));
+  return entries.map((e) => (ignored.has(e.path) ? { ...e, ignored: true } : e));
+}
+
 export async function listDir(
   dir: string,
   rel: string
@@ -63,7 +86,10 @@ export async function listDir(
       entries.push({ name: d.name, path: childRel, kind: "file", sizeBytes: st?.size ?? 0 });
     }
   }
-  return { entries: sortEntries(entries), truncated: dirents.length > MAX_ENTRIES };
+  return {
+    entries: sortEntries(await markIgnored(repo, entries)),
+    truncated: dirents.length > MAX_ENTRIES,
+  };
 }
 
 export interface FileContent {
