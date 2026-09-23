@@ -150,3 +150,27 @@ export function groupHits(hits: SearchHit[]): { path: string; hits: SearchHit[] 
   }
   return [...byPath.entries()].map(([path, hits]) => ({ path, hits }));
 }
+
+/**
+ * 解鎖過的明碼內容，幾秒後自動收回成遮罩態。
+ *
+ * **為什麼要有**：`/code` 的畫面常被 agent 用瀏覽器工具讀（截圖、抓 DOM）。
+ * `sensitive-files.md` 有寫「不得對已解鎖的畫面截圖」，但規則只對讀到規則的那個
+ * agent 有效 —— 沒載入到、或換成別的工具在跑就擋不住。自動收回是**不依賴任何人
+ * 守規矩**的那一層：多數時候畫面上早就遮回去了。
+ *
+ * 只收明碼。遮罩態沒有值，留著不會有事。
+ */
+export const REVEAL_TTL_MS = 60_000;
+
+/** 還剩幾秒（給畫面上的倒數）。已經到期就是 0 */
+export function revealSecondsLeft(
+  revealedAt: number,
+  now: number,
+  ttlMs: number = REVEAL_TTL_MS
+): number {
+  // 夾在 [0, TTL]：時鐘倒退（睡眠喚醒、改系統時間）時 now 可能比 revealedAt 早，
+  // 不夾的話畫面會倒數出一個比 TTL 還大的數字
+  const left = Math.ceil((revealedAt + ttlMs - now) / 1000);
+  return Math.min(Math.max(0, left), Math.ceil(ttlMs / 1000));
+}

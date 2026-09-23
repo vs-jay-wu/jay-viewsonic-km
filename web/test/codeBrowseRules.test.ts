@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  isHardBlocked, isRevealable, isSensitivePath, maskEnvValues,
+  REVEAL_TTL_MS, isHardBlocked, isRevealable, isSensitivePath, maskEnvValues,
+  revealSecondsLeft,
 } from "@/lib/codeBrowseRules";
 
 describe("機敏檔案的解鎖分級", () => {
@@ -77,5 +78,28 @@ describe("maskEnvValues", () => {
     const out = maskEnvValues("A=secret1\nB=secret2\n# c\nC=");
     expect(out).not.toContain("secret1");
     expect(out).not.toContain("secret2");
+  });
+});
+
+describe("解鎖的自動收回", () => {
+  it("剛解鎖時是整個 TTL", () => {
+    expect(revealSecondsLeft(1_000, 1_000)).toBe(REVEAL_TTL_MS / 1000);
+  });
+
+  it("倒數是無條件進位 —— 不會在還有 0.4 秒時就顯示 0", () => {
+    expect(revealSecondsLeft(0, REVEAL_TTL_MS - 400)).toBe(1);
+  });
+
+  it("到期就是 0", () => {
+    expect(revealSecondsLeft(0, REVEAL_TTL_MS)).toBe(0);
+  });
+
+  it("過期很久也是 0，不會變成負數", () => {
+    expect(revealSecondsLeft(0, REVEAL_TTL_MS * 10)).toBe(0);
+  });
+
+  it("時鐘倒退時夾在 TTL，不會倒數出一個更大的數字", () => {
+    // 睡眠喚醒或改系統時間會讓 now 比 revealedAt 早
+    expect(revealSecondsLeft(10_000, 5_000)).toBe(REVEAL_TTL_MS / 1000);
   });
 });

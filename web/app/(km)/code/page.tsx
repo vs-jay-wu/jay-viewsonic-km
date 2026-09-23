@@ -12,7 +12,9 @@ import { useLiveRefresh } from "@/components/useLiveRefresh";
 import { hljsHref, type DiffTheme } from "@/lib/uiSettingsRules";
 import { languageOf } from "@/lib/changesRules";
 import { groupRepos } from "@/lib/repoGroupRules";
-import { groupHits, looksBinary, type SearchHit, type TreeEntry } from "@/lib/codeBrowseRules";
+import {
+  groupHits, looksBinary, revealSecondsLeft, type SearchHit, type TreeEntry,
+} from "@/lib/codeBrowseRules";
 
 /**
  * 程式碼瀏覽（唯讀）。
@@ -296,6 +298,14 @@ function CodeBrowser() {
    * 開一個檔案。`reveal` 只在使用者按了解鎖按鈕時才帶 ——
    * 機敏檔案的預設路徑仍然拿不到內容（見 lib/codeBrowseRules.ts）。
    */
+  /**
+   * 明碼解鎖的到期時間。**自動收回不依賴任何人守規矩** —— `/code` 的畫面常被
+   * agent 用瀏覽器工具讀，規則擋得住讀到規則的那一個，擋不住其他的
+   * （見 `.claude/rules/sensitive-files.md`）。
+   */
+  const [revealedAt, setRevealedAt] = useState<number | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+
   const openFile = async (rel: string, line?: number, reveal?: "full" | "masked") => {
     setLoadingFile(true);
     setGotoLine(line ?? null);
@@ -305,10 +315,30 @@ function CodeBrowser() {
       const res = await fetch(`/api/code/file?${qs}`);
       const json = await res.json();
       setFile(res.ok ? json : { path: rel, text: "", sizeBytes: 0, ...json });
+      // 只有明碼要倒數；遮罩態沒有值，留著不會有事
+      setRevealedAt(res.ok && reveal === "full" ? Date.now() : null);
     } finally {
       setLoadingFile(false);
     }
   };
+
+  useEffect(() => {
+    if (revealedAt === null) {
+      setSecondsLeft(0);
+      return;
+    }
+    const tick = () => {
+      const left = revealSecondsLeft(revealedAt, Date.now());
+      setSecondsLeft(left);
+      // 到期就自己降回遮罩態（不是整個關掉 —— 欄位名沒有機敏性，留著比較好用）
+      if (left === 0 && file?.path) void openFile(file.path, undefined, "masked");
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+    // openFile 每次 render 都是新的，放進相依會讓 interval 一直重建
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealedAt, file?.path]);
 
   const doSearch = async () => {
     if (!dir || q.trim().length < 2) return;
@@ -575,7 +605,9 @@ function CodeBrowser() {
                   {file.sensitive && (
                     <span className="flex shrink-0 items-center gap-1 rounded-md border border-warn px-1.5 py-0.5 text-[11px] text-warn">
                       <Icon name="alert" size={11} />
-                      {file.revealed === "masked" ? "只有欄位名" : "機敏內容已顯示"}
+                      {file.revealed === "masked"
+                        ? "只有欄位名"
+                        : `機敏內容已顯示 · ${secondsLeft} 秒後自動收回`}
                     </span>
                   )}
                   {/* 遮罩態要能往上解到明碼，明碼態要能收回 —— 兩個方向都留在標題列，
