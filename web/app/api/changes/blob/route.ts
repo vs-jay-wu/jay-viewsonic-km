@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isExternalRepo } from "@/lib/externalRepos";
 import { isKnownWorktree, readImageBlob } from "@/lib/changes";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
   if (!worktree || !file) {
     return NextResponse.json({ error: "要給 worktree 與 file" }, { status: 400 });
   }
-  if (!(await isKnownWorktree(worktree))) {
+  if (!(await isKnownWorktree(worktree)) && !(await isExternalRepo(worktree))) {
     return NextResponse.json({ error: "不認得這個工作區" }, { status: 403 });
   }
 

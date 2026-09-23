@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { APP_NAME, NAV, titleForPath } from "@/lib/navRules";
+import { APP_NAME, NAV, isActiveNav, titleForPath } from "@/lib/navRules";
 
 describe("titleForPath — 分頁標題跟著頁面走", () => {
   it("首頁只有 app 名字", () => {
@@ -7,8 +7,14 @@ describe("titleForPath — 分頁標題跟著頁面走", () => {
   });
 
   it("側邊欄的頁用側邊欄的字（同一份來源，不會漂移）", () => {
-    expect(titleForPath("/git")).toBe(`Repo 檢視 · ${APP_NAME}`);
+    expect(titleForPath("/docs")).toBe(`文件 · ${APP_NAME}`);
     expect(titleForPath("/changes")).toBe(`未提交的改動 · ${APP_NAME}`);
+  });
+
+  it("工作台的兩個視圖各有自己的標題（側邊欄只有一個入口，標題仍要分）", () => {
+    expect(titleForPath("/repo/code")).toBe(`程式碼 · ${APP_NAME}`);
+    expect(titleForPath("/repo/git")).toBe(`Repo 檢視 · ${APP_NAME}`);
+    expect(titleForPath("/repo")).toBe(`Repo · ${APP_NAME}`);
   });
 
   it("不在側邊欄的頁也有自己的標題", () => {
@@ -25,8 +31,11 @@ describe("titleForPath — 分頁標題跟著頁面走", () => {
     expect(titleForPath("/chat/19:abc@thread.v2")).toBe(`Teams 歸檔 · ${APP_NAME}`);
   });
 
-  it("`/gitsomething` 不算 `/git` 的子頁（要整段相符）", () => {
-    expect(titleForPath("/gitsomething")).toBe(APP_NAME);
+  it("相符要以「段」為單位，不是字串開頭", () => {
+    // `/repo/codex` 不是 `/repo/code` 的子頁，但它**是** `/repo` 的 —— 落到父層才對
+    expect(titleForPath("/repo/codex")).toBe(`Repo · ${APP_NAME}`);
+    // `/repository` 跟 `/repo` 只是字串開頭相同，不該被當成它的子頁
+    expect(titleForPath("/repository")).toBe(APP_NAME);
   });
 
   it("認不得的路徑退回 app 名字，不要亂猜", () => {
@@ -37,6 +46,32 @@ describe("titleForPath — 分頁標題跟著頁面走", () => {
     for (const n of NAV) {
       expect(n.label, n.href).toBeTruthy();
       expect(n.icon, n.href).toBeTruthy();
+      // 帶 query 的 href 會讓側邊欄得讀 useSearchParams，那會弄壞整個群組的預渲染
+      expect(n.href.includes("?"), n.href).toBe(false);
     }
+  });
+});
+
+describe("isActiveNav — 側邊欄哪一項該亮", () => {
+  const repo = NAV.find((n) => n.label === "Repo")!;
+  const changes = NAV.find((n) => n.label === "未提交的改動")!;
+
+  it("工作台的兩個視圖都算在同一個項目上", () => {
+    expect(isActiveNav(repo, "/repo")).toBe(true);
+    expect(isActiveNav(repo, "/repo/code")).toBe(true);
+    expect(isActiveNav(repo, "/repo/git")).toBe(true);
+    expect(isActiveNav(repo, "/repos")).toBe(false); // 「Repo 清單」是另一頁
+  });
+
+  it("其他頁不受影響，而且要整段相符", () => {
+    expect(isActiveNav(changes, "/changes")).toBe(true);
+    expect(isActiveNav(changes, "/changes/x")).toBe(true);
+    expect(isActiveNav(changes, "/changesomething")).toBe(false);
+  });
+
+  it("首頁只有正好在首頁才亮", () => {
+    const home = NAV.find((n) => n.href === "/")!;
+    expect(isActiveNav(home, "/")).toBe(true);
+    expect(isActiveNav(home, "/repo/code")).toBe(false);
   });
 });

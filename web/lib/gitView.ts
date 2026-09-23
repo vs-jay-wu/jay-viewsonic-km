@@ -10,6 +10,7 @@ import {
 } from "@/lib/gitViewRules";
 import { parseNameStatus } from "@/lib/workChangesRules";
 import { cacheState, canServeCached, shouldRescan } from "@/lib/repoCacheRules";
+import { isExternalRepo } from "@/lib/externalRepos";
 import { parseStatus, type ChangedFile } from "@/lib/changesRules";
 
 /**
@@ -80,10 +81,21 @@ const CONCURRENCY = 8;
 /** 一次抓幾個 commit。graph 是 O(列數)，再多畫面也讀不完 */
 export const PAGE = 120;
 
-/** 只允許工作區裡的 repo —— 前端傳來的路徑不能直接餵給 `git -C` */
-async function resolveRepo(dir: string): Promise<string | null> {
+/**
+ * 只允許工作區裡的 repo —— 前端傳來的路徑不能直接餵給 `git -C`。
+ *
+ * **讀跟寫的範圍不一樣**（Jay 2026-09-23）：
+ * - 讀（`repoDetail` / `repoCommits` / `commitDetail`）**連外接碟上的 repo 也放行**。
+ *   `/repo` 的工作台可以開 offloaded 的 repo，只是「這張票當初怎麼改的」而已；
+ *   原本避開外接是為了「對 327 個全掃」，選到一個才跑 git 不是同一件事。
+ * - 寫（`fetchRepo` / `pushBranch` / `removeWorktree`）**只給本機**。那些會改到東西，
+ *   而且在 USB 上慢；offloaded 的 repo 本來就不該在那邊推東西。
+ */
+async function resolveRepo(dir: string, opts: { write?: boolean } = {}): Promise<string | null> {
   const abs = path.resolve(dir);
-  return (await isKnownWorktree(abs)) ? abs : null;
+  if (await isKnownWorktree(abs)) return abs;
+  if (opts.write) return null;
+  return (await isExternalRepo(abs)) ? abs : null;
 }
 
 async function headOf(dir: string): Promise<RepoHead> {
@@ -382,7 +394,7 @@ export async function fetchRepo(
   dir: string,
   remote?: string
 ): Promise<{ ok: boolean; summary: string; detail?: string }> {
-  const repo = await resolveRepo(dir);
+  const repo = await resolveRepo(dir, { write: true });
   if (!repo) return { ok: false, summary: "不認得這個 repo" };
   const remotes = await remotesOf(repo);
   if (remote && !remotes.includes(remote)) {
@@ -419,7 +431,7 @@ export async function pushBranch(
   dir: string,
   branchName: string
 ): Promise<{ ok: boolean; summary: string; detail?: string }> {
-  const repo = await resolveRepo(dir);
+  const repo = await resolveRepo(dir, { write: true });
   if (!repo) return { ok: false, summary: "不認得這個 repo" };
 
   const detail = await repoDetail(repo, { limit: 1 });

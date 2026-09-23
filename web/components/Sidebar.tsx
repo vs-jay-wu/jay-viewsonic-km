@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import Icon, { type IconName } from "@/components/Icon";
-import { NAV } from "@/lib/navRules";
+import { NAV, isActiveNav } from "@/lib/navRules";
 
 interface Chat {
   id: number;
@@ -62,9 +62,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
             key={t.href}
             href={t.href}
             onClick={onNavigate}
-            className={itemClass(
-              t.href === "/" ? pathname === "/" : pathname.startsWith(t.href)
-            )}
+            className={itemClass(isActiveNav(t, pathname))}
           >
             <Icon name={t.icon} size={16} className="text-white/60" />
             <span className="truncate flex-1">{t.label}</span>
