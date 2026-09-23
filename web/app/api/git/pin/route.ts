@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isKnownWorktree } from "@/lib/changes";
 import { isExternalRepo } from "@/lib/externalRepos";
-import { invalidateRepoCache, togglePinned } from "@/lib/gitView";
+import { invalidateRepoCache, readPinned, togglePinned } from "@/lib/gitView";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +12,11 @@ export const dynamic = "force-dynamic";
  * **pin 的語意由讀取端決定**（`lib/repoGroupRules.ts`：主 repo 的 pin 管 repo
  * 清單的順序，worktree 的 pin 只管那個 repo 底下的順序）。
  */
+/** 目前 pin 住哪些路徑。側邊欄與 repo 總覽都要知道 */
+export async function GET() {
+  return NextResponse.json({ pinned: await readPinned() });
+}
+
 export async function POST(req: NextRequest) {
   const { dir } = (await req.json()) as { dir?: string };
   if (!dir) return NextResponse.json({ error: "要給 dir" }, { status: 400 });

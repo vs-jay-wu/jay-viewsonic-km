@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import Icon, { type IconName } from "@/components/Icon";
 import { NAV, isActiveNav } from "@/lib/navRules";
 
-interface Chat {
-  id: number;
-  topic: string | null;
+interface Pinned {
+  dir: string;
+  name: string;
+  /** linked worktree（`edu-droid-flutter-vb-2193` 這種）—— 標一下才分得出來 */
+  worktree: boolean;
 }
 
 
@@ -25,14 +27,33 @@ const EXTERNAL_SITES: { href: string; label: string; icon: IconName }[] = [
  * 點任何一個連結就收起來 —— 不然點完還擋著你要看的東西。
  */
 export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
-  const [chats, setChats] = useState<Chat[]>([]);
-  const params = useParams();
+  const [pinned, setPinned] = useState<Pinned[]>([]);
   const pathname = usePathname();
-  const activeChatId = params?.chatId ? Number(params.chatId) : null;
 
+  /**
+   * pin 住的 repo 直接放到側邊欄（Jay 2026-09-23，取代原本的 Teams 頻道清單）。
+   *
+   * 只打 `/api/git/pin`（一個 JSON 檔）而不是整份 repo 清單 —— 側邊欄每頁都會
+   * 掛，不該為了幾個名字去觸發 2.6 秒的掃描。名字直接從路徑取，`worktree` 則是
+   * 看它是不是某個同層 repo 的前綴 ＋ 後綴（`<repo>-<topic>`）——
+   * 這裡只是要決定畫不畫那顆圖示，判錯了也只是圖示不對。
+   */
   useEffect(() => {
-    fetch("/api/chats").then((r) => r.json()).then(setChats);
-  }, []);
+    fetch("/api/git/pin")
+      .then((r) => r.json())
+      .then((d: { pinned?: string[] }) => {
+        const dirs = d.pinned ?? [];
+        const names = dirs.map((p) => p.split("/").pop() ?? p);
+        setPinned(
+          dirs.map((dir, i) => ({
+            dir,
+            name: names[i],
+            worktree: names.some((n) => n !== names[i] && names[i].startsWith(`${n}-`)),
+          }))
+        );
+      })
+      .catch(() => undefined);
+  }, [pathname]);
 
   const itemClass = (active: boolean) =>
     `flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-white/10 transition-colors ${
@@ -86,20 +107,29 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
           </a>
         ))}
 
-        <div className="px-4 pt-5 pb-1.5 text-[11px] uppercase tracking-wide text-white/35">
-          Teams Archive
-        </div>
-        {chats.map((chat) => (
-          <Link
-            key={chat.id}
-            href={`/chat/${chat.id}`}
-            onClick={onNavigate}
-            className={itemClass(activeChatId === chat.id)}
-          >
-            <Icon name="hash" size={14} className="text-white/40" />
-            <span className="truncate flex-1">{chat.topic || "(無標題)"}</span>
-          </Link>
-        ))}
+        {pinned.length > 0 && (
+          <>
+            <div className="px-4 pt-5 pb-1.5 text-[11px] uppercase tracking-wide text-white/35">
+              已 pin
+            </div>
+            {pinned.map((p) => (
+              <Link
+                key={p.dir}
+                // 不指定視圖 —— `/repo` 會導到你上次看的那個（lib/repoViewPref.ts）
+                href={`/repo?dir=${encodeURIComponent(p.dir)}`}
+                onClick={onNavigate}
+                className={itemClass(false)}
+              >
+                <Icon
+                  name={p.worktree ? "worktree" : "repos"}
+                  size={14}
+                  className="text-white/40"
+                />
+                <span className="truncate flex-1 font-mono text-[13px]">{p.name}</span>
+              </Link>
+            ))}
+          </>
+        )}
       </nav>
     </aside>
   );
