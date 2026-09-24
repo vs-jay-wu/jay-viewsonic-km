@@ -115,6 +115,14 @@ Tailwind v4 對帶透明度的顏色吐 `oklab()`，當成 RGB 解析會得到�
 
 純規則檔也是**測試的落點**（`npm test`）—— 判準會變，要有東西守著。
 
+## km web 跑在 **port 9487**，不是 3000
+
+`npm run dev` 與 `npm run start` 都寫死 `--port 9487`（`package.json`），
+launchd 的安裝腳本預設也是它。**不要改回 3000** —— 有些專案 repo 的登入／驗證
+回呼寫死 3000，km 佔著那個 port 會害它們跑不起來（Jay 2026-09-24）。
+
+所以文件、指令、探針裡的網址一律 `http://localhost:9487`。
+
 ## ⚠️ dev server 開著時，不要對同一個 `.next` 跑 build
 
 `npm run build` 已經改成寫到 `.next-build`（`package.json` 的 `NEXT_DIST_DIR` ＋
@@ -131,8 +139,8 @@ Tailwind v4 對帶透明度的顏色吐 `oklab()`，當成 RGB 解析會得到�
 **怎麼確認**：直接抓 dev server 送出去的那份 CSS 來看，不要只讀源碼 ——
 
 ```bash
-CSS=$(curl -s http://localhost:3000/<某頁> | grep -o '/_next/static/[^"]*\.css' | head -1)
-curl -s "http://localhost:3000$CSS" | grep -A 3 '^\.md-body {'
+CSS=$(curl -s http://localhost:9487/<某頁> | grep -o '/_next/static/[^"]*\.css' | head -1)
+curl -s "http://localhost:9487$CSS" | grep -A 3 '^\.md-body {'
 ```
 
 ⚠️ **`touch` 叫不醒它**，要真的改到內容才會重編（加一行註解再刪掉即可）。

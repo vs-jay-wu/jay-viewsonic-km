@@ -5,7 +5,7 @@
 ## 本機工作台（web）
 
 ```bash
-cd web && npm run dev        # http://localhost:3000
+cd web && npm run dev        # http://localhost:9487
 ```
 
 > `better-sqlite3` 是原生模組。換過 Node 版本後會出現
@@ -16,7 +16,7 @@ cd web && npm run dev        # http://localhost:3000
 開放給同網段的任何人。要從別台機器用請走 SSH tunnel：
 
 ```bash
-ssh -N -L 3000:127.0.0.1:3000 <這台機器>
+ssh -N -L 9487:127.0.0.1:9487 <這台機器>
 ```
 
 要讓它常駐（登入自動起、掛掉自動重啟）：

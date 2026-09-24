@@ -1,6 +1,6 @@
 讀取指定聊天室的 Teams 訊息，由 Claude 直接生成摘要，並透過 API 寫入資料庫。
 
-**前置條件：** `http://localhost:3000` 必須在執行中（`cd web && npm run dev`）
+**前置條件：** `http://localhost:9487` 必須在執行中（`cd web && npm run dev`）
 
 **用法：**
 - `/teams-summarize` → 總結星期六浩克的最近訊息
@@ -30,7 +30,7 @@ sqlite3 /Users/jay.wj.wu/ProjectsWork_GitHub/jay-viewsonic-km/data/teams.db \
 3. 透過 API 寫入（將 `TITLE`、`SUMMARY`、`KEY_MESSAGES` 替換為實際內容）：
 
 ```bash
-curl -s -X POST "http://localhost:3000/api/chats/1/summaries" \
+curl -s -X POST "http://localhost:9487/api/chats/1/summaries" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "TITLE",

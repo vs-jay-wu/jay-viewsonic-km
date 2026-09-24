@@ -11,7 +11,7 @@
 # 冪等：重跑會覆寫同一個 plist 並重新載入。
 #
 # 用法：
-#   ./scripts/setup-km-web.sh --install          常駐（dev 模式，預設 port 3000）
+#   ./scripts/setup-km-web.sh --install          常駐（dev 模式，預設 port 9487）
 #   ./scripts/setup-km-web.sh --install --port 3100
 #   ./scripts/setup-km-web.sh --install --hostname 0.0.0.0   # 不建議，見下
 #   ./scripts/setup-km-web.sh --status           看載入狀態與 HTTP 是否有回應
@@ -26,7 +26,7 @@
 # ⚠️ 預設只聽 127.0.0.1。這個 server 沒有驗證，API 可以刪本機檔案、殺行程、
 #    花錢並以 Jay 的身分送出 PR review —— 綁到 0.0.0.0 等於把這些開放給同網段
 #    的任何人。要遠端用請走 SSH tunnel：
-#      ssh -N -L 3000:127.0.0.1:3000 <這台機器>
+#      ssh -N -L 9487:127.0.0.1:9487 <這台機器>
 
 set -euo pipefail
 
@@ -39,7 +39,9 @@ OUT_LOG="$LOG_DIR/web.out.log"
 ERR_LOG="$LOG_DIR/web.err.log"
 
 ACTION=""
-PORT=3000
+# ⚠️ **不要改回 3000。** 有些專案 repo 的登入／驗證回呼寫死 3000，km 佔著那個
+# port 會害它們跑不起來（Jay 2026-09-24）。
+PORT=9487
 # 只聽 loopback。這個 server 沒有任何驗證，而它的 API 可以刪本機檔案、殺行程、
 # 花錢並以 Jay 的身分對別人的 PR 送出 approve —— 綁 0.0.0.0 等於把這些動作
 # 開放給同網段的任何人（實際驗證過：辦公室網段的 172.21.x.x 打得進來）。

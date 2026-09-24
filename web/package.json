@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --hostname 127.0.0.1",
+    "dev": "next dev --hostname 127.0.0.1 --port 9487",
     "build": "NEXT_DIST_DIR=.next-build next build",
-    "start": "NEXT_DIST_DIR=.next-build next start --hostname 127.0.0.1",
+    "start": "NEXT_DIST_DIR=.next-build next start --hostname 127.0.0.1 --port 9487",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest"

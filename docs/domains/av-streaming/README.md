@@ -23,7 +23,7 @@ ViewSonic 影音技術（AirSync / MVB Cast in-out / Recorder）的學習筆記�
 跟 km 工作台是同一個 server，**沒有自己的 npm script、也不用另外 install**：
 
 ```
-cd web && npm run dev      # http://localhost:3000/av-streaming
+cd web && npm run dev      # http://localhost:9487/av-streaming
 ```
 
 > **不要在 dev server 還跑著的時候執行 `npm run build`。**
