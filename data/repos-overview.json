@@ -3,7 +3,7 @@
     "description": "ViewSonic EDU GitHub 組織的 repo 概覽，供 AI 快速理解各專案用途",
     "organization": "Viewsonic-EDU",
     "updated": "2026-09-08",
-    "totalRepos": 331
+    "totalRepos": 333
   },
   "products": {
     "mvb": {
@@ -153,6 +153,19 @@
         "mvb 重寫版"
       ],
       "description": "2026 年啟動的 myViewBoard 原生重寫線，三個 repo 各對應一個平台（Android / macOS / Windows），共用同一套 AI-native 開發流程（spec 編號 + gate + worktree）與 MT- 系列 Jira ticket；文件格式走 OLF v-next。既有 Flutter（mvbf）與 Sparrow 是行為真實來源，不是實作藍本。口語一律講中文「狸貓版」，沒有人講英文代號；json key 只是 ASCII 佔位"
+    },
+    "vbo": {
+      "fullName": "VBO (ViewBoard One)",
+      "aliases": [
+        "vbo",
+        "VBO",
+        "ViewBoard One",
+        "企業版",
+        "企業版 demo",
+        "One Take",
+        "take_one"
+      ],
+      "description": "ViewBoard One 會議室互動顯示器的產品線（口語「企業版」，2026-09 起的 demo）。兩層：Layer 1 是白板 app「VBO」，每台都有、不收音不錄影；Layer 2「One Take」是中高階機種的會議擷取（音訊＋白板事件＋畫面脈絡合成一條時間軸，結束時數秒內產出 Wrap Up），目前仍是 Phase 0 可行性階段。與 vbos（教育 IFP 系統層）不同線"
     }
   },
   "repos": [
@@ -2349,6 +2362,22 @@
         "C#",
         ".NET 10",
         "WinUI 3"
+      ]
+    },
+    {
+      "name": "edu-vbo",
+      "product": "vbo",
+      "description": "VBO（ViewBoard One）白板 app 與 One Take 的單一 repo，2026-09-23 由 Jacky 建立（本機專案在 2026-09-16 就開始）。Android 原生重寫白板，四個 Gradle 模組：:app（殼、側邊工具列）／:whiteboard（筆跡、橡皮擦、選取、復原）／:takeit（Take it：頁面轉 PDF 經 QR 帶走，會議室沒網路時板子自己當網路）／:phonedrop（手機掃 QR 把內容丟上板：文字已完成、圖片進行中）。applicationId com.viewsonic.vbo，Gradle rootProject 仍叫 take_one。流程是 prospec（spec 先行＋TDD＋跨模型 review loop），票號是 repo 自己的 VSTO-NNN（登記在 docs/tickets.md，沒有 Jira）；commit 格式 type[VSTO-NNN]: …。build 需要公司內網 maven（VSApiCompat）與手動放入的平台簽章 keystore；預設分支 main，同事開 {name}/{purpose} 分支發 PR",
+      "tech": [
+        "Kotlin",
+        "Jetpack Compose",
+        "Android"
+      ],
+      "aliases": [
+        "vbo",
+        "take_one",
+        "One Take",
+        "企業版"
       ]
     }
   ]
