@@ -14,7 +14,7 @@
 
 1. **先呼叫對應的 repo skill**，例如 `mvbf`（= `edu-droid-flutter`）、`mvbf-commit`；
    `cs`（= `ragdoll-cat`，ClassSwift Android，＋ `cs-review`）；`olfparser`（＋ `-review` / `-commit` /
-   `-verify`）。skill 裡有該 repo 的個人層慣例，
+   `-verify`）；`vbo`（= `edu-vbo`，企業版 VBO／ViewBoard One）。skill 裡有該 repo 的個人層慣例，
    以及「該讀哪些團隊 rules」的清單。
    > 動到 **OLF 檔案格式語意**時（不限 repo，mvbf 也算）另外叫 `olf-vnext`。
 2. **沒有該 repo 的 skill 時**，自己做最小版本：
@@ -140,6 +140,7 @@ VB-2193（mvbf PR #276）：分支切在 29 個 commit 前的 `master`，我在
 |---|---|---|
 | 本 km repo | `<gitmoji> <type>: <繁體中文簡述>` | [`gitmoji-zh-tw.md`](gitmoji-zh-tw.md) |
 | `edu-droid-flutter`（mvbf） | `[Type] 標題` + `What:` / `Why:` / `How:` / `Changes:`，**無 gitmoji** | 該 repo 的 `.claude/rules/commit-format.md` |
+| `edu-vbo`（企業版） | `type[VSTO-NNN]: …`，英文 body ＋ agent trailer，**無 gitmoji**；票號是 repo 自己的（無 Jira） | 該 repo 的 `.claude/rules/git-workflow.md`（見 `vbo` skill） |
 | 其他專案 repo | 先找該 repo 的 `.claude/rules/` 或 `CLAUDE.md` | 同上 |
 
 ### 動手前的固定動作
