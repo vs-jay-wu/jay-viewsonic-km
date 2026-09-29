@@ -67,6 +67,34 @@ async function markIgnored(repo: string, entries: TreeEntry[]): Promise<TreeEntr
   return entries.map((e) => (ignored.has(e.path) ? { ...e, ignored: true } : e));
 }
 
+/** 合併鏈最多往下幾層。Java／Kotlin 的 package 路徑很深，但不會無限 */
+const MAX_COMPACT_DEPTH = 16;
+
+/**
+ * VS Code 的 compact folders：只有單一子目錄的資料夾整條合成一列
+ * （`com` ▸ `viewsonic` ▸ `vbo` ▸ `takeone` → `com/viewsonic/vbo/takeone`）。
+ *
+ * 回傳的 `path` 是**鏈底**那個目錄 —— 展開時直接列它的內容，中間那幾層不佔一列
+ * （它們本來就沒有別的東西可看）。
+ */
+async function compactDir(parentAbs: string, name: string, rel: string): Promise<TreeEntry> {
+  let dispName = name;
+  let curRel = rel;
+  let curAbs = path.join(parentAbs, name);
+
+  for (let depth = 0; depth < MAX_COMPACT_DEPTH; depth++) {
+    const kids = await readdir(curAbs, { withFileTypes: true }).catch(() => null);
+    if (!kids) break;
+    // `.git` 在列表上本來就被跳過，所以它不算「唯一的那個子項目」
+    const visible = kids.filter((k) => k.name !== ".git");
+    if (visible.length !== 1 || !visible[0].isDirectory()) break;
+    dispName = `${dispName}/${visible[0].name}`;
+    curRel = `${curRel}/${visible[0].name}`;
+    curAbs = path.join(curAbs, visible[0].name);
+  }
+  return { name: dispName, path: curRel, kind: "dir" };
+}
+
 export async function listDir(
   dir: string,
   rel: string
@@ -84,7 +112,7 @@ export async function listDir(
     if (d.name === ".git") continue; // 內部資料，看了也沒意義
     const childRel = rel ? `${rel}/${d.name}` : d.name;
     if (d.isDirectory()) {
-      entries.push({ name: d.name, path: childRel, kind: "dir" });
+      entries.push(await compactDir(abs, d.name, childRel));
     } else if (d.isFile() || d.isSymbolicLink()) {
       const st = await stat(path.join(abs, d.name)).catch(() => null);
       entries.push({ name: d.name, path: childRel, kind: "file", sizeBytes: st?.size ?? 0 });

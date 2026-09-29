@@ -70,6 +70,22 @@ export default function RepoWorkbench({ view }: { view: View }) {
     [params, router, dir, view]
   );
 
+  /**
+   * 目前開著的檔案也寫進網址 —— 重整、上一頁、把網址貼給自己看都要回到同一個檔
+   * （Jay 2026-09-24：重整之後變回「選一個檔案」）。用 `replace` 不用 `push`，
+   * 點檔案不該在瀏覽器的歷史裡堆一層。
+   */
+  const setFile = useCallback(
+    (p: string | null) => {
+      const url = new URLSearchParams(params.toString());
+      if (p) url.set("file", p);
+      else url.delete("file");
+      const q = url.toString();
+      router.replace(`/repo/${view}${q ? `?${q}` : ""}`, { scroll: false });
+    },
+    [params, router, view]
+  );
+
   // ── 這個 repo 有哪些 worktree ────────────────────────────────────────────
   const [worktrees, setWorktrees] = useState<Worktree[]>([]);
   const [loadingWt, setLoadingWt] = useState(false);
@@ -245,7 +261,11 @@ export default function RepoWorkbench({ view }: { view: View }) {
           </>
         }
       />
-      {view === "code" ? <CodeView dir={dir} /> : <GitView dir={dir} writable={!external} />}
+      {view === "code" ? (
+        <CodeView dir={dir} file={params.get("file") ?? ""} onFile={setFile} />
+      ) : (
+        <GitView dir={dir} writable={!external} />
+      )}
     </div>
   );
 }

@@ -127,14 +127,41 @@ export default function CodeView({
   }, [diffTheme]);
 
   const loadDir = useCallback(
-    async (rel: string) => {
-      if (!dir) return;
+    async (rel: string): Promise<TreeEntry[] | null> => {
+      if (!dir) return null;
       const qs = new URLSearchParams({ dir, path: rel });
       const res = await fetch(`/api/code/tree?${qs}`);
       const json = await res.json();
-      if (res.ok) setTree((t) => ({ ...t, [rel]: json.entries as TreeEntry[] }));
+      if (!res.ok) return null;
+      const entries = json.entries as TreeEntry[];
+      setTree((t) => ({ ...t, [rel]: entries }));
+      return entries;
     },
     [dir]
+  );
+
+  /**
+   * 把某個檔案在樹上「露出來」：從根往下逐層找出包含它的那個目錄並展開。
+   *
+   * **不能自己把路徑拆成一段一段展開** —— 樹上的目錄是合併過的
+   * （`com/viewsonic/vbo/takeone` 只佔一列，key 是鏈底），拆出來的中間那幾段
+   * 在樹上根本不存在，展開了也不會有東西出現。所以照樹自己給的 `path` 往下走。
+   */
+  const revealFile = useCallback(
+    async (rel: string) => {
+      let cur = "";
+      const chain: string[] = [];
+      for (let depth = 0; depth < 32; depth++) {
+        const entries = tree[cur] ?? (await loadDir(cur));
+        if (!entries) break;
+        const next = entries.find((e) => e.kind === "dir" && rel.startsWith(`${e.path}/`));
+        if (!next) break;
+        chain.push(next.path);
+        cur = next.path;
+      }
+      if (chain.length) setExpanded((prev) => new Set([...prev, ...chain]));
+    },
+    [tree, loadDir]
   );
 
   // 換 repo：重置整棵樹與右邊的內容
@@ -146,6 +173,23 @@ export default function CodeView({
     setHits(null);
     void loadDir("");
   }, [dir, loadDir]);
+
+  /**
+   * 網址上帶了 `file=` 就把它打開（重整、貼網址、從「版本」視圖切過來都走這裡）。
+   *
+   * 用 ref 記已經開過哪一個，**不能用 `file?.path` 當條件** —— 機敏檔案被擋下來時
+   * `file.path` 也是那個路徑，會變成每次 render 都重打一次 API。
+   */
+  const openedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!dir || !urlFile) return;
+    const key = `${dir}::${urlFile}`;
+    if (openedRef.current === key) return;
+    openedRef.current = key;
+    void openFile(urlFile);
+    // openFile 每次 render 都是新的；相依只看網址與 repo
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dir, urlFile]);
 
   const toggleDir = (rel: string) => {
     setExpanded((prev) => {
@@ -173,6 +217,9 @@ export default function CodeView({
 
   const openFile = async (rel: string, line?: number, reveal?: "full" | "masked") => {
     setLoadingFile(true);
+    onFile?.(rel);
+    // 從搜尋結果或網址開的檔案，樹上還是收著的 —— 一起展開，看得到它在哪
+    void revealFile(rel);
     setGotoLine(line ?? null);
     try {
       const qs = new URLSearchParams({ dir, path: rel });
