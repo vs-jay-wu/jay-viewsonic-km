@@ -185,7 +185,7 @@ RECORD_WRITTEN=0
 # **只在成功時刪**：失敗那次的對話是唯一能看出它卡在哪的東西。
 # 被 pin 住的一律不刪（web 的 pin 是明確的「不要刪我」）。
 remove_session_transcript() {
-  local sid="$1"
+  local sid="$1" why="${2:-run}"
   [[ -n "$sid" && "$sid" != "null" ]] || return 0
 
   local pins="$REPO_ROOT/data/local-state/session-pins.json"
@@ -198,7 +198,34 @@ remove_session_transcript() {
   for f in "$HOME"/.claude/projects/*/"$sid".jsonl(N); do
     rm -f "$f" && removed=1
   done
-  [[ "$removed" -eq 1 ]] && echo "· 已刪掉這輪的 session 紀錄（$sid）"
+  if [[ "$removed" -eq 1 ]]; then
+    if [[ "$why" == "sweep" ]]; then
+      echo "· 清掉過期的 session 紀錄（$sid）"
+    else
+      echo "· 已刪掉這輪的 session 紀錄（$sid）"
+    fi
+  fi
+  return 0
+}
+
+# 失敗那一輪的 transcript 保留幾天。
+#
+# **不是永久保留**：上面那條「只在成功時刪」對單次除錯是對的，但它沒有出口 ——
+# 失敗會反覆發生，而每一次都留下一份永遠不會消失的 jsonl（2026-09-29 清掉的
+# 34 筆裡，有 11 筆是 11 天前那一批連續失敗留下的）。過了保留期就沒有除錯價值。
+TRANSCRIPT_KEEP_DAYS=7
+
+# 掃過期的 transcript。只認**自己的 run 紀錄裡記下來的 session id**，
+# 所以不會誤刪別人的 session（包括 Jay 自己開的那些）。被 pin 的一樣跳過。
+sweep_old_transcripts() {
+  local cutoff f sid
+  cutoff="$(date -u -v-${TRANSCRIPT_KEEP_DAYS}d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" || return 0
+  for f in "$RUNS_DIR"/*.json(N); do
+    [[ "$f" == *.prs.json ]] && continue
+    sid="$(jq -r --arg c "$cutoff" '
+      select((.startedAt // "") < $c) | .claude.sessionId // empty' "$f" 2>/dev/null)"
+    [[ -n "$sid" ]] && remove_session_transcript "$sid" sweep
+  done
   return 0
 }
 
@@ -285,6 +312,9 @@ trap on_signal INT TERM
 
 echo "▶ [$ID] 偵測待處理的 PR…"
 DETECT_OUT="$(mktemp)"
+# 順手清掉過期的 transcript（函式定義在上面，呼叫一定要在它之後）
+sweep_old_transcripts
+
 if ! "$REPO_ROOT/scripts/handle-pr-inbox.sh" --json > "$DETECT_OUT" 2>"$DETECT_OUT.err"; then
   err="$(tail -c 2000 "$DETECT_OUT.err")"
   echo "✗ 偵測失敗：$err" >&2
@@ -474,7 +504,13 @@ run_ai() {
       < /dev/null > "$AI_JSON" 2>"$LOG_FILE.err"
     AI_CODE=$?
   else
+    # **id 自己先發，不要等它從輸出解析回來**：AI 整個爆掉時輸出不是合法 JSON，
+    # `session_id` 就解不到，那份 transcript 會變成沒有人認得的孤兒，永遠留在
+    # ~/.claude/projects/（2026-09-17 那天留下 23 筆就是這樣）。
+    # 引擎切換會再跑一次，所以每次呼叫都要新的 id —— 同一個 id 不能開兩次。
+    CLAUDE_SESSION_ID="$(uuidgen | tr 'A-Z' 'a-z')"
     claude -p "/handle-pr-inbox" \
+      --session-id "$CLAUDE_SESSION_ID" \
       --model "$CLAUDE_MODEL" \
       --output-format json \
       --append-system-prompt "$EXTRA" \
@@ -524,10 +560,10 @@ if [[ "$ENGINE" == "codex" ]]; then
      resultText: ($last | .[0:4000])}' 2>/dev/null \
     || echo "{\"exitCode\":$AI_CODE,\"isError\":true}")"
 else
-  AI_META="$(jq -n --argjson code "$AI_CODE" --slurpfile r "$AI_JSON" '
+  AI_META="$(jq -n --argjson code "$AI_CODE" --arg forced "${CLAUDE_SESSION_ID:-}" --slurpfile r "$AI_JSON" '
     ($r[0] // {}) as $o
     | {exitCode: $code,
-       sessionId:  ($o.session_id // null),
+       sessionId:  ($o.session_id // ($forced | select(. != "")) // null),
        costUsd:    ($o.total_cost_usd // null),
        durationMs: ($o.duration_ms // null),
        apiDurationMs: ($o.duration_api_ms // null),
