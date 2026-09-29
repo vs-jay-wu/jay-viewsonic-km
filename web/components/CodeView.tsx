@@ -18,6 +18,7 @@ import {
   groupHits, looksBinary, revealSecondsLeft, type SearchHit, type TreeEntry,
 } from "@/lib/codeBrowseRules";
 import { foldRanges, hiddenLines } from "@/lib/foldRules";
+import { splitHighlightedLines } from "@/lib/highlightLines";
 
 /**
  * 程式碼瀏覽（唯讀）。
@@ -215,7 +216,10 @@ export default function CodeView({ dir }: { dir: string }) {
     // getLanguage 的守衛見 DiffView 的同名函式（沒註冊的語言會噴 console.error）
     if (!file?.text || !lang || !hljs.getLanguage(lang)) return null;
     try {
-      return hljs.highlight(file.text, { language: lang, ignoreIllegals: true }).value.split("\n");
+      // ⚠️ 不能直接 split("\n")：跨行的 span 會讓中間幾行掉回預設顏色（見 lib/highlightLines.ts）
+      return splitHighlightedLines(
+        hljs.highlight(file.text, { language: lang, ignoreIllegals: true }).value
+      );
     } catch {
       return null; // 認不得的語言就不上色，不要硬猜
     }
