@@ -111,10 +111,19 @@ sync_repo() {
     echo "Syncing $label $ORG/$repo ..."
     # Clean AppleDouble sidecars that macOS creates on exFAT — git mistakes
     # ._pack-*.idx for real pack indexes and floods with "non-monotonic index".
-    # Also disable core.fileMode: exFAT reports every file as 0755, so with
+    #
+    # Run this for LOCAL repos too, not just /Volumes/*: bringing an offloaded
+    # repo back copies the sidecars onto the internal disk, where nothing used
+    # to clean them. Found 44 of them under local .git dirs on 2026-09-24,
+    # three of them pack sidecars in edu-droid-screen-recorder.
+    #
+    # Scope stays inside .git on purpose. Two repos have ._* files COMMITTED
+    # (edu-mvb-web-original-portal, edu-mvb-web-landing-pages); deleting those
+    # would show up as tracked-file deletions on every sync.
+    find "$repo_path/.git" -name '._*' -delete 2>/dev/null || true
+    # Only exFAT needs this: it reports every file as 0755, so with
     # fileMode=true every tracked file shows as "mode change" and looks dirty.
     if [[ "$repo_path" == /Volumes/* ]]; then
-      find "$repo_path/.git" -name '._*' -delete 2>/dev/null || true
       git -C "$repo_path" config core.fileMode false 2>/dev/null || true
     fi
     local sym primary current here dirty
