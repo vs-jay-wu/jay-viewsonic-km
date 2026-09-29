@@ -5,7 +5,7 @@ import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import { statusLabel } from "@/lib/jiraStatus";
 import {
-  DEFAULT_VIEW, PRIORITY_ORDER, TICKET_GROUPS, TICKET_SORTS, applyView, capForDisplay,
+  DEFAULT_VIEW, PRIORITY_ORDER, TICKET_GROUPS, TICKET_SORTS, allPrsMerged, applyView, capForDisplay,
   groupByProduct, splitPinned,
   groupKeyOf, issueTypeStyle,
   type AssigneeFilter,
@@ -106,7 +106,15 @@ export default function TicketsPage() {
     () => splitPinned(snapshot?.issues ?? [], pinnedKeys, view.query),
     [snapshot, pinnedKeys, view.query]
   );
-  const tickets = useMemo(() => applyView(rest, view), [rest, view]);
+  /**
+   * PR 已經 merge 的單不算「需要注意」（Jay 2026-09-24）—— 單的狀態常常忘了移，
+   * 但 PR 合了就代表球不在自己這裡。狀態來自工作索引（`itemOf`）。
+   */
+  const prMerged = useCallback(
+    (key: string) => allPrsMerged(itemOf(key)?.prs ?? []),
+    [itemOf]
+  );
+  const tickets = useMemo(() => applyView(rest, view, prMerged), [rest, view, prMerged]);
   // 快照裡是 VB 全部未完成的單（幾百筆），一次畫完只會拖慢畫面
   const capped = useMemo(() => capForDisplay(tickets), [tickets]);
 

@@ -127,14 +127,16 @@ export const WAITING_ON_OTHERS_STATUSES = [
  *
  *   0  指派給我、球在我這裡
  *   1  指派給我、擱置（Pending / Blocked）
- *   2  指派給我、等別人（review／QA／已 merge）
+ *   2  指派給我、等別人（review／QA／已 merge，或**關聯的 PR 全部 merge 了**）
  *   3+ 指派給別人的，同樣的三段再排一次
  *
  * 也就是「指派給誰」是第一維、「球在誰那裡」是第二維。
  */
-export function attentionRank(t: MyTicket): number {
+export function attentionRank(t: MyTicket, prsAllMerged = false): number {
   const mine = t.assignedToMe ? 0 : 3;
-  if (WAITING_ON_OTHERS_STATUSES.includes(t.status)) return mine + 2;
+  // PR 已經 merge 就是球不在我這裡了，即使單還停在「進行中」——
+  // 狀態常常忘了移，而那不該讓它一直排在最上面（Jay 2026-09-24）
+  if (prsAllMerged || WAITING_ON_OTHERS_STATUSES.includes(t.status)) return mine + 2;
   if (groupKeyOf(t.status) === "on_hold") return mine + 1;
   return mine;
 }
@@ -159,12 +161,31 @@ function keyNum(key: string): number {
   return m ? Number(m[1]) : 0;
 }
 
-export function sortBy(tickets: MyTicket[], sort: TicketSort): MyTicket[] {
+/**
+ * 這張單關聯的 PR 是不是**全部** merge 了。
+ *
+ * - 一個都沒有 → false（沒有 PR 不代表做完了）
+ * - 還有 OPEN 的 → false（其中一支合了不代表整件事結束）
+ * - CLOSED（沒合就關掉）**不算完成** —— 那通常是廢棄的分支，球還在自己這裡
+ */
+export function allPrsMerged(prs: { state: string }[]): boolean {
+  return prs.length > 0 && prs.every((p) => p.state === "MERGED");
+}
+
+/** 排序時要知道「這張單的 PR 合了沒」——畫面用工作索引查，測試直接餵 */
+export type PrMergedLookup = (ticketKey: string) => boolean;
+
+export function sortBy(
+  tickets: MyTicket[],
+  sort: TicketSort,
+  prMerged: PrMergedLookup = () => false
+): MyTicket[] {
   const list = [...tickets];
+  const rank = (t: MyTicket) => attentionRank(t, prMerged(t.key));
   switch (sort) {
     case "attention":
       // 同一段裡照最近更新 —— 段內看得出哪張最近有動
-      return list.sort((a, b) => attentionRank(a) - attentionRank(b) || byUpdatedDesc(a, b));
+      return list.sort((a, b) => rank(a) - rank(b) || byUpdatedDesc(a, b));
     case "updated":
       return list.sort(byUpdatedDesc);
     case "updatedAsc":
@@ -179,7 +200,7 @@ export function sortBy(tickets: MyTicket[], sort: TicketSort): MyTicket[] {
     case "progress":
       return sortTickets(list);
     default:
-      return list.sort((a, b) => attentionRank(a) - attentionRank(b) || byUpdatedDesc(a, b));
+      return list.sort((a, b) => rank(a) - rank(b) || byUpdatedDesc(a, b));
   }
 }
 
@@ -204,7 +225,11 @@ export const DEFAULT_VIEW: TicketView = {
 };
 
 /** 過濾＋排序一起做，讓畫面只呼叫一次（也讓這條路徑整段有測試守著） */
-export function applyView(tickets: MyTicket[], view: TicketView): MyTicket[] {
+export function applyView(
+  tickets: MyTicket[],
+  view: TicketView,
+  prMerged?: PrMergedLookup
+): MyTicket[] {
   const filtered = tickets.filter((t) => {
     const hasAssignee = !!t.assignee?.accountId;
     if (view.assignee === "mine" && !t.assignedToMe) return false;
@@ -220,7 +245,7 @@ export function applyView(tickets: MyTicket[], view: TicketView): MyTicket[] {
     if (view.priorities.length && !view.priorities.includes(t.priority)) return false;
     return true;
   });
-  return sortBy(filtered, view.sort);
+  return sortBy(filtered, view.sort, prMerged);
 }
 
 export function matchesTicketQuery(t: MyTicket, query: string): boolean {

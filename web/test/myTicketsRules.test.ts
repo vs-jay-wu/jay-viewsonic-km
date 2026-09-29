@@ -4,7 +4,7 @@ import {
   groupByProduct, groupKeyOf,
   issueTypeStyle, matchesTicketQuery, priorityIndexOf, sortBy, sortTickets, splitPinned,
   type MyTicket,
-  GROUP_DOT_CLASS, TICKET_GROUPS, groupDotClass,
+  GROUP_DOT_CLASS, TICKET_GROUPS, groupDotClass, allPrsMerged,
 } from "@/lib/myTicketsRules";
 
 // 狀態與 issueType 逐字取自實際抓到的 VB 單
@@ -303,5 +303,42 @@ describe("groupDotClass", () => {
 
   it("不用琥珀色 —— 那是警告專用", () => {
     expect(Object.values(GROUP_DOT_CLASS).some((c) => c.includes("warn"))).toBe(false);
+  });
+});
+
+describe("PR 合了就不算需要注意", () => {
+  const t = (over: Partial<MyTicket> = {}): MyTicket =>
+    ({
+      key: "VB-1", summary: "x", status: "進行中", statusCategory: "In Progress",
+      priority: "Medium", issueType: "Task", product: "Hub",
+      assignee: { accountId: "me", displayName: "Me" }, reporter: { accountId: "me", displayName: "Me" },
+      assignedToMe: true, updated: "2026-09-24T00:00:00Z", url: "",
+      ...over,
+    }) as MyTicket;
+
+  it("allPrsMerged：沒有 PR、還有 OPEN、或只是 CLOSED 都不算", () => {
+    expect(allPrsMerged([])).toBe(false);
+    expect(allPrsMerged([{ state: "MERGED" }, { state: "OPEN" }])).toBe(false);
+    expect(allPrsMerged([{ state: "CLOSED" }])).toBe(false);
+    expect(allPrsMerged([{ state: "MERGED" }, { state: "MERGED" }])).toBe(true);
+  });
+
+  it("單還停在「進行中」，但 PR 合了就往後排（跟 PR MERGED 同一段）", () => {
+    expect(attentionRank(t(), false)).toBe(0);
+    expect(attentionRank(t(), true)).toBe(2);
+    expect(attentionRank(t({ status: "PR MERGED" }), false)).toBe(2);
+  });
+
+  it("別人的單也照同一條規則（只是整段往後 3）", () => {
+    expect(attentionRank(t({ assignedToMe: false }), true)).toBe(5);
+  });
+
+  it("排序時真的會用到：PR 合了的那張會掉到後面", () => {
+    const a = t({ key: "VB-1" });
+    const b = t({ key: "VB-2" });
+    const merged = new Set(["VB-1"]);
+    expect(
+      sortBy([a, b], "attention", (k) => merged.has(k)).map((x) => x.key)
+    ).toEqual(["VB-2", "VB-1"]);
   });
 });
