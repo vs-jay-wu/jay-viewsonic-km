@@ -324,6 +324,16 @@ export function imageMimeOf(filePath: string): string | null {
  */
 export type ImageCompareMode = "two-up" | "swipe" | "onion";
 
+/**
+ * 這個圖片格式放大不會糊嗎。
+ *
+ * 向量（`.svg`、Android 的 `<vector>`）預設**縮放到符合面板**，點陣只縮不放 ——
+ * 18dp 的 icon 用原尺寸畫出來只有 18 個 pixel，等於看不到。
+ */
+export function isScalableImage(filePath: string): boolean {
+  return /\.svg$/i.test(filePath) || /(^|\/)res\/(drawable|mipmap)[^/]*\/[^/]+\.xml$/.test(filePath);
+}
+
 export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;

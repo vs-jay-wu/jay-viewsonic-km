@@ -4,7 +4,7 @@ import {
   patchWorktreeFiles,
   imageMimeOf, splitByStage, splitGap, languageOf, parseDiff, parseStatus, parseStatusLine, sortRepos,
   stageState,
-  type ChangedFile, type DiffLine, type RepoChanges,
+  type ChangedFile, type DiffLine, type RepoChanges, isScalableImage,
 } from "@/lib/changesRules";
 
 describe("parseStatusLine — 前兩個字元是固定欄位，不能用空白切", () => {
@@ -416,5 +416,22 @@ describe("patchWorktreeFiles", () => {
   it("快照裡沒有、但現在有改動 → 回 null 要呼叫端去全掃", () => {
     // branch / isMain / isSessionBound 只有掃描端知道，這裡硬湊會生出錯的中繼資料
     expect(patchWorktreeFiles(snap(), "/never-seen", [f("a")])).toBeNull();
+  });
+});
+
+describe("isScalableImage", () => {
+  it("向量才算：svg 與 res/drawable｜mipmap 底下的 xml", () => {
+    expect(isScalableImage("a/b/icon.svg")).toBe(true);
+    expect(isScalableImage("app/src/main/res/drawable/ic_a.xml")).toBe(true);
+    expect(isScalableImage("app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml")).toBe(true);
+  });
+
+  it("點陣圖不算（放大只會糊，所以只縮不放）", () => {
+    expect(isScalableImage("docs/shot.png")).toBe(false);
+    expect(isScalableImage("a/b.jpg")).toBe(false);
+  });
+
+  it("res 以外的 xml 不算", () => {
+    expect(isScalableImage("app/src/main/AndroidManifest.xml")).toBe(false);
   });
 });

@@ -4,6 +4,10 @@ import path from "path";
 import { repoPath, repoRoot, run } from "@/lib/repo";
 import { isSensitivePath } from "@/lib/codeBrowseRules";
 import {
+  isAdaptiveIconXml, isVectorDrawableXml, looksLikeAndroidDrawable,
+} from "@/lib/vectorDrawableRules";
+import { vectorDrawableSvg } from "@/lib/androidRes";
+import {
   imageMimeOf, parseDiff, parseStatus, sortRepos,
   type ChangedFile, type DiffLine, type RepoChanges, type WorktreeChanges,
 } from "@/lib/changesRules";
@@ -479,7 +483,14 @@ async function imageSides(
   rev: string,
   newRev: string | null
 ): Promise<ImageSides | undefined> {
-  const mime = imageMimeOf(file);
+  /*
+   * Android 的 `<vector>` 也當圖片看（轉成 SVG 之後就能用同一套 2-up／滑桿／洋蔥皮）。
+   *
+   * **要看內容才算數**：`res/drawable/` 底下同樣是 `.xml` 的還有 `<shape>`、
+   * `<selector>`、`<layer-list>`（ragdoll-cat 實測 569 個檔裡有 292 個不是 vector），
+   * 只看副檔名會給它們一個永遠畫不出東西的圖片檢視。
+   */
+  const mime = imageMimeOf(file) ?? (await vectorMime(worktree, abs, file, oldPath, rev, newRev));
   if (!mime) return undefined;
   const newBytes = newRev
     ? await gitBlobSize(worktree, newRev, file)
@@ -488,6 +499,36 @@ async function imageSides(
   const oldBytes = await gitBlobSize(worktree, rev, oldPath);
   if (oldBytes === null && newBytes === null) return undefined;
   return { mime, oldBytes, newBytes, oldPath, oldRev: rev, newRev };
+}
+
+/**
+ * 這個 `.xml` 是不是 VectorDrawable。新側看不到（刪除）就看舊側 ——
+ * 兩側都沒有才回 undefined。
+ */
+async function vectorMime(
+  worktree: string,
+  abs: string,
+  file: string,
+  oldPath: string,
+  rev: string,
+  newRev: string | null
+): Promise<string | undefined> {
+  if (!looksLikeAndroidDrawable(file)) return undefined;
+  const text =
+    (await readTextAt(worktree, abs, file, newRev)) ?? (await readTextAt(worktree, abs, oldPath, rev));
+  return text && (isVectorDrawableXml(text) || isAdaptiveIconXml(text)) ? "image/svg+xml" : undefined;
+}
+
+/** `rev` 是 null／空字串就讀工作區的檔，否則從 git 取 */
+async function readTextAt(
+  worktree: string,
+  abs: string,
+  file: string,
+  rev: string | null
+): Promise<string | null> {
+  if (!rev) return readFile(abs, "utf8").catch(() => null);
+  const r = await run("git", ["-C", worktree, "cat-file", "blob", `${rev}:${file}`]);
+  return r.code === 0 ? r.stdout : null;
 }
 
 /** `cat-file -s` 只讀 object header，不會把整個 blob 解出來。不存在就回 null */
@@ -513,9 +554,20 @@ export async function readImageBlob(
   rev = "HEAD"
 ): Promise<{ data: Buffer; mime: string } | { error: string; status: number }> {
   const mime = imageMimeOf(file);
-  if (!mime) return { error: "不是認得的圖片格式", status: 400 };
   const abs = path.resolve(worktree, file);
   if (!abs.startsWith(worktree + path.sep)) return { error: "路徑不在這個工作區底下", status: 403 };
+
+  // Android 的 VectorDrawable：轉成 SVG 再串出去，`<img>` 才畫得出來。
+  // 尺寸要寫成 dp（`intrinsic`）—— 沒有內建尺寸的 SVG 在 Chrome 量到的是 300×150，
+  // 兩側共用的縮放比就會算錯（見 ImageDiffView 檔頭）
+  if (!mime && looksLikeAndroidDrawable(file)) {
+    const xml = await readTextAt(worktree, abs, file, side === "new" && (!rev || rev === "HEAD") ? null : rev);
+    if (xml === null) return { error: "讀不到這個檔案", status: 404 };
+    const svg = await vectorDrawableSvg(worktree, file, xml);
+    if (!svg) return { error: "這個 drawable 不是 <vector>／<adaptive-icon>，沒有預覽", status: 415 };
+    return { data: Buffer.from(svg, "utf8"), mime: "image/svg+xml" };
+  }
+  if (!mime) return { error: "不是認得的圖片格式", status: 400 };
 
   if (side === "new" && (!rev || rev === "HEAD")) {
     const st = await stat(abs).catch(() => null);

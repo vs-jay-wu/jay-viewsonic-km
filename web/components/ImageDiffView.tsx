@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Tooltip from "@/components/Tooltip";
-import { formatBytes, type ImageCompareMode } from "@/lib/changesRules";
+import { formatBytes, isScalableImage, type ImageCompareMode } from "@/lib/changesRules";
 import type { DiffTheme } from "@/lib/uiSettingsRules";
 
 /* eslint-disable @next/next/no-img-element --
@@ -29,6 +29,16 @@ interface Dim {
   w: number;
   h: number;
 }
+
+/** 向量「符合」時最多放大到這個框（px）—— 再大就要自己按放大 */
+const FIT_MAX_W = 320;
+const FIT_MAX_H = 320;
+/** 2-up 兩欄之間的距離（`gap-4`），算每欄可用寬度時要扣掉 */
+const TWO_UP_GAP = 16;
+/** 每按一下放大／縮小的倍數 */
+const ZOOM_STEP = 1.5;
+const ZOOM_MIN = 0.1;
+const ZOOM_MAX = 32;
 
 const CHECKER = {
   backgroundImage:
@@ -73,6 +83,8 @@ export default function ImageDiffView({
   const [dimOld, setDimOld] = useState<Dim | null>(null);
   const [dimNew, setDimNew] = useState<Dim | null>(null);
   const [avail, setAvail] = useState(0);
+  /** 「符合」的倍率。1 ＝ 剛好符合面板，不是 1:1 像素 */
+  const [zoom, setZoom] = useState(1);
   const boxRef = useRef<HTMLDivElement>(null);
 
   // 只有一張的時候沒有「比」可言，直接顯示那一張
@@ -107,7 +119,31 @@ export default function ImageDiffView({
   // 疊圖的畫布 = 兩張的外接矩形，縮放比共用（見檔頭）
   const boxW = Math.max(dimOld?.w ?? 0, dimNew?.w ?? 0);
   const boxH = Math.max(dimOld?.h ?? 0, dimNew?.h ?? 0);
-  const scale = boxW && avail ? Math.min(1, avail / boxW) : 1;
+  /**
+   * 「符合」的比例：點陣圖**只縮不放**（放大只會糊），向量則放大到填滿面板 ——
+   * 但高度壓在 FIT_MAX_H 以內，否則細長的圖會把整頁撐開。
+   */
+  const scalable = isScalableImage(file);
+  /**
+   * 2-up 是兩欄並排，每一側只有一半的寬度可用（中間還有 gap）——
+   * 用整個容器的寬去算，向量會被放大到超出自己那一欄。
+   */
+  const sides = (hasOld ? 1 : 0) + (hasNew ? 1 : 0);
+  const availForFit =
+    effMode === "two-up" && sides > 1 ? Math.max(0, (avail - TWO_UP_GAP) / 2) : avail;
+  /**
+   * 向量可以放大，但**不是放到填滿面板**：18dp 的 icon 撐滿整欄會變成 2333%，
+   * 看起來像壞掉。上限是 `FIT_MAX_W × FIT_MAX_H` 這個框，要更大就自己按放大。
+   */
+  const upscale = Math.max(
+    1,
+    Math.min(boxW ? FIT_MAX_W / boxW : 1, boxH ? FIT_MAX_H / boxH : 1)
+  );
+  const fit =
+    boxW && availForFit
+      ? Math.min(availForFit / boxW, scalable ? upscale : 1)
+      : 1;
+  const scale = fit * zoom;
 
   const onDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.buttons === 0 && e.type === "pointermove") return;
@@ -196,6 +232,47 @@ export default function ImageDiffView({
           </button>
         )}
 
+        {effMode !== "source" && (
+          <div className="flex items-center gap-1">
+            <Tooltip label="縮小">
+              <button
+                onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z / ZOOM_STEP))}
+                aria-label="縮小"
+                className={`rounded-md border px-2 py-1 text-xs ${
+                  dark ? "border-line-strong text-fg-muted hover:bg-control/85" : "border-line-strong text-fg-muted hover:bg-surface-raised"
+                }`}
+              >
+                −
+              </button>
+            </Tooltip>
+            {/* 顯示的是**實際畫出來的**比例（符合的倍率 × 縮放），不是 zoom 本身 —— 
+                使用者關心的是「現在看到的比原圖大幾倍」 */}
+            <Tooltip label={zoom === 1 ? "目前是縮放至符合面板" : "回到符合面板"}>
+              <button
+                onClick={() => setZoom(1)}
+                className={`min-w-14 rounded-md border px-2 py-1 font-mono text-xs ${
+                  zoom === 1
+                    ? dark ? "border-line-strong text-fg-muted" : "border-line-strong text-fg-muted"
+                    : dark ? "border-line-strong bg-control/80 text-on-solid" : "border-control bg-control text-on-solid"
+                }`}
+              >
+                {Math.round(scale * 100)}%
+              </button>
+            </Tooltip>
+            <Tooltip label="放大">
+              <button
+                onClick={() => setZoom((z) => Math.min(ZOOM_MAX, z * ZOOM_STEP))}
+                aria-label="放大"
+                className={`rounded-md border px-2 py-1 text-xs ${
+                  dark ? "border-line-strong text-fg-muted hover:bg-control/85" : "border-line-strong text-fg-muted hover:bg-surface-raised"
+                }`}
+              >
+                ＋
+              </button>
+            </Tooltip>
+          </div>
+        )}
+
         <span className={`ml-auto font-mono text-[11px] ${label}`}>
           {hasOld && <Meta dim={dimOld} bytes={oldBytes} />}
           {both && <span className="mx-1.5">→</span>}
@@ -206,7 +283,7 @@ export default function ImageDiffView({
       {effMode === "source" && source}
 
       {effMode === "two-up" && (
-        <div className="flex flex-wrap gap-4 px-4 py-4">
+        <div ref={boxRef} className="flex flex-wrap gap-4 px-4 py-4">
           {hasOld && (
             <Side
               title={`舊（${revLabel(oldRev)}）`}
@@ -215,6 +292,7 @@ export default function ImageDiffView({
               src={urlOld}
               onDim={setDimOld}
               dim={dimOld}
+              scale={scale}
             />
           )}
           {hasNew && (
@@ -225,6 +303,7 @@ export default function ImageDiffView({
               src={urlNew}
               onDim={setDimNew}
               dim={dimNew}
+              scale={scale}
             />
           )}
         </div>
@@ -346,6 +425,7 @@ function Side({
   src,
   dim,
   onDim,
+  scale,
 }: {
   title: string;
   tone: "add" | "del";
@@ -353,6 +433,8 @@ function Side({
   src: string;
   dim: Dim | null;
   onDim: (d: Dim) => void;
+  /** 兩側共用的縮放比（含使用者的縮放倍率）——各自塞滿容器的話尺寸差異會消失 */
+  scale: number;
 }) {
   return (
     <figure className="min-w-0 flex-1">
@@ -365,18 +447,19 @@ function Side({
         {dim && <span className={`ml-2 font-mono ${dark ? "text-fg-muted" : "text-fg-subtle"}`}>{dim.w}×{dim.h}</span>}
       </figcaption>
       <div
-        className={`overflow-hidden rounded border ${
+        className={`overflow-auto rounded border ${
           tone === "add"
             ? dark ? "border-emerald-900" : "border-ok/40"
             : dark ? "border-red-900" : "border-danger/40"
         }`}
         style={CHECKER}
       >
-        {/* 2-up 是「各自看清楚」，所以這裡才允許縮到容器寬；尺寸差異靠上面的數字 */}
+        {/* 兩側同一個縮放比（向量會放大到符合欄寬，點陣只縮不放）；尺寸差異靠上面的數字 */}
         <img
           src={src}
           alt={title}
-          className="mx-auto block h-auto max-w-full"
+          className="mx-auto block"
+          style={dim ? { width: dim.w * scale, height: dim.h * scale } : undefined}
           onLoad={(e) => onDim({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
         />
       </div>
