@@ -125,12 +125,12 @@ query($q: String!, $n: Int!) {
             requestedReviewer { ... on User { login } ... on Team { slug } } } }
         }
         commits(last: 1) { nodes { commit { committedDate } } }
-        reviews(last: 50) { nodes { author { login } state submittedAt } }
-        comments(last: 50) { nodes { author { login } createdAt body } }
+        reviews(last: 50) { nodes { author { __typename login } state submittedAt } }
+        comments(last: 50) { nodes { author { __typename login } createdAt body } }
         reviewThreads(last: 60) {
           nodes {
             isResolved isOutdated
-            comments(first: 1) { nodes { author { login } createdAt } }
+            comments(first: 1) { nodes { author { __typename login } createdAt } }
           }
         }
       }
@@ -228,8 +228,17 @@ jq -s --arg me "$ME" --argjson includeMine "$INCLUDE_MINE" --argjson includeDraf
 
       # 別人的「說話」（留言／review）——不含 commit，因為自己 PR 的最新 commit
       # 通常是我自己推的，混進來會讓每個自己的 PR 都誤判成「有人回我」
-      | ([ $p.reviews.nodes[]  | select(.author.login != $me) | .submittedAt | ts ]
-       + [ $p.comments.nodes[] | select(.author.login != $me) | .createdAt  | ts ]
+      #
+      # ⚠️ **機器人的留言不算「有人在等我回」**（Jay 2026-09-24 回報：同兩筆 PR
+      # 連續六天每輪都列在待處理，但每輪都判定「都處理過了」）。這個 org 的
+      # `claude` 自動 review 會在每次 push 後再貼一篇，於是
+      # 「對方最後動作」永遠比「我最後動作」新 —— 而它不會因為我回覆就停，
+      # 所以那筆會**永遠**留在待處理清單上，且指紋不變 → AI 也永遠不會再跑。
+      #
+      # 判準用 GraphQL 的 `__typename == "Bot"`，不要用 `login | endswith("[bot]")`：
+      # 這隻的 login 就是 `claude`，沒有 `[bot]` 後綴（實測）。
+      | ([ $p.reviews.nodes[]  | select(.author.login != $me and .author.__typename != "Bot") | .submittedAt | ts ]
+       + [ $p.comments.nodes[] | select(.author.login != $me and .author.__typename != "Bot") | .createdAt  | ts ]
        + [0] | max) as $said
 
       | ([ $p.reviewThreads.nodes[]
@@ -282,7 +291,7 @@ jq -s --arg me "$ME" --argjson includeMine "$INCLUDE_MINE" --argjson includeDraf
           theirLastActivity: (if $theirs == 0 then null else ($theirs | todateiso8601) end),
           lastCommitDaysAgo: days($lastCommit),
           staleDays: days($theirs),
-          openThreadsByOthers: ([ $openThreads[] | select(.author.login != $me) ] | length),
+          openThreadsByOthers: ([ $openThreads[] | select(.author.login != $me and .author.__typename != "Bot") ] | length),
           openThreadsByMe: ([ $openThreads[] | select(.author.login == $me) ] | length),
           _mine: $mine, _theirs: $theirs, _said: $said
         }
