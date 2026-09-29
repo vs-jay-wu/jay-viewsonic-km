@@ -7,6 +7,10 @@ import {
   isHardBlocked, isSensitivePath, looksBinary, maskEnvValues, parseGrepOutput, sortEntries,
   type SearchHit, type TreeEntry,
 } from "@/lib/codeBrowseRules";
+import {
+  isAdaptiveIconXml, isVectorDrawableXml, looksLikeAndroidDrawable, parseAdaptiveIcon,
+} from "@/lib/vectorDrawableRules";
+import { readResColors, readResDrawables } from "@/lib/androidRes";
 
 /**
  * 唯讀的程式碼瀏覽。**這個檔案裡沒有任何寫入**（Jay 2026-09-18：不要改 code 的功能）。
@@ -101,6 +105,13 @@ export interface FileContent {
   sensitive?: boolean;
   /** 這次是用哪種方式解鎖的 */
   revealed?: Reveal;
+  /**
+   * Android drawable 才有：同一個 `res/` 底下的 `<color name=…>` 對照表。
+   * 沒有它的話 `android:fillColor="@color/x"` 在預覽裡只能畫成灰色。
+   */
+  resColors?: Record<string, string>;
+  /** adaptive icon 才有：它三層指到的那幾個 drawable 的原文 */
+  resDrawables?: Record<string, string>;
 }
 
 /**
@@ -155,7 +166,18 @@ export async function readFileIn(
   const sensitive = isSensitivePath(rel);
   // 遮罩一定要在這裡做 —— 前端遮的話值還在回應裡，開 DevTools 就看得到
   const text = sensitive && reveal === "masked" ? maskEnvValues(buf.toString("utf8")) : buf.toString("utf8");
-  return { path: rel, text, sizeBytes: st.size, truncated: false, sensitive, revealed: reveal };
+  const previewable =
+    looksLikeAndroidDrawable(rel) && (isVectorDrawableXml(text) || isAdaptiveIconXml(text));
+  const resColors = previewable ? await readResColors(repo, rel) : undefined;
+  // adaptive icon 的三層各自是另一個檔，預覽要在客戶端合成，所以一起送過去
+  const refs = previewable && isAdaptiveIconXml(text) ? parseAdaptiveIcon(text) : null;
+  const resDrawables = refs
+    ? await readResDrawables(repo, rel, [refs.background, refs.foreground])
+    : undefined;
+  return {
+    path: rel, text, sizeBytes: st.size, truncated: false, sensitive, revealed: reveal,
+    resColors, resDrawables,
+  };
 }
 
 /**

@@ -19,6 +19,12 @@ import {
 } from "@/lib/codeBrowseRules";
 import { foldRanges, hiddenLines } from "@/lib/foldRules";
 import { splitHighlightedLines } from "@/lib/highlightLines";
+import DrawablePreview from "@/components/DrawablePreview";
+import MarkdownPreview from "@/components/MarkdownPreview";
+import {
+  adaptiveIconToSvg, isAdaptiveIconXml, isVectorDrawableXml, looksLikeAndroidDrawable,
+  vectorDrawableToSvg, type AdaptiveMask,
+} from "@/lib/vectorDrawableRules";
 
 /**
  * 程式碼瀏覽（唯讀）。
@@ -39,13 +45,31 @@ interface FileContent {
   sensitive?: boolean;
   /** 這次是用哪種方式解鎖的；沒有就是還沒解 */
   revealed?: "full" | "masked";
+  /** Android drawable 才有：同一個 res/ 底下的 `<color name=…>` 對照表 */
+  resColors?: Record<string, string>;
+  /** adaptive icon 才有：三層指到的 drawable 原文 */
+  resDrawables?: Record<string, string>;
 }
+
+/** Android Studio 的三態：只看圖 / 只看碼 / 並排 */
+type DrawableMode = "view" | "code" | "split";
 
 const DEFAULT_TREE_W = 320;
 
-export default function CodeView({ dir }: { dir: string }) {
+export default function CodeView({
+  dir,
+  file: urlFile = "",
+  onFile,
+}: {
+  dir: string;
+  /** 網址上的 `file=`。重整或直接貼網址時要回到同一個檔 */
+  file?: string;
+  onFile?: (path: string | null) => void;
+}) {
   const wide = useWideLayout();
   const rowRef = useRef<HTMLDivElement>(null);
+  /** 右邊那欄（檔案內容）的容器 —— 拖曳預覽寬度時要拿它的左緣當基準 */
+  const contentRef = useRef<HTMLDivElement>(null);
   const treePane = useDragWidth({
     storageKey: "km.code.treeW",
     defaultWidth: DEFAULT_TREE_W,
@@ -249,6 +273,70 @@ export default function CodeView({ dir }: { dir: string }) {
 
   const dark = diffTheme === "dark";
 
+  /**
+   * Android 的 VectorDrawable 預覽。`<vector>` **不是 SVG**，要轉過才畫得出來
+   * （見 lib/vectorDrawableRules.ts）。轉不成功就只是沒有預覽，照樣顯示原始碼。
+   */
+  /** adaptive icon 的遮罩形狀（啟動器各家不同，所以可以切） */
+  const [mask, setMask] = useState<AdaptiveMask>("squircle");
+  const adaptive = !!file?.text && isAdaptiveIconXml(file.text);
+
+  const vector = useMemo(() => {
+    if (!file?.text || !looksLikeAndroidDrawable(file.path)) return null;
+    if (isAdaptiveIconXml(file.text)) {
+      const a = adaptiveIconToSvg(
+        file.text,
+        { colors: file.resColors, drawables: file.resDrawables },
+        "fill",
+        mask
+      );
+      return "error" in a ? null : a;
+    }
+    if (!isVectorDrawableXml(file.text)) return null;
+    const r = vectorDrawableToSvg(file.text, file.resColors ?? {});
+    return "error" in r ? null : r;
+  }, [file, mask]);
+
+  /**
+   * markdown 的預覽。**刻意沒有並排**（Jay 2026-09-24）——
+   * 內文是給人讀的，切成兩半反而兩邊都難讀。
+   */
+  const isMarkdown = !!file && /\.(md|markdown|mdx)$/i.test(file.path);
+
+  const [drawableMode, setDrawableMode] = useState<DrawableMode>("split");
+  const [mdMode, setMdMode] = useState<Exclude<DrawableMode, "split">>("view");
+  useEffect(() => {
+    const saved = localStorage.getItem("km.code.drawableMode");
+    if (saved === "view" || saved === "code" || saved === "split") setDrawableMode(saved);
+    const md = localStorage.getItem("km.code.mdMode");
+    if (md === "view" || md === "code") setMdMode(md);
+  }, []);
+  const pickMode = (m: DrawableMode) => {
+    if (isMarkdown) {
+      if (m === "split") return;
+      setMdMode(m);
+    } else {
+      setDrawableMode(m);
+    }
+    try {
+      localStorage.setItem(isMarkdown ? "km.code.mdMode" : "km.code.drawableMode", m);
+    } catch {
+      // 記不住就算了，不影響這次瀏覽
+    }
+  };
+  const mode: DrawableMode = isMarkdown ? mdMode : drawableMode;
+  const hasPreview = !!vector || isMarkdown;
+  const showPreview = hasPreview && mode !== "code";
+  const showCode = !hasPreview || mode !== "view";
+
+  const previewPane = useDragWidth({
+    storageKey: "km.code.previewW",
+    defaultWidth: 360,
+    min: 200,
+    max: 1200,
+    measure: (clientX) => clientX - (contentRef.current?.getBoundingClientRect().left ?? 0),
+  });
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div ref={rowRef} className="flex min-h-0 flex-1 flex-col lg:flex-row">
@@ -307,7 +395,7 @@ export default function CodeView({ dir }: { dir: string }) {
           <DragHandle handleProps={treePane.handleProps} />
 
           {/* 右：檔案內容 */}
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div ref={contentRef} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             {loadingFile ? (
               <p className="px-6 py-10 text-sm text-fg-subtle">讀取中…</p>
             ) : !file ? (
@@ -342,7 +430,7 @@ export default function CodeView({ dir }: { dir: string }) {
               </div>
             ) : (
               <>
-                <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-line bg-surface px-4 py-2">
+                <div className="flex shrink-0 items-center gap-2 border-b border-line bg-surface px-4 py-2">
                   <FileIcon path={file.path} size={14} />
                   <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg">{file.path}</span>
                   {file.sensitive && (
@@ -365,11 +453,54 @@ export default function CodeView({ dir }: { dir: string }) {
                       {file.revealed === "full" ? "收回" : "顯示完整內容"}
                     </button>
                   )}
+                  {/*
+                    * VectorDrawable 才出現的三態，照 Android Studio 的分法
+                    * （Jay 2026-09-24：「有點類似 android studio 可以切 view or code or 同時」）。
+                    */}
+                  {hasPreview && (
+                    <div className="flex shrink-0 items-center rounded-lg border border-line p-0.5">
+                      {(([
+                        ["view", "只看預覽", "eye"],
+                        ["split", "預覽與程式碼並排", "columns"],
+                        ["code", "只看原始碼", "code"],
+                      ] as const).filter(([m]) => !(isMarkdown && m === "split"))).map(([m, label, icon]) => (
+                        <Tooltip key={m} label={label}>
+                          <button
+                            onClick={() => pickMode(m)}
+                            aria-label={label}
+                            aria-pressed={mode === m}
+                            className={`flex items-center rounded-md px-1.5 py-1 ${
+                              mode === m
+                                ? "bg-surface-selected text-accent"
+                                : "text-fg-muted hover:text-fg"
+                            }`}
+                          >
+                            <Icon name={icon} size={13} />
+                          </button>
+                        </Tooltip>
+                      ))}
+                    </div>
+                  )}
                   <span className="shrink-0 font-mono text-[11px] text-fg-subtle">
                     {lines.length} 行 · {(file.sizeBytes / 1024).toFixed(1)} KB
                   </span>
                 </div>
-                <div className={dark ? "bg-[#0d1117]" : "bg-surface"}>
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
+                {showPreview && (
+                  <div
+                    style={showCode && wide && vector ? { width: previewPane.width, flex: "0 0 auto" } : undefined}
+                    className={`flex min-h-0 min-w-0 flex-1 flex-col border-line ${showCode ? "lg:border-r" : ""}`}
+                  >
+                    {vector ? (
+                      <DrawablePreview vector={vector} mask={adaptive ? mask : undefined} onMask={setMask} />
+                    ) : (
+                      <MarkdownPreview text={file.text} />
+                    )}
+                  </div>
+                )}
+                {showPreview && showCode && vector && <DragHandle handleProps={previewPane.handleProps} />}
+                {showCode && (
+                <div className={`min-h-0 flex-1 overflow-auto ${dark ? "bg-[#0d1117]" : "bg-surface"}`}>
                   <table className="w-full border-collapse font-mono text-[12px] leading-[1.55]">
                     <tbody>
                       {lines.map((l, i) => {
@@ -419,6 +550,8 @@ export default function CodeView({ dir }: { dir: string }) {
                       })}
                     </tbody>
                   </table>
+                </div>
+                )}
                 </div>
               </>
             )}

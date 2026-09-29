@@ -11,7 +11,7 @@ export type IconName =
   | "clock" | "spinner" | "chevronRight" | "chevronDown" | "external" | "coins"
   | "search" | "lock" | "gitPr" | "bell" | "repos" | "hardDrive"
   | "toTop" | "toBottom" | "menu" | "list" | "tree" | "target"
-  | "bug" | "task" | "story" | "spike" | "ops" | "worktree";
+  | "bug" | "task" | "story" | "spike" | "ops" | "worktree" | "eye" | "columns" | "checker";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></>,
@@ -36,6 +36,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
   pen: <><path d="M12 19 19.5 11.5a2.8 2.8 0 0 0-4-4L8 15l-1 5Z" /><path d="M4 21h7" /></>,
   quiz: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h5M8 12h8M8 16h6" /></>,
   license: <><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z" /><path d="M14 2v5h5" /><circle cx="12" cy="14" r="2.5" /><path d="m10.5 16.2-.5 3 2-1 2 1-.5-3" /></>,
+
+  // 預覽／並排（drawable 的三態切換用）
+  eye: <><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></>,
+  columns: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M12 4v16" /></>,
+  // 透明底的棋盤格：外框 ＋ 對角兩格填滿（吃 currentColor，所以兩個主題都看得出來）
+  checker: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 12h18M12 3v18" /><path d="M3 3h9v9H3z" fill="currentColor" stroke="none" /><path d="M12 12h9v9h-9z" fill="currentColor" stroke="none" /></>,
 
   sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
   moon: <><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></>,
