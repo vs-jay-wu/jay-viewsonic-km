@@ -16,6 +16,25 @@ import Sidebar from "@/components/Sidebar";
  */
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  /**
+   * 寬螢幕的「只留圖示」。跟窄螢幕那個抽屜是**兩件事**：抽屜是整欄滑掉，
+   * 這個是留著一條 64px 的圖示列（Jay 2026-09-24）。
+   */
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    setCollapsed(localStorage.getItem("km.sidebar.collapsed") === "1");
+  }, []);
+
+  const toggleCollapsed = () =>
+    setCollapsed((c) => {
+      try {
+        localStorage.setItem("km.sidebar.collapsed", c ? "0" : "1");
+      } catch {
+        // 記不住就算了，這次還是會收起來
+      }
+      return !c;
+    });
 
   // Esc 收起抽屜。只在開著的時候掛，免得跟頁面自己的 Esc（例如對話紀錄面板）搶
   useEffect(() => {
@@ -56,7 +75,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           open ? "translate-x-0 shadow-2xl" : "-translate-x-full"
         }`}
       >
-        <Sidebar onNavigate={() => setOpen(false)} />
+        <Sidebar
+          onNavigate={() => setOpen(false)}
+          collapsed={collapsed}
+          onToggleCollapsed={toggleCollapsed}
+        />
       </div>
 
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface">

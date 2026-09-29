@@ -11,7 +11,7 @@ export type IconName =
   | "clock" | "spinner" | "chevronRight" | "chevronDown" | "external" | "coins"
   | "search" | "lock" | "gitPr" | "bell" | "repos" | "hardDrive"
   | "toTop" | "toBottom" | "menu" | "list" | "tree" | "target"
-  | "bug" | "task" | "story" | "spike" | "ops" | "worktree" | "eye" | "columns" | "checker";
+  | "bug" | "task" | "story" | "spike" | "ops" | "worktree" | "eye" | "columns" | "checker" | "chevronLeft";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></>,
@@ -39,6 +39,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
 
   // 預覽／並排（drawable 的三態切換用）
   eye: <><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></>,
+  chevronLeft: <path d="m15 6-6 6 6 6" />,
   columns: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M12 4v16" /></>,
   // 透明底的棋盤格：外框 ＋ 對角兩格填滿（吃 currentColor，所以兩個主題都看得出來）
   checker: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 12h18M12 3v18" /><path d="M3 3h9v9H3z" fill="currentColor" stroke="none" /><path d="M12 12h9v9h-9z" fill="currentColor" stroke="none" /></>,

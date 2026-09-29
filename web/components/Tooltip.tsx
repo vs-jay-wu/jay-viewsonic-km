@@ -20,7 +20,8 @@ import { createPortal } from "react-dom";
  * 記得傳 `side="bottom"` 是行不通的 —— 漏一個就又跑出去，而且要等有人看到才知道。
  */
 
-type Side = "top" | "bottom" | "left";
+/** `right` 是給收合後的側邊欄用的：泡泡往右開，不會蓋住那一欄自己 */
+type Side = "top" | "bottom" | "left" | "right";
 
 const GAP = 8;
 /** 離視窗邊緣至少留這麼多 */
@@ -30,11 +31,18 @@ export default function Tooltip({
   label,
   children,
   side = "top",
+  className = "",
 }: {
   label: string;
   children: React.ReactNode;
   /** 偏好的方向。放不下時會自己翻面，所以這只是偏好 */
   side?: Side;
+  /**
+   * 加在**錨點**上的 class（預設 `inline-flex`，會縮到內容寬）。
+   * 需要泡泡從整塊的邊緣開時要給 `w-full` —— 否則量到的是圖示那幾 px，
+   * `side="right"` 會開在那塊區域裡面而不是外面。
+   */
+  className?: string;
 }) {
   const anchorRef = useRef<HTMLSpanElement>(null);
   const bubbleRef = useRef<HTMLSpanElement>(null);
@@ -48,7 +56,11 @@ export default function Tooltip({
   useEffect(() => setMounted(true), []);
 
   const topFor = (s: Side, r: DOMRect) =>
-    s === "bottom" ? r.bottom + GAP : s === "left" ? r.top + r.height / 2 : r.top - GAP;
+    s === "bottom"
+      ? r.bottom + GAP
+      : s === "left" || s === "right"
+        ? r.top + r.height / 2
+        : r.top - GAP;
 
   const show = useCallback(() => {
     const el = anchorRef.current;
@@ -58,7 +70,10 @@ export default function Tooltip({
     setEffSide(side);
     setPlaced(false);
     // `left: 0` 是為了量到「不受限」的寬度（見下面）
-    setPos({ top: topFor(side, r), left: side === "left" ? r.left - GAP : 0 });
+    setPos({
+      top: topFor(side, r),
+      left: side === "left" ? r.left - GAP : side === "right" ? r.right + GAP : 0,
+    });
   }, [side]);
 
   const hide = useCallback(() => {
@@ -93,7 +108,7 @@ export default function Tooltip({
       setPos({ top: topFor("top", anchor), left: pos.left });
       return;
     }
-    if (placed || effSide === "left") return;
+    if (placed || effSide === "left" || effSide === "right") return;
 
     const w = b.width;
     const left = Math.min(
@@ -120,7 +135,7 @@ export default function Tooltip({
   return (
     <span
       ref={anchorRef}
-      className="relative inline-flex"
+      className={`relative inline-flex ${className}`}
       onMouseEnter={show}
       onMouseLeave={hide}
       onFocus={show}
@@ -141,10 +156,13 @@ export default function Tooltip({
                     ? "none"
                     : effSide === "left"
                       ? "translate(-100%, -50%)"
-                      : "translate(0, -100%)",
+                      : effSide === "right"
+                        ? "translate(0, -50%)"
+                        : "translate(0, -100%)",
                 maxWidth: "min(22rem, calc(100vw - 16px))",
                 // 量寬度那一幀先別讓人看到它在左上角
-                visibility: placed || effSide === "left" ? "visible" : "hidden",
+                visibility:
+                  placed || effSide === "left" || effSide === "right" ? "visible" : "hidden",
               }}
               className="pointer-events-none fixed z-[200] whitespace-pre-wrap rounded-md bg-control px-2 py-1 text-xs text-on-solid shadow-lg"
             >
