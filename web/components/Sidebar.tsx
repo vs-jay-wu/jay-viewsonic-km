@@ -128,7 +128,11 @@ export default function Sidebar({
             >
               <KmMark size={22} />
             </Link>
-            <Tooltip side="right" label="展開側邊欄" className="absolute inset-0">
+            {/* 外層的 div 負責定位，Tooltip 的錨點只負責填滿它 ——
+                `relative`（Tooltip 自己帶的）與 `absolute` 是同一組 utility，
+                誰贏由 CSS 順序決定，疊在同一個元素上會變成左上角對齊 */}
+            <div className="absolute inset-0">
+              <Tooltip side="right" label="展開側邊欄" className="h-full w-full">
               <button
                 onClick={onToggleCollapsed}
                 aria-label="展開側邊欄"
@@ -137,7 +141,8 @@ export default function Sidebar({
               >
                 <Icon name="chevronRight" size={16} />
               </button>
-            </Tooltip>
+              </Tooltip>
+            </div>
           </div>
         </div>
       ) : (

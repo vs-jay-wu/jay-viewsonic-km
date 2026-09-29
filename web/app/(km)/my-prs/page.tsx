@@ -167,10 +167,14 @@ function PrRow({
             )}
           </div>
         </div>
-        <div className="shrink-0 text-right text-xs text-fg-subtle">
-          <div>更新 {relTime(pr.updatedAt)}</div>
-          {pr.theirLastActivity && <div>有人回 {relTime(pr.theirLastActivity)}</div>}
-        </div>
+        {/* merge 完就只剩「什麼時候合的」有意義 —— 之後的更新與留言不影響任何決定，
+            列出來只是噪音（Jay 2026-09-24）。merged 那一列自己已經寫了合併時間 */}
+        {pr.state !== "MERGED" && (
+          <div className="shrink-0 text-right text-xs text-fg-subtle">
+            <div>更新 {relTime(pr.updatedAt)}</div>
+            {pr.theirLastActivity && <div>有人回 {relTime(pr.theirLastActivity)}</div>}
+          </div>
+        )}
         {onOpenSession && (
           <Tooltip
             side="left"
@@ -419,13 +423,25 @@ export default function MyPrsPage() {
               )}
             </h2>
             {events.length > 0 && (
-              <div className="flex gap-2">
-                <button onClick={markRead} className="text-xs text-fg-muted hover:text-fg">
-                  全部標為已讀
-                </button>
-                <button onClick={clearEvents} className="text-xs text-fg-subtle hover:text-danger">
-                  清空
-                </button>
+              <div className="flex items-center gap-1">
+                <Tooltip label="全部標為已讀">
+                  <button
+                    onClick={markRead}
+                    aria-label="全部標為已讀"
+                    className="rounded-md p-1.5 text-fg-muted hover:bg-surface-raised hover:text-fg"
+                  >
+                    <Icon name="check" size={15} />
+                  </button>
+                </Tooltip>
+                <Tooltip label="清空這份清單">
+                  <button
+                    onClick={clearEvents}
+                    aria-label="清空"
+                    className="rounded-md p-1.5 text-fg-subtle hover:bg-surface-raised hover:text-danger"
+                  >
+                    <Icon name="trash" size={15} />
+                  </button>
+                </Tooltip>
               </div>
             )}
           </div>

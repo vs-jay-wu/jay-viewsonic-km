@@ -9,6 +9,7 @@ import { reviewClis } from "@/lib/cliTools";
 import { latestTeamReview } from "@/lib/prInbox";
 import { orcaPresence } from "@/lib/orca";
 import Icon, { type IconName } from "@/components/Icon";
+import Tooltip from "@/components/Tooltip";
 import BuildDirsSection from "@/components/BuildDirsSection";
 import QuickNote from "@/components/QuickNote";
 import HomeOpenPrs from "@/components/HomeOpenPrs";
@@ -312,11 +313,17 @@ export default async function Home() {
           <div className="mt-10">
             <div className="flex items-baseline justify-between">
               <h2 className="text-sm font-semibold text-fg">
-                我開著的 PR <span className="font-normal text-fg-subtle">{openPrs.length}</span>
+                我開著的 PR
               </h2>
-              <Link href="/my-prs" className="text-xs text-fg-subtle hover:text-fg hover:underline">
-                全部（含近期 merged）→
-              </Link>
+              <Tooltip label="看全部（含近期 merged）">
+                <Link
+                  href="/my-prs"
+                  aria-label="看全部的 PR（含近期 merged）"
+                  className="rounded-md p-1.5 text-fg-subtle hover:bg-surface-raised hover:text-fg"
+                >
+                  <Icon name="list" size={15} />
+                </Link>
+              </Tooltip>
             </div>
             {/* 清單本身是 client 元件：要能開／接續對應的 Claude session */}
             <HomeOpenPrs prs={openPrs} />
