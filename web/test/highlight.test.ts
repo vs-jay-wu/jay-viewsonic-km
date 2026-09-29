@@ -18,6 +18,8 @@ const NAMES = [
     ...Object.values(LANG),
     languageOf("Dockerfile")!,
     languageOf(".env.example")!,
+    languageOf(".gitignore")!,
+    languageOf("Makefile")!,
   ]),
 ];
 
@@ -28,5 +30,21 @@ describe("highlight 的語言表", () => {
 
   it("表裡有那三個 common 沒附的（dart / groovy / dockerfile）", () => {
     for (const n of ["dart", "groovy", "dockerfile"]) expect(NAMES).toContain(n);
+  });
+
+  it("整個檔名就是「副檔名」的那些也認得（`.gitignore` 之類）", () => {
+    expect(languageOf(".gitignore")).toBe("ini");
+    expect(languageOf("web/.dockerignore")).toBe("ini");
+    expect(languageOf(".gitattributes")).toBe("ini");
+    expect(languageOf("Makefile")).toBe("makefile");
+    // 大小寫不該影響（`Dockerfile` 與 `dockerfile` 都有人用）
+    expect(languageOf("dockerfile")).toBe("dockerfile");
+    // 認不得的還是要回 null，不要亂猜一個語言
+    expect(languageOf("LICENSE")).toBeNull();
+  });
+
+  it("多重副檔名取最後一段（`build.gradle.kts` 是 Kotlin，不是 Groovy）", () => {
+    expect(languageOf("build.gradle.kts")).toBe("kotlin");
+    expect(languageOf("settings.gradle")).toBe("groovy");
   });
 });

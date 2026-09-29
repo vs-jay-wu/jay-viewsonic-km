@@ -284,13 +284,30 @@ export const LANG: Record<string, string> = {
   py: "python", sh: "bash", zsh: "bash", bash: "bash", yml: "yaml", yaml: "yaml",
   dart: "dart", kt: "kotlin", java: "java", swift: "swift", rs: "rust", go: "go",
   css: "css", scss: "scss", html: "xml", xml: "xml", sql: "sql", toml: "ini",
-  gradle: "groovy", rb: "ruby", php: "php", cs: "csharp", c: "c", h: "c",
+  gradle: "groovy", kts: "kotlin", rb: "ruby", php: "php", cs: "csharp", c: "c", h: "c",
   cpp: "cpp", hpp: "cpp", m: "objectivec", mm: "objectivec", plist: "xml",
+};
+
+/**
+ * 沒有副檔名、或副檔名就是整個檔名的那些（`.gitignore` 這種）。
+ *
+ * ignore 檔用 `ini`：它把 `#` 開頭的整行當註解，而 glob 本身不會被亂上色。
+ * **不要用 `bash`** —— 它會把 `build`、`local` 這些常見的樣式當成關鍵字上色，
+ * 看起來像有語意，其實沒有。
+ */
+const NAME_LANG: Record<string, string> = {
+  dockerfile: "dockerfile",
+  makefile: "makefile",
+  ".gitignore": "ini", ".dockerignore": "ini", ".npmignore": "ini",
+  ".eslintignore": "ini", ".prettierignore": "ini", ".stylelintignore": "ini",
+  ".gitattributes": "ini", ".gitmodules": "ini", ".editorconfig": "ini",
+  ".gitconfig": "ini", ".npmrc": "ini", ".prospec.yaml": "yaml",
 };
 
 export function languageOf(path: string): string | null {
   const name = path.split("/").pop() ?? "";
-  if (name === "Dockerfile") return "dockerfile";
+  const byName = NAME_LANG[name.toLowerCase()];
+  if (byName) return byName;
   if (name.startsWith(".env")) return "bash";
   const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
   return LANG[ext] ?? null;
