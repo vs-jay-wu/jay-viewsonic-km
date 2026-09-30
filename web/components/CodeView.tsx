@@ -506,18 +506,28 @@ export default function CodeView({
                   在這之前值根本沒離開磁碟。解鎖不會被記住：換檔案、重整都會回到遮蔽。
                 */}
                 {file.sensitive && (
+                  /*
+                    兩顆的樣式與位置**刻意這樣排**（Jay 2026-09-30）：
+                    「只顯示欄位名」才是多數情況真正要的（看有哪些欄位），
+                    所以它拿到醒目的那個樣式；「顯示內容」是危險的那個，
+                    改成低調的字 ＋ 驚嘆號。
+
+                    視覺引導要押在安全的那一邊 —— 只是想確認欄位的時候，
+                    不該因為「比較大顆比較好按」而把 token 叫出來。
+                  */
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     <button
-                      onClick={() => void openFile(file.path, undefined, "masked")}
-                      className="rounded-lg border border-line px-3 py-1.5 text-xs text-fg hover:bg-surface-raised"
+                      onClick={() => void openFile(file.path, undefined, "full")}
+                      className="flex items-center gap-1 rounded-lg border border-line px-3 py-1.5 text-xs text-fg hover:bg-surface-raised"
                     >
-                      只顯示欄位名
+                      <Icon name="alert" size={12} className="text-warn" />
+                      顯示內容
                     </button>
                     <button
-                      onClick={() => void openFile(file.path, undefined, "full")}
-                      className="rounded-lg border border-warn px-3 py-1.5 text-xs text-warn hover:bg-surface-raised"
+                      onClick={() => void openFile(file.path, undefined, "masked")}
+                      className="rounded-lg border border-warn bg-warn-bg px-3 py-1.5 text-xs font-medium text-warn hover:bg-surface-raised"
                     >
-                      顯示內容
+                      只顯示欄位名
                     </button>
                     <span className="text-xs text-fg-subtle">
                       正在分享螢幕的話先別按
