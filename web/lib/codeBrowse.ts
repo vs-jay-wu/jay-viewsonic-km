@@ -11,6 +11,7 @@ import {
   isAdaptiveIconXml, isVectorDrawableXml, looksLikeAndroidDrawable, parseAdaptiveIcon,
 } from "@/lib/vectorDrawableRules";
 import { readResColors, readResDrawables } from "@/lib/androidRes";
+import { rawMimeOf } from "@/lib/codeRawRules";
 
 /**
  * 唯讀的程式碼瀏覽。**這個檔案裡沒有任何寫入**（Jay 2026-09-18：不要改 code 的功能）。
@@ -214,6 +215,42 @@ export async function readFileIn(
     path: rel, text, sizeBytes: st.size, truncated: false, sensitive, revealed: reveal,
     resColors, resDrawables,
   };
+}
+
+/**
+ * 把一個檔案**原封不動**交給瀏覽器（`/code-view/…` 用）。
+ *
+ * 與 `readFileIn` 的差別只有「不轉成 JSON 字串」；**守衛完全相同**，而且刻意
+ * 共用同一支函式的那幾條判斷，不要各寫一份 —— 兩份遲早會漂移，而漂移的那天
+ * 是機敏檔案從新的出口漏出去。
+ *
+ * 比 `readFileIn` 更嚴的一條：**副檔名要在白名單裡**（`rawMimeOf`）。
+ * 這條路由的輸出會被瀏覽器當成 HTML／JS 執行，猜 MIME 是不行的。
+ */
+export async function readRawIn(
+  dir: string,
+  rel: string
+): Promise<{ data: Buffer; mime: string } | { error: string; status: number }> {
+  const repo = await openRepo(dir);
+  if (!repo) return { error: "不認得這個 repo", status: 403 };
+  const abs = await resolveIn(repo, rel);
+  if (!abs || !rel) return { error: "路徑不在這個 repo 底下", status: 403 };
+
+  // 機敏檔案的三層守衛照樣套用（sensitive-files.md）——
+  // 這條路由沒有 `reveal` 參數，所以機敏檔案一律擋，連遮罩版都不給
+  if (isHardBlocked(rel)) return { error: "這個目錄受保護，一律不讀取", status: 403 };
+  if (isSensitivePath(rel)) return { error: "機敏檔案不從這條路徑提供", status: 403 };
+
+  const mime = rawMimeOf(rel);
+  if (!mime) return { error: "這種副檔名不從這條路徑提供", status: 415 };
+
+  const st = await stat(abs).catch(() => null);
+  if (!st?.isFile()) return { error: "不是檔案", status: 404 };
+  if (st.size > MAX_FILE_BYTES) return { error: "檔案太大", status: 413 };
+
+  const buf = await readFile(abs).catch(() => null);
+  if (!buf) return { error: "讀不到這個檔案", status: 404 };
+  return { data: buf, mime };
 }
 
 /**

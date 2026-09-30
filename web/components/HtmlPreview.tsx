@@ -1,33 +1,37 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
-import { previewSandbox, withPreviewCsp } from "@/lib/htmlPreviewRules";
+import { previewSandbox } from "@/lib/htmlPreviewRules";
+import { codeRawUrl } from "@/lib/codeRawRules";
 
 /**
- * HTML 的預覽。**`<iframe srcdoc>` ＋ sandbox**，不經過任何新的 server 路徑 ——
- * 內容已經在 `/api/code/file` 的回應裡（見 `lib/htmlPreviewRules.ts` 的檔頭）。
+ * HTML 的預覽：**`/code-view/…` 這條唯讀路由 ＋ sandbox iframe**。
  *
- * 兩個已知限制，畫面上要講出來，不要讓人以為是檔案壞了：
+ * 走路由（而不是 `srcdoc`）是為了**相對資產**：`./style.css`、`img/x.png` 要能
+ * 解析到隔壁的檔案。專案 repo 的 1084 個 HTML 裡有 466 個是這種。
  *
- * 1. **srcdoc 沒有 base URL** → 引相對路徑資產（`./style.css`、`img/x.png`）的
- *    檔案會破圖。專案 repo 的 1084 個 HTML 裡有 466 個是這種。
- * 2. **模板與片段本來就畫不對**：266 個含 `{{ }}` / `{% %}` / `ng-` 之類，
- *    410 個沒有 `<html>`。那要走建置或伺服器渲染，不是這裡能補的。
+ * script 預設**關**（590 個檔含 `<script>`）；開了也仍在沙箱內，而且那條路由的
+ * CSP 會關掉 `connect-src` 與 `form-action` —— km 的 API 沒有檢查 `Origin`，
+ * 不關的話頁面裡的 script 可以用 km 的身分去打它。
  *
- * script 預設**關**：590 個檔含 `<script>`，其中有些是「JS 生投影片」那種、
- * 關著會是空白，所以給一顆開關 —— 但預設關才是對的起點。
+ * 模板（`{{ }}`）與片段（沒有 `<html>`）本來就畫不對，那要走建置或伺服器渲染。
  */
-export default function HtmlPreview({ html }: { html: string }) {
+export default function HtmlPreview({ dir, path }: { dir: string; path: string }) {
   const [allowScripts, setAllowScripts] = useState(false);
-  const doc = useMemo(() => withPreviewCsp(html, allowScripts), [html, allowScripts]);
+  const src = codeRawUrl(dir, path, { scripts: allowScripts });
+
+  const btn = (active: boolean) =>
+    `flex items-center gap-1 rounded-md border px-1.5 py-0.5 ${
+      active ? "border-accent/50 bg-surface-selected text-accent" : "border-line hover:text-fg"
+    }`;
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-1.5 text-[11px] text-fg-muted">
         <span>沙箱預覽</span>
-        <span className="text-fg-subtle">相對路徑的圖與 css 不會載入</span>
+        <span className="text-fg-subtle">模板與片段畫不出正確的樣子</span>
         <div className="ml-auto flex items-center gap-1">
           <Tooltip
             label={
@@ -39,15 +43,17 @@ export default function HtmlPreview({ html }: { html: string }) {
             <button
               onClick={() => setAllowScripts((v) => !v)}
               aria-pressed={allowScripts}
-              className={`flex items-center gap-1 rounded-md border px-1.5 py-0.5 ${
-                allowScripts
-                  ? "border-accent/50 bg-surface-selected text-accent"
-                  : "border-line hover:text-fg"
-              }`}
+              className={btn(allowScripts)}
             >
               <Icon name="play" size={11} />
               script
             </button>
+          </Tooltip>
+          <Tooltip label="用新分頁開（同一條唯讀路由，CSP 一樣擋著）">
+            <a href={src} target="_blank" rel="noreferrer" className={btn(false)}>
+              <Icon name="external" size={11} />
+              新分頁
+            </a>
           </Tooltip>
         </div>
       </div>
@@ -55,12 +61,12 @@ export default function HtmlPreview({ html }: { html: string }) {
       {/*
         `sandbox` **永遠不給 `allow-same-origin`** —— 給了就等於沒沙箱：
         裡面的 script 就能讀 km 的 localStorage、也能以 km 的身分打 km 的 API。
-        `key` 帶著 script 開關：改開關要重建 iframe，不然舊的 sandbox 還在。
+        `key` 帶著網址：換檔案或改 script 開關都要重建 iframe。
       */}
       <iframe
-        key={allowScripts ? "scripts" : "static"}
+        key={src}
         title="HTML 預覽"
-        srcDoc={doc}
+        src={src}
         sandbox={previewSandbox(allowScripts)}
         className="min-h-0 w-full flex-1 border-0 bg-white"
       />

@@ -27,6 +27,7 @@ import {
   vectorDrawableToSvg, type AdaptiveMask,
 } from "@/lib/vectorDrawableRules";
 import { isHtmlPath } from "@/lib/htmlPreviewRules";
+import { codeRawUrl, rawMimeOf } from "@/lib/codeRawRules";
 
 /**
  * 程式碼瀏覽（唯讀）。
@@ -476,6 +477,27 @@ export default function CodeView({
               <p className="px-6 py-10 text-sm text-fg-subtle">讀取中…</p>
             ) : !file ? (
               <p className="px-6 py-10 text-sm text-fg-subtle">選一個檔案。</p>
+            ) : file.error && rawMimeOf(file.path)?.startsWith("image/") ? (
+              /*
+                圖片：`readFileIn` 會擋下來說「二進位檔」，但**那個說法對圖片是錯的** ——
+                它只是不能當文字讀。有了 `/code-view/…` 就直接畫出來
+                （`<img>` 自己去抓，不經過 JSON；base64 會胖三分之一）。
+              */
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="flex shrink-0 items-center gap-2 border-b border-line bg-surface px-4 py-2">
+                  <FileIcon path={file.path} size={14} />
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg">{file.path}</span>
+                </div>
+                <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-surface-sunken p-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element --
+                      來源是本機 API 串出來的位元組，next/image 幫不上忙（見 ImageDiffView 檔頭） */}
+                  <img
+                    src={codeRawUrl(dir, file.path)}
+                    alt={file.path}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+              </div>
             ) : file.error ? (
               <div className="px-6 py-10">
                 <p className="font-mono text-xs text-fg-muted">{file.path}</p>
@@ -571,7 +593,7 @@ export default function CodeView({
                       <DrawablePreview vector={vector} mask={adaptive ? mask : undefined} onMask={setMask} />
                     ) : isHtml ? (
                       // 換檔案就重建，script 開關與捲動位置跟著歸零
-                      <HtmlPreview key={file.path} html={file.text} />
+                      <HtmlPreview key={file.path} dir={dir} path={file.path} />
                     ) : (
                       <MarkdownPreview text={file.text} />
                     )}
