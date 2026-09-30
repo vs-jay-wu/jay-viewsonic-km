@@ -56,6 +56,19 @@ type DrawableMode = "view" | "code" | "split";
 
 const DEFAULT_TREE_W = 320;
 
+/**
+ * 程式碼檢視最多畫幾行。
+ *
+ * 一行一個 `<tr>`：50,896 行實測 **45 萬個 DOM 節點、JS heap 275 MB、捲動每幀
+ * 34ms**（2026-09-30，edu-mvb-mac-playground 的 1.9 MB manifest.json）。
+ * 檔案本身抓回來只要 25ms —— 貴的是畫面，所以要限制的是**行數**，不是位元組
+ * （`lib/codeBrowse.ts` 的 `MAX_FILE_BYTES` 已經放寬到 10 MB）。
+ *
+ * **預覽不受這個限制**：iframe 與 markdown 吃的是完整內容，那一條路徑沒有
+ * 一行一個節點的問題。
+ */
+const MAX_RENDER_LINES = 5000;
+
 export default function CodeView({
   dir,
   file: urlFile = "",
@@ -282,19 +295,28 @@ export default function CodeView({
   }, [gotoLine, file]);
 
   const lang = file ? languageOf(file.path) : null;
-  const lines = useMemo(() => (file?.text ? file.text.split("\n") : []), [file]);
+  const allLines = useMemo(() => (file?.text ? file.text.split("\n") : []), [file]);
+  const tooManyLines = allLines.length > MAX_RENDER_LINES;
+  const lines = useMemo(
+    () => (tooManyLines ? allLines.slice(0, MAX_RENDER_LINES) : allLines),
+    [allLines, tooManyLines]
+  );
   const highlighted = useMemo(() => {
     // getLanguage 的守衛見 DiffView 的同名函式（沒註冊的語言會噴 console.error）
     if (!file?.text || !lang || !hljs.getLanguage(lang)) return null;
     try {
       // ⚠️ 不能直接 split("\n")：跨行的 span 會讓中間幾行掉回預設顏色（見 lib/highlightLines.ts）
+      //
+      // 只上色**畫得出來的那幾行**（`lines` 已經被 MAX_RENDER_LINES 截過）——
+      // 10 MB 的檔整份丟給 hljs 會直接卡住主執行緒，而多出來的部分根本不會畫。
+      // 從開頭截是安全的：tokenizer 的狀態本來就是從第一個字元推進來的。
       return splitHighlightedLines(
-        hljs.highlight(file.text, { language: lang, ignoreIllegals: true }).value
+        hljs.highlight(lines.join("\n"), { language: lang, ignoreIllegals: true }).value
       );
     } catch {
       return null; // 認不得的語言就不上色，不要硬猜
     }
-  }, [file, lang]);
+  }, [file, lang, lines]);
 
   /**
    * JSON 的收合。**換檔案就清掉** —— 行號是跟著檔案的，留著會把新檔案的
@@ -304,8 +326,9 @@ export default function CodeView({
   useEffect(() => setFolded(new Set()), [file?.path]);
 
   const ranges = useMemo(
-    () => (lang === "json" && lines.length ? foldRanges(lines) : []),
-    [lang, lines]
+    // 截斷時不給收合：範圍是從完整內容算的，只畫一部分的話括號對不起來
+    () => (lang === "json" && lines.length && !tooManyLines ? foldRanges(lines) : []),
+    [lang, lines, tooManyLines]
   );
   const foldStart = useMemo(() => new Map(ranges.map((r) => [r.start, r])), [ranges]);
   const hidden = useMemo(() => hiddenLines(ranges, folded), [ranges, folded]);
@@ -529,7 +552,7 @@ export default function CodeView({
                     </div>
                   )}
                   <span className="shrink-0 font-mono text-[11px] text-fg-subtle">
-                    {lines.length} 行 · {(file.sizeBytes / 1024).toFixed(1)} KB
+                    {allLines.length} 行 · {(file.sizeBytes / 1024).toFixed(1)} KB
                   </span>
                 </div>
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
@@ -597,6 +620,15 @@ export default function CodeView({
                       })}
                     </tbody>
                   </table>
+                  {/* 只在真的截掉時才出現 —— 平常一個字都不要多 */}
+                  {tooManyLines && (
+                    <p className={`px-4 py-3 text-xs ${dark ? "text-[#8b949e]" : "text-fg-muted"}`}>
+                      這個檔有 {allLines.length.toLocaleString()} 行，只畫前{" "}
+                      {MAX_RENDER_LINES.toLocaleString()} 行 —— 一行一個列，全畫的話
+                      瀏覽器會卡住（50,896 行實測 45 萬個節點、275 MB）。
+                      要看全部請用編輯器開。
+                    </p>
+                  )}
                 </div>
                 )}
                 </div>

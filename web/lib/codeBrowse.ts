@@ -20,8 +20,16 @@ import { readResColors, readResDrawables } from "@/lib/androidRes";
  *   2. 目標路徑解析後必須還在那個 repo 底下（擋 `../../` 逃逸）
  */
 
-/** 單一檔案的上限。超過就不給看 —— 瀏覽器也畫不動 */
-export const MAX_FILE_BYTES = 2 * 1024 * 1024;
+/**
+ * 單一檔案的上限。
+ *
+ * **貴的不是傳輸，是畫面**：1.9 MB 的檔從這支 API 抓回來只要 25ms（本機），
+ * 但同一個檔有 50,896 行，程式碼檢視一行一個 `<tr>` → 45 萬個 DOM 節點、
+ * JS heap 275 MB、捲動每幀 34ms（2026-09-30 實測）。所以限制**行數**才對，
+ * 那一層在畫面端（`components/CodeView.tsx` 的 `MAX_RENDER_LINES`）；
+ * 這裡的位元組上限只是擋住「誤放的產物」那種極端情況（repo 裡有 38 MB 的 CSV）。
+ */
+export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 /** 一次列幾個項目。node_modules 那種目錄有上萬個，全列會把瀏覽器卡死 */
 const MAX_ENTRIES = 2000;
 
