@@ -93,7 +93,16 @@ $ adb shell am get-current-user
 1. 在機器的設定裡把「人體感應／PIR／有人偵測」類的節能選項關掉 —— 最根本。
    `persist.sys.*` 要 root 才能改，**不要用 adb 硬改**。〔推論：選單名稱沒親眼確認〕
 2. PIN：〔推論，未實測〕在設定裡設一次 PIN 再改回「無」，看能不能讓 `CredentialType` 變成 `NONE`。
-3. 測試前的快速檢查：
+3. **工作規則（Jay 2026-09-30）：只要是 IFP，就每十分鐘點一次。** 目前用的是一支背景迴圈：
+   - 每 600 秒先 `input keyevent KEYCODE_WAKEUP`，再點狀態列上緣的正中間（x = 寬度/2，y = 5）。這個位置
+     不在白板、也不在 rail 上，白板不會多出墨點。
+   - **有 instrumentation 在跑就跳過**：`ps -A` 看得到 `com.viewsonic.vbo.test` 或 `androidx.test` 時不點，
+     因為點一下可能落在測試的 UI 上，把測試弄壞。
+   - 每一次都記一行：時間、點之前有沒有上鎖、有沒有點。
+   - 〔未證實〕點一下能不能重設人體感應的計時：PIR 看的是感應器，注入的觸控不一定算「有人」。
+     有沒有效要看紀錄，看完再回來補結論。
+   - 不要套在共用的 IFP35 上，那台是別的 session 在用。
+4. 測試前的快速檢查：
 
    ```bash
    export ANDROID_SERIAL=172.21.4.186:5555
