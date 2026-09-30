@@ -90,8 +90,17 @@ $ adb shell am get-current-user
 
 **怎麼處理**
 
-1. 在機器的設定裡把「人體感應／PIR／有人偵測」類的節能選項關掉 —— 最根本。
-   `persist.sys.*` 要 root 才能改，**不要用 adb 硬改**。〔推論：選單名稱沒親眼確認〕
+1. **關掉人體感應（找到開關了，2026-09-30）：設定 → Advanced → Sensor Settings → Motion sensor → 關。**〔實測〕
+   - 同一頁還有 **Static power off interval**（出廠 5 mins，就是「5 分鐘沒偵測到人就睡」的那個值）。Motion sensor
+     關掉之後，這一項會變灰。另一項 Sensor data notification 是溫溼度、CO2 的顯示，跟休眠無關。
+   - 不需要密碼。要注意的是 Sensor Settings 在 Advanced 清單的最底下，會被底部導覽列蓋住，
+     要先把右欄往上捲，否則點到的是 Home。
+   - 這個開關在 `com.ifpdos.vsettings` 的 `SensorSettingsFragment`（`pir_detect_spinner` / `KEY_PIR_STATE`）；
+     真正讓機器休眠的是 `com.seewo.osservice` 的 `HumanIdentificationService`。
+   - 設定裡找不到任何 pir / human 的 key，`persist.sys.*` 也要 root 才能改，**不要用 adb 硬改**。
+   - 2026-09-29 那次「在設定頁關了卻沒效」，應該是改到了別的節能選項。
+   - **驗證**：關掉後閒置 7 分鐘（17:00:57–17:07:57）。這段時間沒有 `Timeout for waiting human`、沒有
+     `Going to sleep`，服務只記 `PIR state is off, has person, but can't set screen status to true`；機器保持醒著、沒上鎖。
 2. PIN：〔推論，未實測〕在設定裡設一次 PIN 再改回「無」，看能不能讓 `CredentialType` 變成 `NONE`。
 3. **工作規則（Jay 2026-09-30）：只要是 IFP，就每十分鐘點一次。** 目前用的是一支背景迴圈：
    - 每 600 秒先 `input keyevent KEYCODE_WAKEUP`，再點狀態列上緣的正中間（x = 寬度/2，y = 5）。這個位置
@@ -99,8 +108,13 @@ $ adb shell am get-current-user
    - **有 instrumentation 在跑就跳過**：`ps -A` 看得到 `com.viewsonic.vbo.test` 或 `androidx.test` 時不點，
      因為點一下可能落在測試的 UI 上，把測試弄壞。
    - 每一次都記一行：時間、點之前有沒有上鎖、有沒有點。
-   - 〔未證實〕點一下能不能重設人體感應的計時：PIR 看的是感應器，注入的觸控不一定算「有人」。
-     有沒有效要看紀錄，看完再回來補結論。
+   - 〔實測 2026-09-30：**無效**〕點一下**不會**重設人體感應的計時。
+     - 15:50 和 16:00 各點了一次，16:06:38 照樣 `HumanIdentification: Timeout for waiting human` 睡著。
+     - 16:11:38 點完，16:17:20 又逾時。
+     - 醒來也還是停在鎖定畫面。
+     - 真正的解法是上面第 1 點。
+   - 〔實測〕「跑測試時跳過」的判斷用 `ps -A` 找 `com.viewsonic.vbo.test` 會漏掉：測試跑在 app 自己的
+     process 裡，所以那次在測試中途點下去了。要改成看 `am instrument` 或 UTP 的 process。
    - 不要套在共用的 IFP35 上，那台是別的 session 在用。
 4. 測試前的快速檢查：
 
