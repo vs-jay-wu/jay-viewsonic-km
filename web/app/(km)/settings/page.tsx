@@ -10,6 +10,7 @@ import {
 import { resolveDiffTheme } from "@/lib/uiSettingsRules";
 import { useResolvedTheme } from "@/components/useResolvedTheme";
 import DiffView from "@/components/DiffView";
+import DeviceSettings from "@/components/DeviceSettings";
 import type { DiffLine } from "@/lib/changesRules";
 
 const THEME_LABEL: Record<Theme, string> = { system: "跟隨系統", light: "淺色", dark: "深色" };
@@ -192,6 +193,8 @@ export default function SettingsPage() {
             <DiffView lines={PREVIEW_LINES} file="preview.ts" theme={previewTheme} />
           </div>
         </div>
+
+        <DeviceSettings />
       </div>
     </div>
   );

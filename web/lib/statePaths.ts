@@ -51,6 +51,8 @@ export const STATE_OWNER: Record<string, StateOwner> = {
   "repo-first-commit.json": "hub",
   "repo-moves.jsonl": "hub",
   "repo-sync-config.json": "hub",
+  // 已核可的機器與待核可的配對請求。核可是 hub 的職權，satellite 不該有自己一份
+  "devices.json": "hub",
 
   // ── hub：偏好（pin 與便條）─────────────────────────────────────────
   "changes-pinned.json": "hub",
