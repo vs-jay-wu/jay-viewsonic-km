@@ -6,15 +6,17 @@
 //   - VB Bug 總覽（Jira 的 bug 矩陣）
 //   - 指派給我的單（Jira，增量）
 //   - Repo 同步（夜間把 org 的 repo 全部 pull 一次，不叫 AI）
+//   - 未提交改動的快照預熱（只在有人看那一頁的時候跑）
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
-  const [prInbox, myPrs, vbBugs, repoSync, myTickets] = await Promise.all([
+  const [prInbox, myPrs, vbBugs, repoSync, myTickets, changes] = await Promise.all([
     import("@/lib/prInboxScheduler"),
     import("@/lib/myPrs"),
     import("@/lib/vbBugs"),
     import("@/lib/repoSync"),
     import("@/lib/myTickets"),
+    import("@/lib/changesScheduler"),
   ]);
   await Promise.all([
     prInbox.initScheduler().catch(() => undefined),
@@ -22,5 +24,6 @@ export async function register() {
     vbBugs.initScheduler().catch(() => undefined),
     repoSync.initScheduler().catch(() => undefined),
     myTickets.initScheduler().catch(() => undefined),
+    changes.initScheduler().catch(() => undefined),
   ]);
 }

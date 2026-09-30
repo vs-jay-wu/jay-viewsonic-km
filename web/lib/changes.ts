@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import { readdir, readFile, mkdir, stat, writeFile } from "fs/promises";
 import path from "path";
 import { repoPath, repoRoot, run } from "@/lib/repo";
+import { cacheState, canServeCached, shouldRescan } from "@/lib/repoCacheRules";
 import { isSensitivePath } from "@/lib/codeBrowseRules";
 import {
   isAdaptiveIconXml, isVectorDrawableXml, looksLikeAndroidDrawable,
@@ -389,6 +390,133 @@ export interface FileDiff {
 
 /** 單張圖的上限。超過就不給看（瀏覽器也扛不住，而且那多半是誤放的產物） */
 export const IMAGE_MAX_BYTES = 25 * 1024 * 1024;
+
+/**
+ * 快照的快取。判準沿用 `lib/repoCacheRules.ts`（有測試），這裡只管狀態。
+ *
+ * **為什麼要快取**：全掃 159 個 repo 要 **3 秒**，而且那 3 秒**不是傳輸也不是
+ * Next** —— 純 node 跑同一批 git 指令是 2.95 秒，把並行度從 12 拉到 48 也沒有變快
+ * （2026-09-30 實測）。成本是「159 個 repo × 每個 25–50ms」的長尾，沒有熱點可以修。
+ * 所以唯一能做的是**不要在開頁時掃**。
+ *
+ * 策略與 repo 清單那份相同：stale-while-revalidate。另外多一層 ——
+ * **快照寫到磁碟**，dev server 重開之後第一次開頁也不必等 3 秒。
+ */
+const SNAPSHOT_FILE = repoPath("data/local-state/changes-snapshot.json");
+/** 幾秒內算新鮮。掃一次 3 秒，排程每 30 秒預熱一次，所以這個值取 45 秒 */
+export const CHANGES_CACHE_TTL_MS = 45_000;
+
+interface ChangesCache {
+  data: ChangesSnapshot | null;
+  computedAt: number | null;
+  inflight: Promise<ChangesSnapshot> | null;
+  /** 最後一次有人問這份資料（排程用它決定要不要繼續預熱） */
+  lastAskedAt: number | null;
+  loadedFromDisk: boolean;
+}
+
+// 狀態掛在 globalThis：dev 的 HMR 會重載模組，掛模組變數上每次存檔就清空
+const cg = globalThis as typeof globalThis & { __kmChangesCache?: ChangesCache };
+const changesCache: ChangesCache = (cg.__kmChangesCache ??= {
+  data: null, computedAt: null, inflight: null, lastAskedAt: null, loadedFromDisk: false,
+});
+
+async function loadSnapshotFromDisk(): Promise<void> {
+  if (changesCache.loadedFromDisk) return;
+  changesCache.loadedFromDisk = true;
+  const raw = await readFile(SNAPSHOT_FILE, "utf8").catch(() => null);
+  if (!raw) return;
+  try {
+    const saved = JSON.parse(raw) as { computedAt: number; snapshot: ChangesSnapshot };
+    // 已經有更新的了就不要用磁碟上那份蓋掉
+    if (saved.snapshot && (changesCache.computedAt ?? 0) < saved.computedAt) {
+      changesCache.data = saved.snapshot;
+      changesCache.computedAt = saved.computedAt;
+    }
+  } catch {
+    /* 檔壞了就當沒有，下一次掃完會蓋回去 */
+  }
+}
+
+function rescanChanges(): Promise<ChangesSnapshot> {
+  changesCache.inflight ??= scanChanges()
+    .then(async (d) => {
+      changesCache.data = d;
+      changesCache.computedAt = Date.now();
+      await mkdir(path.dirname(SNAPSHOT_FILE), { recursive: true }).catch(() => undefined);
+      await writeFile(
+        SNAPSHOT_FILE,
+        JSON.stringify({ computedAt: changesCache.computedAt, snapshot: d }),
+        "utf8"
+      ).catch(() => undefined);
+      return d;
+    })
+    .finally(() => {
+      changesCache.inflight = null;
+    });
+  return changesCache.inflight;
+}
+
+/**
+ * 快取版。`force` 會等新的掃完才回 —— 「重新掃描」按鈕與「指紋變了」那條路用它。
+ *
+ * 回傳多兩個欄位讓畫面知道手上這份多舊：`computedAt`（ISO）與 `stale`。
+ */
+export async function scanChangesCached(
+  force = false
+): Promise<ChangesSnapshot & { computedAt: string | null; stale: boolean }> {
+  changesCache.lastAskedAt = Date.now();
+  await loadSnapshotFromDisk();
+  // 掛在這裡而不是只掛在排程上：dev 模式下改 `instrumentation.ts` 不會重跑
+  // `register()`，只靠排程的話要等下次重開 server 才生效（實測踩到）
+  void warmUntrackedCache().catch(() => undefined);
+
+  const state = cacheState(changesCache.computedAt, Date.now(), CHANGES_CACHE_TTL_MS);
+  const serveCached = canServeCached(state, force) && changesCache.data !== null;
+
+  if (shouldRescan(state, force)) {
+    const p = rescanChanges();
+    // 背景重掃的失敗不能變成未處理的 rejection —— 這次已經用舊資料回應了
+    if (serveCached) p.catch(() => undefined);
+    else await p;
+  }
+
+  const data = changesCache.data as ChangesSnapshot;
+  return {
+    ...data,
+    computedAt: changesCache.computedAt ? new Date(changesCache.computedAt).toISOString() : null,
+    stale: state !== "fresh" && serveCached,
+  };
+}
+
+/** 排程用：最近有人看過這頁嗎（沒人看就不必一直預熱） */
+export function changesAskedWithin(ms: number): boolean {
+  return changesCache.lastAskedAt !== null && Date.now() - changesCache.lastAskedAt < ms;
+}
+
+/**
+ * 替每個 repo 打開 `core.untrackedCache`。
+ *
+ * git 自己的未追蹤檔快取，實測**每個 repo 的 `git status` 快一倍**
+ * （0.028→0.014、0.025→0.012…，2026-09-30 抽 5 個量的）。掃描裡有三分之一的
+ * 成本是在走未追蹤檔（`-uno` 實測 2.62s→1.76s），所以這條是免費的一刀。
+ *
+ * **一個 process 只做一次**：`git config` 本身也要開一個行程，每次掃都做等於
+ * 多付 159 次 spawn。設定寫在各 repo 的 `.git/config`（本機檔，不會進版控，
+ * 團隊不受影響）。
+ */
+export async function warmUntrackedCache(): Promise<number> {
+  const cw = globalThis as typeof globalThis & { __kmUntrackedCacheDone?: boolean };
+  if (cw.__kmUntrackedCacheDone) return 0;
+  cw.__kmUntrackedCacheDone = true;
+  const { dirs } = await listRepoDirs();
+  let n = 0;
+  await mapLimit(dirs, CONCURRENCY, async (dir) => {
+    const r = await run("git", ["-C", dir, "config", "core.untrackedCache", "true"]);
+    if (r.code === 0) n++;
+  });
+  return n;
+}
 
 /**
  * 取一個檔案的 diff。

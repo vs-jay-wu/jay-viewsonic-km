@@ -119,16 +119,17 @@ export default function ChangesPage() {
    * `quiet`：自動更新用的（Jay 2026-09-22「不要一直顯示讀取」）——
    * 不開 spinner、失敗也不把畫面換成錯誤訊息。手動按「重新掃描」才是有回饋的那種。
    */
-  const load = useCallback(async (quiet = false) => {
+  const load = useCallback(async (quiet = false, fresh = true) => {
     if (!quiet) setLoading(true);
     try {
-      const res = await fetch("/api/changes", { cache: "no-store" });
+      const res = await fetch(`/api/changes${fresh ? "?fresh=1" : ""}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) {
         if (!quiet) setError(json.error ?? "掃描失敗");
       } else {
         setData(json as Snapshot);
         setError(null);
+        return json as Snapshot & { stale?: boolean };
       }
     } catch (e) {
       if (!quiet) setError((e as Error).message);
@@ -137,7 +138,16 @@ export default function ChangesPage() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  /*
+   * 開頁：先拿**快照**（0ms，不掃），畫面立刻有東西；那份如果是舊的，
+   * 再靜靜補一次真掃。排程每 30 秒會預熱，所以多數時候第二次根本不會發生。
+   */
+  useEffect(() => {
+    void (async () => {
+      const first = await load(false, false);
+      if (first?.stale) void load(true, true);
+    })();
+  }, [load]);
 
   // diff 的配色在 `/settings` 改。樣式表用 <link> 動態換 —— highlight.js 的主題是
   // 整份全域 CSS，靜態 import 兩份會互相蓋掉，沒辦法在執行期切換
