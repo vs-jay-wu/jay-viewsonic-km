@@ -30,6 +30,20 @@ const DOT_R = 3.5;
 const x = (lane: number) => lane * LANE_W + LANE_W / 2;
 
 /**
+ * 每一列的線**往上下各多畫半個 px**，讓相鄰兩列重疊。
+ *
+ * 一列一個 SVG，線的端點剛好落在邊界上（0 與 ROW_H）。理論上首尾相接，但在
+ * 非整數的裝置像素上兩段各自 antialias，接縫會透出底色 —— 放大看就是一格一格的
+ * 小缺口（Jay 2026-09-30）。重疊半個 px 就不會有縫；SVG 預設會裁掉超出邊界的
+ * 部分，所以畫的那幾個 `<svg>` 要一起開 `overflow: visible`。
+ */
+const BLEED = 0.5;
+const TOP = -BLEED;
+const BOT = ROW_H + BLEED;
+/** 開 `overflow: visible` 才看得到溢出的那半個 px */
+const SVG_STYLE = { overflow: "visible" } as const;
+
+/**
  * 一段線的顏色取「比較右邊的那條 lane」。
  *
  * 往右開出去＝新分支，用新 lane 的顏色；往左收回去＝那條分支結束，用它自己的顏色。
@@ -87,6 +101,15 @@ export default function CommitGraph({
   const wipAt = wipRowIndex(commits, headSha);
   // 畫在 HEAD 所在的 lane 上，並往下接到那一列
   const wipLane = graph.rows[wipAt]?.lane ?? 0;
+  /**
+   * 這一列**插在兩個 commit 中間**，所以原本從上面穿下來的那些 lane 要自己補畫 ——
+   * 不補的話它們會在這一列斷成兩截（Jay 2026-09-30：未提交移到 HEAD 之後才出現，
+   * 因為它以前永遠在最上面，上面沒有任何線）。
+   * 取 HEAD 那一列的 `up`：那正是跨過這個邊界的線。
+   */
+  const wipThrough = (graph.rows[wipAt]?.up ?? []).map((l) => l.from);
+  /** 展開檔案清單時，這些 lane 也要繼續往下接 */
+  const wipLanes = [...new Set([wipLane, ...wipThrough])];
 
   const wipRow = hasWip && wip && (
         <li>
@@ -97,13 +120,25 @@ export default function CommitGraph({
               wip.open ? "bg-surface-selected" : ""
             }`}
           >
-            <svg width={width} height={ROW_H} className="shrink-0" aria-hidden>
-              {/* 往下接到第一個 commit */}
+            <svg width={width} height={ROW_H} className="shrink-0" style={SVG_STYLE} aria-hidden>
+              {/* 從上面穿下來的 lane（這一列插在中間，線要自己接） */}
+              {wipThrough.map((lane, k) => (
+                <line
+                  key={`t${k}`}
+                  x1={x(lane)}
+                  y1={TOP}
+                  x2={x(lane)}
+                  y2={BOT}
+                  stroke={laneColor(lane)}
+                  strokeWidth={1.5}
+                />
+              ))}
+              {/* 往下接到 HEAD 那一列 */}
               <line
                 x1={x(wipLane)}
                 y1={ROW_H / 2}
                 x2={x(wipLane)}
-                y2={ROW_H}
+                y2={BOT}
                 stroke={laneColor(wipLane)}
                 strokeWidth={1.5}
               />
@@ -164,7 +199,7 @@ export default function CommitGraph({
                   <ExpandedFiles
                     key={side}
                     width={width}
-                    lanes={[wipLane]}
+                    lanes={wipLanes}
                     files={open ? files : []}
                     keyPrefix={`wip:${side}`}
                     view={view}
@@ -231,11 +266,11 @@ export default function CommitGraph({
                 flashSha === c.sha ? "bg-warn/20" : open ? "bg-surface-selected" : ""
               }`}
             >
-              <svg width={width} height={ROW_H} className="shrink-0" aria-hidden>
+              <svg width={width} height={ROW_H} className="shrink-0" style={SVG_STYLE} aria-hidden>
                 {joinWip && (
                   <line
                     x1={x(row.lane)}
-                    y1={0}
+                    y1={TOP}
                     x2={x(row.lane)}
                     y2={ROW_H / 2}
                     stroke={laneColor(row.lane)}
@@ -245,7 +280,7 @@ export default function CommitGraph({
                 {row?.up.map((l, k) => (
                   <path
                     key={`u${k}`}
-                    d={`M ${x(l.from)} 0 C ${x(l.from)} ${ROW_H / 4}, ${x(l.to)} ${ROW_H / 4}, ${x(l.to)} ${ROW_H / 2}`}
+                    d={`M ${x(l.from)} ${TOP} C ${x(l.from)} ${ROW_H / 4}, ${x(l.to)} ${ROW_H / 4}, ${x(l.to)} ${ROW_H / 2}`}
                     stroke={linkColor(l.from, l.to)}
                     strokeWidth={1.5}
                     fill="none"
@@ -254,7 +289,7 @@ export default function CommitGraph({
                 {row?.down.map((l, k) => (
                   <path
                     key={`d${k}`}
-                    d={`M ${x(l.from)} ${ROW_H / 2} C ${x(l.from)} ${(ROW_H * 3) / 4}, ${x(l.to)} ${(ROW_H * 3) / 4}, ${x(l.to)} ${ROW_H}`}
+                    d={`M ${x(l.from)} ${ROW_H / 2} C ${x(l.from)} ${(ROW_H * 3) / 4}, ${x(l.to)} ${(ROW_H * 3) / 4}, ${x(l.to)} ${BOT}`}
                     stroke={linkColor(l.from, l.to)}
                     strokeWidth={1.5}
                     fill="none"
@@ -436,15 +471,18 @@ function ExpandedFiles({
         height="100%"
         viewBox={`0 0 ${width} 10`}
         preserveAspectRatio="none"
+        style={SVG_STYLE}
         aria-hidden
       >
         {lanes.map((lane, k) => (
           <line
             key={k}
             x1={x(lane)}
-            y1={0}
+            /* 上下各溢出一點，跟相鄰的列重疊（見 BLEED）。
+               這個 SVG 的高度會被拉伸，所以用相對量而不是 px */
+            y1={-1}
             x2={x(lane)}
-            y2={10}
+            y2={11}
             stroke={laneColor(lane)}
             strokeWidth={1.5}
             vectorEffect="non-scaling-stroke"
