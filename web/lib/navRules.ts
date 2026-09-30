@@ -47,13 +47,35 @@ const EXTRA_TITLES: Record<string, string> = {
   "/chat": "Teams 歸檔",
 };
 
+/**
+ * app 名字。**不要再接到分頁標題後面**（Jay 2026-09-30）——
+ * 分頁很窄，「· KM 工作台」每一頁都一樣、卻吃掉一半寬度；「這是哪個站」
+ * 由 favicon 認（`app/(km)/icon.svg`，暖沙底 ＋ 深棕 K，刻意跟工作上常開的
+ * 那幾個站不同色）。這個常數留給畫面上真的要寫出名字的地方（側邊欄標題）。
+ */
 export const APP_NAME = "KM 工作台";
 
 /**
- * 這條路徑的分頁標題。
+ * 工作台（`/repo/code`、`/repo/git`）的分頁標題：**repo 名字排第一**
+ * （Jay 2026-09-30）。分頁一窄就只剩最前面幾個字，那時該看到的是「這是哪個
+ * repo」，不是「這是程式碼還是版本」—— 開了五個工作台分頁時前者才分得出來。
+ *
+ * 視圖名留在第二段，同一個 repo 的兩個分頁才不會長得一模一樣。
+ * `dir` 是工作區的絕對路徑，取最後一段當名字（worktree 也跟著它自己的目錄名）。
+ */
+export function repoViewTitle(dir: string | null | undefined, view: "code" | "git"): string {
+  const name = (dir ?? "").split("/").filter(Boolean).pop();
+  const label = EXTRA_TITLES[`/repo/${view}`];
+  if (!name) return label;
+  return `${name} · ${label}`;
+}
+
+/**
+ * 這條路徑的分頁標題。**不帶 app 名字**（見 `APP_NAME`）。
  *
  * **取最長的前綴**，`/repos/history` 這種子頁才會落到 `/repos` 而不是 `/`。
- * 認不得就只給 app 名字 —— 標題錯總比標題是別頁的名字好。
+ * 認不得就退回 app 名字 —— 標題錯總比標題是別頁的名字好，而空字串會讓
+ * 瀏覽器改顯示整串網址。
  */
 export function titleForPath(pathname: string): string {
   if (pathname === "/") return APP_NAME;
@@ -66,7 +88,7 @@ export function titleForPath(pathname: string): string {
       best = href;
     }
   }
-  return best ? `${all[best]} · ${APP_NAME}` : APP_NAME;
+  return best ? all[best] : APP_NAME;
 }
 
 /** 側邊欄的這一項現在是不是「你在的那一頁」 */
