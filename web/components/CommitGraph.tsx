@@ -467,22 +467,28 @@ function ExpandedFiles({
           高度隨內容拉長也不會變形（曲線才會） */}
       <svg
         width={width}
-        className="absolute inset-y-0 left-0"
+        /*
+          ⚠️ 重疊要用 **CSS 的 top/bottom**，不能改 viewBox 裡的 y。
+          這個 SVG 只有 10 個單位高、被拉伸到整塊的高度，所以「-1 個單位」在
+          展開 20 個檔案時是好幾十 px —— 線會往上蓋過未提交那一列的圓圈
+          （Jay 2026-09-30 看到圓圈被線穿過去）。用 px 才是固定的半個 px。
+        */
+        className="absolute left-0"
         height="100%"
+        /* `top` ＋ `height` 一起給：只給 top/bottom 的話 SVG 會縮成 viewBox 的
+           固定高度（10px），線就只畫在最上面那一小段 */
+        style={{ ...SVG_STYLE, top: -BLEED, height: `calc(100% + ${BLEED * 2}px)` }}
         viewBox={`0 0 ${width} 10`}
         preserveAspectRatio="none"
-        style={SVG_STYLE}
         aria-hidden
       >
         {lanes.map((lane, k) => (
           <line
             key={k}
             x1={x(lane)}
-            /* 上下各溢出一點，跟相鄰的列重疊（見 BLEED）。
-               這個 SVG 的高度會被拉伸，所以用相對量而不是 px */
-            y1={-1}
+            y1={0}
             x2={x(lane)}
-            y2={11}
+            y2={10}
             stroke={laneColor(lane)}
             strokeWidth={1.5}
             vectorEffect="non-scaling-stroke"
