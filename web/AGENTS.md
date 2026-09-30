@@ -115,6 +115,23 @@ Tailwind v4 對帶透明度的顏色吐 `oklab()`，當成 RGB 解析會得到�
 
 純規則檔也是**測試的落點**（`npm test`）—— 判準會變，要有東西守著。
 
+## 入口守衛在 `proxy.ts`（不是 `middleware.ts`），而且有兩個會讓整站 500 的坑
+
+Host 白名單、裝置 token、CSRF 三道檢查在 `proxy.ts`，判準在 `lib/accessRules.ts`。
+兩個實測踩到的：
+
+- **函式要 `export default`。** 具名的 `export function proxy` 會丟
+  `TypeError: adapterFn is not a function`，**每個請求 500**，而畫面上看起來像整個
+  app 壞了。
+- **不可以 `export const config`**，連 `runtime` / `matcher` 都不行：
+  `⨯ Route segment config is not allowed in Proxy file`，一樣是啟動失敗。
+  要略過哪些路徑就在函式裡自己判斷。proxy 本來就跑在 Node.js runtime，
+  所以讀得到 `data/hub/devices.json`。
+
+⚠️ **把 `middleware.ts` 改名成 `proxy.ts` 之後要清掉 `.next`**：Turbopack 會留著
+指向舊檔的產物，症狀是 `Could not parse module '[project]/middleware.ts', file not found`
+與 `adapterFn is not a function`，而源碼看起來完全正確。清掉之後 6 秒就起來了。
+
 ## repo 在網址上用「身分」，不是絕對路徑
 
 `/repo/code?repo=Viewsonic-EDU/ragdoll-cat`、`/code-view/<base64 的身分>/…`。

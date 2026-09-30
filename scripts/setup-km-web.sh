@@ -13,7 +13,8 @@
 # 用法：
 #   ./scripts/setup-km-web.sh --install          常駐（dev 模式，預設 port 9487）
 #   ./scripts/setup-km-web.sh --install --port 3100
-#   ./scripts/setup-km-web.sh --install --hostname 0.0.0.0   # 不建議，見下
+#   ./scripts/setup-km-web.sh --install --tailscale              對外開放（只給 tailnet）
+#   ./scripts/setup-km-web.sh --install --hostname 0.0.0.0       會被擋掉，見下
 #   ./scripts/setup-km-web.sh --status           看載入狀態與 HTTP 是否有回應
 #   ./scripts/setup-km-web.sh --restart          重啟（換 Node 版本、npm rebuild 後用）
 #   ./scripts/setup-km-web.sh --uninstall        取消常駐
@@ -58,6 +59,7 @@ while [[ $# -gt 0 ]]; do
     --print)     ACTION=print ;;
     --port)      PORT="${2:?--port 需要一個 port}"; shift ;;
     --hostname)  HOSTNAME_BIND="${2:?--hostname 需要一個位址}"; shift ;;
+    --tailscale) HOSTNAME_BIND=tailscale ;;
     -h|--help)   sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "未知參數：$1" >&2; exit 2 ;;
   esac
@@ -90,6 +92,38 @@ if [[ "$ACTION" == "install" ]] && [[ -d "$WEB_DIR/node_modules/better-sqlite3" 
     echo "    它是用別的 node 編的。兩條路：" >&2
     echo "      NPM_OVERRIDE=/opt/homebrew/bin/npm $0 --install   # 用編它的那支" >&2
     echo "      (cd web && npm rebuild better-sqlite3)            # 改成用這支重編" >&2
+    exit 1
+  fi
+fi
+
+# ── 對外開放的兩道安全連鎖 ────────────────────────────────────────────────────
+#
+# km 會開 Claude session、會跑腳本、讀得到整個 workspace。它一旦被打穿，等於有人
+# 以你的身分在你的機器上執行任意指令。所以「聽 loopback 以外的介面」這件事要很難
+# 不小心做到。設計見 docs/ideas/km-multi-machine.md §9。
+
+if [[ "$HOSTNAME_BIND" == tailscale ]]; then
+  TS_IP="$(tailscale ip -4 2>/dev/null | head -1 || true)"
+  [[ -n "$TS_IP" ]] || { echo "拿不到 tailscale 的 IP —— 先 tailscale up" >&2; exit 1; }
+  HOSTNAME_BIND="$TS_IP"
+fi
+
+# ⚠️ 0.0.0.0 會連咖啡廳的 Wi-Fi 一起聽。綁 tailscale 那張介面的位址，
+# 不在 tailnet 裡的人連 TCP 都握不上手。
+if [[ "$HOSTNAME_BIND" == "0.0.0.0" || "$HOSTNAME_BIND" == "::" ]]; then
+  echo "拒絕綁 $HOSTNAME_BIND —— 那會對所有網路開放。" >&2
+  echo "  要對外開放請用 --tailscale（或 --hostname <tailscale 的 IP>）。" >&2
+  exit 1
+fi
+
+# 綁非 loopback 卻沒設 km.allowedHosts 的話，proxy.ts 的 Host 白名單會把每個
+# 遠端請求都擋成 403 —— 服務起得來、但對方只看得到 403，很難查。先講清楚。
+if [[ "$HOSTNAME_BIND" != "127.0.0.1" && "$HOSTNAME_BIND" != "localhost" && "$ACTION" == "install" ]]; then
+  HOSTS="$(jq -r '.km.allowedHosts // [] | length' "$REPO_ROOT/local.workspace.json" 2>/dev/null || echo 0)"
+  if [[ "$HOSTS" == "0" ]]; then
+    echo "⚠️  要綁 $HOSTNAME_BIND，但 local.workspace.json 的 km.allowedHosts 是空的。" >&2
+    echo "    那樣所有遠端請求都會被擋成 403（Host 白名單）。先填這台機器在" >&2
+    echo "    tailnet 上的名字與 IP，例如：[\"mac-hub\", \"$HOSTNAME_BIND\"]" >&2
     exit 1
   fi
 fi
