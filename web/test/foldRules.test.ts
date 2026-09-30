@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { foldRanges, hiddenLines } from "@/lib/foldRules";
+import { foldRanges, hiddenLines, xmlFoldRanges,
+} from "@/lib/foldRules";
 
 const L = (s: string) => s.split("\n");
 
@@ -71,5 +72,35 @@ describe("hiddenLines", () => {
 
   it("沒收就什麼都不藏", () => {
     expect(hiddenLines(ranges, new Set()).size).toBe(0);
+  });
+});
+
+describe("xmlFoldRanges", () => {
+  it("跨行的元素可以收，同一行開關的不算", () => {
+    expect(xmlFoldRanges(L("<a>\n  <b>x</b>\n</a>"))).toEqual([{ start: 0, end: 2 }]);
+  });
+
+  it("巢狀的每一層都算", () => {
+    const src = L("<a>\n  <b>\n    <c/>\n  </b>\n</a>");
+    expect(xmlFoldRanges(src)).toEqual([
+      { start: 0, end: 4 },
+      { start: 1, end: 3 },
+    ]);
+  });
+
+  it("自閉標籤、宣告、DOCTYPE 都不是開標籤", () => {
+    expect(xmlFoldRanges(L('<?xml version="1.0"?>\n<!DOCTYPE x>\n<a/>\n<b />'))).toEqual([]);
+  });
+
+  it("屬性裡的 `/` 不會被當成自閉（路徑很常見）", () => {
+    expect(xmlFoldRanges(L('<a href="x/y">\n1\n</a>'))).toEqual([{ start: 0, end: 2 }]);
+  });
+
+  it("註解裡的標籤不參與配對（含跨行註解）", () => {
+    expect(xmlFoldRanges(L("<!--\n<a>\n-->\n<b>\n1\n</b>"))).toEqual([{ start: 3, end: 5 }]);
+  });
+
+  it("對不起來的收標籤丟掉，不要硬配", () => {
+    expect(xmlFoldRanges(L("</x>\n<a>\n1\n</a>"))).toEqual([{ start: 1, end: 3 }]);
   });
 });

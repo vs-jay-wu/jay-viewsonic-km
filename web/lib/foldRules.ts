@@ -73,3 +73,66 @@ export function hiddenLines(ranges: FoldRange[], folded: ReadonlySet<number>): S
   }
   return hidden;
 }
+
+/**
+ * XML／HTML 的可收合區段：**跨行的元素**（開標籤與收標籤不在同一行）。
+ *
+ * 跟 JSON 那支一樣是掃 token、不是看縮排 —— 縮排在 XML 更不可信
+ * （屬性換行、mixed content）。判準：
+ *
+ * - 自閉標籤（`<x/>`）、宣告（`<?xml …?>`）、DOCTYPE、註解一律不算開標籤。
+ * - **同一行開又關的不算**（`<a>x</a>`）：收起來不會少佔一行，只是多一個把手。
+ * - 對不起來的收標籤（多一個 `</x>`）就丟掉，不要硬配 —— 配錯會把不相干的
+ *   區段藏起來，而那在畫面上看不出異常。
+ * - 註解內容整段跳過，裡面的 `<tag>` 不參與配對。
+ */
+export function xmlFoldRanges(lines: string[]): FoldRange[] {
+  const stack: { name: string; line: number }[] = [];
+  const out: FoldRange[] = [];
+  let inComment = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    let s = lines[i];
+
+    // 註解可能跨行；先把這一行裡的註解區段吃掉
+    for (;;) {
+      if (inComment) {
+        const end = s.indexOf("-->");
+        if (end < 0) {
+          s = "";
+          break;
+        }
+        s = s.slice(end + 3);
+        inComment = false;
+        continue;
+      }
+      const start = s.indexOf("<!--");
+      if (start < 0) break;
+      const end = s.indexOf("-->", start + 4);
+      if (end < 0) {
+        s = s.slice(0, start);
+        inComment = true;
+        break;
+      }
+      s = s.slice(0, start) + s.slice(end + 3);
+    }
+
+    const re = /<\/?([A-Za-z_][\w.:-]*)([^<>]*)>/g;
+    for (let m = re.exec(s); m; m = re.exec(s)) {
+      const [tag, name, rest] = m;
+      if (tag.startsWith("</")) {
+        // 找最近的同名開標籤；對不起來就整個丟掉
+        const at = [...stack].reverse().findIndex((x) => x.name === name);
+        if (at < 0) continue;
+        const idx = stack.length - 1 - at;
+        const open = stack[idx];
+        stack.length = idx;
+        if (open.line < i) out.push({ start: open.line, end: i });
+      } else if (!rest.trimEnd().endsWith("/")) {
+        stack.push({ name, line: i });
+      }
+    }
+  }
+  // 起始行小的排前面，跟 JSON 那支一致（畫面靠 start 找把手）
+  return out.sort((a, b) => a.start - b.start || b.end - a.end);
+}
