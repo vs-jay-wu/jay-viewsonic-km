@@ -20,11 +20,13 @@ import {
 import { foldRanges, hiddenLines } from "@/lib/foldRules";
 import { splitHighlightedLines } from "@/lib/highlightLines";
 import DrawablePreview from "@/components/DrawablePreview";
+import HtmlPreview from "@/components/HtmlPreview";
 import MarkdownPreview from "@/components/MarkdownPreview";
 import {
   adaptiveIconToSvg, isAdaptiveIconXml, isVectorDrawableXml, looksLikeAndroidDrawable,
   vectorDrawableToSvg, type AdaptiveMask,
 } from "@/lib/vectorDrawableRules";
+import { isHtmlPath } from "@/lib/htmlPreviewRules";
 
 /**
  * 程式碼瀏覽（唯讀）。
@@ -372,6 +374,10 @@ export default function CodeView({
    * 內文是給人讀的，切成兩半反而兩邊都難讀。
    */
   const isMarkdown = !!file && /\.(md|markdown|mdx)$/i.test(file.path);
+  /** HTML 也是兩態（預覽／原始碼），沒有並排 —— 理由同 markdown */
+  const isHtml = !!file && isHtmlPath(file.path);
+  /** 兩態的那幾種（markdown、HTML）共用同一個偏好 */
+  const twoState = isMarkdown || isHtml;
 
   const [drawableMode, setDrawableMode] = useState<DrawableMode>("split");
   const [mdMode, setMdMode] = useState<Exclude<DrawableMode, "split">>("view");
@@ -382,20 +388,20 @@ export default function CodeView({
     if (md === "view" || md === "code") setMdMode(md);
   }, []);
   const pickMode = (m: DrawableMode) => {
-    if (isMarkdown) {
+    if (twoState) {
       if (m === "split") return;
       setMdMode(m);
     } else {
       setDrawableMode(m);
     }
     try {
-      localStorage.setItem(isMarkdown ? "km.code.mdMode" : "km.code.drawableMode", m);
+      localStorage.setItem(twoState ? "km.code.mdMode" : "km.code.drawableMode", m);
     } catch {
       // 記不住就算了，不影響這次瀏覽
     }
   };
-  const mode: DrawableMode = isMarkdown ? mdMode : drawableMode;
-  const hasPreview = !!vector || isMarkdown;
+  const mode: DrawableMode = twoState ? mdMode : drawableMode;
+  const hasPreview = !!vector || twoState;
   const showPreview = hasPreview && mode !== "code";
   const showCode = !hasPreview || mode !== "view";
 
@@ -533,7 +539,7 @@ export default function CodeView({
                         ["view", "只看預覽", "eye"],
                         ["split", "預覽與程式碼並排", "columns"],
                         ["code", "只看原始碼", "code"],
-                      ] as const).filter(([m]) => !(isMarkdown && m === "split"))).map(([m, label, icon]) => (
+                      ] as const).filter(([m]) => !(twoState && m === "split"))).map(([m, label, icon]) => (
                         <Tooltip key={m} label={label}>
                           <button
                             onClick={() => pickMode(m)}
@@ -563,6 +569,9 @@ export default function CodeView({
                   >
                     {vector ? (
                       <DrawablePreview vector={vector} mask={adaptive ? mask : undefined} onMask={setMask} />
+                    ) : isHtml ? (
+                      // 換檔案就重建，script 開關與捲動位置跟著歸零
+                      <HtmlPreview key={file.path} html={file.text} />
                     ) : (
                       <MarkdownPreview text={file.text} />
                     )}
