@@ -283,7 +283,12 @@ export const LANG: Record<string, string> = {
   mjs: "javascript", cjs: "javascript", json: "json", md: "markdown",
   py: "python", sh: "bash", zsh: "bash", bash: "bash", yml: "yaml", yaml: "yaml",
   dart: "dart", kt: "kotlin", java: "java", swift: "swift", rs: "rust", go: "go",
-  css: "css", scss: "scss", html: "xml", xml: "xml", sql: "sql", toml: "ini",
+  css: "css", scss: "scss", html: "xml", xml: "xml", svg: "xml", sql: "sql", toml: "ini",
+  bat: "dos", cmd: "dos", properties: "properties",
+  // 這個工作區裡的 `.conf` **全部**是 nginx（10 個檔：9 個 nginx.conf ＋
+  // 1 個 nginx-lodestar.conf，2026-09-30 實測）。別種 .conf 出現時最多是
+  // 指令名不上色，`#` 註解與字串仍然對 —— 看得出來，不會安靜地錯
+  conf: "nginx",
   gradle: "groovy", kts: "kotlin", rb: "ruby", php: "php", cs: "csharp", c: "c", h: "c",
   cpp: "cpp", hpp: "cpp", m: "objectivec", mm: "objectivec", plist: "xml",
 };

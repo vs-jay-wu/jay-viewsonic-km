@@ -21,6 +21,7 @@ import { foldRanges, hiddenLines } from "@/lib/foldRules";
 import { splitHighlightedLines } from "@/lib/highlightLines";
 import DrawablePreview from "@/components/DrawablePreview";
 import HtmlPreview from "@/components/HtmlPreview";
+import ImagePreview from "@/components/ImagePreview";
 import MarkdownPreview from "@/components/MarkdownPreview";
 import {
   adaptiveIconToSvg, isAdaptiveIconXml, isVectorDrawableXml, looksLikeAndroidDrawable,
@@ -377,6 +378,11 @@ export default function CodeView({
   const isMarkdown = !!file && /\.(md|markdown|mdx)$/i.test(file.path);
   /** HTML 也是兩態（預覽／原始碼），沒有並排 —— 理由同 markdown */
   const isHtml = !!file && isHtmlPath(file.path);
+  /**
+   * SVG 是**三態**（預覽／並排／原始碼，Jay 2026-09-30）：它跟 drawable 一樣
+   * 同時是圖也是看得懂的原始碼，常常要一邊看圖一邊對 path。
+   */
+  const isSvg = !!file && /\.svg$/i.test(file.path);
   /** 兩態的那幾種（markdown、HTML）共用同一個偏好 */
   const twoState = isMarkdown || isHtml;
 
@@ -402,7 +408,7 @@ export default function CodeView({
     }
   };
   const mode: DrawableMode = twoState ? mdMode : drawableMode;
-  const hasPreview = !!vector || twoState;
+  const hasPreview = !!vector || twoState || isSvg;
   const showPreview = hasPreview && mode !== "code";
   const showCode = !hasPreview || mode !== "view";
 
@@ -488,15 +494,7 @@ export default function CodeView({
                   <FileIcon path={file.path} size={14} />
                   <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg">{file.path}</span>
                 </div>
-                <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-surface-sunken p-4">
-                  {/* eslint-disable-next-line @next/next/no-img-element --
-                      來源是本機 API 串出來的位元組，next/image 幫不上忙（見 ImageDiffView 檔頭） */}
-                  <img
-                    src={codeRawUrl(dir, file.path)}
-                    alt={file.path}
-                    className="max-h-full max-w-full object-contain"
-                  />
-                </div>
+                <ImagePreview src={codeRawUrl(dir, file.path)} alt={file.path} />
               </div>
             ) : file.error ? (
               <div className="px-6 py-10">
@@ -586,11 +584,17 @@ export default function CodeView({
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
                 {showPreview && (
                   <div
-                    style={showCode && wide && vector ? { width: previewPane.width, flex: "0 0 auto" } : undefined}
+                    style={
+                      showCode && wide && (vector || isSvg)
+                        ? { width: previewPane.width, flex: "0 0 auto" }
+                        : undefined
+                    }
                     className={`flex min-h-0 min-w-0 flex-1 flex-col border-line ${showCode ? "lg:border-r" : ""}`}
                   >
                     {vector ? (
                       <DrawablePreview vector={vector} mask={adaptive ? mask : undefined} onMask={setMask} />
+                    ) : isSvg ? (
+                      <ImagePreview src={codeRawUrl(dir, file.path)} alt={file.path} />
                     ) : isHtml ? (
                       // 換檔案就重建，script 開關與捲動位置跟著歸零
                       <HtmlPreview key={file.path} dir={dir} path={file.path} />
@@ -599,7 +603,9 @@ export default function CodeView({
                     )}
                   </div>
                 )}
-                {showPreview && showCode && vector && <DragHandle handleProps={previewPane.handleProps} />}
+                {showPreview && showCode && (vector || isSvg) && (
+                  <DragHandle handleProps={previewPane.handleProps} />
+                )}
                 {showCode && (
                 <div className={`min-h-0 flex-1 overflow-auto ${dark ? "bg-[#0d1117]" : "bg-surface"}`}>
                   <table className="w-full border-collapse font-mono text-[12px] leading-[1.55]">

@@ -28,8 +28,18 @@ describe("highlight 的語言表", () => {
     expect(hljs.getLanguage(name)).toBeTruthy();
   });
 
-  it("表裡有那三個 common 沒附的（dart / groovy / dockerfile）", () => {
-    for (const n of ["dart", "groovy", "dockerfile"]) expect(NAMES).toContain(n);
+  it("表裡有那幾個 common 沒附的（dart / groovy / dockerfile / dos / nginx / properties）", () => {
+    for (const n of ["dart", "groovy", "dockerfile", "dos", "nginx", "properties"]) {
+      expect(NAMES).toContain(n);
+    }
+  });
+
+  it("Jay 2026-09-30 指名的那幾種", () => {
+    expect(languageOf("gradle.properties")).toBe("properties");
+    expect(languageOf("gradlew.bat")).toBe("dos");
+    expect(languageOf("nginx/nginx.conf")).toBe("nginx");
+    expect(languageOf("deploy/nginx-lodestar.conf")).toBe("nginx");
+    expect(languageOf("public/icon.svg")).toBe("xml");
   });
 
   it("整個檔名就是「副檔名」的那些也認得（`.gitignore` 之類）", () => {
