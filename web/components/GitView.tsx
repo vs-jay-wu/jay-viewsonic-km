@@ -653,7 +653,7 @@ export default function GitView({
                 : diffFor.side === "index"
                   ? "已 staged（HEAD → 索引，commit 會帶走）"
                   : diffFor.side === "worktree"
-                    ? "未 staged（索引 → 工作區，commit 不會帶走）"
+                    ? "未 staged（索引 → 工作區）"
                     : "未提交（HEAD → 工作區）"}
             </span>
             <Tooltip side="left" label="關閉（Esc）">

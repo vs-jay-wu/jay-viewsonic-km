@@ -52,7 +52,7 @@ const SIDE_TITLE: Record<WipSide, string> = {
 
 const SIDE_DESC: Record<WipSide, string> = {
   index: "已 staged（HEAD → 索引，commit 會帶走）",
-  worktree: "未 staged（索引 → 工作區，commit 不會帶走）",
+  worktree: "未 staged（索引 → 工作區）",
 };
 
 interface DiffPayload {
