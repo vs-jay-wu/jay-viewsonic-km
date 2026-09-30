@@ -1,4 +1,4 @@
-import { readdir, readFile, mkdir, open, stat, writeFile } from "fs/promises";
+import { readdir, readFile, mkdir, open, stat } from "fs/promises";
 import path from "path";
 import { repoPath, repoRoot, run } from "@/lib/repo";
 import {
@@ -6,6 +6,7 @@ import {
   type DocFile, type DocSet, type DocsIndex, type DocStatus,
 } from "@/lib/docsRules";
 import { statePath } from "@/lib/statePaths";
+import { writeStateFile } from "@/lib/stateWrite";
 
 export type { DocFile, DocSet, DocsIndex };
 
@@ -32,7 +33,7 @@ export async function togglePin(dir: string): Promise<string[]> {
   const pinned = await readPins();
   const next = pinned.includes(dir) ? pinned.filter((d) => d !== dir) : [...pinned, dir];
   await mkdir(path.dirname(PINS_FILE), { recursive: true });
-  await writeFile(PINS_FILE, JSON.stringify({ pinned: next }, null, 2) + "\n", "utf8");
+  await writeStateFile(PINS_FILE, JSON.stringify({ pinned: next }, null, 2) + "\n");
   return next;
 }
 

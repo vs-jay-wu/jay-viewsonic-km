@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { readdir, readFile, mkdir, stat, writeFile } from "fs/promises";
+import { readdir, readFile, mkdir, stat } from "fs/promises";
 import path from "path";
 import { repoPath, repoRoot, run } from "@/lib/repo";
 import { cacheState, canServeCached, shouldRescan } from "@/lib/repoCacheRules";
@@ -13,6 +13,7 @@ import {
   type ChangedFile, type DiffLine, type RepoChanges, type WorktreeChanges,
 } from "@/lib/changesRules";
 import { statePath } from "@/lib/statePaths";
+import { writeStateFile } from "@/lib/stateWrite";
 
 export type { RepoChanges, WorktreeChanges, ChangedFile, DiffLine };
 
@@ -47,7 +48,7 @@ export async function togglePinned(repo: string): Promise<string[]> {
   const cur = await readPinned();
   const next = cur.includes(repo) ? cur.filter((r) => r !== repo) : [...cur, repo];
   await mkdir(path.dirname(PIN_FILE), { recursive: true });
-  await writeFile(PIN_FILE, JSON.stringify({ pinned: next }, null, 2) + "\n", "utf8");
+  await writeStateFile(PIN_FILE, JSON.stringify({ pinned: next }, null, 2) + "\n");
   return next;
 }
 
@@ -444,11 +445,9 @@ function rescanChanges(): Promise<ChangesSnapshot> {
     .then(async (d) => {
       changesCache.data = d;
       changesCache.computedAt = Date.now();
-      await mkdir(path.dirname(SNAPSHOT_FILE), { recursive: true }).catch(() => undefined);
-      await writeFile(
+      await writeStateFile(
         SNAPSHOT_FILE,
         JSON.stringify({ computedAt: changesCache.computedAt, snapshot: d }),
-        "utf8"
       ).catch(() => undefined);
       return d;
     })

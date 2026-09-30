@@ -10,6 +10,16 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
+  // 角色印在啟動 log 最前面：多機器之後「我現在看的是哪一台的 km」會是最常問的
+  // 問題，而 log 是唯一在畫面之外也查得到的地方（launchd 的 log 見 AGENTS.md）。
+  const { kmConfig } = await import("@/lib/kmRole");
+  const cfg = kmConfig();
+  console.log(
+    cfg
+      ? `[km] 角色：${cfg.role}．機器：${cfg.machine.name}${cfg.hubUrl ? `．hub：${cfg.hubUrl}` : ""}`
+      : "[km] 角色：未設定（單機模式）—— 見 docs/ideas/km-multi-machine.md §8",
+  );
+
   const [prInbox, myPrs, vbBugs, repoSync, myTickets, changes] = await Promise.all([
     import("@/lib/prInboxScheduler"),
     import("@/lib/myPrs"),

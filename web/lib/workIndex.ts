@@ -1,6 +1,5 @@
-import { readFile, mkdir, writeFile } from "fs/promises";
+import { readFile, mkdir } from "fs/promises";
 import path from "path";
-import { repoPath } from "@/lib/repo";
 import { listSessions } from "@/lib/sessions";
 import { readSnapshot } from "@/lib/myPrs";
 import { readReposOverview } from "@/lib/reposOverview";
@@ -10,6 +9,7 @@ import {
 import type { IndexedPr, IndexedSession, WorkIndex, WorkItem } from "@/lib/workIndexRules";
 import { sortWorkItems } from "@/lib/workIndexRules";
 import { statePath } from "@/lib/statePaths";
+import { writeStateFile } from "@/lib/stateWrite";
 
 export type { WorkIndex, WorkItem, IndexedPr, IndexedSession };
 
@@ -139,7 +139,7 @@ export async function getWorkIndex(opts: { force?: boolean } = {}): Promise<Work
 
   const index = await build();
   await mkdir(path.dirname(FILE), { recursive: true })
-    .then(() => writeFile(FILE, JSON.stringify(index, null, 2) + "\n", "utf8"))
+    .then(() => writeStateFile(FILE, JSON.stringify(index, null, 2) + "\n"))
     .catch(() => undefined);
   return index;
 }

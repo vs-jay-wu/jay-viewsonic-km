@@ -1,12 +1,12 @@
-import { readFile, mkdir, writeFile } from "fs/promises";
+import { readFile, mkdir } from "fs/promises";
 import path from "path";
-import { repoPath } from "@/lib/repo";
 import {
   afterFailure, afterSuccess, classifyError, emptyHealth, healthFromRuns, isUnhealthy,
   FAILURE_ALERT_THRESHOLD, type SourceHealth,
 } from "@/lib/healthRules";
 import { listRuns } from "@/lib/prInbox";
 import { statePath } from "@/lib/statePaths";
+import { writeStateFile } from "@/lib/stateWrite";
 
 export type { SourceHealth };
 export { FAILURE_ALERT_THRESHOLD, isUnhealthy, classifyError };
@@ -81,7 +81,7 @@ async function read(): Promise<Store> {
 
 async function write(store: Store): Promise<void> {
   await mkdir(path.dirname(FILE), { recursive: true });
-  await writeFile(FILE, JSON.stringify(store, null, 2) + "\n", "utf8");
+  await writeStateFile(FILE, JSON.stringify(store, null, 2) + "\n");
 }
 
 export async function readHealth(): Promise<SourceHealth[]> {

@@ -1,5 +1,4 @@
 import { readFile, stat } from "fs/promises";
-import { repoPath } from "@/lib/repo";
 import { parseHistory, type MoveRecord } from "@/lib/repoMoveHistoryRules";
 import { statePath } from "@/lib/statePaths";
 

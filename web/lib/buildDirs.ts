@@ -1,4 +1,4 @@
-import { readFile, readdir, mkdir, writeFile, stat } from "fs/promises";
+import { readFile, readdir, mkdir, stat } from "fs/promises";
 import path from "path";
 import { repoPath, repoRoot, run } from "@/lib/repo";
 import {
@@ -6,6 +6,7 @@ import {
   type BuildDirEntry, type BuildDirsSnapshot, type RepoBuildDirs,
 } from "@/lib/buildDirRules";
 import { statePath } from "@/lib/statePaths";
+import { writeStateFile } from "@/lib/stateWrite";
 
 export type { BuildDirsSnapshot, RepoBuildDirs, BuildDirEntry };
 
@@ -136,7 +137,7 @@ export async function scan(): Promise<BuildDirsSnapshot> {
     error: null,
   };
   await mkdir(path.dirname(SNAPSHOT_FILE), { recursive: true })
-    .then(() => writeFile(SNAPSHOT_FILE, JSON.stringify(snapshot, null, 2) + "\n", "utf8"))
+    .then(() => writeStateFile(SNAPSHOT_FILE, JSON.stringify(snapshot, null, 2) + "\n"))
     .catch(() => undefined);
   return snapshot;
 }

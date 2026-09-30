@@ -1,8 +1,9 @@
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { mkdir, readFile } from "fs/promises";
 import path from "path";
-import { repoPath, run } from "@/lib/repo";
+import { run } from "@/lib/repo";
 import { mapLimit } from "@/lib/changes";
 import { statePath } from "@/lib/statePaths";
+import { writeStateFile } from "@/lib/stateWrite";
 
 /**
  * 每個 repo 的第一顆 commit（＝專案何時開始）。
@@ -40,7 +41,7 @@ async function read(): Promise<Cache> {
 
 async function write(cache: Cache): Promise<void> {
   await mkdir(path.dirname(FILE), { recursive: true });
-  await writeFile(FILE, JSON.stringify(cache, null, 2) + "\n", "utf8");
+  await writeStateFile(FILE, JSON.stringify(cache, null, 2) + "\n");
 }
 
 /**

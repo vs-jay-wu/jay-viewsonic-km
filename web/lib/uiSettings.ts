@@ -1,8 +1,8 @@
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { mkdir, readFile } from "fs/promises";
 import path from "path";
-import { repoPath } from "@/lib/repo";
 import { DEFAULT_UI_SETTINGS, normalizeUiSettings, type UiSettings } from "@/lib/uiSettingsRules";
 import { statePath } from "@/lib/statePaths";
+import { writeStateFile } from "@/lib/stateWrite";
 
 export type { UiSettings };
 
@@ -28,6 +28,6 @@ export async function writeUiSettings(patch: Partial<UiSettings>): Promise<UiSet
   const next = normalizeUiSettings({ ...(await readUiSettings()), ...defined });
   next.updatedAt = new Date().toISOString();
   await mkdir(path.dirname(FILE), { recursive: true });
-  await writeFile(FILE, JSON.stringify(next, null, 2) + "\n", "utf8");
+  await writeStateFile(FILE, JSON.stringify(next, null, 2) + "\n");
   return next;
 }

@@ -1,9 +1,10 @@
-import { readFile, mkdir, writeFile } from "fs/promises";
+import { readFile, mkdir } from "fs/promises";
 import path from "path";
 import { repoPath, run } from "@/lib/repo";
 import { recordFailure, recordSuccess } from "@/lib/health";
 import { notifyMac } from "@/lib/notify";
 import { statePath } from "@/lib/statePaths";
+import { writeStateFile } from "@/lib/stateWrite";
 
 const SNAPSHOT_FILE = statePath("my-prs.json");
 const CONFIG_FILE = statePath("my-prs-config.json");
@@ -118,7 +119,7 @@ async function readJson<T>(file: string, fallback: T): Promise<T> {
 
 async function writeJson(file: string, value: unknown): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify(value, null, 2) + "\n", "utf8");
+  await writeStateFile(file, JSON.stringify(value, null, 2) + "\n");
 }
 
 function clampInterval(seconds: unknown): number {

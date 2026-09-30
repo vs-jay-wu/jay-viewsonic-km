@@ -1,8 +1,8 @@
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { mkdir, readFile } from "fs/promises";
 import path from "path";
-import { repoPath } from "@/lib/repo";
 import { SCRATCH_ID, emptyNote, type Note, type NoteFile } from "@/lib/noteRules";
 import { statePath } from "@/lib/statePaths";
+import { writeStateFile } from "@/lib/stateWrite";
 
 export type { Note };
 
@@ -37,7 +37,7 @@ export async function readNote(): Promise<Note> {
 export async function writeNote(text: string): Promise<Note> {
   const note: Note = { id: SCRATCH_ID, text, updatedAt: new Date().toISOString() };
   await mkdir(path.dirname(FILE), { recursive: true });
-  await writeFile(FILE, JSON.stringify({ notes: [note] } satisfies NoteFile, null, 2) + "\n", "utf8");
+  await writeStateFile(FILE, JSON.stringify({ notes: [note] } satisfies NoteFile, null, 2) + "\n");
   return note;
 }
 

@@ -1,4 +1,4 @@
-import { readFile, mkdir, writeFile } from "fs/promises";
+import { readFile, mkdir } from "fs/promises";
 import path from "path";
 import { repoPath, run } from "@/lib/repo";
 import { recordFailure, recordSuccess } from "@/lib/health";
@@ -7,6 +7,7 @@ import {
   type RepoSyncConfig, type RepoSyncRun, type RepoSyncSchedulerState, type RepoSyncState,
 } from "@/lib/repoSyncRules";
 import { statePath } from "@/lib/statePaths";
+import { writeStateFile } from "@/lib/stateWrite";
 
 // 型別定義在純規則檔（客戶端要 import type），這裡只轉出去
 export type { RepoSyncConfig, RepoSyncRun, RepoSyncState, RepoSyncSchedulerState };
@@ -54,7 +55,7 @@ async function readJson<T>(file: string, fallback: T): Promise<T> {
 
 async function writeJson(file: string, value: unknown): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify(value, null, 2) + "\n", "utf8");
+  await writeStateFile(file, JSON.stringify(value, null, 2) + "\n");
 }
 
 export async function readConfig(): Promise<RepoSyncConfig> {

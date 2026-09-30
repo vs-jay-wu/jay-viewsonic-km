@@ -1,6 +1,6 @@
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { mkdir, readFile } from "fs/promises";
 import path from "path";
-import { repoPath, run } from "@/lib/repo";
+import { run } from "@/lib/repo";
 import {
   isKnownWorktree, listRepoDirs, mainRepoOfLinkedWorktree, mapLimit, worktreesOf,
 } from "@/lib/changes";
@@ -13,6 +13,7 @@ import { cacheState, canServeCached, shouldRescan } from "@/lib/repoCacheRules";
 import { isExternalRepo } from "@/lib/externalRepos";
 import { parseStatus, type ChangedFile } from "@/lib/changesRules";
 import { statePath } from "@/lib/statePaths";
+import { writeStateFile } from "@/lib/stateWrite";
 
 /**
  * 唯讀的 repo 檢視（`/git`）。
@@ -40,7 +41,7 @@ export async function togglePinned(dir: string): Promise<string[]> {
   const cur = await readPinned();
   const next = cur.includes(dir) ? cur.filter((d) => d !== dir) : [...cur, dir];
   await mkdir(path.dirname(PIN_FILE), { recursive: true });
-  await writeFile(PIN_FILE, JSON.stringify({ pinned: next }, null, 2) + "\n", "utf8");
+  await writeStateFile(PIN_FILE, JSON.stringify({ pinned: next }, null, 2) + "\n");
   return next;
 }
 

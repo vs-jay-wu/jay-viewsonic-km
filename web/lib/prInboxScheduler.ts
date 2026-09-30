@@ -1,8 +1,8 @@
-import { readFile, mkdir, writeFile } from "fs/promises";
+import { readFile, mkdir } from "fs/promises";
 import path from "path";
-import { repoPath } from "@/lib/repo";
 import { lockState, pruneRuns, triggerRun } from "@/lib/prInbox";
 import { statePath } from "@/lib/statePaths";
+import { writeStateFile } from "@/lib/stateWrite";
 
 const CONFIG_FILE = statePath("pr-inbox-watch.json");
 const MIN_INTERVAL_SECONDS = 60;
@@ -165,7 +165,7 @@ export async function readConfig(): Promise<ScheduleConfig> {
 
 async function writeConfig(config: ScheduleConfig): Promise<void> {
   await mkdir(path.dirname(CONFIG_FILE), { recursive: true });
-  await writeFile(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", "utf8");
+  await writeStateFile(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n");
 }
 
 /**

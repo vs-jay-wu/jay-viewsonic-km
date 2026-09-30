@@ -96,3 +96,16 @@ export function statePath(name: string, ...rest: string[]): string {
 export function cachePath(name: string, ...rest: string[]): string {
   return repoPath("data", "cache", name, ...rest);
 }
+
+/**
+ * 從完整路徑反推它屬於哪一塊。不在 `data/<owner>/` 底下就回 null。
+ *
+ * 用路徑反推而不是再傳一次名字：寫入端手上有的就是路徑常數
+ * （`const FILE = statePath("health.json")`），再要它複述一次名字必然會脫鉤。
+ */
+export function ownerOfPath(filePath: string): StateOwner | null {
+  const parts = filePath.split("/");
+  const i = parts.lastIndexOf("data");
+  const owner = i >= 0 ? parts[i + 1] : undefined;
+  return owner === "hub" || owner === "machine" || owner === "cache" ? owner : null;
+}

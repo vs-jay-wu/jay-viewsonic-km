@@ -1,6 +1,6 @@
-import { readFile, mkdir, stat, writeFile } from "fs/promises";
+import { readFile, mkdir, stat } from "fs/promises";
 import path from "path";
-import { repoPath, run } from "@/lib/repo";
+import { run } from "@/lib/repo";
 import { listRepoDirs, mapLimit, statusOf, workspace, worktreesOf } from "@/lib/changes";
 import { getWorkIndex } from "@/lib/workIndex";
 import { canonicalRepo, parseSessionTitle } from "@/lib/workItemRules";
@@ -10,6 +10,7 @@ import {
   type LineBranch, type LineReason, type WorkChanges,
 } from "@/lib/workChangesRules";
 import { statePath } from "@/lib/statePaths";
+import { writeStateFile } from "@/lib/stateWrite";
 
 export type { WorkChanges, LineBranch };
 
@@ -40,7 +41,7 @@ export async function toggleManual(key: string, worktree: string): Promise<strin
   all[key] = next;
   if (!next.length) delete all[key];
   await mkdir(path.dirname(MANUAL_FILE), { recursive: true });
-  await writeFile(MANUAL_FILE, JSON.stringify({ lines: all }, null, 2) + "\n", "utf8");
+  await writeStateFile(MANUAL_FILE, JSON.stringify({ lines: all }, null, 2) + "\n");
   return next;
 }
 

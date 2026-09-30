@@ -1,7 +1,8 @@
-import { readFile, mkdir, stat, writeFile } from "fs/promises";
+import { readFile, mkdir, stat } from "fs/promises";
 import path from "path";
 import { repoPath, run } from "@/lib/repo";
 import { statePath } from "@/lib/statePaths";
+import { writeStateFile } from "@/lib/stateWrite";
 
 /**
  * 用 Orca（ADE）的 CLI 開 Claude session。
@@ -59,7 +60,7 @@ async function readRegistry(): Promise<Registry> {
 
 async function writeRegistry(r: Registry): Promise<void> {
   await mkdir(path.dirname(REGISTRY_FILE), { recursive: true });
-  await writeFile(REGISTRY_FILE, JSON.stringify(r, null, 2) + "\n", "utf8");
+  await writeStateFile(REGISTRY_FILE, JSON.stringify(r, null, 2) + "\n");
 }
 
 // ─── 查詢 ────────────────────────────────────────────────────────────────────
@@ -217,7 +218,7 @@ export async function orcaPresence(): Promise<OrcaPresence> {
     checkedAt: new Date().toISOString(),
   };
   await mkdir(path.dirname(PRESENCE_FILE), { recursive: true })
-    .then(() => writeFile(PRESENCE_FILE, JSON.stringify(presence, null, 2) + "\n", "utf8"))
+    .then(() => writeStateFile(PRESENCE_FILE, JSON.stringify(presence, null, 2) + "\n"))
     .catch(() => undefined);
   return presence;
 }

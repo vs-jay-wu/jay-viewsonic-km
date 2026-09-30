@@ -1,8 +1,8 @@
-import { open, readdir, readFile, rm, stat, mkdir, writeFile } from "fs/promises";
+import { open, readdir, readFile, rm, stat, mkdir } from "fs/promises";
 import path from "path";
 import os from "os";
-import { repoPath } from "@/lib/repo";
 import { statePath } from "@/lib/statePaths";
+import { writeStateFile } from "@/lib/stateWrite";
 
 // 純規則放隔壁（客戶端也要用，不能帶到 fs/promises）
 export { isStale, STALE_DAYS } from "@/lib/sessionRules";
@@ -54,7 +54,7 @@ async function readPins(): Promise<PinsFile> {
 
 async function writePins(pins: PinsFile): Promise<void> {
   await mkdir(path.dirname(PINS_FILE), { recursive: true });
-  await writeFile(PINS_FILE, JSON.stringify(pins, null, 2) + "\n", "utf8");
+  await writeStateFile(PINS_FILE, JSON.stringify(pins, null, 2) + "\n");
 }
 
 export async function setPinned(id: string, pinned: boolean): Promise<boolean> {
@@ -242,7 +242,7 @@ async function readMetaCache(): Promise<MetaCache> {
 
 async function writeMetaCache(cache: MetaCache): Promise<void> {
   await mkdir(path.dirname(META_CACHE_FILE), { recursive: true });
-  await writeFile(META_CACHE_FILE, JSON.stringify(cache), "utf8");
+  await writeStateFile(META_CACHE_FILE, JSON.stringify(cache));
 }
 
 /** custom-title 優先，其次 agent 名，最後才退回第一句 prompt。 */

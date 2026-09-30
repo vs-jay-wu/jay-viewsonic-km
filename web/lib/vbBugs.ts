@@ -1,4 +1,4 @@
-import { readFile, mkdir, writeFile } from "fs/promises";
+import { readFile, mkdir } from "fs/promises";
 import path from "path";
 import { repoPath, run } from "@/lib/repo";
 import { recordFailure, recordSuccess } from "@/lib/health";
@@ -15,6 +15,7 @@ const DEFAULT_INTERVAL_SECONDS = 1800; // bug 數不會分鐘級變動，半小�
 export type { BugIssue, BugCell, BugProduct, PriorityCol, StatusGroup } from "@/lib/vbBugsRules";
 import type { BugIssue } from "@/lib/vbBugsRules";
 import { statePath } from "@/lib/statePaths";
+import { writeStateFile } from "@/lib/stateWrite";
 
 export interface BugSnapshot {
   fetchedAt: string;
@@ -68,7 +69,7 @@ async function readJson<T>(file: string, fallback: T): Promise<T> {
 
 async function writeJson(file: string, value: unknown): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify(value, null, 2) + "\n", "utf8");
+  await writeStateFile(file, JSON.stringify(value, null, 2) + "\n");
 }
 
 function clampInterval(seconds: unknown): number {
