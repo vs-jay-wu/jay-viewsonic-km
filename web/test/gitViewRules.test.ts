@@ -3,7 +3,7 @@ import {
   describeFetch, layoutGraph, mergeCommitPage, parseBranches, parseCommits, parseFetchOutput,
   refreshCommits,
   parseRefs, pushPlan, sortBranches,
-  type Branch, type Commit,
+  type Branch, type Commit, wipRowIndex,
 } from "@/lib/gitViewRules";
 
 const c = (sha: string, parents: string[] = []): Commit => ({
@@ -350,5 +350,26 @@ describe("refreshCommits", () => {
   it("抓回空的一頁就維持現狀（通常是請求失敗或換了分支）", () => {
     const current = [c("c"), c("b")];
     expect(refreshCommits(current, [])).toBe(current);
+  });
+});
+
+describe("wipRowIndex — 未提交要接在 HEAD 上，不是清單最上面", () => {
+  const cs = (...shas: string[]) => shas.map((sha) => ({ sha }));
+
+  it("HEAD 在中間時就回那一列（edu-vbo：HEAD 落後 origin/main 202 個）", () => {
+    expect(wipRowIndex(cs("a", "b", "c", "d"), "c")).toBe(2);
+  });
+
+  it("HEAD 就是最新那一列時回 0", () => {
+    expect(wipRowIndex(cs("a", "b"), "a")).toBe(0);
+  });
+
+  it("HEAD 不在這批 commit 裡就回 0（畫在最上面，行為跟以前一樣）", () => {
+    expect(wipRowIndex(cs("a", "b"), "zzz")).toBe(0);
+    expect(wipRowIndex(cs("a", "b"), null)).toBe(0);
+  });
+
+  it("空清單不會炸", () => {
+    expect(wipRowIndex([], "a")).toBe(0);
   });
 });

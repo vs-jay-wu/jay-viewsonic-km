@@ -519,7 +519,7 @@ export default function GitView({
                   </Tooltip>
                   <span className="ml-auto" />
                   {detail.wip.length > 0 && (
-                    <Tooltip label="展開最上面那一列看未提交的改動">
+                    <Tooltip label="展開 HEAD 上面那一列看未提交的改動">
                       <button
                         onClick={() => {
                           setWipOpen(true);
@@ -588,6 +588,7 @@ export default function GitView({
                 <CommitGraph
                   commits={detail.commits}
                   graph={graph}
+                  headSha={detail.head.sha}
                   openSha={openCommit}
                   info={commitInfo}
                   onToggle={toggleCommit}

@@ -20,6 +20,23 @@ export interface Commit {
   refs: RefChip[];
 }
 
+/**
+ * 「未提交」那一列要畫在第幾列**之前**。
+ *
+ * ⚠️ **不是固定第 0 列。** 未提交的改動長在 **HEAD** 上，不是長在清單最上面那個
+ * commit 上 —— 看「全部分支」時最上面通常是別人的 `origin/main`，而本機 HEAD 可能
+ * 落後好幾百個 commit（Jay 2026-09-30 在 edu-vbo 上看到：HEAD 落後 origin/main
+ * 202 個，未提交那一列卻畫在 origin/main 上面，看起來像是那條線上的改動）。
+ *
+ * HEAD 不在這批 commit 裡（切到別條分支、只載入一部分）就回 0 —— 畫在最上面，
+ * 跟以前一樣；呼叫端會另外標示「HEAD 不在畫面上」。
+ */
+export function wipRowIndex(commits: { sha: string }[], headSha: string | null): number {
+  if (!headSha) return 0;
+  const i = commits.findIndex((c) => c.sha === headSha);
+  return i < 0 ? 0 : i;
+}
+
 export interface RefChip {
   name: string;
   kind: "head" | "local" | "remote" | "tag";

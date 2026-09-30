@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import { FileRow, StageBadge, TreeRows, type ViewMode } from "@/components/FileList";
 import { buildTree, countByStage, splitByStage, type ChangedFile, type WipSide } from "@/lib/changesRules";
-import { laneColor, type Commit, type Graph, type GraphRow } from "@/lib/gitViewRules";
+import { laneColor, wipRowIndex, type Commit, type Graph, type GraphRow } from "@/lib/gitViewRules";
 
 /**
  * commit 歷史 ＋ 左邊的 graph。
@@ -54,6 +54,7 @@ export default function CommitGraph({
   openFile,
   flashSha,
   wip,
+  headSha = null,
 }: {
   commits: Commit[];
   graph: Graph;
@@ -68,7 +69,12 @@ export default function CommitGraph({
   openFile: { sha: string | null; path: string; side?: WipSide } | null;
   /** 剛跳過去的那一列，短暫highlight —— 不然在一百多列裡看不出停在哪 */
   flashSha?: string | null;
-  /** 未提交的改動。畫在最上面一列，圓圈是虛線（照 VS Code） */
+  /**
+   * 本機 HEAD 的 sha。**未提交那一列要接在它上面**，不是接在清單第一列 ——
+   * 看「全部分支」時第一列通常是別人的 `origin/main`（見 `wipRowIndex`）。
+   */
+  headSha?: string | null;
+  /** 未提交的改動。畫在 HEAD 那一列上面，圓圈是虛線（照 VS Code） */
   wip?: {
     files: ChangedFile[];
     open: boolean;
@@ -76,13 +82,13 @@ export default function CommitGraph({
   };
 }) {
   const width = Math.max(1, graph.width) * LANE_W;
-  // WIP 那一列要畫在 HEAD 所在的 lane 上，並連到下面第一列
-  const wipLane = graph.rows[0]?.lane ?? 0;
   const hasWip = !!wip && wip.files.length > 0;
+  /** 未提交要插在哪一列之前（HEAD 那一列；HEAD 不在畫面上就是最上面） */
+  const wipAt = wipRowIndex(commits, headSha);
+  // 畫在 HEAD 所在的 lane 上，並往下接到那一列
+  const wipLane = graph.rows[wipAt]?.lane ?? 0;
 
-  return (
-    <ul>
-      {hasWip && wip && (
+  const wipRow = hasWip && wip && (
         <li>
           <button
             onClick={wip.onToggle}
@@ -196,7 +202,13 @@ export default function CommitGraph({
               );
             })()}
         </li>
-      )}
+      );
+
+  return (
+    <ul>
+      {/* HEAD 不在這批 commit 裡（切到別條分支、只載入前面幾頁）時 `wipAt` 是 0，
+          跟以前一樣畫在最上面 */}
+      {wipAt === 0 && wipRow}
       {commits.map((c, i) => {
         const row = graph.rows[i];
         const open = openSha === c.sha;
@@ -207,9 +219,11 @@ export default function CommitGraph({
          * （沒有任何 lane 在等它）。上面畫了未提交那一列時，這半格要自己補，
          * 否則虛線圓圈與第一個 commit 之間會缺半列（Jay 2026-09-17 回報）。
          */
-        const joinWip = i === 0 && hasWip && row;
+        const joinWip = i === wipAt && hasWip && row;
         return (
-          <li key={c.sha} data-sha={c.sha}>
+          <Fragment key={c.sha}>
+          {i === wipAt && wipAt !== 0 && wipRow}
+          <li data-sha={c.sha}>
             <button
               onClick={() => onToggle(c.sha)}
               style={{ height: ROW_H }}
@@ -301,6 +315,7 @@ export default function CommitGraph({
               />
             )}
           </li>
+          </Fragment>
         );
       })}
     </ul>
