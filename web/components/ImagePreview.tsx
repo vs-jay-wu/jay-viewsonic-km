@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Icon, { type IconName } from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 
@@ -34,6 +34,30 @@ export default function ImagePreview({ src, alt }: { src: string; alt: string })
   const [bg, setBg] = useState<Bg>("checker");
   const [zoom, setZoom] = useState(1);
   const [dim, setDim] = useState<{ w: number; h: number } | null>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * 觸控板的雙指縮放要縮**這張圖**，不是整個網頁（Jay 2026-09-30）。
+   *
+   * 瀏覽器把觸控板的 pinch 報成**帶 `ctrlKey` 的 wheel 事件** —— 這是唯一
+   * 接得到它的方式（沒有 pinch 事件）。
+   *
+   * ⚠️ **一定要自己 `addEventListener` 並指定 `passive: false`**：
+   * React 的 `onWheel` 是 passive 的，裡面呼叫 `preventDefault()` 不會生效
+   * （而且 console 只會印一行警告），頁面照樣被縮放。
+   */
+  useEffect(() => {
+    const el = paneRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return; // 一般捲動不要攔
+      e.preventDefault();
+      // deltaY 往上是負的＝放大；用指數才會是「等比例」而不是等差
+      setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z * Math.exp(-e.deltaY / 180))));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem("km.drawable.bg");
@@ -97,8 +121,13 @@ export default function ImagePreview({ src, alt }: { src: string; alt: string })
         </div>
       </div>
 
+      {/*
+        `overscroll-contain`：捲到底之後再捲，不要把事件交給外層 ——
+        macOS 的觸控板左右滑到底會變成瀏覽器的上一頁（Jay 2026-09-30）。
+      */}
       <div
-        className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4"
+        ref={paneRef}
+        className="flex min-h-0 flex-1 items-center justify-center overflow-auto overscroll-contain p-4"
         style={
           bg === "checker"
             ? { background: CHECKER }

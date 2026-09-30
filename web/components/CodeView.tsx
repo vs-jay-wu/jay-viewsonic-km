@@ -640,7 +640,11 @@ export default function CodeView({
                   <DragHandle handleProps={previewPane.handleProps} />
                 )}
                 {showCode && (
-                <div className={`min-h-0 flex-1 overflow-auto ${dark ? "bg-[#0d1117]" : "bg-surface"}`}>
+                <div
+                  className={`min-h-0 flex-1 overflow-auto overscroll-contain ${
+                    dark ? "bg-[#0d1117]" : "bg-surface"
+                  }`}
+                >
                   <table className="w-full border-collapse font-mono text-[12px] leading-[1.55]">
                     <tbody>
                       {lines.map((l, i) => {

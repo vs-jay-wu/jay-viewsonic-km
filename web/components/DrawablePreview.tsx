@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Icon, { type IconName } from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import type { AdaptiveMask, VectorSvg } from "@/lib/vectorDrawableRules";
@@ -51,6 +51,20 @@ export default function DrawablePreview({
   const [bg, setBg] = useState<Bg>("checker");
   /** 1 ＝ 縮放至符合面板；其餘是它的倍率 */
   const [zoom, setZoom] = useState(1);
+  const paneRef = useRef<HTMLDivElement>(null);
+
+  /** 觸控板雙指縮放（瀏覽器報成帶 ctrlKey 的 wheel）。理由見 `ImagePreview` */
+  useEffect(() => {
+    const el = paneRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z * Math.exp(-e.deltaY / 180))));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem("km.drawable.bg");
@@ -141,7 +155,8 @@ export default function DrawablePreview({
       </div>
 
       <div
-        className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4"
+        ref={paneRef}
+        className="flex min-h-0 flex-1 items-center justify-center overflow-auto overscroll-contain p-4"
         style={
           bg === "checker"
             ? { background: CHECKER }

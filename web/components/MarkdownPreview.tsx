@@ -63,7 +63,7 @@ export default function MarkdownPreview({ text }: { text: string }) {
     <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
       {/* `min-w-0` 不能省：flex 項目預設 `min-width:auto`，內文有寬表格時會把自己
           撐到超過容器，目錄那一欄就被擠出畫面外（而且不會有捲軸） */}
-      <div ref={bodyRef} className="min-h-0 min-w-0 flex-1 overflow-auto px-6 py-5">
+      <div ref={bodyRef} className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain px-6 py-5">
         <div className="md-body mx-auto max-w-3xl">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
