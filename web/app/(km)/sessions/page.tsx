@@ -11,6 +11,7 @@ import {
 } from "@/lib/workIndexRules";
 import { useTicketSession } from "@/lib/useTicketSession";
 import { isDefaultWorkContext, isStale, STALE_DAYS } from "@/lib/sessionRules";
+import { projectLocation } from "@/lib/sessionLocationRules";
 import TranscriptPanel from "@/components/TranscriptPanel";
 
 interface SessionInfo {
@@ -91,10 +92,25 @@ export default function SessionsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  /**
+   * 專案下拉：**照 repo 分組**，不是照 cwd。
+   *
+   * Orca 的工作區（`~/orca/workspaces/edu-vbo/thresher`）原本各自佔一列、
+   * 只顯示 `thresher`，看起來像三個不相干的專案（Jay 2026-09-30）。
+   * 判準在 `lib/sessionLocationRules.ts`（有測試）。
+   */
   const projects = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const s of sessions) m.set(s.cwd, (m.get(s.cwd) ?? 0) + 1);
-    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+    const m = new Map<string, { n: number; labels: Set<string> }>();
+    for (const s of sessions) {
+      const { repo, label } = projectLocation(s.cwd);
+      const cur = m.get(repo) ?? { n: 0, labels: new Set<string>() };
+      cur.n++;
+      cur.labels.add(label);
+      m.set(repo, cur);
+    }
+    return [...m.entries()]
+      .map(([repo, v]) => ({ repo, n: v.n, labels: [...v.labels].sort() }))
+      .sort((a, b) => b.n - a.n);
   }, [sessions]);
 
   const stale = useMemo(
@@ -116,7 +132,7 @@ export default function SessionsPage() {
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return sessions
-      .filter((s) => project === "all" || s.cwd === project)
+      .filter((s) => project === "all" || projectLocation(s.cwd).repo === project)
       .filter((s) =>
         view === "stale"
           ? isStale(s, staleDays)
@@ -386,9 +402,11 @@ export default function SessionsPage() {
             className="max-w-xs rounded-lg border border-line-strong px-3 py-2 text-sm text-fg"
           >
             <option value="all">全部專案（{sessions.length}）</option>
-            {projects.map(([cwd, n]) => (
-              <option key={cwd} value={cwd}>
-                {cwd.split("/").slice(-1)[0]}（{n}）
+            {projects.map((p) => (
+              <option key={p.repo} value={p.repo}>
+                {p.repo}（{p.n}）
+                {/* 同一個 repo 有多個位置時列出來，才知道這些 session 散在哪 */}
+                {p.labels.length > 1 ? `　${p.labels.join("、")}` : ""}
               </option>
             ))}
           </select>
@@ -540,7 +558,7 @@ export default function SessionsPage() {
                   <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-fg-subtle">
                     {!isDefaultWorkContext(s.cwd, s.gitBranch) && (
                       <>
-                        <span>{s.cwd.split("/").slice(-2).join("/")}</span>
+                        <span>{projectLocation(s.cwd).label}</span>
                         {s.gitBranch && (
                           <span className="rounded bg-surface-sunken px-1.5 py-0.5 text-fg-muted">
                             {s.gitBranch}
