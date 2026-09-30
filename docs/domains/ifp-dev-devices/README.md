@@ -67,6 +67,27 @@ $ adb shell dumpsys lock_settings
 一睡醒 keyguard 就出來，而且韌體的 bug 讓密碼輸入畫面不一定會出現（Jay 2026-09-29 目擊）。
 機器上還有第二個使用者 `UserInfo{10:New user}`（沒在跑）。
 
+**卡住時長什麼樣（2026-09-30 再次發生）**：休眠被喚醒後，鎖定畫面先出現「選擇使用者」，
+但選了之後**不出現 PIN 輸入框**，人卡在那裡解不開，只能重開機。〔Jay 目擊〕
+
+當下 adb 看得到的狀態〔實測〕：
+
+```text
+$ adb shell dumpsys window | grep -E "mCurrentFocus|isKeyguardShowing"
+  mCurrentFocus=Window{… u0 NotificationShade}      ← 鎖定畫面本身
+    isKeyguardShowing=true
+$ adb shell dumpsys lock_settings | grep CredentialType
+    CredentialType: PIN
+$ adb shell am get-current-user
+0
+```
+
+- **adb 截不到那個畫面**：`adb exec-out screencap -p` 出來是全黑、只剩底部一個返回箭頭（有 credential 的
+  keyguard 不給截圖）。要留證據只能拿手機拍。
+- 〔推論，未證實〕「先選使用者」應該是因為機器上有第二個使用者（user 10），而選完之後該接的 PIN 輸入畫面沒出來
+  是 FW 的 bug——跟設定頁顯示「無」卻還存著 PIN 可能是同一件事。
+- **處理**：重開機。重開後直接進桌面，不會要求輸入 PIN。
+
 **怎麼處理**
 
 1. 在機器的設定裡把「人體感應／PIR／有人偵測」類的節能選項關掉 —— 最根本。
