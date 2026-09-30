@@ -41,7 +41,7 @@ Jay 只有筆電，而且開始需要第二台：
 ```
 你在 B 前面 → 瀏覽器開 B 的 localhost:9487（satellite）
                 ├─ /changes /repo/code /sessions → 讀 B 自己的磁碟
-                └─ 其餘全部 → server 端向 hub 取（Tailscale）
+                └─ 其餘全部 → server 端向 hub 取（SSH port forward，見 §9）
 
 hub（A）是唯一的聚合點：
     ├─ 第一類資料自己抓（排程只在這裡跑）
@@ -197,16 +197,62 @@ B 上要多一個 repo 是**明確動作**（清單上按「在這台 clone」�
 **km 會開 Claude session、會跑腳本、能讀整個 workspace。被打穿 = 有人以 Jay 的身分
 在他的機器上執行任意指令。** 目前它安全只有一個理由：只聽 `127.0.0.1`。
 
-### 傳輸：Tailscale，而且綁介面不綁 `0.0.0.0`
+### 傳輸：**SSH port forward**（2026-09-30 定案）
+
+```bash
+# 在 B 上開，把 A 的 km 接到 B 的 9488
+ssh -N -L 9488:localhost:9487 <hub 的位址>
+```
+
+B 的 `km.hubUrl` 就寫 `http://localhost:9488`。
+
+**為什麼是它**：沒有第三方、沒有帳號、沒有授權問題（見下一節查到的東西），
+而且對 km 而言**那就是 loopback** —— 不必綁非 loopback 的介面、不必設
+`allowedHosts`、不必發裝置 token。安全邊界整個換成 SSH 的金鑰認證，那比 km
+自己能做到的任何東西都強。
+
+**為什麼是 9488 不是 9487**：B 自己也跑著一個 km（satellite）佔著 9487，
+本機轉發不能撞號。
+
+實測（2026-09-30，用 curl 偽造 Host 模擬轉發進來的請求）：
+
+| 情境 | 結果 |
+|---|---|
+| `Host: localhost:9488` 的 GET | 200（`hostnameOf` 去掉 port → loopback → 放行） |
+| `Host: 127.0.0.1:9488` 的 GET | 200 |
+| satellite 的 server 端 POST（無 `Origin`、無 `Sec-Fetch-Site`） | 過得了守衛（走「不是瀏覽器 ＋ 來自本機」那條豁免） |
+
+**要注意的**：
+
+- `ssh -L` 預設只綁 B 的 `127.0.0.1`，所以只有 B 上的行程連得到 —— 這是對的，
+  **不要加 `-g` 或 `GatewayPorts`**，那會把 A 的 km 曝光給 B 所在的整個網段。
+- A 要開 **Remote Login**（系統設定 ▸ 一般 ▸ 共享）。**2026-09-30 實測目前是關的**
+  （`ssh localhost` → `Connection refused`）。開之前想一下那台機器會接到哪些網路。
+- 斷線要能自己接回來：`-o ServerAliveInterval=30 -o ServerAliveCountMax=3`
+  ＋ 外面包一層重試（或 `autossh`）。這屬於階段 1 要做的事。
+- 離開家就不方便（要有辦法連回 A）。真的變成常態需求時再回頭看下面的 Tailscale。
+
+### 備案：Tailscale（**目前不採用**）
 
 WireGuard 加密、裝置層級認證本來就有、離家也能用、給穩定名字不必追 DHCP。
-bind 到 **Tailscale 那張介面的 IP（`100.x.y.z`）**，不要 `0.0.0.0` ——
-差別在接到咖啡廳 Wi-Fi 時前者完全不暴露。（`setup-km-web.sh` 的註解本來就寫了
-「0.0.0.0 不建議」。）
+要用的話 bind 到 **Tailscale 那張介面的 IP（`100.x.y.z`）**，不要 `0.0.0.0`
+（差別在接到咖啡廳 Wi-Fi 時前者完全不暴露）。`setup-km-web.sh --tailscale`
+已經寫好了，`km.allowedHosts` 與裝置配對那一整套也已經實作並測過 ——
+**改用它不必再寫程式，只要開通與填設定。**
 
-#### ⚠️ 註冊帳號與授權：兩件要先想清楚的事（2026-09-30 Jay 問）
+**翻案條件**（任一成立就回來看這個備案）：
 
-**① 不要用公司帳號登入。** Jay 的信箱是 `@viewsonic.com`。若公司已經有以那個網域
+- 開始需要**在家以外**存取 km（出差、在公司連家裡那台）
+- 機器變成三台以上 —— SSH 轉發要 N 條，tailnet 只要各自加入
+- 手機／iPad 要看 km（§12 的後期項目）——瀏覽器沒辦法用 SSH 轉發
+- 公司 IT 明確允許，且授權那條（見下）被釐清
+
+**不採用的理由**：授權落在定價頁那句行銷文案的灰色地帶（下一節），而且在公司配的
+電腦上裝第三方 VPN 類軟體本身可能牴觸 IT 政策 —— 而 SSH 轉發沒有這兩個問題。
+
+#### 備案的授權問題：官方怎麼寫的（2026-09-30 Jay 問，實查）
+
+**① 要用的話，不要用公司帳號登入。** Jay 的信箱是 `@viewsonic.com`。若公司已經有以那個網域
 建立的 tailnet，用它登入會**把你的機器併進公司的 tailnet** —— 裝置清單、ACL、
 稽核紀錄都在 IT 手上。用個人的 Google／GitHub 帳號另開一個自己的 tailnet。
 
@@ -239,27 +285,32 @@ personal」那一邊；真正被引用來說你不該這樣用的，只會是定
 **另一個獨立的風險（跟授權無關）**：在公司配的電腦上裝第三方 VPN 類軟體、把公司
 機器接進個人 tailnet，可能牴觸公司 IT 政策 —— 那跟 Tailscale 收不收錢是兩回事。
 
-三條路：
+當時比較的三條（留著是為了讓翻案的人看得到取捨，不是待選清單）：
 
 | 做法 | 費用 | 風險 |
 |---|---|---|
 | 個人網域註冊 ＋ Personal | 免費 | 定價頁的 non-commercial 文案；公司 IT 政策 |
-| **SSH port forward**（`ssh -L 9487:localhost:9487 <hub>`） | 免費 | **沒有第三方、沒有授權問題**；要開 Remote Login、IP 變了要重接、離開家不方便 |
+| **SSH port forward** ← **選這條** | 免費 | **沒有第三方、沒有授權問題**；要開 Remote Login、IP 變了要重接、離開家不方便 |
 | Standard（US$8／人／月） | 付費 | 沒有授權疑慮；仍受公司 IT 政策管 |
 
 > ⚠️ **不要用公司信箱註冊**：自訂網域會被直接判成 business use；而且若公司已有
 > tailnet，你的機器會被併進去（裝置清單、ACL、稽核都在 IT 手上）。
 
-**做決定之前，km 這邊不受影響**：`proxy.ts` 的三道檢查、裝置 token、
-`--tailscale` 綁定都跟用哪條通道無關 —— 它們防的是「有人打得到這個 port」，
-不是「通道是誰提供的」。SSH 那條甚至更單純：對 km 而言那就是 loopback。
+**換通道不必改 km**：`proxy.ts` 的三道檢查、裝置配對與 token、
+`setup-km-web.sh --tailscale` 都跟用哪條通道無關 —— 它們防的是「有人打得到這個
+port」，不是「通道是誰提供的」。
+
+走 SSH 的話它們是**休眠**而不是白做的：全部流量在 km 眼中都是 loopback，
+所以 Host 白名單只剩預設值、token 從來不會被要求。哪天翻案改用 Tailscale，
+填 `km.allowedHosts` ＋ 配對一次就生效。
 
 ### 驗證：配對 → 裝置 token，沒有會員系統
 
 | 通道 | 驗證 |
 |---|---|
 | 瀏覽器 → 自己機器的 km | **維持現狀不用驗**（還是 localhost） |
-| km ↔ km | 裝置 token（配對時在 hub 上按 approve） |
+| km ↔ km **走 SSH 轉發**（目前） | **SSH 的金鑰認證**。km 看到的是 loopback，token 不會被要求 |
+| km ↔ km **走 tailnet**（翻案後） | 裝置 token（配對時在 hub 上按 approve） |
 | 手機／其他瀏覽器 → hub | cookie 配對流程（**後期**，見 §12） |
 
 配對流程：B 第一次連 → 顯示 6 碼 ＋ 送上 hostname／機器碼 → 你在 hub 上看到那些資訊
@@ -345,7 +396,7 @@ hub 絕不自動的另一個理由：**km 就是開發 km 的地方**，工作�
 階段 0  ① repo 身分改 org/repo + workspaceRoot
         ② data/ 切成 hub / machine / cache（含 29 個檔逐一歸屬）
         ③ 角色設定 + 對 data/hub/ 的寫入守衛
-        ④ Tailscale + 綁 tailscale 介面 + Origin/Host 檢查 + km↔km token
+        ④ Origin/Host 檢查 + 裝置配對與 token（通道用 SSH port forward）
         ⑤ hub 安裝 LaunchAgent（重開機會自己回來）
 階段 1  satellite 角色：排程關閉、三個 local 頁讀自己的、其餘向 hub 取
         + 離線快取、時間戳、警告列

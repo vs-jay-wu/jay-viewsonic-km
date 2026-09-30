@@ -22,7 +22,13 @@ export interface KmMachine {
 
 export interface KmConfig {
   role: KmRole;
-  /** satellite 才需要：hub 的網址 */
+  /**
+   * satellite 才需要：hub 的網址。
+   *
+   * 走 SSH port forward 的話這是**本機的轉發埠**（例如 `http://localhost:9488`），
+   * 不是 hub 的 IP —— 9487 被這台自己的 km 佔著，轉發不能撞號。
+   * 見 `docs/ideas/km-multi-machine.md` §9。
+   */
   hubUrl?: string;
   machine: KmMachine;
 }
