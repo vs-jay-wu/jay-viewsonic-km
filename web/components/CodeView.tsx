@@ -15,7 +15,7 @@ import { useRepoList } from "@/components/useRepoList";
 import { hljsHref, type DiffTheme } from "@/lib/uiSettingsRules";
 import { languageOf, shebangLanguage } from "@/lib/changesRules";
 import {
-  groupHits, looksBinary, revealSecondsLeft, type SearchHit, type TreeEntry,
+  groupHits, looksUnviewable, revealSecondsLeft, type SearchHit, type TreeEntry,
 } from "@/lib/codeBrowseRules";
 import { foldRanges, hiddenLines, xmlFoldRanges } from "@/lib/foldRules";
 import { splitHighlightedLines } from "@/lib/highlightLines";
@@ -762,6 +762,9 @@ function TreeLevel({
                 * 顏色的分法跟 VS Code 一樣：**被 gitignore 的調暗**，其餘是一般亮度
                 * （Jay 2026-09-23）。原本是「所有檔案都偏暗、只有目錄亮」，
                 * 等於把最常看的東西壓得最暗。
+                *
+                * 第二段灰（`looksUnviewable`）講的是「這個檔打不開」，所以**不含**
+                * 圖／音／影／字型 —— 那些現在預覽得出來。
                 */}
               <span
                 className={`font-mono ${
@@ -769,7 +772,7 @@ function TreeLevel({
                     ? "text-fg-disabled"
                     : e.kind === "dir"
                       ? "text-fg"
-                      : looksBinary(e.path)
+                      : looksUnviewable(e.path)
                         ? "text-fg-subtle"
                         : "text-fg"
                 }`}

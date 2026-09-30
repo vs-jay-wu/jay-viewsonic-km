@@ -5,6 +5,8 @@
  * （Jay 2026-09-18：只要看 code 與資料夾結構，不要改）。
  */
 
+import { previewKindOf } from "./codeRawRules";
+
 export interface TreeEntry {
   name: string;
   /** 相對 repo 根目錄 */
@@ -37,6 +39,21 @@ export function extOf(path: string): string {
 
 export function looksBinary(path: string): boolean {
   return BINARY_EXT.has(extOf(path));
+}
+
+/**
+ * 檔案樹上要不要把這個檔名調暗。
+ *
+ * 判準是**這個檔在 km web 上看不看得到**，不是「能不能當文字讀」——
+ * `looksBinary` 管的是後者（文字讀取路徑要擋掉它們），兩件事 2026-09-30 之前
+ * 共用同一條規則，於是圖／音／影／字型全被畫成「不用開」的顏色，
+ * 而它們恰好是現在點下去體驗最好的一批（Jay 當天問「為什麼這些檔案是灰色的」）。
+ *
+ * ⚠️ 新增預覽能力時，真正要改的是 `codeRawRules.ts` 的 `RAW_MIME`／`previewKindOf`，
+ * 這裡會自己跟上。不要回頭把副檔名塞進 `BINARY_EXT` 以外的第三份清單。
+ */
+export function looksUnviewable(path: string): boolean {
+  return looksBinary(path) && previewKindOf(path) === null;
 }
 
 /**

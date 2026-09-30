@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   REVEAL_TTL_MS, isHardBlocked, sortEntries, type TreeEntry, isRevealable, isSensitivePath, maskEnvValues,
-  revealSecondsLeft,
+  revealSecondsLeft, looksBinary, looksUnviewable,
 } from "@/lib/codeBrowseRules";
 
 describe("機敏檔案的解鎖分級", () => {
@@ -123,5 +123,36 @@ describe("sortEntries", () => {
   it("檔案也一樣", () => {
     const out = sortEntries([e("README.md"), e(".gitignore")]).map((x) => x.name);
     expect(out[0]).toBe(".gitignore");
+  });
+});
+
+describe("looksUnviewable（檔案樹調暗的判準）", () => {
+  it("看得到的檔案不調暗，即使它是二進位", () => {
+    // 這幾種 looksBinary 仍然為 true（文字讀取路徑要擋），但畫面上預覽得出來
+    for (const p of [
+      "res/drawable/ic.png", "a/b.jpg", "x.gif", "x.webp", "favicon.ico",
+      "fonts/AbrilFatface-Regular.ttf", "a.otf", "a.woff2",
+      "audio/r1-u1.wav", "a.mp3", "a.m4a", "clip.mp4", "clip.mov",
+    ]) {
+      expect(looksBinary(p), p).toBe(true);
+      expect(looksUnviewable(p), p).toBe(false);
+    }
+  });
+
+  it("真的打不開的才調暗", () => {
+    for (const p of [
+      "app/release.jks", "viewsonic.keystore", "cert.p12", "a.so", "a.dylib",
+      "libs/x.jar", "libs/x.aar", "app.apk", "app.aab", "classes.dex",
+      "A.class", "a.zip", "a.tar", "a.gz", "doc.pdf", "font.eot", "icon.icns",
+    ]) {
+      expect(looksUnviewable(p), p).toBe(true);
+    }
+  });
+
+  it("一般文字檔兩條都不中", () => {
+    for (const p of ["README.md", "app/build.gradle.kts", "res/drawable/ic.xml", "logo.svg"]) {
+      expect(looksBinary(p), p).toBe(false);
+      expect(looksUnviewable(p), p).toBe(false);
+    }
   });
 });
