@@ -26,7 +26,7 @@ export default function RepoPicker({
   showWorktrees = true,
 }: {
   list: RepoList;
-  onPick: (dir: string) => void;
+  onPick: (row: RepoRow) => void;
   showWorktrees?: boolean;
 }) {
   const { rows, sort, setSort, loadingFirstCommit, externalMounted, rescanning, reload, togglePin, busyPin } = list;
@@ -161,7 +161,7 @@ function Row({
 }: {
   row: RepoRow;
   sort: SortKey;
-  onPick: (dir: string) => void;
+  onPick: (row: RepoRow) => void;
   onPin: (row: RepoRow) => Promise<void>;
   busyPin: boolean;
 }) {
@@ -188,7 +188,7 @@ function Row({
         </button>
       </Tooltip>
       <button
-        onClick={() => onPick(row.dir)}
+        onClick={() => onPick(row)}
         className="flex min-w-0 flex-1 items-center gap-1.5 py-2 pl-1 text-left font-mono text-xs text-fg"
       >
         <span className="min-w-0 flex-1 truncate">{row.name}</span>

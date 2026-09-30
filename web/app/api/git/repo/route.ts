@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { repoCommits, repoDetail } from "@/lib/gitView";
+import { repoDirFromParams } from "@/lib/repoRef";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
-  const dir = q.get("dir") ?? "";
+  const dir = (await repoDirFromParams(q)) ?? "";
   if (!dir) return NextResponse.json({ error: "要給 dir" }, { status: 400 });
   const fetchPage = q.get("commitsOnly") === "1" ? repoCommits : repoDetail;
   const out = await fetchPage(dir, {

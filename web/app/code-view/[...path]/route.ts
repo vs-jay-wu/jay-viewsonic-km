@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readRawIn } from "@/lib/codeBrowse";
 import { decodeRepoKey, rawCsp } from "@/lib/codeRawRules";
+import { dirOfRef } from "@/lib/repoRef";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,11 @@ export async function GET(
 ) {
   const { path: segments } = await params;
   const [key, ...rest] = segments;
-  const dir = key ? decodeRepoKey(key) : null;
+  // key 裡放的是 **repo 身分**（`Viewsonic-EDU/ragdoll-cat`），不是絕對路徑。
+  // 這個網址會被嵌進預覽出來的 HTML 裡、也會被貼到新分頁，帶絕對路徑的話
+  // 貼到另一台機器就會安靜地指向那台的磁碟（見 lib/repoRefRules.ts）。
+  const ref = key ? decodeRepoKey(key) : null;
+  const dir = ref ? await dirOfRef(ref) : null;
   if (!dir || rest.length === 0) {
     return new NextResponse("網址要是 /code-view/<repoKey>/<檔案路徑>", { status: 400 });
   }

@@ -77,10 +77,17 @@ const MAX_RENDER_LINES = 5000;
 
 export default function CodeView({
   dir,
+  repoRef,
   file: urlFile = "",
   onFile,
 }: {
   dir: string;
+  /**
+   * 這個 repo 的跨機器身分。原始檔案的網址（`/code-view/…`）用它，
+   * 不用 `dir` —— 那些網址會被嵌進預覽的 HTML、也會被貼到新分頁。
+   * 對不到 root 的 repo 是 null，那種就沒有預覽（見 `lib/repoRefRules.ts`）。
+   */
+  repoRef: string | null;
   /** 網址上的 `file=`。重整或直接貼網址時要回到同一個檔 */
   file?: string;
   onFile?: (path: string | null) => void;
@@ -506,7 +513,15 @@ export default function CodeView({
                 </div>
                 {(() => {
                   const kind = previewKindOf(file.path);
-                  const src = codeRawUrl(dir, file.path);
+                  // repoRef 對不到 root 時沒有 `/code-view/…` 可以指（見 codeRawUrl 的註解）
+                  if (!repoRef) {
+                    return (
+                      <p className="px-6 py-10 text-sm text-fg-subtle">
+                        這個 repo 不在已知的工作區底下，沒辦法預覽原始檔案。
+                      </p>
+                    );
+                  }
+                  const src = codeRawUrl(repoRef, file.path);
                   if (kind === "image") return <ImagePreview src={src} alt={file.path} />;
                   if (kind === "font")
                     return <FontPreview src={src} name={file.path.split("/").pop() ?? file.path} />;
@@ -626,11 +641,16 @@ export default function CodeView({
                   >
                     {vector ? (
                       <DrawablePreview vector={vector} mask={adaptive ? mask : undefined} onMask={setMask} />
-                    ) : isSvg ? (
-                      <ImagePreview src={codeRawUrl(dir, file.path)} alt={file.path} />
-                    ) : isHtml ? (
+                    ) : isSvg && repoRef ? (
+                      <ImagePreview src={codeRawUrl(repoRef, file.path)} alt={file.path} />
+                    ) : isHtml && repoRef ? (
                       // 換檔案就重建，script 開關與捲動位置跟著歸零
-                      <HtmlPreview key={file.path} dir={dir} path={file.path} />
+                      <HtmlPreview key={file.path} repoRef={repoRef} path={file.path} />
+                    ) : isSvg || isHtml ? (
+                      // repoRef 對不到 root → 沒有 `/code-view/…` 可以指
+                      <p className="px-6 py-10 text-sm text-fg-subtle">
+                        這個 repo 不在已知的工作區底下，沒辦法預覽。
+                      </p>
                     ) : (
                       <MarkdownPreview text={file.text} />
                     )}

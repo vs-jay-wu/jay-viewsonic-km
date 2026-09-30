@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isKnownWorktree, scanChangesCached, statusOf } from "@/lib/changes";
+import { repoDirFromParams } from "@/lib/repoRef";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
  * 你在編輯器存檔的當下不該觸發一次 3 秒的全掃。
  */
 export async function GET(req: NextRequest) {
-  const dir = req.nextUrl.searchParams.get("dir");
+  const dir = await repoDirFromParams(req.nextUrl.searchParams);
   if (dir) {
     if (!(await isKnownWorktree(dir))) {
       return NextResponse.json({ error: "不認得這個 worktree" }, { status: 403 });

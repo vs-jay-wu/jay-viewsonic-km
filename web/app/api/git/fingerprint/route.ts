@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { globalFingerprint, repoFingerprint } from "@/lib/gitFingerprint";
+import { repoDirFromParams } from "@/lib/repoRef";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
  * `?dir=` 給單一 repo 的完整指紋（含還沒 stage 的檔案編輯）；不給就是全域。
  */
 export async function GET(req: NextRequest) {
-  const dir = req.nextUrl.searchParams.get("dir");
+  const dir = await repoDirFromParams(req.nextUrl.searchParams);
   if (dir) {
     const fp = await repoFingerprint(dir);
     if (fp === null) return NextResponse.json({ error: "不認得這個 repo" }, { status: 403 });

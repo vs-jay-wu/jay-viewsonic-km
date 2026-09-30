@@ -15,6 +15,12 @@ import { emitPinChanged, onPinChanged } from "@/lib/pinEvents";
 
 export interface RepoRow {
   dir: string;
+  /**
+   * 跨機器通用的身分（`Viewsonic-EDU/ragdoll-cat`）。**網址一律用它**，
+   * `dir` 只在同一台機器內部用 —— 見 `lib/repoRefRules.ts`。
+   * 對不到任何 root 的極少數目錄會是 null，那種就沒辦法做可攜的連結。
+   */
+  ref: string | null;
   name: string;
   /** 搜尋時額外比對的字：worktree 帶上主 repo 名，這樣打 `mvbf` 也找得到它的分支 */
   keywords: string;
@@ -34,6 +40,7 @@ export interface RepoRow {
 interface Brief {
   name: string;
   dir: string;
+  ref: string | null;
   worktreeOf: string | null;
   pinned: boolean;
   lastCommitAt: string | null;
@@ -70,7 +77,7 @@ export function useRepoList(): RepoList {
       const res = await fetch(`/api/code/repos${fresh ? "?fresh=1" : ""}`, { cache: "no-store" });
       const d = (await res.json()) as {
         local: Brief[];
-        external: { dir: string; name: string }[];
+        external: { dir: string; ref: string | null; name: string }[];
         externalMounted: boolean;
       };
       setExternalMounted(d.externalMounted);
@@ -118,13 +125,13 @@ export function useRepoList(): RepoList {
       ...groupRepos(repos.filter((r) => !r.external)).flatMap((g) => [
         ...(g.main
           ? [{
-              dir: g.main.dir, name: g.main.name, keywords: "",
+              dir: g.main.dir, ref: g.main.ref, name: g.main.name, keywords: "",
               worktree: false, pinned: g.main.pinned, group: g.name, external: false,
               lastCommitAt: g.main.lastCommitAt, firstCommitAt: firstCommit[g.main.dir] ?? null,
             }]
           : []),
         ...g.worktrees.map((w) => ({
-          dir: w.dir, name: w.name, keywords: g.name,
+          dir: w.dir, ref: w.ref, name: w.name, keywords: g.name,
           worktree: true, pinned: w.pinned, group: g.name, external: false,
           lastCommitAt: w.lastCommitAt, firstCommitAt: firstCommit[w.dir] ?? null,
         })),
@@ -132,7 +139,7 @@ export function useRepoList(): RepoList {
       ...repos
         .filter((r) => r.external)
         .map((r) => ({
-          dir: r.dir, name: r.name, keywords: "",
+          dir: r.dir, ref: r.ref, name: r.name, keywords: "",
           worktree: false, pinned: r.pinned, group: r.name, external: true,
           lastCommitAt: r.lastCommitAt, firstCommitAt: firstCommit[r.dir] ?? null,
         })),

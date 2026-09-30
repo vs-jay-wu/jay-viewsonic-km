@@ -75,10 +75,15 @@ export function decodeRepoKey(key: string): string | null {
  * 預覽用的網址。**每一段各自 encode**：檔名可能有空白或中文，
  * 整串一次 encode 會把 `/` 也編掉，路徑就散了。
  */
-export function codeRawUrl(dir: string, filePath: string, opts: { scripts?: boolean } = {}): string {
+/**
+ * `repoRef` 是**跨機器通用的身分**（`Viewsonic-EDU/ragdoll-cat`），不是絕對路徑：
+ * 這個網址會被嵌進預覽出來的 HTML、也會被貼到新分頁，帶絕對路徑的話貼到另一台
+ * 機器就會安靜地指向那台的磁碟。見 `lib/repoRefRules.ts`。
+ */
+export function codeRawUrl(repoRef: string, filePath: string, opts: { scripts?: boolean } = {}): string {
   const segs = filePath.split("/").filter(Boolean).map(encodeURIComponent);
   const q = opts.scripts ? "?scripts=1" : "";
-  return `/code-view/${encodeRepoKey(dir)}/${segs.join("/")}${q}`;
+  return `/code-view/${encodeRepoKey(repoRef)}/${segs.join("/")}${q}`;
 }
 
 /**

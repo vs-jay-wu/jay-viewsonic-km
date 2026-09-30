@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileIn, type Reveal } from "@/lib/codeBrowse";
+import { repoDirFromParams } from "@/lib/repoRef";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
-  const dir = q.get("dir") ?? "";
+  const dir = (await repoDirFromParams(q)) ?? "";
   const file = q.get("path") ?? "";
   const raw = q.get("reveal");
   const reveal: Reveal | undefined = raw === "full" || raw === "masked" ? raw : undefined;

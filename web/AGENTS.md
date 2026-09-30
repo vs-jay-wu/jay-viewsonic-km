@@ -115,6 +115,21 @@ Tailwind v4 對帶透明度的顏色吐 `oklab()`，當成 RGB 解析會得到�
 
 純規則檔也是**測試的落點**（`npm test`）—— 判準會變，要有東西守著。
 
+## repo 在網址上用「身分」，不是絕對路徑
+
+`/repo/code?repo=Viewsonic-EDU/ragdoll-cat`、`/code-view/<base64 的身分>/…`。
+**不要**再把絕對路徑放進網址或狀態檔的 key。
+
+為什麼：絕對路徑在另一台機器上**可能也解析得開**（兩台的使用者短名相同），
+於是把連結貼過去會正常打開、但顯示的是那台的磁碟，**沒有任何錯誤訊息**。
+
+- 身分 ↔ 絕對路徑的轉換：`lib/repoRefRules.ts`（純規則）＋ `lib/repoRef.ts`（讀設定）
+- server 端用 `repoDirFromParams()` 收參數；頁面用 `lib/repoPageParams.ts` 在
+  **server component** 解析好再傳給 client（讓 client 拿 repo 清單去比對的話，
+  清單載入前會先閃一下「選一個 repo」）
+- API 內部互相呼叫仍然可以用 `dir=`（同一台機器、當場產生的），但**網址不行**
+- `?dir=` 還收，那是過渡期。satellite 一上線就拿掉
+
 ## km web 跑在 **port 9487**，不是 3000
 
 `npm run dev` 與 `npm run start` 都寫死 `--port 9487`（`package.json`），

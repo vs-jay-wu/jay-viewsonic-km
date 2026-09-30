@@ -22,8 +22,13 @@ import GitView from "@/components/GitView";
  * 選完直接進它的主 checkout，要看別的 worktree 用麵包屑第二顆下拉切 ——
  * 多數時候看的就是主 checkout，不該為此多一次點擊。
  *
- * 網址：`/repo/code` 與 `/repo/git`，`?dir=<worktree 路徑>`，其餘參數屬於各自的
- * 視圖（`sha`／`file`／`side` 是版本視圖的）。
+ * 網址：`/repo/code` 與 `/repo/git`，`?repo=<身分>`（例如
+ * `Viewsonic-EDU/ragdoll-cat`），其餘參數屬於各自的視圖
+ * （`sha`／`file`／`side` 是版本視圖的）。
+ *
+ * **網址帶身分、不帶絕對路徑**：絕對路徑在另一台機器上可能也解析得開，貼過去
+ * 會安靜地顯示那台的磁碟。身分由 server 端解析成這台的絕對路徑再傳進來
+ * （`dir` prop），見 `lib/repoRefRules.ts`。
  *
  * **兩個視圖是兩條路徑、不是 `?view=`**：側邊欄要分辨「現在在哪一個」就得讀
  * query，而 `useSearchParams` 會讓整個 `(km)` 群組的預渲染都需要 Suspense 邊界
@@ -32,6 +37,7 @@ import GitView from "@/components/GitView";
 
 interface Worktree {
   dir: string;
+  ref: string | null;
   name: string;
   branch: string | null;
   isMain: boolean;
@@ -39,14 +45,12 @@ interface Worktree {
   pinned: boolean;
 }
 
-export default function RepoWorkbench({ view }: { view: View }) {
+export default function RepoWorkbench({ view, dir }: { view: View; dir: string }) {
   const params = useSearchParams();
   const router = useRouter();
   const confirm = useConfirm();
   const toast = useToast();
   const repoList = useRepoList();
-
-  const dir = params.get("dir") ?? "";
 
   /**
    * 網址是唯一真相（`/code` 那個 bug 的教訓：state 與網址各存一份會對不起來，
@@ -56,18 +60,22 @@ export default function RepoWorkbench({ view }: { view: View }) {
    * repo 的東西，帶過去會讀不到而且看起來像壞了。
    */
   const go = useCallback(
-    (next: { dir?: string | null; view?: View }, keepViewParams = false) => {
+    (next: { ref?: string | null; dir?: string; view?: View }, keepViewParams = false) => {
       const url = new URLSearchParams(keepViewParams ? params.toString() : "");
-      const d = next.dir === undefined ? dir : next.dir;
-      if (d) url.set("dir", d);
-      else url.delete("dir");
+      const r = next.ref === undefined && next.dir === undefined ? params.get("repo") : next.ref;
+      url.delete("repo");
+      url.delete("dir");
+      // ref 對不到任何 root 的極少數 repo（例如掛在別顆外接碟上）才走 dir，
+      // 那種連結**不可攜** —— 貼到另一台機器會解到別的東西或什麼都沒有
+      if (r) url.set("repo", r);
+      else if (next.dir) url.set("dir", next.dir);
       const v = next.view ?? view;
       // 記住偏好：側邊欄的「Repo」下次會直接進這個視圖
       if (next.view) rememberView(next.view);
       const q = url.toString();
       router.replace(`/repo/${v}${q ? `?${q}` : ""}`, { scroll: false });
     },
-    [params, router, dir, view]
+    [params, router, view]
   );
 
   /**
@@ -137,12 +145,16 @@ export default function RepoWorkbench({ view }: { view: View }) {
    * 清單給的是 repo 的路徑（＝主 checkout），所以直接用就對了；
    * 那個 repo 有沒有 worktree 是進去之後才問的事。
    */
-  const pickRepo = useCallback((d: string) => go({ dir: d }), [go]);
+  const pickRepo = useCallback(
+    (row: { ref: string | null; dir: string }) =>
+      row.ref ? go({ ref: row.ref }) : go({ dir: row.dir }),
+    [go]
+  );
 
   const wtOptions = useMemo<SearchOption[]>(
     () =>
       worktrees.map((w) => ({
-        value: w.dir,
+        value: w.ref ?? w.dir,
         label: w.isMain ? `主要 · ${w.branch ?? "(detached)"}` : `${w.name} · ${w.branch ?? "(detached)"}`,
         keywords: `${w.name} ${w.branch ?? ""}`,
         hint: w.isMain ? undefined : <WorktreeBadge sessionBound={w.isSessionBound} />,
@@ -202,7 +214,7 @@ export default function RepoWorkbench({ view }: { view: View }) {
     toast({ ok: true, text: `${current.name}：${json.summary}` });
     // 刪掉的正是目前開著的那個 —— 回到主 checkout
     const main = worktrees.find((w) => w.isMain);
-    go({ dir: main?.dir ?? null });
+    go({ ref: main?.ref ?? null });
     await repoList.reload(true);
   }, [current, confirm, toast, worktrees, go, repoList]);
 
@@ -226,7 +238,7 @@ export default function RepoWorkbench({ view }: { view: View }) {
           <>
             <Tooltip label="回到 repositories 清單">
               <button
-                onClick={() => go({ dir: null })}
+                onClick={() => go({ ref: null })}
                 className="flex items-center gap-1.5 font-mono text-sm font-medium text-fg hover:text-accent"
               >
                 <Icon name="chevronRight" size={14} className="rotate-180 text-fg-subtle" />
@@ -235,8 +247,8 @@ export default function RepoWorkbench({ view }: { view: View }) {
             </Tooltip>
             <SearchSelect
               ariaLabel="選 worktree"
-              value={dir}
-              onChange={(d) => go({ dir: d })}
+              value={params.get("repo") ?? ""}
+              onChange={(r) => go({ ref: r })}
               placeholder={loadingWt ? "讀取中…" : "搜尋 worktree…"}
               width={360}
               options={wtOptions}
@@ -269,7 +281,7 @@ export default function RepoWorkbench({ view }: { view: View }) {
         }
       />
       {view === "code" ? (
-        <CodeView dir={dir} file={params.get("file") ?? ""} onFile={setFile} />
+        <CodeView dir={dir} repoRef={params.get("repo")} file={params.get("file") ?? ""} onFile={setFile} />
       ) : (
         <GitView dir={dir} writable={!external} />
       )}

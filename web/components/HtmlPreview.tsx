@@ -18,9 +18,9 @@ import { codeRawUrl } from "@/lib/codeRawRules";
  *
  * 模板（`{{ }}`）與片段（沒有 `<html>`）本來就畫不對，那要走建置或伺服器渲染。
  */
-export default function HtmlPreview({ dir, path }: { dir: string; path: string }) {
+export default function HtmlPreview({ repoRef, path }: { repoRef: string; path: string }) {
   const [allowScripts, setAllowScripts] = useState(false);
-  const src = codeRawUrl(dir, path, { scripts: allowScripts });
+  const src = codeRawUrl(repoRef, path, { scripts: allowScripts });
 
   const btn = (active: boolean) =>
     `flex items-center gap-1 rounded-md border px-1.5 py-0.5 ${

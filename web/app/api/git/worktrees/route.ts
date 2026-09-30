@@ -3,6 +3,8 @@ import path from "path";
 import { isKnownWorktree, worktreesOf } from "@/lib/changes";
 import { isExternalRepo } from "@/lib/externalRepos";
 import { readPinned } from "@/lib/gitView";
+import { refRoots, repoDirFromParams } from "@/lib/repoRef";
+import { encodeRepoRef } from "@/lib/repoRefRules";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +17,7 @@ export const dynamic = "force-dynamic";
  * ⚠️ 這裡只讀。外接的 repo 不開 fetch／push（那兩個會寫入，而且在 USB 上慢）。
  */
 export async function GET(req: NextRequest) {
-  const dir = req.nextUrl.searchParams.get("dir");
+  const dir = await repoDirFromParams(req.nextUrl.searchParams);
   if (!dir) return NextResponse.json({ error: "要給 dir" }, { status: 400 });
   const abs = path.resolve(dir);
   if (!(await isKnownWorktree(abs)) && !(await isExternalRepo(abs))) {
@@ -23,10 +25,12 @@ export async function GET(req: NextRequest) {
   }
 
   const pinned = await readPinned();
-  const list = await worktreesOf(abs);
+  const [list, roots] = await Promise.all([worktreesOf(abs), refRoots()]);
   const main = list[0]?.path;
   const worktrees = list.map((w) => ({
     dir: w.path,
+    // 網址用 ref（跨機器通用），`dir` 只在同一台機器內部用
+    ref: encodeRepoRef(w.path, roots),
     name: path.basename(w.path),
     branch: w.branch,
     isMain: w.path === main,
