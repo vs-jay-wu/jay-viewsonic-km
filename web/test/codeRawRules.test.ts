@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { codeRawUrl, decodeRepoKey, encodeRepoKey, rawCsp, rawMimeOf } from "@/lib/codeRawRules";
+import { codeRawUrl, decodeRepoKey, encodeRepoKey, rawCsp, rawMimeOf, previewKindOf,
+} from "@/lib/codeRawRules";
 
 describe("repo key 的編解碼", () => {
   it("繞一圈拿得回原本的路徑（含中文與空白）", () => {
@@ -63,5 +64,33 @@ describe("rawCsp", () => {
   it("相對資產要載得到，所以圖與樣式放行 'self'", () => {
     expect(rawCsp(false)).toContain("img-src 'self'");
     expect(rawCsp(false)).toContain("style-src 'self'");
+  });
+});
+
+describe("rawMimeOf — 影音", () => {
+  it("音檔認得（工作區實際有 mp3 與 wav）", () => {
+    expect(rawMimeOf("assets/notification.wav")).toBe("audio/wav");
+    expect(rawMimeOf("a/b/signout.MP3")).toBe("audio/mpeg");
+    expect(rawMimeOf("x.m4a")).toBe("audio/mp4");
+  });
+
+  it("影片也在白名單裡", () => {
+    expect(rawMimeOf("demo.mp4")).toBe("video/mp4");
+    expect(rawMimeOf("demo.mov")).toBe("video/quicktime");
+  });
+});
+
+describe("previewKindOf", () => {
+  it("照 MIME 分類", () => {
+    expect(previewKindOf("a/icon.svg")).toBe("image");
+    expect(previewKindOf("assets/notification.wav")).toBe("audio");
+    expect(previewKindOf("demo.mp4")).toBe("video");
+    expect(previewKindOf("fonts/AbrilFatface-Regular.ttf")).toBe("font");
+  });
+
+  it("認不得的回 null（不要猜，猜錯會出現放不出來的播放器）", () => {
+    expect(previewKindOf("a.kt")).toBeNull();
+    expect(previewKindOf("b.jks")).toBeNull();
+    expect(previewKindOf("README.md")).toBeNull();
   });
 });

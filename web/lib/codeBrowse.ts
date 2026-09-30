@@ -164,7 +164,7 @@ export async function readFileIn(
   dir: string,
   rel: string,
   reveal?: Reveal
-): Promise<FileContent | { error: string }> {
+): Promise<FileContent | { error: string; sizeBytes?: number; sensitive?: boolean }> {
   const repo = await openRepo(dir);
   if (!repo) return { error: "不認得這個 repo" };
   const abs = await resolveIn(repo, rel);
@@ -181,7 +181,13 @@ export async function readFileIn(
   }
   // 二進位要**排在機敏之前**：keystore 那種檔解鎖也只是亂碼，
   // 給解鎖按鈕等於把原因講錯（Jay 2026-09-23 點 .jks 時看到的就是那個）
-  if (looksBinary(rel)) return { error: "二進位檔，不顯示內容" };
+  //
+  // 大小要一起回：圖／音／影／字型這幾種雖然「不能當文字讀」，畫面上還是
+  // 看得到（走 `/code-view/…`），而播放器要拿它來顯示檔案大小
+  if (looksBinary(rel)) {
+    const bin = await stat(abs).catch(() => null);
+    return { error: "二進位檔，不顯示內容", sizeBytes: bin?.size ?? 0 };
+  }
   if (isSensitivePath(rel) && !reveal) {
     return {
       error: "這是機敏檔案，預設不顯示內容。要看有哪些欄位請看同目錄的 .env.example",

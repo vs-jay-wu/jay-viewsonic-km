@@ -17,18 +17,20 @@ import { languageOf, shebangLanguage } from "@/lib/changesRules";
 import {
   groupHits, looksBinary, revealSecondsLeft, type SearchHit, type TreeEntry,
 } from "@/lib/codeBrowseRules";
-import { foldRanges, hiddenLines } from "@/lib/foldRules";
+import { foldRanges, hiddenLines, xmlFoldRanges } from "@/lib/foldRules";
 import { splitHighlightedLines } from "@/lib/highlightLines";
 import DrawablePreview from "@/components/DrawablePreview";
 import HtmlPreview from "@/components/HtmlPreview";
 import ImagePreview from "@/components/ImagePreview";
+import MediaPreview from "@/components/MediaPreview";
+import FontPreview from "@/components/FontPreview";
 import MarkdownPreview from "@/components/MarkdownPreview";
 import {
   adaptiveIconToSvg, isAdaptiveIconXml, isVectorDrawableXml, looksLikeAndroidDrawable,
   vectorDrawableToSvg, type AdaptiveMask,
 } from "@/lib/vectorDrawableRules";
 import { isHtmlPath } from "@/lib/htmlPreviewRules";
-import { codeRawUrl, rawMimeOf } from "@/lib/codeRawRules";
+import { codeRawUrl, previewKindOf } from "@/lib/codeRawRules";
 
 /**
  * 程式碼瀏覽（唯讀）。
@@ -330,11 +332,17 @@ export default function CodeView({
   const [folded, setFolded] = useState<Set<number>>(new Set());
   useEffect(() => setFolded(new Set()), [file?.path]);
 
-  const ranges = useMemo(
-    // 截斷時不給收合：範圍是從完整內容算的，只畫一部分的話括號對不起來
-    () => (lang === "json" && lines.length && !tooManyLines ? foldRanges(lines) : []),
-    [lang, lines, tooManyLines]
-  );
+  /**
+   * 可收合的區段：JSON 看括號、XML／HTML 看跨行的元素（Jay 2026-09-30）。
+   *
+   * 截斷時一律不給收合 —— 範圍是從完整內容算的，只畫一部分的話配對會錯位。
+   */
+  const ranges = useMemo(() => {
+    if (!lines.length || tooManyLines) return [];
+    if (lang === "json") return foldRanges(lines);
+    if (lang === "xml") return xmlFoldRanges(lines);
+    return [];
+  }, [lang, lines, tooManyLines]);
   const foldStart = useMemo(() => new Map(ranges.map((r) => [r.start, r])), [ranges]);
   const hidden = useMemo(() => hiddenLines(ranges, folded), [ranges, folded]);
 
@@ -484,18 +492,32 @@ export default function CodeView({
               <p className="px-6 py-10 text-sm text-fg-subtle">讀取中…</p>
             ) : !file ? (
               <p className="px-6 py-10 text-sm text-fg-subtle">選一個檔案。</p>
-            ) : file.error && rawMimeOf(file.path)?.startsWith("image/") ? (
+            ) : file.error && previewKindOf(file.path) ? (
               /*
-                圖片：`readFileIn` 會擋下來說「二進位檔」，但**那個說法對圖片是錯的** ——
-                它只是不能當文字讀。有了 `/code-view/…` 就直接畫出來
-                （`<img>` 自己去抓，不經過 JSON；base64 會胖三分之一）。
+                二進位但**看得到**的那幾種（圖、音、影、字型）。
+                `readFileIn` 會擋下來說「二進位檔」—— 那個說法沒錯，但對這幾種
+                沒有用：它們只是不能當文字讀。有了 `/code-view/…` 就直接交給
+                瀏覽器（`<img>`／`<audio>`／`FontFace` 自己去抓，不經過 JSON）。
               */
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className="flex shrink-0 items-center gap-2 border-b border-line bg-surface px-4 py-2">
                   <FileIcon path={file.path} size={14} />
                   <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg">{file.path}</span>
                 </div>
-                <ImagePreview src={codeRawUrl(dir, file.path)} alt={file.path} />
+                {(() => {
+                  const kind = previewKindOf(file.path);
+                  const src = codeRawUrl(dir, file.path);
+                  if (kind === "image") return <ImagePreview src={src} alt={file.path} />;
+                  if (kind === "font")
+                    return <FontPreview src={src} name={file.path.split("/").pop() ?? file.path} />;
+                  return (
+                    <MediaPreview
+                      src={src}
+                      kind={kind === "video" ? "video" : "audio"}
+                      sizeBytes={file.sizeBytes}
+                    />
+                  );
+                })()}
               </div>
             ) : file.error ? (
               <div className="px-6 py-10">

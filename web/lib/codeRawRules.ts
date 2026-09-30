@@ -31,6 +31,16 @@ const RAW_MIME: Record<string, string> = {
   otf: "font/otf",
   mp4: "video/mp4",
   webm: "video/webm",
+  mov: "video/quicktime",
+  // 音檔（工作區裡有 60 個 mp3、28 個 wav —— 提示音、錄音 fixture 那些）
+  wav: "audio/wav",
+  mp3: "audio/mpeg",
+  m4a: "audio/mp4",
+  aac: "audio/aac",
+  ogg: "audio/ogg",
+  oga: "audio/ogg",
+  opus: "audio/ogg",
+  flac: "audio/flac",
   txt: "text/plain; charset=utf-8",
   md: "text/plain; charset=utf-8",
 };
@@ -95,4 +105,22 @@ export function rawCsp(allowScripts: boolean): string {
   ];
   if (allowScripts) parts.push("script-src 'self' 'unsafe-inline' 'unsafe-eval' https:");
   return parts.join("; ");
+}
+
+/**
+ * 這個檔在 `/repo/code` 要用哪種預覽。
+ *
+ * 判準只看白名單給的 MIME —— 副檔名認不出來的一律 `null`（顯示「二進位檔」），
+ * 不要猜：猜錯的後果是畫面上出現一個放不出來的播放器或空白的圖框。
+ */
+export type RawPreviewKind = "image" | "audio" | "video" | "font";
+
+export function previewKindOf(filePath: string): RawPreviewKind | null {
+  const mime = rawMimeOf(filePath);
+  if (!mime) return null;
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("audio/")) return "audio";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("font/")) return "font";
+  return null;
 }
