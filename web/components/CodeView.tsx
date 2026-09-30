@@ -13,7 +13,7 @@ import { useLiveRefresh } from "@/components/useLiveRefresh";
 import RepoPicker from "@/components/RepoPicker";
 import { useRepoList } from "@/components/useRepoList";
 import { hljsHref, type DiffTheme } from "@/lib/uiSettingsRules";
-import { languageOf } from "@/lib/changesRules";
+import { languageOf, shebangLanguage } from "@/lib/changesRules";
 import {
   groupHits, looksBinary, revealSecondsLeft, type SearchHit, type TreeEntry,
 } from "@/lib/codeBrowseRules";
@@ -298,7 +298,8 @@ export default function CodeView({
     el?.scrollIntoView({ block: "center" });
   }, [gotoLine, file]);
 
-  const lang = file ? languageOf(file.path) : null;
+  // 副檔名認不出來時退而看 `#!` 那一行（`gradlew` 這種沒有副檔名的腳本）
+  const lang = file ? languageOf(file.path) ?? shebangLanguage(file.text) : null;
   const allLines = useMemo(() => (file?.text ? file.text.split("\n") : []), [file]);
   const tooManyLines = allLines.length > MAX_RENDER_LINES;
   const lines = useMemo(

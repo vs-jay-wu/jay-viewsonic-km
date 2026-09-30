@@ -309,6 +309,29 @@ const NAME_LANG: Record<string, string> = {
   ".gitconfig": "ini", ".npmrc": "ini", ".prospec.yaml": "yaml",
 };
 
+/**
+ * `#!` 那一行指到的語言。
+ *
+ * 沒有副檔名的腳本（`gradlew`、`configure`、`hooks/pre-commit`…）靠這個才認得出來
+ * —— 而它們正是最需要上色的那種（Jay 2026-09-30 問 `gradlew` 為什麼沒上色）。
+ *
+ * **只看第一行**，而且要真的以 `#!` 開頭；`env` 後面那個字才是直譯器
+ * （`#!/usr/bin/env python3`）。認不得就回 null，不要猜。
+ */
+export function shebangLanguage(text: string): string | null {
+  const first = text.slice(0, 200).split("\n", 1)[0];
+  if (!first.startsWith("#!")) return null;
+  const words = first.slice(2).trim().split(/\s+/);
+  const bin = (words[0]?.endsWith("/env") ? words[1] : words[0]) ?? "";
+  const name = bin.split("/").pop()?.replace(/[0-9.]+$/, "") ?? "";
+  const MAP: Record<string, string> = {
+    sh: "bash", bash: "bash", zsh: "bash", dash: "bash", ksh: "bash",
+    python: "python", node: "javascript", deno: "typescript",
+    ruby: "ruby", perl: "perl", php: "php", lua: "lua", r: "r",
+  };
+  return MAP[name] ?? null;
+}
+
 export function languageOf(path: string): string | null {
   const name = path.split("/").pop() ?? "";
   const byName = NAME_LANG[name.toLowerCase()];

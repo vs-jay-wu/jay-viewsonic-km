@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import hljs from "@/lib/highlight";
-import { LANG, languageOf } from "@/lib/changesRules";
+import { LANG, languageOf, shebangLanguage,
+} from "@/lib/changesRules";
 
 /**
  * 副檔名表裡的每個語言都要真的註冊得起來。
@@ -56,5 +57,30 @@ describe("highlight 的語言表", () => {
   it("多重副檔名取最後一段（`build.gradle.kts` 是 Kotlin，不是 Groovy）", () => {
     expect(languageOf("build.gradle.kts")).toBe("kotlin");
     expect(languageOf("settings.gradle")).toBe("groovy");
+  });
+});
+
+describe("shebangLanguage — 沒有副檔名的腳本", () => {
+  it("認得常見的直譯器", () => {
+    expect(shebangLanguage("#!/bin/sh\nexit 0")).toBe("bash");
+    expect(shebangLanguage("#!/usr/bin/env bash\n")).toBe("bash");
+    expect(shebangLanguage("#!/usr/bin/env python3\n")).toBe("python");
+    expect(shebangLanguage("#!/usr/bin/env node\n")).toBe("javascript");
+  });
+
+  it("`env` 後面那個字才是直譯器", () => {
+    expect(shebangLanguage("#!/usr/bin/env -S ruby -w\n")).toBeNull();
+    expect(shebangLanguage("#!/usr/bin/env ruby\n")).toBe("ruby");
+  });
+
+  it("沒有 shebang、或認不得的一律 null（不要猜）", () => {
+    expect(shebangLanguage("echo hi\n")).toBeNull();
+    expect(shebangLanguage("#!/usr/bin/env fish\n")).toBeNull();
+    expect(shebangLanguage("")).toBeNull();
+  });
+
+  it("`#!` 一定要在第一行的開頭", () => {
+    expect(shebangLanguage("\n#!/bin/sh\n")).toBeNull();
+    expect(shebangLanguage("  #!/bin/sh\n")).toBeNull();
   });
 });
