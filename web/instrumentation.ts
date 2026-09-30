@@ -20,6 +20,18 @@ export async function register() {
       : "[km] 角色：未設定（單機模式）—— 見 docs/ideas/km-multi-machine.md §8",
   );
 
+  /*
+   * **satellite 不跑任何排程。** 第一類資料（PR／Jira／VB Bug）只有 hub 抓
+   * （docs/ideas/km-multi-machine.md §2）—— 兩台各巡一遍就是這整個設計要避免的事。
+   *
+   * 不只是浪費：satellite 上的排程會去寫 `data/hub/…`，被 `writeStateFile` 的守衛
+   * 擋下來丟例外，於是健康度開始累積失敗、首頁跳警告，而那些警告一個都不是真的。
+   */
+  if (cfg?.role === "satellite") {
+    console.log("[km] satellite：排程不啟動（第一類資料向 hub 取）");
+    return;
+  }
+
   const [prInbox, myPrs, vbBugs, repoSync, myTickets, changes] = await Promise.all([
     import("@/lib/prInboxScheduler"),
     import("@/lib/myPrs"),

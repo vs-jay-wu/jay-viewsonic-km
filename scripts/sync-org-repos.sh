@@ -26,9 +26,19 @@ for arg in "$@"; do
   esac
 done
 ORG="${ORG:-Viewsonic-EDU}"
-BASE="/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs"
-TARGET="$BASE/$ORG"
 WORKSPACE_JSON="$(dirname "$0")/../local.workspace.json"
+
+# 同步到哪裡：**以 local.workspace.json 的 localPath 為準**（它已經含 org 名）。
+#
+# ⚠️ 這裡原本是寫死的 `/Users/jay.wj.wu/ProjectsWork_GitHub/Orgs/$ORG`。那在第二台
+# 機器上不是「找不到」就是**更糟的「剛好也存在但不是同一份」** —— 使用者短名相同的話
+# 路徑會合法，於是同步到一個你沒在看的地方，而且沒有任何錯誤訊息
+# （docs/ideas/km-multi-machine.md §6 講的就是這一類）。
+TARGET="$(jq -r --arg org "$ORG" '.orgs[$org].localPath // empty' "$WORKSPACE_JSON" 2>/dev/null || true)"
+if [[ -z "$TARGET" ]]; then
+  echo "local.workspace.json 沒有 orgs.$ORG.localPath —— 不知道要同步到哪裡" >&2
+  exit 1
+fi
 
 if ! command -v gh >/dev/null 2>&1; then
   echo "Error: gh (GitHub CLI) is required."
@@ -98,7 +108,11 @@ fetched_dirty=0
 failed=0
 offloaded=0
 offloaded_synced=0
+skipped_absent=0
 total=0
+
+# 這台的角色決定「缺的 repo 要不要抓下來」。讀不到就當 hub（單機時的行為不變）
+KM_ROLE="$(jq -r '.km.role // "hub"' "$WORKSPACE_JSON" 2>/dev/null || echo hub)"
 DIRTY_REPOS=()
 
 sync_repo() {
@@ -172,6 +186,14 @@ sync_repo() {
         return 2
       fi
     fi
+  elif [[ "$KM_ROLE" == satellite ]]; then
+    # satellite 只同步「這台已經有的」。要多一個 repo 是明確動作，不是排程長出來的
+    # （docs/ideas/km-multi-machine.md §7）。
+    #
+    # ⚠️ 少了這條，把這支腳本原封不動放到第二台上跑，會**把整個 org clone 下來** ——
+    # 清單來自 `gh repo list`（全 org），而底下那個分支對沒有 .git 的目錄一律 clone。
+    skipped_absent=$((skipped_absent + 1))
+    return 4
   else
     echo "Cloning $label $ORG/$repo ..."
     if gh repo clone "$ORG/$repo" "$repo_path"; then
@@ -217,6 +239,7 @@ while IFS= read -r repo; do
     0) pulled=$((pulled + 1)) ;;
     1) cloned=$((cloned + 1)) ;;
     3) fetched_dirty=$((fetched_dirty + 1)) ;;
+    4) : ;;  # satellite 上「這台沒有的」，已經在 sync_repo 裡數過
     *) failed=$((failed + 1)) ;;
   esac
 done <<< "$REPOS_RAW"
@@ -230,6 +253,9 @@ echo "Cloned: $cloned"
 echo "Pulled: $pulled"
 echo "Fetched-only (dirty working tree): $fetched_dirty"
 echo "Offloaded (skipped): $offloaded"
+if [[ "$KM_ROLE" == satellite ]]; then
+  echo "Not on this machine (satellite, not cloned): $skipped_absent"
+fi
 if [ "$INCLUDE_OFFLOADED" -eq 1 ]; then
   echo "Offloaded (synced on external): $offloaded_synced"
 fi
