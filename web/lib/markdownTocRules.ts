@@ -34,3 +34,29 @@ export function dedupe(slug: string, seen: Map<string, number>): string {
   seen.set(slug, n + 1);
   return n === 0 ? slug : `${slug}-${n}`;
 }
+
+/**
+ * 這個 code fence 是不是 mermaid。
+ *
+ * react-markdown 給的 class 是 `language-<名字>`，而且**可能還有別的 class**
+ * （外掛會加），所以要比對整個 token 而不是 `includes("mermaid")` ——
+ * `language-mermaidish` 不是 mermaid。
+ */
+export function isMermaidFence(className: unknown): boolean {
+  if (typeof className !== "string") return false;
+  return className.split(/\s+/).includes("language-mermaid");
+}
+
+/**
+ * markdown 裡允許哪些原生 HTML。
+ *
+ * 這些 md 來自各個 repo，**不是我們寫的**，所以走
+ * `rehype-raw` ＋ `rehype-sanitize`：raw 讓 `<br>` 這類標籤真的變成節點，
+ * sanitize 再把白名單外的東西（`<script>`、`on*`、`javascript:`…）拿掉。
+ *
+ * 只開實際用得到的：掃過 26,394 個 md，`<br>` 出現 **36,170 次**，
+ * 其次是 `div`／`li`／`p`／`ul`／`span`／`td`／`img`／`details`／`summary`
+ * （2026-09-30 實測）。清單以 `defaultSchema` 為底加開 `details`／`summary`
+ * —— GitHub 的折疊區塊靠它們，而 `defaultSchema` 沒有收。
+ */
+export const MD_EXTRA_TAGS = ["details", "summary"] as const;
