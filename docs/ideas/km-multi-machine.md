@@ -210,21 +210,45 @@ bind 到 **Tailscale 那張介面的 IP（`100.x.y.z`）**，不要 `0.0.0.0` �
 建立的 tailnet，用它登入會**把你的機器併進公司的 tailnet** —— 裝置清單、ACL、
 稽核紀錄都在 IT 手上。用個人的 Google／GitHub 帳號另開一個自己的 tailnet。
 
-**② 授權是灰色地帶，值得先確認。** Tailscale 的 Personal 方案免費（就裝置數而言，
-兩台筆電遠在額度內），但它的條款寫的是**個人使用**；而這裡的情境是
-「個人的知識庫 repo、用在工作上、跑在公司配的筆電上」。這不是明確的違規，也不是
-明確的合規。
+**② 授權：官方怎麼寫的（2026-09-30 實查，附出處）。**
 
-> 證據等級：**未查證**。上面對方案內容的描述來自模型的既有知識，可能已經過期。
-> 決定之前請直接看 tailscale.com 的 pricing 與 terms。
+| 出處 | 原文（重點） |
+|---|---|
+| [定價頁](https://tailscale.com/pricing) | Personal 方案「**only suitable for non-commercial use**」、「for individuals who want to use Tailscale **at home**」、「perfect for things like building a homelab or home VPN」 |
+| 定價頁／[Free plans and discounts](https://tailscale.com/docs/account/manage-plans/free-plans-discounts) | **用什麼網域註冊決定分類**：公開網域（Gmail、Apple、個人 GitHub）→ 視為 personal use，自動進免費 Personal；**自訂網域 → 視為 business use**，自動進試用 |
+| [ToS §2.1](https://tailscale.com/terms) | 授權範圍是「solely for your own **personal use or internal business purposes**」—— 注意它**沒有**把免費方案限定成非商業 |
+| ToS §2.3 | 禁止「**commercially exploit** any part of the Services」（＝轉售／拿它牟利，不是「工作時用到」） |
+| ToS §1 | 「If you are purchasing or using the Services **on behalf of your company or using a company domain**, all references to "you" reference such company.」 |
 
-三條路，成本與風險不同：
+**所以灰在哪裡**：有約束力的 ToS 並沒有寫「免費方案不得用於工作」，它寫的是
+personal use **或** internal business purposes；把 Personal 講成 non-commercial 的是
+**定價頁的行銷文案**。而 Tailscale 實際用來分類的機制是**註冊網域**，不是你拿它做什麼。
+
+對照到這裡的情境：
+
+- ✅ **不是** 「commercially exploit」—— 那指轉售或靠它牟利。
+- ✅ **不是** 「using a company domain」—— 只要用個人 Gmail／GitHub 註冊。
+- ⚠️ **「on behalf of your company」可以吵**：連的是公司配的筆電、做的是工作 ——
+  但這是為了自己方便，不是公司要求或公司部署。
+- ⚠️ 定價頁的 **at home / homelab** 措辭並沒有祝福「工作用途」。
+
+**結論**：兩台機器、不轉售、用個人網域註冊，落在「Tailscale 自己的機制會判成
+personal」那一邊；真正被引用來說你不該這樣用的，只會是定價頁那句行銷文案。
+風險低但不是零。
+
+**另一個獨立的風險（跟授權無關）**：在公司配的電腦上裝第三方 VPN 類軟體、把公司
+機器接進個人 tailnet，可能牴觸公司 IT 政策 —— 那跟 Tailscale 收不收錢是兩回事。
+
+三條路：
 
 | 做法 | 費用 | 風險 |
 |---|---|---|
-| 個人 tailnet ＋ Personal 方案 | 免費 | 授權灰色地帶；另外，在公司電腦裝第三方 VPN 類軟體本身可能牴觸 IT 政策 |
-| **SSH port forward**（`ssh -L 9487:localhost:9487 <hub>`） | 免費 | **沒有授權問題、不必安裝任何東西**；但要開 Remote Login、IP 變了要重接、離開家不方便 |
-| 付費方案（Starter 之類） | 每人每月 | 沒有授權疑慮 |
+| 個人網域註冊 ＋ Personal | 免費 | 定價頁的 non-commercial 文案；公司 IT 政策 |
+| **SSH port forward**（`ssh -L 9487:localhost:9487 <hub>`） | 免費 | **沒有第三方、沒有授權問題**；要開 Remote Login、IP 變了要重接、離開家不方便 |
+| Standard（US$8／人／月） | 付費 | 沒有授權疑慮；仍受公司 IT 政策管 |
+
+> ⚠️ **不要用公司信箱註冊**：自訂網域會被直接判成 business use；而且若公司已有
+> tailnet，你的機器會被併進去（裝置清單、ACL、稽核都在 IT 手上）。
 
 **做決定之前，km 這邊不受影響**：`proxy.ts` 的三道檢查、裝置 token、
 `--tailscale` 綁定都跟用哪條通道無關 —— 它們防的是「有人打得到這個 port」，
