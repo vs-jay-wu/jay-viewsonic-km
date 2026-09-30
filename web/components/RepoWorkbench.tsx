@@ -72,16 +72,23 @@ export default function RepoWorkbench({ view }: { view: View }) {
 
   /**
    * 目前開著的檔案也寫進網址 —— 重整、上一頁、把網址貼給自己看都要回到同一個檔
-   * （Jay 2026-09-24：重整之後變回「選一個檔案」）。用 `replace` 不用 `push`，
-   * 點檔案不該在瀏覽器的歷史裡堆一層。
+   * （Jay 2026-09-24：重整之後變回「選一個檔案」）。
+   *
+   * **用 `push` 不用 `replace`**：換檔案是一次導覽，上一頁要能回到剛剛那個檔
+   * （Jay 2026-09-30）。
+   *
+   * ⚠️ **跟現在網址一樣就什麼都不做**：按上一頁回到 A 時，還原那條路徑會再
+   * 呼叫一次 `openFile("A")`，沒有這個守衛就會再 push 一筆一模一樣的 A ——
+   * 於是上一頁看起來像卡住（回到的還是 A）。
    */
   const setFile = useCallback(
     (p: string | null) => {
+      if ((params.get("file") ?? "") === (p ?? "")) return;
       const url = new URLSearchParams(params.toString());
       if (p) url.set("file", p);
       else url.delete("file");
       const q = url.toString();
-      router.replace(`/repo/${view}${q ? `?${q}` : ""}`, { scroll: false });
+      router.push(`/repo/${view}${q ? `?${q}` : ""}`, { scroll: false });
     },
     [params, router, view]
   );
