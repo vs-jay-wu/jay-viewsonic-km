@@ -1,6 +1,7 @@
 import { readFile, mkdir, stat, writeFile } from "fs/promises";
 import path from "path";
 import { repoPath, run } from "@/lib/repo";
+import { statePath } from "@/lib/statePaths";
 
 /**
  * 用 Orca（ADE）的 CLI 開 Claude session。
@@ -15,8 +16,8 @@ import { repoPath, run } from "@/lib/repo";
  *    要不要註冊是會改 Orca 設定的決定，所以回報給 UI 讓 Jay 自己按，不自作主張。
  */
 
-const REGISTRY_FILE = repoPath("data/local-state/orca-sessions.json");
-const PRESENCE_FILE = repoPath("data/local-state/orca-presence.json");
+const REGISTRY_FILE = statePath("orca-sessions.json");
+const PRESENCE_FILE = statePath("orca-presence.json");
 const APP_PATH = process.env.ORCA_APP || "/Applications/Orca.app";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

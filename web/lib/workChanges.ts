@@ -9,11 +9,12 @@ import {
   LOG_FORMAT, branchMatchesTicket, mergeLineFiles, parseLog, parseNameStatus,
   type LineBranch, type LineReason, type WorkChanges,
 } from "@/lib/workChangesRules";
+import { statePath } from "@/lib/statePaths";
 
 export type { WorkChanges, LineBranch };
 
 /** 手動加進某條線的 worktree（偵測一定會漏，要有逃生口） */
-const MANUAL_FILE = repoPath("data/local-state/work-lines.json");
+const MANUAL_FILE = statePath("work-lines.json");
 const CONCURRENCY = 8;
 
 // ─── 手動加入的 worktree ─────────────────────────────────────────────────────

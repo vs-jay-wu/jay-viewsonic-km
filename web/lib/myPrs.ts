@@ -3,11 +3,11 @@ import path from "path";
 import { repoPath, run } from "@/lib/repo";
 import { recordFailure, recordSuccess } from "@/lib/health";
 import { notifyMac } from "@/lib/notify";
+import { statePath } from "@/lib/statePaths";
 
-const STATE_DIR = "data/local-state";
-const SNAPSHOT_FILE = repoPath(STATE_DIR, "my-prs.json");
-const CONFIG_FILE = repoPath(STATE_DIR, "my-prs-config.json");
-const EVENTS_FILE = repoPath(STATE_DIR, "my-prs-events.json");
+const SNAPSHOT_FILE = statePath("my-prs.json");
+const CONFIG_FILE = statePath("my-prs-config.json");
+const EVENTS_FILE = statePath("my-prs-events.json");
 
 const MIN_INTERVAL_SECONDS = 60;
 const DEFAULT_INTERVAL_SECONDS = 600;

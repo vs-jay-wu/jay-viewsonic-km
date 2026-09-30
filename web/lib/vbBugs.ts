@@ -3,9 +3,8 @@ import path from "path";
 import { repoPath, run } from "@/lib/repo";
 import { recordFailure, recordSuccess } from "@/lib/health";
 
-const STATE_DIR = "data/local-state";
-const SNAPSHOT_FILE = repoPath(STATE_DIR, "vb-bugs.json");
-const CONFIG_FILE = repoPath(STATE_DIR, "vb-bugs-config.json");
+const SNAPSHOT_FILE = statePath("vb-bugs.json");
+const CONFIG_FILE = statePath("vb-bugs-config.json");
 
 const MIN_INTERVAL_SECONDS = 300;
 const DEFAULT_INTERVAL_SECONDS = 1800; // bug 數不會分鐘級變動，半小時夠了
@@ -15,6 +14,7 @@ const DEFAULT_INTERVAL_SECONDS = 1800; // bug 數不會分鐘級變動，半小�
 // 矩陣的型別與聚合規則在 vbBugsRules.ts（純函式，有測試）
 export type { BugIssue, BugCell, BugProduct, PriorityCol, StatusGroup } from "@/lib/vbBugsRules";
 import type { BugIssue } from "@/lib/vbBugsRules";
+import { statePath } from "@/lib/statePaths";
 
 export interface BugSnapshot {
   fetchedAt: string;

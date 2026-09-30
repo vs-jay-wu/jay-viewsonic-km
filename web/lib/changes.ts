@@ -12,10 +12,11 @@ import {
   imageMimeOf, parseDiff, parseStatus, sortRepos,
   type ChangedFile, type DiffLine, type RepoChanges, type WorktreeChanges,
 } from "@/lib/changesRules";
+import { statePath } from "@/lib/statePaths";
 
 export type { RepoChanges, WorktreeChanges, ChangedFile, DiffLine };
 
-const PIN_FILE = repoPath("data/local-state/changes-pinned.json");
+const PIN_FILE = statePath("changes-pinned.json");
 /** 同時跑幾個 git —— 117 個 repo 循序跑要 2.6 秒，開併發後快得多 */
 const CONCURRENCY = 12;
 /** 單一檔案的 diff 上限，太大的只給前面這麼多 */
@@ -402,7 +403,7 @@ export const IMAGE_MAX_BYTES = 25 * 1024 * 1024;
  * 策略與 repo 清單那份相同：stale-while-revalidate。另外多一層 ——
  * **快照寫到磁碟**，dev server 重開之後第一次開頁也不必等 3 秒。
  */
-const SNAPSHOT_FILE = repoPath("data/local-state/changes-snapshot.json");
+const SNAPSHOT_FILE = statePath("changes-snapshot.json");
 /** 幾秒內算新鮮。掃一次 3 秒，排程每 30 秒預熱一次，所以這個值取 45 秒 */
 export const CHANGES_CACHE_TTL_MS = 45_000;
 

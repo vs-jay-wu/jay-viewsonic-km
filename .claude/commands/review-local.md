@@ -9,7 +9,7 @@
 
 ### 引擎：codex（預設）或 claude
 
-`--engine codex|claude`；不給就讀 web 設定頁存的值（`data/local-state/ui-settings.json`
+`--engine codex|claude`；不給就讀 web 設定頁存的值（`data/machine/ui-settings.json`
 的 `reviewEngine`），還是沒有就用 **codex**。
 
 **兩邊的 JSON 輸出一模一樣**（同一份 schema、同一組欄位），舊紀錄照樣讀得懂；

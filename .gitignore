@@ -15,5 +15,8 @@ local.workspace.json
 data/pr-inbox-runs/
 data/review-local-runs/
 
-# Claude session pin 等本機狀態（不進版控）
-data/local-state/
+# 三塊狀態（不進版控）。誰擁有哪一塊見 web/lib/statePaths.ts 的 STATE_OWNER，
+# 設計見 docs/ideas/km-multi-machine.md §5
+data/hub/
+data/machine/
+data/cache/

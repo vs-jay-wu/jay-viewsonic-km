@@ -442,7 +442,7 @@ export default function PrInboxPage() {
           </div>
 
           <p className="mt-3 text-xs leading-relaxed text-fg-subtle">
-            排程掛在這個 web server 裡（設定寫進 <code>data/local-state/pr-inbox-watch.json</code>，
+            排程掛在這個 web server 裡（設定寫進 <code>data/hub/pr-inbox-watch.json</code>，
             server 重開會自己接回去），所以 <strong className="text-fg-muted">web 沒開就不會巡邏</strong> ——
             要讓它常駐請跑 <code>./scripts/setup-km-web.sh --install</code>。
             啟用後只要有待處理的 PR 就會自動叫 AI 去看並留言，那是會對外送出的動作；

@@ -32,7 +32,7 @@ const PREVIEW_LINES: DiffLine[] = [
 /**
  * 設定。
  *
- * 設定存在 server（`data/local-state/ui-settings.json`）而不是 localStorage：
+ * 設定存在 server（`data/machine/ui-settings.json`）而不是 localStorage：
  * 這個 app 的其他設定（PR 巡邏、VB Bug 抓取）都在 server，換瀏覽器或從手機開
  * 也要一致。
  */

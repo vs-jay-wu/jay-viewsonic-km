@@ -12,6 +12,7 @@ import { parseNameStatus } from "@/lib/workChangesRules";
 import { cacheState, canServeCached, shouldRescan } from "@/lib/repoCacheRules";
 import { isExternalRepo } from "@/lib/externalRepos";
 import { parseStatus, type ChangedFile } from "@/lib/changesRules";
+import { statePath } from "@/lib/statePaths";
 
 /**
  * 唯讀的 repo 檢視（`/git`）。
@@ -22,7 +23,7 @@ import { parseStatus, type ChangedFile } from "@/lib/changesRules";
  */
 
 /** pin 住的 repo（存路徑，改名就當它不在了） */
-const PIN_FILE = repoPath("data/local-state/git-pinned.json");
+const PIN_FILE = statePath("git-pinned.json");
 
 export async function readPinned(): Promise<string[]> {
   const raw = await readFile(PIN_FILE, "utf8").catch(() => null);

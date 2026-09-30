@@ -65,7 +65,7 @@ class RepoStorageError(Exception):
 
 # ---------------------------------------------------------------- 搬遷紀錄
 
-HISTORY_FILE = KM_ROOT / "data" / "local-state" / "repo-moves.jsonl"
+HISTORY_FILE = KM_ROOT / "data" / "hub" / "repo-moves.jsonl"
 # 超過這個行數就砍掉最舊的。一次搬移一行，這個量夠看很久了
 HISTORY_MAX_LINES = 1000
 

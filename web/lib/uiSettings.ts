@@ -2,10 +2,11 @@ import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { repoPath } from "@/lib/repo";
 import { DEFAULT_UI_SETTINGS, normalizeUiSettings, type UiSettings } from "@/lib/uiSettingsRules";
+import { statePath } from "@/lib/statePaths";
 
 export type { UiSettings };
 
-const FILE = repoPath("data/local-state/ui-settings.json");
+const FILE = statePath("ui-settings.json");
 
 export async function readUiSettings(): Promise<UiSettings> {
   const raw = await readFile(FILE, "utf8").catch(() => null);

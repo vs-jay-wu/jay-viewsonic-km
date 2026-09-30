@@ -5,10 +5,11 @@ import {
   CLEANABLE_DIR_NAMES, filterBig, kindsOf,
   type BuildDirEntry, type BuildDirsSnapshot, type RepoBuildDirs,
 } from "@/lib/buildDirRules";
+import { statePath } from "@/lib/statePaths";
 
 export type { BuildDirsSnapshot, RepoBuildDirs, BuildDirEntry };
 
-const SNAPSHOT_FILE = repoPath("data/local-state/build-dirs.json");
+const SNAPSHOT_FILE = statePath("build-dirs.json");
 /** 掃一次要 du 幾十 GB，不便宜（實測約 7 秒）。快取到期才重掃。 */
 const STALE_MS = 6 * 60 * 60 * 1000;
 

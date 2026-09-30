@@ -156,7 +156,7 @@ curl -s "http://localhost:9487$CSS" | grep -A 3 '^\.md-body {'
 一律照現有那套，不要各寫一套（Jay 2026-09-11 指定）：
 
 - **排程掛在 web server 裡**（`instrumentation.ts` 的 `register()`），設定存
-  `data/local-state/`，所以 server 重開會自己接回去；timer 存在 `globalThis`，
+  `data/hub/`，所以 server 重開會自己接回去；timer 存在 `globalThis`，
   否則 dev 模式的 HMR 會留下孤兒 interval。
 - **健康度**照 `lib/health.ts` 檔頭的三步驟接上；判準留在 `lib/healthRules.ts`：
   認證類錯誤第一次就在首頁示警（不會自己好），其餘連續 3 次才示警。

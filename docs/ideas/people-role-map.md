@@ -41,7 +41,7 @@ Teams:  （又是另一個顯示名）
 Mandy Luo 79、Evis Cheng 75、vs-jacky-yang 56…）。
 列 165 列的表只會標前 20 個然後再也不回來，剩下的變成過期資料。
 
-### 3. 要放進版控，不能放 `data/local-state/`
+### 3. 要放進版控，不能放 `data/hub/`
 
 `data/people.json`（**進版控**）：
 
@@ -52,7 +52,7 @@ Mandy Luo 79、Evis Cheng 75、vs-jacky-yang 56…）。
 ]}
 ```
 
-理由：這是**知識**不是本機狀態。放 `local-state/` 會被 gitignore，
+理由：這是**知識**不是本機狀態。放 `data/hub/` 會被 gitignore，
 別的 session 的 AI 讀不到也 grep 不到，等於白做。
 
 **而且一定要在 `.claude/rules/` 加一條指標**（「要知道某人是 RD/PM/QA、

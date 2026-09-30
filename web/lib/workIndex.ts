@@ -9,10 +9,11 @@ import {
 } from "@/lib/workItemRules";
 import type { IndexedPr, IndexedSession, WorkIndex, WorkItem } from "@/lib/workIndexRules";
 import { sortWorkItems } from "@/lib/workIndexRules";
+import { statePath } from "@/lib/statePaths";
 
 export type { WorkIndex, WorkItem, IndexedPr, IndexedSession };
 
-const FILE = repoPath("data/local-state/work-index.json");
+const FILE = statePath("work-index.json");
 /** 重建一次要掃全部 session 標題（有 meta cache，但仍不便宜），所以有最小間隔 */
 const MIN_REBUILD_GAP_MS = 60_000;
 

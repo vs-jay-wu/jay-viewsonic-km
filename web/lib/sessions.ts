@@ -2,13 +2,14 @@ import { open, readdir, readFile, rm, stat, mkdir, writeFile } from "fs/promises
 import path from "path";
 import os from "os";
 import { repoPath } from "@/lib/repo";
+import { statePath } from "@/lib/statePaths";
 
 // 純規則放隔壁（客戶端也要用，不能帶到 fs/promises）
 export { isStale, STALE_DAYS } from "@/lib/sessionRules";
 
 const PROJECTS_DIR = path.join(os.homedir(), ".claude", "projects");
-const PINS_FILE = repoPath("data/local-state/session-pins.json");
-const META_CACHE_FILE = repoPath("data/local-state/session-meta-cache.json");
+const PINS_FILE = statePath("session-pins.json");
+const META_CACHE_FILE = statePath("session-meta-cache.json");
 const HEAD_BYTES = 64 * 1024;
 
 /** session id 是 uuid；只認這個形狀，避免拿到奇怪的路徑。 */

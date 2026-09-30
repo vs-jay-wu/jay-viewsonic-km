@@ -68,11 +68,11 @@ for cmd in git jq; do command -v "$cmd" >/dev/null || { echo "找不到 $cmd" >&
 
 source "$KM_ROOT/scripts/lib/engine.sh"
 
-# 引擎：--engine > web 設定頁（data/local-state/ui-settings.json）> codex
+# 引擎：--engine > web 設定頁（data/machine/ui-settings.json）> codex
 ENGINE_EXPLICIT=true
 if [[ -z "$ENGINE" ]]; then
   ENGINE_EXPLICIT=false
-  ENGINE="$(jq -r '.reviewEngine // "codex"' "$KM_ROOT/data/local-state/ui-settings.json" 2>/dev/null || echo codex)"
+  ENGINE="$(jq -r '.reviewEngine // "codex"' "$KM_ROOT/data/machine/ui-settings.json" 2>/dev/null || echo codex)"
   [[ "$ENGINE" == "null" || -z "$ENGINE" ]] && ENGINE=codex
   # 偏好的那個最近回報沒額度就先換 —— 不然每一輪都要先失敗一次才會切
   ENGINE="$(engine_pick "$ENGINE")"

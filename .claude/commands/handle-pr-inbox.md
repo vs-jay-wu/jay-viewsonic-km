@@ -83,7 +83,7 @@
 **approve / request changes 也自己送，不用問**（Jay 2026-09-10 明確授權）。
 只留言沒有自動化的價值 —— review 要有結論，球才會離開他手上。
 
-模式來自 `data/local-state/pr-inbox-watch.json` 的 `reviewVerdict`
+模式來自 `data/hub/pr-inbox-watch.json` 的 `reviewVerdict`
 （web 的「PR 巡邏」頁可改）。**互動與排程共用同一個設定，不分兩套。**
 
 | 模式 | 行為 |
@@ -210,7 +210,7 @@ grep -nE 'jay-viewsonic-km|docs/(features|domains|repositories)/|\.claude/(rules
 只有真的有待處理的 PR 才啟動 `claude -p /handle-pr-inbox`。
 
 - 開關排程：km web 的「PR 巡邏」頁（排程掛在 web server 裡，設定存
-  `data/local-state/pr-inbox-watch.json`）。要讓 web 常駐：`./scripts/setup-km-web.sh --install`
+  `data/hub/pr-inbox-watch.json`）。要讓 web 常駐：`./scripts/setup-km-web.sh --install`
 - 執行紀錄與花費：`data/pr-inbox-runs/`（gitignored），web 的「PR 巡邏」頁可看可刪；
   自動清理：沒叫 AI 的留 7 天，派過 AI 的留 30 天
 - **AI 執行期間會上鎖**，排程碰到鎖直接跳過 —— 同一批 PR 不會被 review 兩次

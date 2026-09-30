@@ -34,7 +34,7 @@ REPO_ROOT="${0:A:h:h}"
 WEB_DIR="$REPO_ROOT/web"
 LABEL="com.jay-viewsonic-km.web"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-LOG_DIR="$REPO_ROOT/data/local-state"
+LOG_DIR="$REPO_ROOT/data/machine"
 OUT_LOG="$LOG_DIR/web.out.log"
 ERR_LOG="$LOG_DIR/web.err.log"
 
@@ -71,8 +71,28 @@ done
 }
 
 # node 要用絕對路徑：launchd 的 PATH 不會有 nvm/homebrew 那些
-NPM_BIN="$(command -v npm)"
-NODE_DIR="${NPM_BIN:A:h}"
+NPM_BIN="${NPM_OVERRIDE:-$(command -v npm)}"
+# ⚠️ 用 `:h`（npm 那個符號連結所在的 bin 目錄），**不要** `:A:h`。
+# `:A` 會把 npm 解到 .../lib/node_modules/npm/bin/，那裡**沒有 node**，
+# 於是 npm 的 `#!/usr/bin/env node` 會沿著 PATH 掉到下一個 node（這台是
+# homebrew 的 v26），跟 nvm 的 npm 配成兩個不同版本 —— 原生模組就 ABI 不合。
+NODE_DIR="${NPM_BIN:h}"
+
+# 原生模組（better-sqlite3）是用某一個 node 編的，跟 launchd 要跑的那支必須同 ABI。
+#
+# ⚠️ 不一致的失敗方式很難查：web **起得來**、大部分頁面 200，只有讀 teams.db 的
+# 首頁 500，而錯誤只出現在 launchd 的 log 裡。2026-09-30 踩過 —— install 當下的
+# shell PATH 解到 nvm 的 v22（MODULE_VERSION 127），但模組是用 homebrew 的 v26
+# （147）編的。所以這裡先實際 require 一次，不要只比版本號字串。
+if [[ "$ACTION" == "install" ]] && [[ -d "$WEB_DIR/node_modules/better-sqlite3" ]]; then
+  if ! "$NODE_DIR/node" -e "require('$WEB_DIR/node_modules/better-sqlite3')" >/dev/null 2>&1; then
+    echo "⚠️  $NODE_DIR/node（$("$NODE_DIR/node" -v)）載不動 better-sqlite3。" >&2
+    echo "    它是用別的 node 編的。兩條路：" >&2
+    echo "      NPM_OVERRIDE=/opt/homebrew/bin/npm $0 --install   # 用編它的那支" >&2
+    echo "      (cd web && npm rebuild better-sqlite3)            # 改成用這支重編" >&2
+    exit 1
+  fi
+fi
 
 plist_body() {
   cat <<PLIST

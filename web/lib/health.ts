@@ -6,11 +6,12 @@ import {
   FAILURE_ALERT_THRESHOLD, type SourceHealth,
 } from "@/lib/healthRules";
 import { listRuns } from "@/lib/prInbox";
+import { statePath } from "@/lib/statePaths";
 
 export type { SourceHealth };
 export { FAILURE_ALERT_THRESHOLD, isUnhealthy, classifyError };
 
-const FILE = repoPath("data/local-state/health.json");
+const FILE = statePath("health.json");
 
 /**
  * ## 要接一個新的定時服務進來，做三件事

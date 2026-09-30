@@ -55,7 +55,7 @@ engine_out_of_credits() {
 ENGINE_COOLDOWN_MIN="${ENGINE_COOLDOWN_MIN:-30}"
 
 engine_health_file() {
-  echo "${KM_ROOT:-${REPO_ROOT:-.}}/data/local-state/engine-health.json"
+  echo "${KM_ROOT:-${REPO_ROOT:-.}}/data/hub/engine-health.json"
 }
 
 # $1 engine  $2 一句話說明（會寫進紀錄，首頁可以顯示）

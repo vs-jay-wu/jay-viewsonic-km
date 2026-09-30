@@ -2,8 +2,9 @@ import { readFile, mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { repoPath } from "@/lib/repo";
 import { lockState, pruneRuns, triggerRun } from "@/lib/prInbox";
+import { statePath } from "@/lib/statePaths";
 
-const CONFIG_FILE = repoPath("data/local-state/pr-inbox-watch.json");
+const CONFIG_FILE = statePath("pr-inbox-watch.json");
 const MIN_INTERVAL_SECONDS = 60;
 const DEFAULT_INTERVAL_SECONDS = 1800;
 

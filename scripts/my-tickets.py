@@ -12,7 +12,7 @@
 只看 VB（Jay 2026-09-11）：VSFT／MT 是舊落點，大部分票已經搬到 VB。
 
 用法：
-    ./scripts/my-tickets.py --state data/local-state/my-tickets.json [--full]
+    ./scripts/my-tickets.py --state data/hub/my-tickets.json [--full]
 
 輸出（stdout）是完整的快照 JSON，呼叫端負責寫檔。
 """

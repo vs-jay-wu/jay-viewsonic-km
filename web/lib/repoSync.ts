@@ -6,6 +6,7 @@ import {
   parseSummary, shouldRun,
   type RepoSyncConfig, type RepoSyncRun, type RepoSyncSchedulerState, type RepoSyncState,
 } from "@/lib/repoSyncRules";
+import { statePath } from "@/lib/statePaths";
 
 // 型別定義在純規則檔（客戶端要 import type），這裡只轉出去
 export type { RepoSyncConfig, RepoSyncRun, RepoSyncState, RepoSyncSchedulerState };
@@ -22,9 +23,8 @@ export type { RepoSyncConfig, RepoSyncRun, RepoSyncState, RepoSyncSchedulerState
  *    那是給互動使用的語意，排程不能用。
  */
 
-const STATE_DIR = "data/local-state";
-const STATE_FILE = repoPath(STATE_DIR, "repo-sync.json");
-const CONFIG_FILE = repoPath(STATE_DIR, "repo-sync-config.json");
+const STATE_FILE = statePath("repo-sync.json");
+const CONFIG_FILE = statePath("repo-sync-config.json");
 
 /** 多久檢查一次「現在是不是窗口、這個窗口跑過沒」 */
 const TICK_SECONDS = 600;

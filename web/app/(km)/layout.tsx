@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 };
 
 /*
- * `data-theme` 在 server 這裡就決定好 —— 設定存在 `data/local-state/ui-settings.json`，
+ * `data-theme` 在 server 這裡就決定好 —— 設定存在 `data/machine/ui-settings.json`，
  * 不是 localStorage，所以 SSR 的時候就知道要出哪個值，**不會先閃一下淺色**。
  * `system` 那一態交給 CSS 的 `@media` 判斷，同樣不需要 JS。
  */

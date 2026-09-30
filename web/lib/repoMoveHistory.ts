@@ -1,11 +1,12 @@
 import { readFile, stat } from "fs/promises";
 import { repoPath } from "@/lib/repo";
 import { parseHistory, type MoveRecord } from "@/lib/repoMoveHistoryRules";
+import { statePath } from "@/lib/statePaths";
 
 export type { MoveRecord };
 
 /** `scripts/repo-storage.py` 的 `append_history()` 寫的，一次搬移一行 */
-const FILE = repoPath("data/local-state/repo-moves.jsonl");
+const FILE = statePath("repo-moves.jsonl");
 
 export interface HistoryResult {
   records: MoveRecord[];

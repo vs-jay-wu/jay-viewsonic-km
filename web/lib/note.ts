@@ -2,10 +2,11 @@ import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { repoPath } from "@/lib/repo";
 import { SCRATCH_ID, emptyNote, type Note, type NoteFile } from "@/lib/noteRules";
+import { statePath } from "@/lib/statePaths";
 
 export type { Note };
 
-const FILE = repoPath("data/local-state/note.json");
+const FILE = statePath("note.json");
 
 /**
  * 快速筆記的儲存與推播。

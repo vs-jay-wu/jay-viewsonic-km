@@ -3,6 +3,7 @@ import path from "path";
 import { repoPath, run } from "@/lib/repo";
 import { recordFailure, recordSuccess } from "@/lib/health";
 import type { MyTicket, MyTicketsSnapshot } from "@/lib/myTicketsRules";
+import { statePath } from "@/lib/statePaths";
 
 export type { MyTicket, MyTicketsSnapshot };
 
@@ -11,10 +12,9 @@ export type { MyTicket, MyTicketsSnapshot };
  * 這裡只負責排程、快取與健康度 —— 跟 VB Bug 總覽同一套。
  */
 
-const STATE_DIR = "data/local-state";
-const SNAPSHOT_FILE = repoPath(STATE_DIR, "my-tickets.json");
-const CONFIG_FILE = repoPath(STATE_DIR, "my-tickets-config.json");
-const PINS_FILE = repoPath(STATE_DIR, "ticket-pins.json");
+const SNAPSHOT_FILE = statePath("my-tickets.json");
+const CONFIG_FILE = statePath("my-tickets-config.json");
+const PINS_FILE = statePath("ticket-pins.json");
 
 const MIN_INTERVAL_SECONDS = 300;
 const DEFAULT_INTERVAL_SECONDS = 1800;

@@ -12,7 +12,7 @@ set -uo pipefail
 
 REPO_ROOT="${0:A:h:h:h}"
 WATCH="$REPO_ROOT/scripts/pr-inbox-watch.sh"
-CONFIG="$REPO_ROOT/data/local-state/pr-inbox-watch.json"
+CONFIG="$REPO_ROOT/data/hub/pr-inbox-watch.json"
 BACKUP="$(mktemp)"
 
 pass=0; fail=0

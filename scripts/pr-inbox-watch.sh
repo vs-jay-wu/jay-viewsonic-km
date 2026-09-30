@@ -37,7 +37,7 @@
 #                                  reviewEngine（跟 /review-local 同一格）
 #
 # 排程：不在這支腳本裡，而是掛在 km web server（見 web/lib/prInboxScheduler.ts）。
-#       在 web 的「PR 巡邏」頁開關，設定存 data/local-state/pr-inbox-watch.json。
+#       在 web 的「PR 巡邏」頁開關，設定存 data/hub/pr-inbox-watch.json。
 #       要讓 web 常駐：./scripts/setup-km-web.sh --install
 #
 # 需要：gh（已登入）、jq，以及 claude 或 codex（看 --engine）
@@ -49,10 +49,10 @@ REPO_ROOT="${0:A:h:h}"
 RUNS_DIR="$REPO_ROOT/data/pr-inbox-runs"
 LOCK_DIR="$RUNS_DIR/.lock"
 WS="$REPO_ROOT/local.workspace.json"
-WATCH_CONFIG="$REPO_ROOT/data/local-state/pr-inbox-watch.json"
+WATCH_CONFIG="$REPO_ROOT/data/hub/pr-inbox-watch.json"
 # 已經交給 AI 處理過的 PR：key 是 `<owner/repo>#<number>`，值是當時的「狀態指紋」
 # （head sha ＋ 對方最後動作時間）。指紋沒變就不再重送 —— 見下面的 BATCH 那段。
-HANDLED_FILE="$REPO_ROOT/data/local-state/pr-inbox-handled.json"
+HANDLED_FILE="$REPO_ROOT/data/hub/pr-inbox-handled.json"
 
 # 用哪個引擎。兩邊拿到的是**同一份指示**，差別只在送法：
 #   claude  `/handle-pr-inbox` —— Claude Code 的 slash command，它自己會載入
@@ -82,7 +82,7 @@ done
 
 # ─── 引擎 ───────────────────────────────────────────────────────────────────
 source "$REPO_ROOT/scripts/lib/engine.sh"
-UI_SETTINGS="$REPO_ROOT/data/local-state/ui-settings.json"
+UI_SETTINGS="$REPO_ROOT/data/machine/ui-settings.json"
 ENGINE_EXPLICIT=true
 if [[ -z "$ENGINE" && -f "$UI_SETTINGS" ]]; then
   ENGINE_EXPLICIT=false
@@ -107,7 +107,7 @@ $ENGINE_EXPLICIT || ENGINE="$(engine_pick "$ENGINE")"
 # （Jay 2026-09-10 的決定）。送出判定會通知對方、也會影響 merge 門檻，所以
 # 規則本身很嚴：沒把握退回留言、只有 SHOULD／NIT 不 request changes、
 # MUST 要自己追到程式碼確認過。
-# 設定在 web 的「PR 巡邏」頁（存 data/local-state/pr-inbox-watch.json），
+# 設定在 web 的「PR 巡邏」頁（存 data/hub/pr-inbox-watch.json），
 # 或用 --verdicts 臨時覆寫。
 #
 # 這段刻意放在最前面：write_record 會把模式一起寫進紀錄，驗證晚一步就會留下
@@ -188,7 +188,7 @@ remove_session_transcript() {
   local sid="$1" why="${2:-run}"
   [[ -n "$sid" && "$sid" != "null" ]] || return 0
 
-  local pins="$REPO_ROOT/data/local-state/session-pins.json"
+  local pins="$REPO_ROOT/data/hub/session-pins.json"
   if [[ -f "$pins" ]] && jq -e --arg id "$sid" '.pinned[$id]' "$pins" >/dev/null 2>&1; then
     echo "· session $sid 被 pin 住，保留"
     return 0

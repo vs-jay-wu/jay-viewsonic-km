@@ -5,11 +5,12 @@ import {
   parseDocHead, scopeOf, sortFiles, sortSets,
   type DocFile, type DocSet, type DocsIndex, type DocStatus,
 } from "@/lib/docsRules";
+import { statePath } from "@/lib/statePaths";
 
 export type { DocFile, DocSet, DocsIndex };
 
 const DOCS_DIR = repoPath("docs");
-const PINS_FILE = repoPath("data/local-state/docs-pins.json");
+const PINS_FILE = statePath("docs-pins.json");
 /** 只讀 head 的前面這麼多 byte —— 最大的 findings 有 95KB，全讀只為了標題不划算 */
 const HEAD_BYTES = 4096;
 

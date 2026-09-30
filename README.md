@@ -38,7 +38,7 @@ ssh -N -L 9487:127.0.0.1:9487 <這台機器>
 | `/pr-inbox` | PR 巡邏：排程開關、手動觸發、執行紀錄與花費 | `scripts/pr-inbox-watch.sh`（排程本身跑在 web server 裡） |
 | `/sessions` | Claude session 檢視、pin、刪除、在 Orca 開啟（`claude --resume`） | `~/.claude/projects`、`scripts/orca.sh` |
 
-`data/pr-inbox-runs/` 與 `data/local-state/` 是本機狀態（PR 快照、通知事件、session pin 與
+`data/pr-inbox-runs/`、`data/hub/` 與 `data/machine/` 是本機狀態（PR 快照、通知事件、session pin 與
 解析快取都在裡面），兩者都 gitignored。
 PR 巡邏的執行紀錄會自動清：**沒叫 AI 的留 7 天，派過 AI（或被中斷）的留 30 天**
 （`web/lib/prInbox.ts` 的 `RETAIN_DAYS` / `RETAIN_DAYS_AI`），

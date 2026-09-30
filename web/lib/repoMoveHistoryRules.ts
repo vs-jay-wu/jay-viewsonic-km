@@ -2,7 +2,7 @@
  * 搬遷紀錄的型別與彙整規則。
  *
  * 純函式，客戶端與 server 共用（不能把 `fs/promises` 帶進客戶端，見 web/AGENTS.md）。
- * 紀錄由 `scripts/repo-storage.py` 一行一筆寫進 `data/local-state/repo-moves.jsonl`，
+ * 紀錄由 `scripts/repo-storage.py` 一行一筆寫進 `data/hub/repo-moves.jsonl`，
  * 這裡只負責讀出來之後怎麼整理、怎麼顯示。
  */
 

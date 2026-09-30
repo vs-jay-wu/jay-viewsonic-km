@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { repoPath, run } from "@/lib/repo";
 import { mapLimit } from "@/lib/changes";
+import { statePath } from "@/lib/statePaths";
 
 /**
  * 每個 repo 的第一顆 commit（＝專案何時開始）。
@@ -10,11 +11,11 @@ import { mapLimit } from "@/lib/changes";
  * 才會變，那是罕見到可以忽略的事。實測每個 repo 要 22–35ms，475 個全算大約
  * 7–11 秒 —— 每次開清單都算不可行，但一輩子算一次很划算（Jay 2026-09-23）。
  *
- * 存 `data/local-state/`，跟其他本機狀態同一個地方。key 是路徑：worktree 與
+ * 存 `data/hub/`（repo 的事實，每台機器看到的都一樣）。key 是路徑：worktree 與
  * 主 repo 的第一顆 commit 相同，但路徑不同，各存一份沒有壞處。
  */
 
-const FILE = repoPath("data/local-state/repo-first-commit.json");
+const FILE = statePath("repo-first-commit.json");
 const CONCURRENCY = 8;
 
 interface Entry {
