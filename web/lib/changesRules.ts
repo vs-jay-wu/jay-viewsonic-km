@@ -307,6 +307,15 @@ const NAME_LANG: Record<string, string> = {
   ".eslintignore": "ini", ".prettierignore": "ini", ".stylelintignore": "ini",
   ".gitattributes": "ini", ".gitmodules": "ini", ".editorconfig": "ini",
   ".gitconfig": "ini", ".npmrc": "ini", ".prospec.yaml": "yaml",
+  /*
+   * `.metadata` **不是通用副檔名**，是 Flutter 專案根目錄那個由 `flutter create`
+   * 產生的檔（內容是 YAML：`version.revision`、`channel`、`project_type`…）。
+   * 這個工作區裡的 8 個 `.metadata` 全部是這種（2026-09-30 實測）。
+   *
+   * ⚠️ 別的生態系也用這個名字代表完全不同的東西（Eclipse 的 `.metadata` 是**目錄**），
+   * 但那種情況不會走到這裡 —— 目錄不會被當成檔案開。
+   */
+  ".metadata": "yaml",
 };
 
 /**

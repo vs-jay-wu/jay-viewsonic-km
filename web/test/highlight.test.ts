@@ -41,6 +41,9 @@ describe("highlight 的語言表", () => {
     expect(languageOf("nginx/nginx.conf")).toBe("nginx");
     expect(languageOf("deploy/nginx-lodestar.conf")).toBe("nginx");
     expect(languageOf("public/icon.svg")).toBe("xml");
+    // Flutter 專案根目錄那個（內容是 YAML），不是通用副檔名
+    expect(languageOf(".metadata")).toBe("yaml");
+    expect(languageOf("edu-droid-flutter/.metadata")).toBe("yaml");
   });
 
   it("整個檔名就是「副檔名」的那些也認得（`.gitignore` 之類）", () => {
