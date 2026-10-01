@@ -59,8 +59,22 @@ export default function RepoWorkbench({ view, dir }: { view: View; dir: string }
    * 換 repo／worktree 時**把視圖自己的參數清掉** —— `sha`／`file` 指的是上一個
    * repo 的東西，帶過去會讀不到而且看起來像壞了。
    */
+  /**
+   * 換 repo／worktree／視圖。
+   *
+   * **預設 `push`，不是 `replace`**：選 repo 是一次真正的導覽，Back 要回得到清單
+   * （Jay 2026-10-01 回報：從別頁進 `/repo/code`、選一個 repo、按上一頁，結果跳回
+   * 更前面那一頁 —— 因為 `/repo/code` 那一步沒有在歷史裡留下紀錄）。
+   * 換檔案那條本來就是 `push`（`setFile`），兩邊現在一致。
+   *
+   * `replace: true` 留給**修正**用：刪掉目前這個 worktree 之後退回主 checkout，
+   * 那時「上一頁」指向的是一個已經不存在的 worktree，不該讓它回得去。
+   */
   const go = useCallback(
-    (next: { ref?: string | null; dir?: string; view?: View }, keepViewParams = false) => {
+    (
+      next: { ref?: string | null; dir?: string; view?: View; replace?: boolean },
+      keepViewParams = false
+    ) => {
       const url = new URLSearchParams(keepViewParams ? params.toString() : "");
       const r = next.ref === undefined && next.dir === undefined ? params.get("repo") : next.ref;
       url.delete("repo");
@@ -73,7 +87,8 @@ export default function RepoWorkbench({ view, dir }: { view: View; dir: string }
       // 記住偏好：側邊欄的「Repo」下次會直接進這個視圖
       if (next.view) rememberView(next.view);
       const q = url.toString();
-      router.replace(`/repo/${v}${q ? `?${q}` : ""}`, { scroll: false });
+      const nav = next.replace ? router.replace : router.push;
+      nav(`/repo/${v}${q ? `?${q}` : ""}`, { scroll: false });
     },
     [params, router, view]
   );
@@ -214,7 +229,8 @@ export default function RepoWorkbench({ view, dir }: { view: View; dir: string }
     toast({ ok: true, text: `${current.name}：${json.summary}` });
     // 刪掉的正是目前開著的那個 —— 回到主 checkout
     const main = worktrees.find((w) => w.isMain);
-    go({ ref: main?.ref ?? null });
+    // 剛刪掉的就是目前這個 worktree —— 用 replace，不要讓「上一頁」回到一個不存在的東西
+    go({ ref: main?.ref ?? null, replace: true });
     await repoList.reload(true);
   }, [current, confirm, toast, worktrees, go, repoList]);
 
