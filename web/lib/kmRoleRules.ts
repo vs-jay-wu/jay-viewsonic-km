@@ -30,6 +30,15 @@ export interface KmConfig {
    * 見 `docs/ideas/km-multi-machine.md` §9。
    */
   hubUrl?: string;
+  /**
+   * satellite 才有：hub 要連回這台時，用的是 **hub 自己 loopback 上的這個 port**
+   * （`ssh -R <reversePort>:localhost:9487` 轉過去的）。
+   *
+   * ⚠️ 多台 satellite **不能用同一個號碼** —— 第二條 `ssh -R` 會綁不上，
+   * 而我們開了 `ExitOnForwardFailure=yes`，所以那條隧道整個起不來（大聲失敗，
+   * 比安靜共用一個 port 好）。
+   */
+  reversePort?: number;
   machine: KmMachine;
 }
 
@@ -62,10 +71,12 @@ export function parseKmConfig(workspace: unknown): { config: KmConfig } | { erro
     return { error: `km.machine.name 沒設 —— 給這台機器一個看得懂的名字，${SETUP_HINT}` };
   }
   const hubUrl = typeof raw.hubUrl === "string" && raw.hubUrl.trim() ? raw.hubUrl.trim() : undefined;
+  const rp = raw.reversePort;
+  const reversePort = typeof rp === "number" && Number.isInteger(rp) && rp > 0 && rp < 65536 ? rp : undefined;
   if (role === "satellite" && !hubUrl) {
     return { error: `km.role 是 satellite 但沒有 km.hubUrl —— 它要向誰取第一類資料？` };
   }
-  return { config: { role, hubUrl, machine: { id: id.trim(), name: name.trim() } } };
+  return { config: { role, hubUrl, reversePort, machine: { id: id.trim(), name: name.trim() } } };
 }
 
 /**

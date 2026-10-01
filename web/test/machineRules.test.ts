@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyHeartbeat, isStale, remoteSessions, EMPTY_REGISTRY, MACHINE_STALE_MS,
-  type MachineRegistry,
+  applyHeartbeat, isStale, machineCommandUrl, remoteSessions, EMPTY_REGISTRY,
+  MACHINE_STALE_MS, type MachineRegistry,
 } from "@/lib/machineRules";
 
 const NOW = Date.parse("2026-10-01T10:00:00Z");
@@ -52,5 +52,23 @@ describe("攤平成別台的 session", () => {
 
   it("沒有 selfId（還沒設角色）就全部都算別台的", () => {
     expect(remoteSessions(reg, null, NOW)).toHaveLength(3);
+  });
+});
+
+describe("要把動作送到某台機器上", () => {
+  const live = applyHeartbeat(EMPTY_REGISTRY, B, [], NOW, 9501);
+  const noReverse = applyHeartbeat(EMPTY_REGISTRY, B, [], NOW);
+
+  it("活著又有反向轉發才給得出網址", () => {
+    expect(machineCommandUrl(live, "uuid-b", NOW)).toEqual({ url: "http://localhost:9501" });
+  });
+
+  it("三種做不到的理由要分得出來", () => {
+    // 下一步完全不同：沒這台 vs 沒開反向轉發 vs 離線了
+    expect(machineCommandUrl(live, "uuid-zzz", NOW)).toEqual({ error: expect.stringContaining("不認得") });
+    expect(machineCommandUrl(noReverse, "uuid-b", NOW)).toEqual({ error: expect.stringContaining("反向轉發") });
+    expect(machineCommandUrl(live, "uuid-b", NOW + MACHINE_STALE_MS + 1)).toEqual({
+      error: expect.stringContaining("離線"),
+    });
   });
 });

@@ -21,6 +21,11 @@ export interface MachineRef {
 
 export interface MachineEntry extends MachineRef {
   lastSeenAt: string;
+  /**
+   * hub 要連回這台時用的 port（hub 自己的 loopback，`ssh -R` 轉過去）。
+   * 沒有就代表那台沒開反向轉發 —— 「在那台開 session」會做不到，要講清楚。
+   */
+  reversePort?: number;
   /** 那台推上來的 session 清單（原樣存，hub 不解讀內容） */
   sessions: unknown[];
 }
@@ -44,11 +49,13 @@ export function applyHeartbeat(
   machine: MachineRef,
   sessions: unknown[],
   now: number,
+  reversePort?: number,
 ): MachineRegistry {
   const entry: MachineEntry = {
     id: machine.id,
     name: machine.name,
     lastSeenAt: new Date(now).toISOString(),
+    reversePort,
     sessions,
   };
   return { machines: [...reg.machines.filter((m) => m.id !== machine.id), entry] };
@@ -84,4 +91,26 @@ export function remoteSessions(
         stale: isStale(m, now),
       })),
     );
+}
+
+/**
+ * 要把動作送到某台機器上執行時，它的網址。
+ *
+ * 回 `{ error }` 而不是 null，因為**做不到的理由有三種**，而使用者需要分得出來：
+ * 沒這台、那台沒開反向轉發、那台離線了。三種的下一步完全不同。
+ */
+export function machineCommandUrl(
+  reg: MachineRegistry,
+  machineId: string,
+  now: number,
+): { url: string } | { error: string } {
+  const m = reg.machines.find((x) => x.id === machineId);
+  if (!m) return { error: "不認得這台機器（它還沒送過心跳）" };
+  if (!m.reversePort) {
+    return { error: `「${m.name}」沒有開反向轉發，從這裡下不了指令 —— 在那台重跑 setup-km-tunnel.sh` };
+  }
+  if (isStale(m, now)) {
+    return { error: `「${m.name}」已經離線（上次心跳 ${m.lastSeenAt}）` };
+  }
+  return { url: `http://localhost:${m.reversePort}` };
 }

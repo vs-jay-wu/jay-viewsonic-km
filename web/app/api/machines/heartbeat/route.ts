@@ -18,12 +18,15 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as {
     machine?: MachineRef;
     sessions?: unknown[];
+    reversePort?: number;
   } | null;
   const id = body?.machine?.id?.trim();
   const name = body?.machine?.name?.trim();
   if (!id || !name) return NextResponse.json({ error: "要給 machine.id 與 machine.name" }, { status: 400 });
 
-  const reg = applyHeartbeat(await readMachines(), { id, name }, body?.sessions ?? [], Date.now());
+  const reg = applyHeartbeat(
+    await readMachines(), { id, name }, body?.sessions ?? [], Date.now(), body?.reversePort,
+  );
   await writeMachines(reg);
   return NextResponse.json({ ok: true, machines: reg.machines.length });
 }

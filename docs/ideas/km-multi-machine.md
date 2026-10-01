@@ -45,8 +45,16 @@ Jay 只有筆電，而且開始需要第二台：
 
 hub（A）是唯一的聚合點：
     ├─ 第一類資料自己抓（排程只在這裡跑）
-    └─ 要跨機器的東西（例如「所有機器的 session」）→ hub 去問各 satellite
+    └─ 跨機器的東西（例如「所有機器的 session」）→ **satellite 每分鐘推給 hub**
 ```
+
+> ⚠️ **2026-10-01 修正：原本寫「hub 去問各 satellite」，那在實際的通道上做不到。**
+> `ssh -L 9488:localhost:9487` 只讓 **B 連得到 A，A 連不到 B**。所以 session 索引
+> 改成**推**（`lib/machineRules.ts`）—— 不需要反向通道，而且順便有離線容忍。
+>
+> 真的需要 hub → satellite 的**只有「在那台開 session」**，那條另外加一段
+> `ssh -R <reversePort>:localhost:9487`（`setup-km-tunnel.sh` 讀 `km.reversePort`）。
+> 沒設就只是少那一個功能，其餘不受影響。
 
 兩條規則：
 
@@ -56,8 +64,8 @@ hub（A）是唯一的聚合點：
 
 ### satellite 就是 agent
 
-不必另外寫一隻常駐程式。satellite 本來就是一個 web server，hub 要看 B 的未提交改動時
-就去問 B 的 satellite。**加第三台的成本 = 跑起來 ＋ 在 hub 按 approve**，沒有第三件事。
+不必另外寫一隻常駐程式。satellite 本來就是一個 web server —— 它推送自己的本機事實
+給 hub，而 hub 要在它上面執行動作時（開 session）透過 `ssh -R` 連回去。**加第三台的成本 = 跑起來 ＋ 在 hub 按 approve**，沒有第三件事。
 這是這份設計的驗收標準。
 
 ---
@@ -419,6 +427,8 @@ km 現在開 session 是 `claude -p "/rename <標題>" --session-id <uuid>` 再�
 
 1. 在 B 的畫面上按「開 session」→ 選機器（預設「這一台」）
 2. 選 A → B 產 uuid 與標題 → 經 hub 轉給 A → A 本機執行那兩步
+   （hub → satellite 這一段走 `ssh -R` 的反向轉發；**轉送只帶 session id，
+   對面自己再查一次 cwd**，所以「不吃前端傳來的路徑」在跨機器時一樣成立）
 3. 回報「已在 **書房 Mac** 開啟」，uuid 記進索引
 
 uuid 共用，所以 A 的 satellite 之後回報 session 清單時，hub 一比對就串起來 ——

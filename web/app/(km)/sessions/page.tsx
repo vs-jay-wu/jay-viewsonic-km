@@ -279,7 +279,8 @@ export default function SessionsPage() {
     const res = await fetch(`/api/sessions/${s.id}/open`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ registerRepo }),
+      // 別台的 session 要告訴 server 是哪一台，它才知道要轉給誰
+      body: JSON.stringify({ registerRepo, machineId: s.machine?.id }),
     });
     const out = await res.json().catch(() => ({}));
     setBusy(false);
@@ -290,11 +291,12 @@ export default function SessionsPage() {
     }
 
     switch (out.status) {
+      // 開在別台時一定要講出是哪一台 —— 不然你會盯著自己的螢幕等一個不會出現的分頁
       case "opened":
-        setOpened((p) => ({ ...p, [s.id]: "已在 Orca 開啟" }));
+        setOpened((p) => ({ ...p, [s.id]: out.openedOn ? `已在「${out.openedOn}」的 Orca 開啟` : "已在 Orca 開啟" }));
         break;
       case "reused":
-        setOpened((p) => ({ ...p, [s.id]: "已切到既有分頁" }));
+        setOpened((p) => ({ ...p, [s.id]: out.openedOn ? `已切到「${out.openedOn}」的既有分頁` : "已切到既有分頁" }));
         break;
       case "needs-repo": {
         const ok = await confirm({

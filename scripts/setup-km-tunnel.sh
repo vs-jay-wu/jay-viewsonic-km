@@ -6,7 +6,11 @@
 # satellite 透過這條隧道向它要。
 #
 # 手動版本長這樣，這支腳本做的就是把它交給 launchd：
-#   ssh -N -L 9488:localhost:9487 jay@hub.local
+#   ssh -N -L 9488:localhost:9487 -R 9501:localhost:9487 jay@hub.local
+#
+# 兩個方向都要：
+#   -L  這台 → hub（取第一類資料）
+#   -R  hub → 這台（hub 才能在這台上開 session；`ssh -L` 是單向的）
 #
 # 為什麼要常駐：手動那條**關掉終端機就沒了**，而且 B 闔蓋睡醒、換 Wi-Fi、
 # A 重開機之後都不會自己回來 —— 而斷掉的時候畫面上只會說「連不到 hub」，
@@ -46,6 +50,9 @@ HUB=""
 REMOTE_PORT=9487
 # 轉到本機哪個 port。**不能是 9487** —— 這台自己的 km 佔著它
 LOCAL_PORT=9488
+# hub 那側用哪個 port 連回這台。**以 local.workspace.json 的 km.reversePort 為準**
+# （心跳會把同一個值報給 hub；兩邊各填一次一定會漂移）。
+REVERSE_PORT=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -68,6 +75,11 @@ done
 
 SSH_BIN="$(command -v ssh)"
 
+# 反向 port 只有一個來源：設定檔。心跳報給 hub 的也是它，所以不會對不起來。
+if [[ -z "$REVERSE_PORT" ]]; then
+  REVERSE_PORT="$(jq -r '.km.reversePort // empty' "$WORKSPACE_JSON" 2>/dev/null || true)"
+fi
+
 # 轉發埠與本機 km 撞號的話，`ssh -L` 會綁不上而且**每 ThrottleInterval 重試一次**，
 # log 裡是一行 `bind: Address already in use`，畫面上則什麼都沒有。先擋住。
 if [[ "$ACTION" == install && "$LOCAL_PORT" == "$REMOTE_PORT" ]]; then
@@ -77,6 +89,13 @@ if [[ "$ACTION" == install && "$LOCAL_PORT" == "$REMOTE_PORT" ]]; then
 fi
 
 plist_body() {
+  # hub → 這台的方向。沒設 km.reversePort 就不開 —— 那樣只是「hub 上開不了這台的
+  # session」，其餘功能完全不受影響，不該因此擋住安裝。
+  local REVERSE_ARG=""
+  if [[ -n "$REVERSE_PORT" ]]; then
+    REVERSE_ARG="    <string>-R</string><string>${REVERSE_PORT}:localhost:${REMOTE_PORT}</string>
+"
+  fi
   cat <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -100,7 +119,7 @@ plist_body() {
     <string>-o</string><string>StrictHostKeyChecking=yes</string>
     <string>-o</string><string>ExitOnForwardFailure=yes</string>
     <string>-L</string><string>${LOCAL_PORT}:localhost:${REMOTE_PORT}</string>
-    <string>$HUB</string>
+${REVERSE_ARG}    <string>$HUB</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
@@ -215,6 +234,12 @@ case "$ACTION" in
     echo "✓ 已設為常駐 $LABEL"
     echo "  hub  ：$HUB"
     echo "  轉發 ：localhost:$LOCAL_PORT → hub 的 localhost:$REMOTE_PORT"
+    if [[ -n "$REVERSE_PORT" ]]; then
+      echo "  反向 ：hub 的 localhost:$REVERSE_PORT → 這台的 localhost:$REMOTE_PORT"
+    else
+      echo "  反向 ：**沒開**（local.workspace.json 沒有 km.reversePort）"
+      echo "         → hub 上開不了這台的 session；要的話填一個沒人用的號碼（例如 9501）再重跑"
+    fi
     echo "  log  ：$OUT_LOG / $ERR_LOG"
     echo "  狀態 ：./scripts/setup-km-tunnel.sh --status"
     echo

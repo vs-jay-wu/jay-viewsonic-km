@@ -21,7 +21,7 @@ async function beat(): Promise<void> {
   await fetch(`${cfg.hubUrl}/api/machines/heartbeat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ machine: cfg.machine, sessions }),
+    body: JSON.stringify({ machine: cfg.machine, sessions, reversePort: cfg.reversePort }),
     signal: AbortSignal.timeout(10_000),
   }).catch(() => undefined); // hub 不在是可預期的，下一次再試就好
 }
