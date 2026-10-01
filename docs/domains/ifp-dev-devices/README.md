@@ -20,8 +20,10 @@
 
 **機型與韌體（2026-09-30 讀取）**〔實測，`adb shell getprop` / `dumpsys package`〕
 
-韌體一更新，下面「Sensor Settings」的位置可能就變了。所以每次照著做之前，先重讀這幾個值；
-跟這張表不一樣，就把新的位置補一份，舊的不要直接覆蓋。
+下面「Sensor Settings」的位置，是在這張表的版本上實際點過、確認過的。韌體更新**有可能**讓位置改變，但不一定。
+所以版本跟這張表不同時，照著點的時候多看一眼：
+- 位置一樣：在這張表旁邊補一行「新版本也一樣」，記下版本號；
+- 位置真的變了：另外記一份新的，舊的保留，不要直接覆蓋。
 
 | 項目 | 值 |
 |---|---|
@@ -119,7 +121,7 @@ $ adb shell am get-current-user
 **怎麼處理**
 
 1. **關掉人體感應（找到開關了，2026-09-30）：設定 → Advanced → Sensor Settings → Motion sensor → 關。**〔實測〕
-   適用：**IFP63，build 20250625，`com.ifpdos.vsettings` 2.0.0.54**（見上面的機型表）。韌體版本不同時，先確認位置還在不在。
+   適用：**IFP63，build 20250625，`com.ifpdos.vsettings` 2.0.0.54**（見上面的機型表）。版本不同時位置**可能**一樣、也可能變了，照著點的時候確認一下（見上面的機型表）。
    - **一步一步**（英文介面；設定 app 是兩欄式，左邊選單、右邊內容）：
      1. 桌面的 **Settings** 圖示。開出來的是 `com.android.settings`，它的 Advanced 頁由 `com.ifpdos.settingsext` 提供。
      2. 左欄往下捲，點 **Advanced**（副標「Startup, input source, advanced settings」）。
