@@ -148,7 +148,8 @@ $ adb shell am get-current-user
    - **驗證**：關掉後閒置 7 分鐘（17:00:57–17:07:57）。這段時間沒有 `Timeout for waiting human`、沒有
      `Going to sleep`，服務只記 `PIR state is off, has person, but can't set screen status to true`；機器保持醒著、沒上鎖。
 2. PIN：〔推論，未實測〕在設定裡設一次 PIN 再改回「無」，看能不能讓 `CredentialType` 變成 `NONE`。
-3. **工作規則（Jay 2026-09-30）：只要是 IFP，就每十分鐘點一次。** 目前用的是一支背景迴圈：
+3. ~~工作規則：只要是 IFP，就每十分鐘點一次。~~ **已廢止**（Jay 2026-10-01：「「每十分鐘點一次」這條規則不用留」）。
+   實測點擊沒有效果，真正的解法是第 1 點，把 Motion sensor 關掉。以下保留當時的做法與實測紀錄，作為參考：
    - 每 600 秒先 `input keyevent KEYCODE_WAKEUP`，再點狀態列上緣的正中間（x = 寬度/2，y = 5）。這個位置
      不在白板、也不在 rail 上，白板不會多出墨點。
    - **有 instrumentation 在跑就跳過**：`ps -A` 看得到 `com.viewsonic.vbo.test` 或 `androidx.test` 時不點，
