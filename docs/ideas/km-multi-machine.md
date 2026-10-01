@@ -246,6 +246,47 @@ B 的 `km.hubUrl` 就寫 `http://localhost:9488`。
   「連不到 hub」。
 - 離開家就不方便（要有辦法連回 A）。真的變成常態需求時再回頭看下面的 Tailscale。
 
+#### ⚠️ SSH 突然「認證過了馬上被關掉」＝ macOS 的 Service ACL
+
+2026-10-01 實際踩到：satellite 用 `ssh <hub> '<指令>'` 執行指令，`ssh -v` 顯示
+`Server accepts key` 之後立刻 `Connection closed`；**已經建好的常駐通道完全不受影響**
+（它在被踢出名單之前就認證過了，既有連線不會重新檢查）。
+
+真正的錯誤**只在 hub 的 log 裡**：
+
+```
+sshd-session: (libpam.2.dylib) in pam_sm_acct_mgmt(): pam_sacl:
+  denying 'jay.wj.wu' due to failed service ACL check
+sshd-session: fatal: Access denied for user jay.wj.wu by PAM account configuration [preauth]
+```
+
+`pam_sacl` ＝ macOS 的 **Service ACL**，也就是「系統設定 ▸ 共享 ▸ 遠端登入 ▸
+允許哪些使用者」那個清單（`com.apple.access_ssh` 群組）。被移出去就是這個症狀。
+
+**一行就能判定**：
+
+```bash
+dsmemberutil checkmembership -U <你的帳號> -G com.apple.access_ssh
+```
+
+⚠️ **兩個查 log 的坑**（兩個都踩過）：
+
+- 真正的訊息在 **`sshd-session`** 這個 process，不是 `sshd` ——
+  OpenSSH 9.8+ 把每條連線拆成獨立行程。用 `process == "sshd"` 查會**什麼都看不到**，
+  而「沒有錯誤訊息」看起來很像「不是 sshd 的問題」。
+- zsh 的 `log` 是 **builtin**，會把 `log show …` 吃掉並回 `too many arguments`。
+  用 `/usr/bin/log`。
+
+**這台是 Jamf 管的**（`viewsonic.jamfcloud.com`），所以這個名單**會被改**。
+2026-10-01 當天的狀態是：直接成員資格不見了，但因為帳號被加進了 `admin`，
+而 `com.apple.access_ssh` 巢狀包含 `admin`，所以又通了 —— **也就是現在的 SSH 存取
+掛在「是不是管理員」上**。保險一點是把直接成員資格補回去，兩條任一條在就不會斷：
+
+```bash
+sudo dseditgroup -o edit -a <你的帳號> -t user com.apple.access_ssh
+dsmemberutil checkmembership -U <你的帳號> -G com.apple.access_ssh   # 要回 is a member
+```
+
 ### 備案：Tailscale（**目前不採用**）
 
 WireGuard 加密、裝置層級認證本來就有、離家也能用、給穩定名字不必追 DHCP。

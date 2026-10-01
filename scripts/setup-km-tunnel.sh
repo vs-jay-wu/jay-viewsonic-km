@@ -137,16 +137,11 @@ ${REVERSE_ARG}    <string>$HUB</string>
 PLIST
 }
 
-installed_hub() {
-  [[ -f "$PLIST" ]] || return 1
-  # plist 裡最後一個 <string> 就是 user@host
-  grep -o '<string>[^<]*@[^<]*</string>' "$PLIST" | tail -1 | sed 's/<[^>]*>//g'
-}
+# 讀回已安裝的 plist。解析在 scripts/lib/tunnel-plist.sh（那裡有測試）
+source "${0:A:h}/lib/tunnel-plist.sh"
 
-installed_local_port() {
-  [[ -f "$PLIST" ]] || return 1
-  grep -o '<string>[0-9]*:localhost:[0-9]*</string>' "$PLIST" | sed 's/<[^>]*>//g' | cut -d: -f1
-}
+installed_hub() { tunnel_hub "$PLIST"; }
+installed_local_port() { tunnel_local_port "$PLIST"; }
 
 tunnel_check() {
   local port="$1" code
