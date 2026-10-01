@@ -228,8 +228,14 @@ B 的 `km.hubUrl` 就寫 `http://localhost:9488`。
   **不要加 `-g` 或 `GatewayPorts`**，那會把 A 的 km 曝光給 B 所在的整個網段。
 - A 要開 **Remote Login**（系統設定 ▸ 一般 ▸ 共享）。**2026-09-30 實測目前是關的**
   （`ssh localhost` → `Connection refused`）。開之前想一下那台機器會接到哪些網路。
-- 斷線要能自己接回來：`-o ServerAliveInterval=30 -o ServerAliveCountMax=3`
-  ＋ 外面包一層重試（或 `autossh`）。這屬於階段 1 要做的事。
+- 斷線要能自己接回來 → **`scripts/setup-km-tunnel.sh`**（只在 satellite 上跑）。
+  它把那行 `ssh -N -L` 交給 launchd：`RunAtLoad` ＋ `KeepAlive` ＋
+  `ThrottleInterval 30`，加上 `ServerAliveInterval` 讓 ssh 自己發現「對面其實
+  已經死了」—— 少了它，睡醒之後會卡在一條看起來還活著的連線上，而 `KeepAlive`
+  不會察覺（它只看行程在不在）。
+  裝之前會先用 `BatchMode=yes` 實測一次金鑰登入，過不了就**不寫 plist** ——
+  否則症狀是 launchd 每 30 秒重試、log 一直刷 Permission denied，而畫面上只說
+  「連不到 hub」。
 - 離開家就不方便（要有辦法連回 A）。真的變成常態需求時再回頭看下面的 Tailscale。
 
 ### 備案：Tailscale（**目前不採用**）
