@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Icon from "@/components/Icon";
 import Tooltip from "@/components/Tooltip";
 import { useConfirm } from "@/components/Confirm";
+import { refreshHubStatus } from "@/components/useHubStatus";
 
 interface Machine {
   id: string;
@@ -65,6 +66,9 @@ export default function MachineSettings() {
         body: JSON.stringify(body),
       });
       await load();
+      // 改的可能是**自己**的名字，而側邊欄走的是 useHubStatus 的輪詢 ——
+      // 不踢一下的話要等最久 15 秒才跟上，看起來像沒生效
+      await refreshHubStatus();
     } finally {
       setBusy(false);
       setEditing(null);

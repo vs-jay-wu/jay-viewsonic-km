@@ -54,6 +54,16 @@ async function refresh(): Promise<void> {
   for (const fn of s.subs) fn(s.data);
 }
 
+/**
+ * 立刻重抓一次並通知所有訂閱者。
+ *
+ * 給「改了會馬上看到」的動作用 —— 例如在設定頁改機器名之後，側邊欄不該等到
+ * 下一輪輪詢（最久 15 秒）才跟上（Jay 2026-10-01 回報）。
+ */
+export async function refreshHubStatus(): Promise<void> {
+  await refresh();
+}
+
 export function useHubStatus(): HubView {
   const [v, setV] = useState<HubView>(() => store().data);
 
