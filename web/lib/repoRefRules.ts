@@ -71,7 +71,11 @@ export function decodeRepoRef(ref: string, roots: RefRoot[]): string | null {
   const slash = clean.indexOf("/");
   const id = slash < 0 ? clean : clean.slice(0, slash);
   const rel = slash < 0 ? "" : clean.slice(slash + 1);
-  if (rel.split("/").some((s) => s === ".." || s === "." || s === "")) return null;
+  // ⚠️ `rel` 空的時候**不能**跑這段檢查：`"".split("/")` 是 `[""]`，會被自己的
+  // 「不准空片段」擋掉。那正好是 `km` 這個身分（root 底下沒有再一層）—— org 的
+  // root 底下一定有 repo，所以只有 km 會踩到，而它是最常開的那個。
+  // 2026-10-01 的症狀：點 jay-viewsonic-km 網址變成 `?repo=km` 但畫面停在清單。
+  if (rel && rel.split("/").some((s) => s === ".." || s === "." || s === "")) return null;
   const root = roots.find((r) => r.id === id);
   if (!root) return null;
   const base = trimSlash(root.base);

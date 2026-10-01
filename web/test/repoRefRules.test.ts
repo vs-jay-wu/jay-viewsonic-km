@@ -93,3 +93,19 @@ describe("舊網址 dir= → repo=", () => {
     expect(p.getAll("tag")).toEqual(["a", "b"]);
   });
 });
+
+describe("root 本身就是一個 repo（km）", () => {
+  it("解得開沒有相對路徑的身分", () => {
+    // `km` 是唯一「root 底下沒有再一層」的身分 —— org 的 root 底下一定有 repo，
+    // 所以這個情況只有 km 會踩到，而它正好是最常開的那個
+    expect(decodeRepoRef("km", A)).toBe("/Users/jay/ProjectsWork_GitHub/jay-viewsonic-km");
+    expect(decodeRepoRef("km", B)).toBe("/Users/wu/code/km");
+  });
+
+  it("來回轉得回去", () => {
+    const abs = "/Users/jay/ProjectsWork_GitHub/jay-viewsonic-km";
+    const ref = encodeRepoRef(abs, A)!;
+    expect(ref).toBe("km");
+    expect(decodeRepoRef(ref, A)).toBe(abs);
+  });
+});

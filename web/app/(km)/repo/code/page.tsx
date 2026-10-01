@@ -17,10 +17,16 @@ export async function generateMetadata({
 }: {
   searchParams: Promise<RepoSearchParams>;
 }): Promise<Metadata> {
-  const { repo, dir } = await searchParams;
-  // ref 的最後一段就是 repo 名（`Viewsonic-EDU/ragdoll-cat` → `ragdoll-cat`），
-  // 跟絕對路徑取最後一段是同一個結果，所以共用同一支
-  return { title: repoViewTitle(repo ?? dir, "code") };
+  const q = await searchParams;
+  /*
+   * 標題取**解析出來的絕對路徑**的最後一段，不是 ref 的最後一段。
+   *
+   * 多數情況兩者相同（`Viewsonic-EDU/ragdoll-cat` → `ragdoll-cat`），但
+   * **`km` 這個 ref 不是**：資料夾叫 `jay-viewsonic-km`。拿 ref 當名字的話，
+   * 清單上寫 `jay-viewsonic-km` 而分頁寫 `km`，同一個東西兩個名字。
+   */
+  const dir = await dirFromParams(q);
+  return { title: repoViewTitle(dir || q.repo || q.dir, "code") };
 }
 
 /** 程式碼視圖。內容與另一個視圖共用 `RepoWorkbench`，差別只有這個 prop */
