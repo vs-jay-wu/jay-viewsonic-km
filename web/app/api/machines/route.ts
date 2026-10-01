@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { kmConfig } from "@/lib/kmRole";
-import { forgetMachine, isStale, machineLabel, renameMachine } from "@/lib/machineRules";
-import { readMachines, writeMachines } from "@/lib/machines";
+import { forgetMachine, isStale, machineLabel, renameMachine, selfLabel } from "@/lib/machineRules";
+import { readMachines, updateMachines } from "@/lib/machines";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,10 @@ export async function GET() {
   const cfg = kmConfig();
   const reg = await readMachines();
   return NextResponse.json({
-    self: cfg ? { id: cfg.machine.id, name: cfg.machine.name, role: cfg.role } : null,
+    // 名字查註冊表（跨機器共用），不是本機設定
+    self: cfg
+      ? { id: cfg.machine.id, name: selfLabel(reg, cfg.machine.id, cfg.machine.name), role: cfg.role }
+      : null,
     machines: reg.machines.map((m) => ({
       id: m.id,
       label: machineLabel(m),
@@ -46,12 +49,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "不認得這台機器" }, { status: 404 });
   }
 
+  // 改名／移除都走鎖：心跳隨時可能在寫同一份
   if (body?.action === "rename") {
-    await writeMachines(renameMachine(reg, id, body.displayName ?? ""));
+    const name = body.displayName ?? "";
+    await updateMachines((r) => renameMachine(r, id, name));
     return NextResponse.json({ ok: true });
   }
   if (body?.action === "forget") {
-    await writeMachines(forgetMachine(reg, id));
+    await updateMachines((r) => forgetMachine(r, id));
     return NextResponse.json({ ok: true });
   }
   return NextResponse.json({ error: "action 要是 rename / forget" }, { status: 400 });

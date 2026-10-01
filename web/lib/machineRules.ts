@@ -29,6 +29,11 @@ export interface MachineEntry extends MachineRef {
    * 它自己叫什麼（hostname 風格的那個）。
    */
   displayName?: string;
+  /**
+   * 這台的角色。**hub 也會把自己寫進來**（它不送心跳，是直接寫本機那份），
+   * 否則 satellite 讀到的註冊表裡沒有 hub，於是在 B 上看不到 A 的 session。
+   */
+  role?: "hub" | "satellite";
   lastSeenAt: string;
   /**
    * hub 要連回這台時用的 port（hub 自己的 loopback，`ssh -R` 轉過去）。
@@ -45,9 +50,25 @@ export interface MachineRegistry {
 
 export const EMPTY_REGISTRY: MachineRegistry = { machines: [] };
 
-/** 畫面上要顯示的名字：hub 改過的優先，沒改過就用那台自己報的 */
+/** 畫面上要顯示的名字：改過的優先，沒改過就用那台自己報的 */
 export function machineLabel(m: MachineEntry): string {
   return m.displayName?.trim() || m.name;
+}
+
+/**
+ * **這一台**自己要顯示的名字。
+ *
+ * 真相是**註冊表**（hub 擁有的共用狀態），不是本機的 `local.workspace.json` ——
+ * Jay 2026-10-01：「兩台都要叫做 Tony，名稱設定會跨電腦」。所以在任何一台改名，
+ * 每一台都跟著變。
+ *
+ * `fallback` 是本機設定裡的 `machine.name`，用在兩種情況：
+ * **還沒登記過**（第一次跑，心跳還沒送出去），或**連不上 hub 讀不到註冊表**。
+ * 兩種都不該讓畫面變成空白。
+ */
+export function selfLabel(reg: MachineRegistry, selfId: string, fallback: string): string {
+  const me = reg.machines.find((m) => m.id === selfId);
+  return me ? machineLabel(me) : fallback;
 }
 
 /** 在 hub 上改名。空字串＝取消覆寫，回到那台自己報的名字 */
@@ -82,6 +103,7 @@ export function applyHeartbeat(
   sessions: unknown[],
   now: number,
   reversePort?: number,
+  role?: "hub" | "satellite",
 ): MachineRegistry {
   const prev = reg.machines.find((m) => m.id === machine.id);
   const entry: MachineEntry = {
@@ -89,6 +111,7 @@ export function applyHeartbeat(
     name: machine.name,
     // 心跳不覆寫 hub 上改過的名字
     displayName: prev?.displayName,
+    role,
     lastSeenAt: new Date(now).toISOString(),
     reversePort,
     sessions,
@@ -131,23 +154,36 @@ export function remoteSessions(
 /**
  * 要把動作送到某台機器上執行時，它的網址。
  *
- * 回 `{ error }` 而不是 null，因為**做不到的理由有三種**，而使用者需要分得出來：
- * 沒這台、那台沒開反向轉發、那台離線了。三種的下一步完全不同。
+ * **兩個方向用的管道不一樣**，這是通道形狀造成的，不是設計選擇：
+ *
+ * | 誰要指揮誰 | 走哪條 |
+ * |---|---|
+ * | hub → satellite | `http://localhost:<reversePort>`（`ssh -R` 轉回去） |
+ * | satellite → hub | `self.hubUrl`（`ssh -L`，本來就有的那條） |
+ *
+ * 回 `{ error }` 而不是 null，因為**做不到的理由有好幾種**，而使用者需要分得出來：
+ * 沒這台、那台沒開反向轉發、那台離線了。每一種的下一步完全不同。
  */
 export function machineCommandUrl(
   reg: MachineRegistry,
   machineId: string,
   now: number,
+  self?: { role?: string; hubUrl?: string },
 ): { url: string } | { error: string } {
   const m = reg.machines.find((x) => x.id === machineId);
   if (!m) return { error: "不認得這台機器（它還沒送過心跳）" };
+  if (isStale(m, now)) {
+    return { error: `「${machineLabel(m)}」已經離線（上次心跳 ${m.lastSeenAt}）` };
+  }
+  // satellite 要指揮 hub：用本來就有的那條 -L，不需要反向轉發
+  if (m.role === "hub" && self?.role === "satellite") {
+    if (!self.hubUrl) return { error: "這台沒設 km.hubUrl，不知道 hub 在哪" };
+    return { url: self.hubUrl };
+  }
   if (!m.reversePort) {
     return {
       error: `「${machineLabel(m)}」沒有開反向轉發，從這裡下不了指令 —— 在那台重跑 setup-km-tunnel.sh`,
     };
-  }
-  if (isStale(m, now)) {
-    return { error: `「${machineLabel(m)}」已經離線（上次心跳 ${m.lastSeenAt}）` };
   }
   return { url: `http://localhost:${m.reversePort}` };
 }

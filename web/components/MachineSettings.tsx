@@ -27,10 +27,12 @@ function ago(iso: string): string {
 /**
  * 這個工作區有哪些機器。
  *
- * 名字可以在這裡改，而且**心跳不會把它蓋回去**（`machineRules.ts` 的 `displayName`）——
- * 那台自己報的名字常常是公司資產編號那種，看不出是哪一台。
+ * 名字**跨機器共用**（Jay 2026-10-01）：改一次每一台都跟著變，因為真相是 hub
+ * 那份註冊表，不是各自的 `local.workspace.json`。心跳也不會把它蓋回去
+ * （`machineRules.ts` 的 `displayName` / `selfLabel`）。
  *
- * 旁邊保留它**自己報的名字**：改過名之後要連過去（ssh、看 log）時需要原本那個。
+ * 旁邊保留它**自己報的名字**：改過名之後要連過去（ssh、看 log）時需要原本那個 ——
+ * 那通常是公司資產編號那種，看不出是哪一台，但 ssh 要用它。
  */
 export default function MachineSettings() {
   const [self, setSelf] = useState<{ name: string; role: string } | null>(null);
@@ -80,7 +82,7 @@ export default function MachineSettings() {
       </h2>
       <p className="mt-1 text-sm text-fg-muted">
         這一台是 <span className="font-medium text-fg">{self.name}</span>（{self.role}）。
-        其他機器每分鐘回報一次，所以清單最舊是一分鐘前的。
+        其他機器每分鐘回報一次，所以清單最舊是一分鐘前的。改名是**共用的**，每一台都會跟著變。
       </p>
 
       <ul className="mt-4 divide-y divide-line overflow-hidden rounded-lg border border-line">

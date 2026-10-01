@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   applyHeartbeat, forgetMachine, isStale, machineCommandUrl, machineLabel,
-  remoteSessions, renameMachine, EMPTY_REGISTRY, MACHINE_STALE_MS, type MachineRegistry,
+  remoteSessions, renameMachine, selfLabel, EMPTY_REGISTRY, MACHINE_STALE_MS,
+  type MachineRegistry,
 } from "@/lib/machineRules";
 
 const NOW = Date.parse("2026-10-01T10:00:00Z");
@@ -102,5 +103,46 @@ describe("在 hub 上改名", () => {
     expect(r.machines).toHaveLength(0);
     r = applyHeartbeat(r, B, [], NOW + 60_000);
     expect(r.machines).toHaveLength(1);
+  });
+});
+
+describe("名字跨機器共用", () => {
+  it("自己的名字查註冊表，不是查本機設定", () => {
+    // Jay 2026-10-01：兩台都要叫 Tony，所以真相是 hub 那份註冊表
+    let r = applyHeartbeat(EMPTY_REGISTRY, B, [], NOW, 9501, "satellite");
+    r = renameMachine(r, "uuid-b", "Tony");
+    expect(selfLabel(r, "uuid-b", "FLT-MBP-02")).toBe("Tony");
+  });
+
+  it("還沒登記過、或讀不到註冊表就退回本機設定", () => {
+    // 第一次跑（心跳還沒送出去）與連不上 hub 都走這條，畫面不該變空白
+    expect(selfLabel(EMPTY_REGISTRY, "uuid-b", "FLT-MBP-02")).toBe("FLT-MBP-02");
+  });
+});
+
+describe("兩個方向用不同管道", () => {
+  const hubEntry = applyHeartbeat(EMPTY_REGISTRY, A, [], NOW, undefined, "hub");
+  const both = applyHeartbeat(hubEntry, B, [], NOW, 9501, "satellite");
+
+  it("hub → satellite 走反向轉發", () => {
+    expect(machineCommandUrl(both, "uuid-b", NOW, { role: "hub" }))
+      .toEqual({ url: "http://localhost:9501" });
+  });
+
+  it("satellite → hub 走既有的 hubUrl，不需要反向轉發", () => {
+    // hub 那筆沒有 reversePort，照舊規則會被判成「沒開反向轉發」
+    expect(machineCommandUrl(both, "uuid-a", NOW, { role: "satellite", hubUrl: "http://localhost:9488" }))
+      .toEqual({ url: "http://localhost:9488" });
+  });
+
+  it("satellite 沒設 hubUrl 就講得出來", () => {
+    expect(machineCommandUrl(both, "uuid-a", NOW, { role: "satellite" }))
+      .toEqual({ error: expect.stringContaining("hubUrl") });
+  });
+
+  it("離線的優先報離線，不要先報「沒開反向轉發」", () => {
+    // 兩個都不成立時，先講那個「等它回來就好」的理由
+    expect(machineCommandUrl(both, "uuid-a", NOW + MACHINE_STALE_MS + 1, { role: "satellite" }))
+      .toEqual({ error: expect.stringContaining("離線") });
   });
 });

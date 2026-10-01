@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { listSessions } from "@/lib/sessions";
 import { openSession } from "@/lib/orca";
 import { readMachines } from "@/lib/machines";
+import { kmConfig } from "@/lib/kmRole";
 import { machineCommandUrl } from "@/lib/machineRules";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +35,12 @@ export async function POST(
       return NextResponse.json({ error: "找不到這個 session" }, { status: 404 });
     }
     const reg = await readMachines();
-    const target = machineCommandUrl(reg, body.machineId, Date.now());
+    const cfg = kmConfig();
+    // satellite 要指揮 hub 時走 `hubUrl`（既有的 -L），不是反向轉發
+    const target = machineCommandUrl(reg, body.machineId, Date.now(), {
+      role: cfg?.role,
+      hubUrl: cfg?.hubUrl,
+    });
     if ("error" in target) return NextResponse.json({ error: target.error }, { status: 409 });
 
     const name = reg.machines.find((m) => m.id === body.machineId)?.name ?? "另一台";

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { kmConfig } from "@/lib/kmRole";
 import { applyHeartbeat, type MachineRef } from "@/lib/machineRules";
-import { readMachines, writeMachines } from "@/lib/machines";
+import { updateMachines } from "@/lib/machines";
 
 export const dynamic = "force-dynamic";
 
@@ -24,9 +24,8 @@ export async function POST(req: NextRequest) {
   const name = body?.machine?.name?.trim();
   if (!id || !name) return NextResponse.json({ error: "要給 machine.id 與 machine.name" }, { status: 400 });
 
-  const reg = applyHeartbeat(
-    await readMachines(), { id, name }, body?.sessions ?? [], Date.now(), body?.reversePort,
+  const reg = await updateMachines((r) =>
+    applyHeartbeat(r, { id, name }, body?.sessions ?? [], Date.now(), body?.reversePort, "satellite"),
   );
-  await writeMachines(reg);
   return NextResponse.json({ ok: true, machines: reg.machines.length });
 }
