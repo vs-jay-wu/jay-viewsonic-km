@@ -23,6 +23,7 @@
       <li><a href="#sparsebundle">5. 真要搬：APFS sparsebundle</a></li>
       <li><a href="#colima">6. 先回收 Colima 的 14G</a></li>
       <li><a href="#probes">7. 探針與對照組</a></li>
+      <li><a href="#run">8. 實跑紀錄：edu-dm-dashboard</a></li>
     </ul>
   </nav>
 
@@ -82,8 +83,8 @@
       <tbody>
         <tr><td>26 個 repo 的原始碼</td><td><strong>~1.1 G</strong></td><td><span class="badge badge-ok">實測</span></td><td>不是問題</td></tr>
         <tr><td><code>~/.colima</code></td><td><strong>16 G</strong><br />（<code>_disks</code> 14 G ＋ <code>colima</code> 1.4 G）</td><td><span class="badge badge-ok">實測</span></td><td><strong>目前最大的一塊</strong>，而且 Colima 現在是停的</td></tr>
-        <tr><td><code>node_modules</code> × 6 個要跑的服務</td><td>粗估 3–6 G</td><td><span class="badge badge-warn">估計</span></td><td><strong>未實測</strong>。Angular monorepo 通常 1–2 G，NestJS 各 300–600 M</td></tr>
-        <tr><td>Docker images（Node base、MongoDB／Postgres、MQTT broker…）</td><td>粗估 3–8 G</td><td><span class="badge badge-warn">估計</span></td><td><strong>未實測</strong>，取決於要起幾個服務</td></tr>
+        <tr><td><code>node_modules</code>（<code>edu-dm-dashboard</code> 一個）</td><td><strong>2.0 G</strong><br />185,034 個檔</td><td><span class="badge badge-ok">實測</span></td><td>2026-09-24 實裝。另有 yarn cache <strong>1.5 G</strong>（跨 repo 共用）</td></tr>
+        <tr><td>Docker images</td><td><strong>0</strong></td><td><span class="badge badge-ok">實測</span></td><td>只跑前端接 stage 的話<strong>完全用不到</strong>（見 <a href="#run">§8</a>）。要 Docker 的是那四個帶 DB 的後端</td></tr>
       </tbody>
     </table>
     <div class="callout">
@@ -111,10 +112,21 @@
     <p>拆成三個不同的東西回答，因為它們的答案不一樣：</p>
 
     <h3>4.1 <code>node_modules</code> ／ build 產物 → <span class="badge badge-err">不建議</span></h3>
-    <p>三個理由疊加：<strong>hardlink 不支援</strong>（pnpm 直接壞）、<strong>膨脹 18–58 倍</strong>
+    <p>三個理由疊加：<strong>hardlink 不支援</strong>（pnpm 直接壞）、<strong>膨脹</strong>
     （搬過去反而更耗空間，只是耗在外接）、<strong>小檔慢 13 倍</strong>
     （<code>npm install</code> 與 webpack／Angular build 都是大量小檔 I/O，正是最痛的存取模式）。</p>
-    <p>而且本來就沒必要——依賴撐死 6 G，本機有 84 G。</p>
+    <div class="callout warn">
+      <strong>實算（2026-09-24，<code>edu-dm-dashboard</code> 裝好之後逐檔量）：</strong>
+      <pre><code>node_modules 真實內容        1.4 G   （185,034 個檔）
+  → 本機 APFS（4K cluster）  1.9 G
+  → 外接 exFAT（256K）      45.8 G   ← 23.7 倍</code></pre>
+      <strong>光這一個 repo 就會吃掉外接 46 G。</strong>原因是檔案又多又小，
+      每個至少佔一個 256K cluster。本機只要 1.9 G，而且快 13 倍。
+    </div>
+    <p>pnpm 那條對 <code>edu-dm-api-nestjs</code> 與 <code>edu-dm-iot-nestjs</code> 成立
+    （它們的 <code>postinstall</code> 是 <code>pnpm husky init</code>）；
+    <code>edu-dm-dashboard</code> 用的是 yarn 4 <code>nodeLinker: node-modules</code>，
+    不靠 hardlink，<strong>技術上放得上去</strong>——只是上面那 46 G 與 13 倍讓它沒有意義。</p>
 
     <h3>4.2 Docker／Colima 的 VM disk → <span class="badge badge-err">不要直接搬</span></h3>
     <p>Colima 的 datadisk 實測是：</p>
@@ -206,6 +218,72 @@ colima start --disk 60 --cpu 4 --memory 8</code></pre>
       只有「外接 vs 本機」的<strong>相對比較</strong>是有效的（同條件、同指令）。
       要準確數字得用 <code>fio</code> 之類的工具另外量。
     </div>
+
+    <h2 id="run">8. 實跑紀錄：edu-dm-dashboard</h2>
+    <p>2026-09-24 實際把主控台跑起來。<strong>結論：不需要 Docker、不需要任何本機後端</strong>
+    ——前端用 <code>-c stage</code> 接雲端 stage 即可。</p>
+
+    <table>
+      <thead><tr><th>項目</th><th>值</th></tr></thead>
+      <tbody>
+        <tr><td>repo（還原到本機後）</td><td><strong>103 M</strong>（外接上顯示 2.7 G）</td></tr>
+        <tr><td><code>node_modules</code></td><td><strong>2.0 G</strong> / 185,034 檔，<code>yarn install</code> 54 秒</td></tr>
+        <tr><td>yarn cache</td><td>1.5 G</td></tr>
+        <tr><td>Docker / Colima</td><td><strong>完全沒用到</strong></td></tr>
+      </tbody>
+    </table>
+
+    <h3>步驟</h3>
+    <pre><code>python3 scripts/repo-storage.py restore edu-dm-dashboard --org Viewsonic-EDU
+
+cd .../edu-dm-dashboard
+nvm install          # .nvmrc = 24.3.0（engines 要求 node &gt;=24）
+corepack enable      # packageManager = yarn@4.12.0
+yarn install
+yarn start:dm:stage  # → http://localhost:3000/mydashboard/dm</code></pre>
+
+    <h3>三個踩過的坑</h3>
+
+    <div class="callout warn">
+      <strong>① OIDC 的 <code>redirect_uri</code> 白名單只認 <code>localhost:3000</code>。</strong>
+      <br /><code>oidc.config.ts</code> 的 <code>redirectUri</code> 是
+      <code>${window.location.origin}/mydashboard/dm/entity</code>，<strong>跟著實際 port 跑</strong>。
+      所以換 port 會直接登不進去：
+      <pre><code># 實測 auth.stage.myviewboard.com/oidc/v1/auth
+redirect_uri = localhost:3002  →  400 ERROR
+redirect_uri = localhost:3000  →  302 導向登入頁 ✓</code></pre>
+      <strong>必須用 port 3000</strong>（也是 <code>project.json</code> 的預設）。
+      km web 的 dev server 預設也在 3000，兩者只能擇一。
+    </div>
+
+    <div class="callout warn">
+      <strong>② <code>src/assets/i18n</code> 是 gitignored 的產生物，缺了會直接中止。</strong>
+      <br /><code>generate-i18n-hash.js</code> 會 <code>ENOENT</code>，而它跑在 <code>ng serve</code> 之前，
+      所以<strong>整個 start script 掛掉</strong>，錯誤訊息看起來跟 Angular 無關。
+      <br />正規來源是 POEditor（<code>yarn i18n:updateAll:dm</code>，要 token）。
+      <strong>更省的辦法</strong>：直接從 <code>edu-dm-dashboard-lang</code> 的
+      <code>latest/</code> 複製——那個 repo 的用途正是這份快照。
+      <pre><code>find &lt;lang-repo&gt;/latest -maxdepth 1 -name '*.json' ! -name '._*' \
+  -exec cp {} projects/device-management/src/assets/i18n/ \;
+rm -f projects/device-management/src/assets/i18n/_manifest.json</code></pre>
+      ⚠️ 兩個細節：排除 <code>._*</code>（exFAT 上的 AppleDouble 檔，<code>hash</code> 腳本的
+      <code>.endsWith('.json')</code> 會把它們算進去），以及移掉 <code>_manifest.json</code>
+      （那是 lang repo 自己的 metadata，原始 <code>assets/i18n</code> 沒有這個檔）。
+    </div>
+
+    <div class="callout warn">
+      <strong>③ <code>edu-dm-dashboard-mobile</code> 的 npm 版本是<u>硬擋</u>的。</strong>
+      <br />它的 <code>preinstall</code>（<code>check-npm-version.mjs</code>）要求 npm
+      <strong>剛好等於</strong> <code>11.11.1</code>（<code>!==</code> 就 <code>exit 1</code>），
+      而 Node 24.3.0 自帶的是 11.4.2。要先把 npm 換成指定版本才裝得動。
+    </div>
+
+    <h3>還沒解決的</h3>
+    <p><code>proxy.conf.json</code> 把 <code>/api/dm/v2/*</code> 代理到
+    <code>http://localhost:3001</code>（假設本機有後端）。stage 設定用的是絕對網址，
+    <strong>實測確認 bundle 裡只有 stage 端點、沒有 dev／production 端點</strong>，
+    所以一般情況不會走到那條 proxy。但若有頁面用相對路徑打 API，就會撞上
+    ——真遇到再起 <code>edu-software-manager-api</code>（無 DB，只要三個設定指向 stage）。</p>
   </main>
 </div>
 </body>

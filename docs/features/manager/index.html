@@ -9,6 +9,7 @@
 <meta name="km-doc-status" content="active">
 <meta name="km-doc-icon" content="repo">
 <link rel="stylesheet" href="../../assets/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
 <body>
 <div class="layout">
@@ -20,6 +21,7 @@
       <li><a href="#kb">2. 規格的正解在 KB，不在這裡</a></li>
       <li><a href="#map">3. Repo 地圖</a>
         <ul>
+          <li><a href="#map-diagram">3.0 關係圖</a></li>
           <li><a href="#map-front">3.1 前端</a></li>
           <li><a href="#map-back">3.2 後端</a></li>
           <li><a href="#map-device">3.3 裝置端</a></li>
@@ -106,6 +108,92 @@ https://dm.dev.myviewboard.cloud/api-docs</code></pre>
 
     <h2 id="map">3. Repo 地圖</h2>
     <p>約 <strong>30 個 repo</strong>。<code>pushed_at</code> 取自 GitHub API（2026-09-22 查）。</p>
+
+    <h3 id="map-diagram">3.0 關係圖</h3>
+    <p>先看誰跟誰講話，再看下面的清單會比較好讀。
+    <strong>實線＝有實際證據的連線</strong>（來源見 <a href="#evidence">§8</a>），
+    <strong>虛線＝推論</strong>。</p>
+
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TB
+  subgraph DEV["裝置端（IFP）"]
+    AGENT["dm agent<br/>edu-dm-agent-monorepo<br/>app_aosp / app_edla"]
+    MVB["myViewBoard<br/>edu-droid-flutter"]
+  end
+
+  subgraph UI["使用者介面（瀏覽器）"]
+    DASH["主控台<br/>edu-dm-dashboard"]
+    MOB["行動 PWA<br/>edu-dm-dashboard-mobile"]
+    RD["遠端桌面<br/>edu-dm-remote-desktop"]
+  end
+
+  subgraph CLOUD["雲端（AWS）"]
+    AUTH(["auth.stage<br/>OIDC"])
+    DMAPI(["api/dm<br/>edu-dm-api · -nestjs · -next"])
+    CORE(["dm core v1<br/>dm.*.myviewboard.cloud"])
+    BROKER{{"MQTT broker<br/>dm-mqtt.*"}}
+    SWAPI(["edu-software-manager-api"])
+    AI(["ManagerAI<br/>manager-ai-features-service"])
+  end
+
+  MVB -.->|"ContentProvider IPC<br/>instance_id（VSFT-9654）"| AGENT
+  AGENT -.->|"entity name（既有）"| MVB
+
+  AGENT <-->|"MQTT 雙向<br/>command / static_info / dynamic_info"| BROKER
+  DASH -->|"wss"| BROKER
+  DASH -->|"HTTPS"| DMAPI
+  DASH -->|"HTTPS"| CORE
+  DASH -->|"OIDC 登入"| AUTH
+  DASH -->|"開啟"| RD
+  RD -->|"WebRTC 畫面／控制"| AGENT
+  MOB -->|"HTTPS"| DMAPI
+
+  SWAPI -.->|"MVB_API_BASE_URL"| DMAPI
+  AI -.->|"讀 DM API 產生執行計畫"| DMAPI
+  AI -.->|"意圖 + 參數"| DASH
+      </pre>
+      <div class="diagram-caption">
+        dashboard 的連線出自 <code>environment.stage.ts</code> 的端點清單
+        （<code>dmApiUrl</code>／<code>dmCoreV1Url</code>／<code>dmMQTTUrl</code>／
+        <code>authUrl</code>／<code>remoteDesktopUrl</code>）—— 它<strong>直接用 wss 連 MQTT</strong>，
+        不是只打 REST。<code>edu-software-manager-api</code> 與 ManagerAI 兩條是推論。
+      </div>
+    </div>
+
+    <p>另一組 repo 不參與執行期，而是<strong>支撐開發流程</strong>：</p>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart LR
+  subgraph KNOW["知識與工具"]
+    KB["edu-dm-knowledge-base<br/>18 feature · 355 endpoint<br/>dm-kb plugin"]
+    OPS["edu-dm-opskit<br/>dm-opskit plugin"]
+  end
+  subgraph CI["CI / 規範"]
+    PIPE["edu-dm-pipeline<br/>共用 workflow"]
+    STD["edu-dm-collab-standards<br/>自動 PR review"]
+  end
+  subgraph INFRA["基礎設施 IaC"]
+    TG["edu-dm-terragrunt-infra"]
+    OBS["edu-dm-devops-monorepo<br/>＋ lgtm-observability"]
+  end
+  subgraph TEST["測試"]
+    AUTO["edu-manager-automation<br/>Playwright ＋ Appium"]
+    STRESS["edu-dm-websocket-stresstest<br/>模擬數千台裝置"]
+  end
+
+  KB -.->|"規格來源"| DEVS(("RD / PM / QA"))
+  OPS -.->|"operation 知識"| DEVS
+  DEVS -->|"PR"| PIPE
+  PIPE -->|"部署"| TG
+  TG --> OBS
+  AUTO -.->|"測"| PIPE
+  STRESS -.->|"壓測"| INFRA
+      </pre>
+      <div class="diagram-caption">
+        這一組的存在本身就是資訊：Manager 有自己的 SRE 線與共用 CI，不是附屬功能。
+      </div>
+    </div>
 
     <h3 id="map-front">3.1 前端</h3>
     <table>
@@ -292,5 +380,6 @@ https://dm.dev.myviewboard.cloud/api-docs</code></pre>
     </div>
   </main>
 </div>
+<script src="../../assets/mermaid-init.js"></script>
 </body>
 </html>
