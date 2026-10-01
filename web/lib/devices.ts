@@ -12,6 +12,11 @@ import { statePath } from "@/lib/statePaths";
 import { writeStateFile } from "@/lib/stateWrite";
 import { EMPTY_STORE, prunePending, type DeviceStore } from "@/lib/deviceRules";
 
+/**
+ * ⚠️ 這份**一律讀本機磁碟**，不走 `readStateFile`。它是「這台自己認得哪些裝置」，
+ * 而 `proxy.ts` 的守衛（`accessConfig`）也是直接讀同一個檔 —— 兩邊來源不一致的話，
+ * 會出現「清單上看得到、但守衛不認得」這種極難查的狀況。
+ */
 const FILE = statePath("devices.json");
 
 export async function readStore(): Promise<DeviceStore> {

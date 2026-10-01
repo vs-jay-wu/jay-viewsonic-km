@@ -7,6 +7,7 @@ import {
 import { listRuns } from "@/lib/prInbox";
 import { statePath } from "@/lib/statePaths";
 import { writeStateFile } from "@/lib/stateWrite";
+import { readStateFile } from "@/lib/stateRead";
 
 export type { SourceHealth };
 export { FAILURE_ALERT_THRESHOLD, isUnhealthy, classifyError };
@@ -70,7 +71,7 @@ async function derivedPrInboxHealth(): Promise<SourceHealth> {
 type Store = Record<string, SourceHealth>;
 
 async function read(): Promise<Store> {
-  const raw = await readFile(FILE, "utf8").catch(() => null);
+  const raw = await readStateFile(FILE);
   if (!raw) return {};
   try {
     return JSON.parse(raw) as Store;

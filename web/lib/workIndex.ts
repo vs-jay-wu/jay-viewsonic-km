@@ -10,6 +10,7 @@ import type { IndexedPr, IndexedSession, WorkIndex, WorkItem } from "@/lib/workI
 import { sortWorkItems } from "@/lib/workIndexRules";
 import { statePath } from "@/lib/statePaths";
 import { writeStateFile } from "@/lib/stateWrite";
+import { readStateFile } from "@/lib/stateRead";
 
 export type { WorkIndex, WorkItem, IndexedPr, IndexedSession };
 
@@ -117,7 +118,7 @@ async function build(): Promise<WorkIndex> {
 }
 
 async function readCache(): Promise<WorkIndex | null> {
-  const raw = await readFile(FILE, "utf8").catch(() => null);
+  const raw = await readStateFile(FILE);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as WorkIndex;

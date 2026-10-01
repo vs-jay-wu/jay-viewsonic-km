@@ -11,6 +11,7 @@ import {
 } from "@/lib/workChangesRules";
 import { statePath } from "@/lib/statePaths";
 import { writeStateFile } from "@/lib/stateWrite";
+import { readStateFile } from "@/lib/stateRead";
 
 export type { WorkChanges, LineBranch };
 
@@ -23,7 +24,7 @@ const CONCURRENCY = 8;
 type ManualMap = Record<string, string[]>;
 
 async function readManual(): Promise<ManualMap> {
-  const raw = await readFile(MANUAL_FILE, "utf8").catch(() => null);
+  const raw = await readStateFile(MANUAL_FILE);
   if (!raw) return {};
   try {
     const d = JSON.parse(raw) as { lines?: ManualMap };

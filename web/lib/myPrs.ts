@@ -5,6 +5,7 @@ import { recordFailure, recordSuccess } from "@/lib/health";
 import { notifyMac } from "@/lib/notify";
 import { statePath } from "@/lib/statePaths";
 import { writeStateFile } from "@/lib/stateWrite";
+import { readStateFile } from "@/lib/stateRead";
 
 const SNAPSHOT_FILE = statePath("my-prs.json");
 const CONFIG_FILE = statePath("my-prs-config.json");
@@ -108,7 +109,7 @@ const DEFAULT_CONFIG: MyPrsConfig = {
 // ─── 讀寫 ────────────────────────────────────────────────────────────────────
 
 async function readJson<T>(file: string, fallback: T): Promise<T> {
-  const raw = await readFile(file, "utf8").catch(() => null);
+  const raw = await readStateFile(file);
   if (!raw) return fallback;
   try {
     return JSON.parse(raw) as T;

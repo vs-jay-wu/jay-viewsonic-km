@@ -3,6 +3,7 @@ import path from "path";
 import { lockState, pruneRuns, triggerRun } from "@/lib/prInbox";
 import { statePath } from "@/lib/statePaths";
 import { writeStateFile } from "@/lib/stateWrite";
+import { readStateFile } from "@/lib/stateRead";
 
 const CONFIG_FILE = statePath("pr-inbox-watch.json");
 const MIN_INTERVAL_SECONDS = 60;
@@ -136,7 +137,7 @@ function clampInterval(seconds: unknown): number {
 }
 
 export async function readConfig(): Promise<ScheduleConfig> {
-  const raw = await readFile(CONFIG_FILE, "utf8").catch(() => null);
+  const raw = await readStateFile(CONFIG_FILE);
   if (!raw) {
     return {
       enabled: false, intervalSeconds: DEFAULT_INTERVAL_SECONDS,

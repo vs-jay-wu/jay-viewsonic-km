@@ -14,6 +14,7 @@ import { isExternalRepo } from "@/lib/externalRepos";
 import { parseStatus, type ChangedFile } from "@/lib/changesRules";
 import { statePath } from "@/lib/statePaths";
 import { writeStateFile } from "@/lib/stateWrite";
+import { readStateFile } from "@/lib/stateRead";
 
 /**
  * 唯讀的 repo 檢視（`/git`）。
@@ -27,7 +28,7 @@ import { writeStateFile } from "@/lib/stateWrite";
 const PIN_FILE = statePath("git-pinned.json");
 
 export async function readPinned(): Promise<string[]> {
-  const raw = await readFile(PIN_FILE, "utf8").catch(() => null);
+  const raw = await readStateFile(PIN_FILE);
   if (!raw) return [];
   try {
     const d = JSON.parse(raw) as { pinned?: string[] };

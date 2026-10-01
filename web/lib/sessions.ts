@@ -3,6 +3,7 @@ import path from "path";
 import os from "os";
 import { statePath } from "@/lib/statePaths";
 import { writeStateFile } from "@/lib/stateWrite";
+import { readStateFile } from "@/lib/stateRead";
 
 // 純規則放隔壁（客戶端也要用，不能帶到 fs/promises）
 export { isStale, STALE_DAYS } from "@/lib/sessionRules";
@@ -42,7 +43,7 @@ interface PinsFile {
 }
 
 async function readPins(): Promise<PinsFile> {
-  const raw = await readFile(PINS_FILE, "utf8").catch(() => null);
+  const raw = await readStateFile(PINS_FILE);
   if (!raw) return { pinned: {} };
   try {
     const parsed = JSON.parse(raw) as PinsFile;

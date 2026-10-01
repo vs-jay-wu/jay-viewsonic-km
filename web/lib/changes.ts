@@ -14,6 +14,7 @@ import {
 } from "@/lib/changesRules";
 import { statePath } from "@/lib/statePaths";
 import { writeStateFile } from "@/lib/stateWrite";
+import { readStateFile } from "@/lib/stateRead";
 
 export type { RepoChanges, WorktreeChanges, ChangedFile, DiffLine };
 
@@ -34,7 +35,7 @@ const NUL = String.fromCharCode(0);
  * **只影響排序**，不會讓任何 repo 從清單上消失。
  */
 export async function readPinned(): Promise<string[]> {
-  const raw = await readFile(PIN_FILE, "utf8").catch(() => null);
+  const raw = await readStateFile(PIN_FILE);
   if (!raw) return [];
   try {
     const d = JSON.parse(raw) as { pinned?: string[] };

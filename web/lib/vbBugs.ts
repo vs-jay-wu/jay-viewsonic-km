@@ -16,6 +16,7 @@ export type { BugIssue, BugCell, BugProduct, PriorityCol, StatusGroup } from "@/
 import type { BugIssue } from "@/lib/vbBugsRules";
 import { statePath } from "@/lib/statePaths";
 import { writeStateFile } from "@/lib/stateWrite";
+import { readStateFile } from "@/lib/stateRead";
 
 export interface BugSnapshot {
   fetchedAt: string;
@@ -58,7 +59,7 @@ const DEFAULT_CONFIG: VbBugsConfig = {
 // ─── 讀寫 ────────────────────────────────────────────────────────────────────
 
 async function readJson<T>(file: string, fallback: T): Promise<T> {
-  const raw = await readFile(file, "utf8").catch(() => null);
+  const raw = await readStateFile(file);
   if (!raw) return fallback;
   try {
     return JSON.parse(raw) as T;

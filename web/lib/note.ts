@@ -3,6 +3,7 @@ import path from "path";
 import { SCRATCH_ID, emptyNote, type Note, type NoteFile } from "@/lib/noteRules";
 import { statePath } from "@/lib/statePaths";
 import { writeStateFile } from "@/lib/stateWrite";
+import { readStateFile } from "@/lib/stateRead";
 
 export type { Note };
 
@@ -22,7 +23,7 @@ const FILE = statePath("note.json");
 // ─── 檔案 ────────────────────────────────────────────────────────────────────
 
 export async function readNote(): Promise<Note> {
-  const raw = await readFile(FILE, "utf8").catch(() => null);
+  const raw = await readStateFile(FILE);
   if (!raw) return emptyNote();
   try {
     const parsed = JSON.parse(raw) as Partial<NoteFile>;

@@ -4,6 +4,7 @@ import { run } from "@/lib/repo";
 import { mapLimit } from "@/lib/changes";
 import { statePath } from "@/lib/statePaths";
 import { writeStateFile } from "@/lib/stateWrite";
+import { readStateFile } from "@/lib/stateRead";
 
 /**
  * 每個 repo 的第一顆 commit（＝專案何時開始）。
@@ -29,7 +30,7 @@ interface Entry {
 type Cache = Record<string, Entry>;
 
 async function read(): Promise<Cache> {
-  const raw = await readFile(FILE, "utf8").catch(() => null);
+  const raw = await readStateFile(FILE);
   if (!raw) return {};
   try {
     const d = JSON.parse(raw) as Cache;

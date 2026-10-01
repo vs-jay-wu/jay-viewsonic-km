@@ -8,6 +8,7 @@ import {
 } from "@/lib/repoSyncRules";
 import { statePath } from "@/lib/statePaths";
 import { writeStateFile } from "@/lib/stateWrite";
+import { readStateFile } from "@/lib/stateRead";
 
 // 型別定義在純規則檔（客戶端要 import type），這裡只轉出去
 export type { RepoSyncConfig, RepoSyncRun, RepoSyncState, RepoSyncSchedulerState };
@@ -44,7 +45,7 @@ const DEFAULT_CONFIG: RepoSyncConfig = {
 // ─── 讀寫 ────────────────────────────────────────────────────────────────────
 
 async function readJson<T>(file: string, fallback: T): Promise<T> {
-  const raw = await readFile(file, "utf8").catch(() => null);
+  const raw = await readStateFile(file);
   if (!raw) return fallback;
   try {
     return JSON.parse(raw) as T;

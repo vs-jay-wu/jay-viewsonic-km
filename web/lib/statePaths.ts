@@ -71,6 +71,8 @@ export const STATE_OWNER: Record<string, StateOwner> = {
   "repo-sync.json": "machine",
   // 深淺色主題這類視覺設定跟著螢幕環境走，在 B 上調不該改到 A（Jay 2026-09-30）
   "ui-settings.json": "machine",
+  // 上次連上 hub 是什麼時候。描述的是「這台跟 hub 的關係」，所以歸 machine
+  "hub-status.json": "machine",
   // 上傳到 Jira 前的暫存圖檔。程式裡沒有任何引用，是人／agent 手動放的
   "jira-upload": "machine",
 };

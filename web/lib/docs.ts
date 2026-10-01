@@ -7,6 +7,7 @@ import {
 } from "@/lib/docsRules";
 import { statePath } from "@/lib/statePaths";
 import { writeStateFile } from "@/lib/stateWrite";
+import { readStateFile } from "@/lib/stateRead";
 
 export type { DocFile, DocSet, DocsIndex };
 
@@ -18,7 +19,7 @@ const HEAD_BYTES = 4096;
 // ─── pin ─────────────────────────────────────────────────────────────────────
 
 export async function readPins(): Promise<string[]> {
-  const raw = await readFile(PINS_FILE, "utf8").catch(() => null);
+  const raw = await readStateFile(PINS_FILE);
   if (!raw) return [];
   try {
     const d = JSON.parse(raw) as { pinned?: string[] };

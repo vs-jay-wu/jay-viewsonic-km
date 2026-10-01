@@ -1,6 +1,7 @@
 import { readFile, stat } from "fs/promises";
 import { parseHistory, type MoveRecord } from "@/lib/repoMoveHistoryRules";
 import { statePath } from "@/lib/statePaths";
+import { readStateFile } from "@/lib/stateRead";
 
 export type { MoveRecord };
 
@@ -15,7 +16,7 @@ export interface HistoryResult {
 }
 
 export async function readMoveHistory(): Promise<HistoryResult> {
-  const raw = await readFile(FILE, "utf8").catch(() => null);
+  const raw = await readStateFile(FILE);
   if (raw === null) return { records: [], fileModifiedAt: null, empty: true };
   const mtime = await stat(FILE).then((s) => s.mtime.toISOString(), () => null);
   return { records: parseHistory(raw), fileModifiedAt: mtime, empty: false };

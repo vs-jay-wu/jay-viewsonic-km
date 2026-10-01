@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Icon from "@/components/Icon";
 import Sidebar from "@/components/Sidebar";
+import HubBanner from "@/components/HubBanner";
 
 /**
  * km 工作台的外框。
@@ -83,6 +84,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface">
+        {/* satellite 連不上 hub 時才會畫出東西，hub 上永遠是 null */}
+        <HubBanner />
         {children}
       </main>
     </div>
