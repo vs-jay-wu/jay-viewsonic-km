@@ -29,6 +29,13 @@ export async function register() {
    */
   if (cfg?.role === "satellite") {
     console.log("[km] satellite：排程不啟動（第一類資料向 hub 取）");
+    /*
+     * 唯一的例外：心跳。它**不抓任何遠端資料**，只是把本機事實（這台有哪些
+     * session）推給 hub，所以不違反「第一類資料只有 hub 抓」。
+     * 少了它，hub 上看不到這台的 session（`lib/machineRules.ts`）。
+     */
+    const { initHeartbeat } = await import("@/lib/machineHeartbeat");
+    initHeartbeat();
     return;
   }
 

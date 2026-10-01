@@ -30,6 +30,14 @@ interface SessionInfo {
   hasSidecar: boolean;
   pinned: boolean;
   pinnedAt: string | null;
+  /**
+   * 這筆是別台機器推上來的（`lib/machineRules.ts`）。
+   * 它的 transcript、磁碟、Orca 都在那一台 —— **刪除與開啟在這裡做不到**。
+   */
+  remote?: boolean;
+  machine?: { id: string; name: string };
+  machineLastSeenAt?: string;
+  machineStale?: boolean;
 }
 
 interface DeleteResult {
@@ -523,16 +531,24 @@ export default function SessionsPage() {
                   type="checkbox"
                   checked={selected.has(s.id)}
                   onChange={() => toggle(s.id)}
-                  disabled={s.pinned}
-                  title={s.pinned ? "pin 住的不能刪，先取消 pin" : undefined}
+                  disabled={s.pinned || !!s.remote}
+                  title={
+                    s.remote
+                      ? `在「${s.machine?.name}」上，要到那台才能刪`
+                      : s.pinned
+                        ? "pin 住的不能刪，先取消 pin"
+                        : undefined
+                  }
                   className="mt-1"
                 />
 
                 <Tooltip label={s.pinned ? "取消 pin" : "pin 住（防止被刪）"}>
                   <button
                     onClick={() => togglePin(s)}
-                    disabled={hub.blocked}
-                    title={hub.reason || undefined}
+                    disabled={hub.blocked || !!s.remote}
+                    title={
+                      s.remote ? `在「${s.machine?.name}」上，要到那台才能 pin` : hub.reason || undefined
+                    }
                     className={`mt-0.5 ${s.pinned ? "text-pin" : "text-fg-disabled hover:text-pin"}`}
                   >
                     <Icon name="pin" size={16} />
@@ -546,6 +562,25 @@ export default function SessionsPage() {
                 >
                   <div className="flex items-baseline gap-2">
                     <span className="truncate text-sm text-fg hover:underline">{s.title}</span>
+                    {/*
+                      * 別台機器的 session 一定要標出來：它的 transcript 與 Orca 都在那一台，
+                      * 刪除與開啟在這裡做不到。沒有這個標記的話，使用者會以為按鈕壞了。
+                      */}
+                    {s.remote && s.machine && (
+                      <span
+                        className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] ${
+                          s.machineStale ? "bg-warn-bg text-warn" : "bg-surface-sunken text-fg-muted"
+                        }`}
+                        title={
+                          s.machineLastSeenAt
+                            ? `上次心跳 ${new Date(s.machineLastSeenAt).toLocaleString("zh-TW")}`
+                            : undefined
+                        }
+                      >
+                        {s.machine.name}
+                        {s.machineStale ? "（離線）" : ""}
+                      </span>
+                    )}
                     {s.titleSource !== "custom" && (
                       <span className="shrink-0 text-[11px] text-fg-subtle">
                         {SOURCE_LABEL[s.titleSource]}
