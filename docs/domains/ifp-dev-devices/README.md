@@ -18,6 +18,34 @@
 | 用途 | edu-vbo（VBO-022 side toolbar）的 instrumented 測試機 |
 | 系統服務 | seewo / CVTE 韌體：`com.seewo.osservice`、`com.viewsonic.dmagent`（device admin，有 `force-lock` 權限） |
 
+**機型與韌體（2026-09-30 讀取）**〔實測，`adb shell getprop` / `dumpsys package`〕
+
+韌體一更新，下面「Sensor Settings」的位置可能就變了。所以每次照著做之前，先重讀這幾個值；
+跟這張表不一樣，就把新的位置補一份，舊的不要直接覆蓋。
+
+| 項目 | 值 |
+|---|---|
+| 型號 | `ro.product.model` = **IFP63**；設定 → About 顯示 **IFP6563**（`settings get global device_name`） |
+| 品牌／製造 | ViewSonic / ViewSonic |
+| SoC | `ro.board.platform` = **rk3588**（Rockchip） |
+| CVTE flavor | `ro.cvte.flavor.name` = **viewsonic_pcap_edla** |
+| Android | 15（API 35），security patch **2025-05-05** |
+| Build | `ro.build.display.id` = **AP3A.241005.015.A2 release-keys**，incremental **20250625**（Wed Jun 25 21:00:10 CST 2025） |
+| System fingerprint | `ViewSonic/IFP63_Series/IFP63:15/AP3A.241005.015.A2/20250625:user/release-keys` |
+| Vendor／ODM fingerprint | `ViewSonic/IFP63_Series/IFP63:14/UQ1A.240205.004.B1/20250625:user/release-keys`（vendor 還是 14 的 base） |
+| Bootloader | `ro.boot.fwver` = ddr-v1.18-9fa84341ce, spl-v1.13, bl31-v1.49, bl32-v1.19, uboot-f06c049d61-06/25/2025 |
+| 設定 app | `com.ifpdos.vsettings` **2.0.0.54**（`em-stable*7edf1e31-2.0.0.54*vesncpa_da`）；`com.ifpdos.settingsext` **2.0.0.50** |
+| 休眠服務 | `com.seewo.osservice` **2.1.16.98**（`em-stable*af5a7723e-2.1.16.98*vesncel`） |
+| 以上三個 app 最後更新 | 2026-09-11 09:51:30 |
+
+重讀的指令：
+
+```bash
+export ANDROID_SERIAL=172.21.4.186:5555
+for p in ro.product.model ro.build.display.id ro.build.version.incremental ro.cvte.flavor.name; do echo "$p=$(adb shell getprop $p)"; done
+for pkg in com.ifpdos.vsettings com.ifpdos.settingsext com.seewo.osservice; do adb shell dumpsys package $pkg | grep -m1 versionName; done
+```
+
 ### ⚠️ 5 分鐘沒偵測到人就休眠，醒來是鎖定畫面（2026-09-29 查到）
 
 **症狀**：跑十幾二十分鐘的 connected test，中途整批紅；機器停在鎖定畫面。
@@ -91,6 +119,22 @@ $ adb shell am get-current-user
 **怎麼處理**
 
 1. **關掉人體感應（找到開關了，2026-09-30）：設定 → Advanced → Sensor Settings → Motion sensor → 關。**〔實測〕
+   適用：**IFP63，build 20250625，`com.ifpdos.vsettings` 2.0.0.54**（見上面的機型表）。韌體版本不同時，先確認位置還在不在。
+   - **一步一步**（英文介面；設定 app 是兩欄式，左邊選單、右邊內容）：
+     1. 桌面的 **Settings** 圖示。開出來的是 `com.android.settings`，它的 Advanced 頁由 `com.ifpdos.settingsext` 提供。
+     2. 左欄往下捲，點 **Advanced**（副標「Startup, input source, advanced settings」）。
+     3. 右欄會列出：Startup & shutdown／Input source／Security settings／Pen Detection／Pen Detection App／HDMI OUT
+        format／TYPEC OUT format／**Sensor Settings**。**Sensor Settings 在最底下，被底部導覽列蓋住**；先把右欄往上捲，
+        再點。直接點到的會是 Home 鍵，會跳回桌面。
+     4. **Sensor Settings** 頁有三項：**Motion sensor**（開關）、**Static power off interval**（出廠 5 mins）、
+        Sensor data notification（溫溼度／CO2／PM2.5／VOC 的顯示）。把 **Motion sensor 關掉**，interval 會跟著變灰。
+     5. 進 Sensor Settings 不用輸入密碼。〔實測〕
+        - 第一次用 adb 捲動 Advanced 那一頁時，彈出過一次「Input Current password」。〔推論〕應該是手勢誤觸了
+          **Security settings**，沒有重現過。
+        - 跳出來就按 Cancel。**不要用 adb 幫忙輸入任何密碼。**
+   - 用 adb 遠端操作的話：先 `uiautomator dump` 找 `text="Sensor Settings"` 的座標，確認 y 比導覽列高（4K 畫面約 y < 1900）
+     再 `input tap`。開關是 `android:id/switch_widget`，看 `checked` 確認狀態。
+   - 截圖：關閉前 `img/ifp63-sensor-settings-motion-on.jpg`、關閉後 `img/ifp63-sensor-settings-motion-off.jpg`。
    - 同一頁還有 **Static power off interval**（出廠 5 mins，就是「5 分鐘沒偵測到人就睡」的那個值）。Motion sensor
      關掉之後，這一項會變灰。另一項 Sensor data notification 是溫溼度、CO2 的顯示，跟休眠無關。
    - 不需要密碼。要注意的是 Sensor Settings 在 Advanced 清單的最底下，會被底部導覽列蓋住，
