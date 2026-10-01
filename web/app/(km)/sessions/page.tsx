@@ -77,6 +77,8 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [project, setProject] = useState("all");
+  /** 機器篩選。`""` ＝ 全部；`local` ＝ 這一台；其餘是 machine.id */
+  const [machine, setMachine] = useState("all");
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"all" | "stale" | "settled">("all");
   const [staleDays, setStaleDays] = useState(STALE_DAYS);
@@ -122,6 +124,21 @@ export default function SessionsPage() {
       .sort((a, b) => b.n - a.n);
   }, [sessions]);
 
+  /**
+   * 有哪些機器可以篩。**只有真的出現別台的 session 時才列** —— 單機時那個下拉
+   * 永遠只有一個選項，是純噪音。
+   */
+  const machines = useMemo(() => {
+    const m = new Map<string, number>();
+    let local = 0;
+    for (const s of sessions) {
+      if (s.remote && s.machine) m.set(s.machine.name, (m.get(s.machine.name) ?? 0) + 1);
+      else local++;
+    }
+    return m.size === 0 ? [] : [{ key: "local", label: "這一台", n: local },
+      ...[...m.entries()].map(([label, n]) => ({ key: label, label, n }))];
+  }, [sessions]);
+
   const stale = useMemo(
     () => sessions.filter((s) => isStale(s, staleDays)),
     [sessions, staleDays]
@@ -142,6 +159,13 @@ export default function SessionsPage() {
     const q = query.trim().toLowerCase();
     return sessions
       .filter((s) => project === "all" || projectLocation(s.cwd).repo === project)
+      .filter((s) =>
+        machine === "all"
+          ? true
+          : machine === "local"
+            ? !s.remote
+            : s.remote && s.machine?.name === machine
+      )
       .filter((s) =>
         view === "stale"
           ? isStale(s, staleDays)
@@ -166,7 +190,7 @@ export default function SessionsPage() {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
         return a.modifiedAt < b.modifiedAt ? 1 : -1;
       });
-  }, [sessions, project, query, view, staleDays, settled]);
+  }, [sessions, project, machine, query, view, staleDays, settled]);
 
   // 切換分頁時清掉選取：看不到卻還被勾著的東西，按下刪除會一起消失
   useEffect(() => { setSelected(new Set()); }, [view]);
@@ -422,6 +446,25 @@ export default function SessionsPage() {
               </option>
             ))}
           </select>
+          {/*
+            機器篩選。**只有真的有別台的 session 時才出現** —— 單機時它永遠只有
+            一個選項，佔著篩選列只是噪音（`showSwitch` 那類條件控制項不放進共用
+            篩選列的同一條規則，見 web/AGENTS.md「版面不要因為切分頁而位移」）。
+          */}
+          {machines.length > 0 && (
+            <select
+              value={machine}
+              onChange={(e) => setMachine(e.target.value)}
+              className="max-w-xs rounded-lg border border-line-strong px-3 py-2 text-sm text-fg"
+            >
+              <option value="all">全部機器（{sessions.length}）</option>
+              {machines.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.label}（{m.n}）
+                </option>
+              ))}
+            </select>
+          )}
           <div className="inline-flex overflow-hidden rounded-lg border border-line-strong text-sm">
             {([
               ["all", `全部（${sessions.length}）`],
