@@ -82,6 +82,8 @@ export const STATE_OWNER: Record<string, StateOwner> = {
    * 在 hub 上完全看不懂 —— hub 的 .env 明明有）。
    */
   "health.json": "machine",
+  // 這個 checkout 落後幾個 commit。描述的是「這台的 repo」，每台不同
+  "km-version.json": "machine",
   // 上傳到 Jira 前的暫存圖檔。程式裡沒有任何引用，是人／agent 手動放的
   "jira-upload": "machine",
 };

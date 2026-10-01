@@ -36,12 +36,17 @@ export async function register() {
      */
     const { initHeartbeat } = await import("@/lib/machineHeartbeat");
     initHeartbeat();
+    // 版本檢查兩種角色都要跑：satellite 符合條件會自己更新，hub 只是量給你看
+    const { initKmVersion } = await import("@/lib/kmVersionScheduler");
+    initKmVersion();
     return;
   }
 
   // hub 也要登記自己，否則註冊表裡沒有它，satellite 上就看不到 hub 的 session
   const { initHeartbeat } = await import("@/lib/machineHeartbeat");
   initHeartbeat();
+  const { initKmVersion } = await import("@/lib/kmVersionScheduler");
+  initKmVersion();
 
   const [prInbox, myPrs, vbBugs, repoSync, myTickets, changes] = await Promise.all([
     import("@/lib/prInboxScheduler"),

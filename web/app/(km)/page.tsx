@@ -3,6 +3,7 @@ import { listChats } from "@/lib/db";
 import { readSnapshot } from "@/lib/myPrs";
 import { classifyError, SOURCE_LABELS, unhealthySources } from "@/lib/health";
 import { hintFor } from "@/lib/healthRules";
+import KmVersionNotice from "@/components/KmVersionNotice";
 import { readDisks } from "@/lib/disk";
 import { formatGB, isLow, levelOf, WARN_BELOW_PERCENT } from "@/lib/diskRules";
 import { reviewClis } from "@/lib/cliTools";
@@ -165,6 +166,11 @@ export default async function Home() {
             </div>
           </div>
         )}
+
+        {/* 這台的 km 落後了。最新時這個元件自己 render null */}
+        <div className="mt-6 empty:mt-0">
+          <KmVersionNotice />
+        </div>
 
         {/* review 要用的 CLI 沒裝。沒裝哪個就講哪個，兩個都沒裝就兩則都出 */}
         {missingClis.map((c) => (
