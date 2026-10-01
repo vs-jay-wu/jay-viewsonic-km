@@ -5,6 +5,7 @@ import { useLiveRefresh } from "@/components/useLiveRefresh";
 import { useConfirm } from "@/components/Confirm";
 import { useToast } from "@/components/Toast";
 import Icon from "@/components/Icon";
+import { useHubStatus } from "@/components/useHubStatus";
 import Tooltip from "@/components/Tooltip";
 import WorktreeBadge from "@/components/WorktreeBadge";
 import DiffView from "@/components/DiffView";
@@ -300,6 +301,7 @@ export default function ChangesPage() {
    * pin／取消 pin。回來的清單直接套在手上這份快照上，**不重掃** ——
    * 重掃要跑一百多個 repo 的 git，為了換個順序讓整頁空白幾秒不划算。
    */
+  const hub = useHubStatus();
   const togglePin = async (repo: string) => {
     const res = await fetch("/api/changes/pin", {
       method: "POST",
@@ -455,6 +457,8 @@ export default function ChangesPage() {
                 >
                   <button
                     onClick={() => void togglePin(r.repo)}
+                    disabled={hub.blocked}
+                    title={hub.reason || undefined}
                     aria-label={r.pinned ? `取消 pin ${r.repo}` : `pin ${r.repo}`}
                     className={`shrink-0 ${
                       r.pinned ? "text-pin" : "text-fg-disabled hover:text-pin"

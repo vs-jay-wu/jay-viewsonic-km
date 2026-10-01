@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Icon, { type IconName } from "@/components/Icon";
 import KmMark from "@/components/KmMark";
+import MachineLabel from "@/components/MachineLabel";
 import Tooltip from "@/components/Tooltip";
 import { NAV, isActiveNav } from "@/lib/navRules";
 import { onPinChanged } from "@/lib/pinEvents";
@@ -118,7 +119,10 @@ export default function Sidebar({
             className="flex items-center gap-2.5 px-4 py-4 transition-colors hover:bg-white/10 md:hidden"
           >
             <KmMark size={22} />
-            <h1 className="truncate text-base font-semibold">KM 工作台</h1>
+            <span className="min-w-0">
+              <h1 className="truncate text-base font-semibold">KM 工作台</h1>
+              <MachineLabel />
+            </span>
           </Link>
 
           <div className="group relative hidden h-14 w-16 md:block">
@@ -155,7 +159,10 @@ export default function Sidebar({
             className="flex min-w-0 flex-1 items-center gap-2.5 px-4 py-4 transition-colors hover:bg-white/10"
           >
             <KmMark size={22} />
-            <h1 className="truncate text-base font-semibold">KM 工作台</h1>
+            <span className="min-w-0">
+              <h1 className="truncate text-base font-semibold">KM 工作台</h1>
+              <MachineLabel />
+            </span>
           </Link>
           {onToggleCollapsed && (
             <Tooltip side="right" label="收合側邊欄（只留圖示）">

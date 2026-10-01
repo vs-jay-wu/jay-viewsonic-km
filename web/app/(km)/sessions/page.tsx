@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
+import { useHubStatus } from "@/components/useHubStatus";
 import { useConfirm } from "@/components/Confirm";
 import Tooltip from "@/components/Tooltip";
 import WorkRefChips from "@/components/WorkRefChips";
@@ -189,6 +190,7 @@ export default function SessionsPage() {
     });
   };
 
+  const hub = useHubStatus();
   const togglePin = async (s: SessionInfo) => {
     setSessions((prev) =>
       prev.map((x) => (x.id === s.id ? { ...x, pinned: !x.pinned } : x))
@@ -529,6 +531,8 @@ export default function SessionsPage() {
                 <Tooltip label={s.pinned ? "取消 pin" : "pin 住（防止被刪）"}>
                   <button
                     onClick={() => togglePin(s)}
+                    disabled={hub.blocked}
+                    title={hub.reason || undefined}
                     className={`mt-0.5 ${s.pinned ? "text-pin" : "text-fg-disabled hover:text-pin"}`}
                   >
                     <Icon name="pin" size={16} />

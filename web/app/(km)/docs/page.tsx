@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
+import { useHubStatus } from "@/components/useHubStatus";
 import Tooltip from "@/components/Tooltip";
 import {
   KIND_LABEL, STATUS_STYLE, docIcon, groupSetsByRepo, matchesDocQuery, sortSets,
@@ -45,6 +46,7 @@ export default function DocsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  const hub = useHubStatus();
   const togglePin = async (dir: string) => {
     setBusy(true);
     try {
@@ -169,7 +171,7 @@ export default function DocsPage() {
                   <Tooltip label={pinned ? "取消 pin" : "pin 住（排到最前面）"}>
                     <button
                       onClick={() => togglePin(s.dir)}
-                      disabled={busy}
+                      disabled={busy || hub.blocked}
                       className={`mt-0.5 ${pinned ? "text-pin" : "text-fg-disabled hover:text-pin"}`}
                     >
                       <Icon name="pin" size={16} />

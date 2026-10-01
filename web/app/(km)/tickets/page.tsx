@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
+import { useHubStatus } from "@/components/useHubStatus";
 import Tooltip from "@/components/Tooltip";
 import { statusLabel } from "@/lib/jiraStatus";
 import {
@@ -72,6 +73,7 @@ export default function TicketsPage() {
     return () => clearInterval(t);
   }, [load]);
 
+  const hub = useHubStatus();
   const togglePin = async (key: string) => {
     const res = await fetch("/api/my-tickets/pin", {
       method: "POST",
@@ -144,6 +146,8 @@ export default function TicketsPage() {
               <Tooltip label={pinnedKeys.includes(t.key) ? "取消 pin" : "pin 住（獨立一區，不受篩選影響）"}>
                 <button
                   onClick={() => togglePin(t.key)}
+                  disabled={hub.blocked}
+                  title={hub.reason || undefined}
                   className={`mt-0.5 shrink-0 ${
                     pinnedKeys.includes(t.key)
                       ? "text-pin"

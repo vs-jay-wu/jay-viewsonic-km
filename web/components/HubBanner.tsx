@@ -1,17 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Icon from "@/components/Icon";
-
-interface Status {
-  role: string | null;
-  machineName?: string;
-  hubUrl?: string | null;
-  lastOkAt?: string | null;
-  lastFailAt?: string | null;
-  lastError?: string | null;
-  ok?: boolean;
-}
+import { useHubStatus } from "@/components/useHubStatus";
 
 /**
  * satellite 連不上 hub 時的提示列。
@@ -24,19 +14,9 @@ interface Status {
  * 3. hub 自己什麼都不畫（`role !== "satellite"` 就 render null）。
  */
 export default function HubBanner() {
-  const [s, setS] = useState<Status | null>(null);
+  const s = useHubStatus();
 
-  useEffect(() => {
-    const load = async () => {
-      const res = await fetch("/api/hub-status", { cache: "no-store" }).catch(() => null);
-      if (res?.ok) setS((await res.json()) as Status);
-    };
-    void load();
-    const t = setInterval(() => void load(), 15_000);
-    return () => clearInterval(t);
-  }, []);
-
-  if (!s || s.role !== "satellite" || s.ok) return null;
+  if (s.role !== "satellite" || s.ok) return null;
 
   const when = s.lastOkAt
     ? new Date(s.lastOkAt).toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })

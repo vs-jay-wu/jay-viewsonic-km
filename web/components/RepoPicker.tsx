@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Icon from "@/components/Icon";
+import { useHubStatus } from "@/components/useHubStatus";
 import Tooltip from "@/components/Tooltip";
 import WorktreeBadge from "@/components/WorktreeBadge";
 import type { RepoList, RepoRow } from "@/components/useRepoList";
@@ -165,6 +166,7 @@ function Row({
   onPin: (row: RepoRow) => Promise<void>;
   busyPin: boolean;
 }) {
+  const hub = useHubStatus();
   // 只有跟時間有關的排序才標日期 —— 其餘情況它只會讓名字更難掃
   const date = sortDateLabel(sort, row);
   return (
@@ -180,7 +182,8 @@ function Row({
       >
         <button
           onClick={() => void onPin(row)}
-          disabled={busyPin}
+          disabled={busyPin || hub.blocked}
+          title={hub.reason || undefined}
           aria-label={row.pinned ? `取消 pin ${row.name}` : `pin ${row.name}`}
           className={`shrink-0 pl-2 ${row.pinned ? "text-pin" : "text-fg-disabled hover:text-pin"}`}
         >
