@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>ChromeOS 第一次擷取出題是空白 — 調查與修正紀錄</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="../../../../../assets/icons/quiz.svg">
+<meta name="km-doc-kind" content="findings">
+<meta name="km-doc-icon" content="quiz">
+<meta name="km-doc-status" content="active">
+<meta name="km-doc-tickets" content="VB-2393">
+<link rel="stylesheet" href="../../../../../assets/style.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目錄">
+    <h2>目錄</h2>
+    <ul>
+      <li><a href="#meta">📌 基準</a></li>
+      <li><a href="#tldr">0. 一句話</a></li>
+      <li><a href="#env">1. 驗證過的機器</a></li>
+      <li><a href="#refuted">2. 被推翻的假說（8 個）</a></li>
+      <li><a href="#found">3. 找到成因的那一步</a></li>
+      <li><a href="#fix">4. 修法與觸發條件</a></li>
+      <li><a href="#unknown">5. 還沒驗證的範圍</a></li>
+      <li><a href="#probe">6. 查證指令</a></li>
+      <li><a href="#back">7. 已知問題：Back</a></li>
+      <li><a href="#home">8. 連帶回歸：Home（已修）</a></li>
+      <li><a href="#lesson">9. 這輪的教訓</a></li>
+    </ul>
+  </nav>
+  <main>
+
+<h1>ChromeOS 第一次擷取出題是空白 — 調查與修正紀錄</h1>
+
+<h2 id="meta">📌 基準</h2>
+
+<table>
+<thead><tr><th>項目</th><th>值</th></tr></thead>
+<tbody>
+<tr><td>日期</td><td>2026-09-22 ～ 2026-09-23</td></tr>
+<tr><td>票</td><td><a href="https://viewsonic-vsi.atlassian.net/browse/VB-2393">VB-2393</a>（Highest，回報者 張政揚）</td></tr>
+<tr><td>Repo</td><td><code>Orgs/Viewsonic-EDU/ragdoll-cat</code></td></tr>
+<tr><td>分支</td><td><code>jay/vb-2393-first-capture-blank</code>（基底 <code>origin/develop</code> <code>98be5cc81</code>）</td></tr>
+<tr><td>交付狀態</td><td>已 push，PR <a href="https://github.com/Viewsonic-EDU/ragdoll-cat/pull/1167">ragdoll-cat#1167</a>
+    （<code>98f3bdccc</code> 修法本體、<code>989c25416</code> Back 已知問題、<code>01478ae14</code> onStop 取消網）。
+    票已轉 <code>IN CODE REVIEW</code>；三台實機驗證通過，待 reviewer 裁定 Type C 的 androidTest 要求</td></tr>
+<tr><td>團隊端文件</td><td>cs repo 的 <code>docs/chromeos-arc-screen-capture.md</code>（根因、修法、查證，團隊的 source of truth）</td></tr>
+</tbody>
+</table>
+
+<p>這份是<strong>調查記錄</strong>：走過的冤枉路、實測環境、以及為什麼最後選了這個 workaround。
+實作面的說明放在 cs repo 那份，兩邊角色不同，不要互相複製。</p>
+
+<h2 id="tldr">0. 一句話</h2>
+
+<p><code>ScreenshotActivity</code> 開在自己的 task，而 <strong>ARC 把那個 task 的 container layer
+當成不透明的全畫面遮擋者</strong>（即使 WindowManager 標它 <code>translucent=true</code>），
+於是 myViewBoard 的 layer 被判定完全遮擋、<code>VisibleRegion</code> 歸零、不參與合成 ——
+擷取到的畫面裡就沒有白板。第二次時該 task 沒進合成，所以正常。</p>
+
+<h2 id="env">1. 驗證過的機器</h2>
+
+<p>兩台都<strong>重現問題</strong>，套用修法後都<strong>確認生效</strong>。
+硬體平台完全不同，唯一共通的軟體特徵就是 ARC ——
+這是條件挑 <code>org.chromium.arc</code> 的實測依據。</p>
+
+<table>
+<thead><tr><th>項目</th><th>機台一</th><th>機台二</th></tr></thead>
+<tbody>
+<tr><td>形式</td><td>VPC-Chromebox</td><td>Chromebook</td></tr>
+<tr><td>device / board</td><td><code>brask_cheets</code> / <code>bujia</code></td><td><code>dedede_cheets</code> / <code>galnat360</code></td></tr>
+<tr><td>CPU</td><td>Intel i3-1315U，8 threads</td><td>Intel Celeron N5100，4 cores</td></tr>
+<tr><td>RAM</td><td>7 GB</td><td><strong>3.2 GB</strong></td></tr>
+<tr><td>面板</td><td>外接 IFP6534，3840×2160</td><td>內建 1366×768</td></tr>
+<tr><td>GPU</td><td>Mesa virgl（Intel RPL-U）</td><td>Mesa virgl（Intel UHD JSL）</td></tr>
+<tr><td>ChromeOS / Android</td><td colspan="2"><code>R152-16765.49.0</code> / Android 13 SDK 33（兩台相同）</td></tr>
+<tr><td><code>org.chromium.arc</code></td><td colspan="2">兩台都有</td></tr>
+</tbody>
+</table>
+
+<p>⚠️ 機台二只有 3.2 GB RAM，融合版 debug APK（539 MB）有被 low-memory killer 砍掉的風險
+（logcat 不會有 FATAL）。實測這次沒被砍，但要在那台跑 debug build 前先確認 app 起得來。</p>
+
+<h3>機台一的完整資訊</h3>
+
+<table>
+<thead><tr><th>項目</th><th>值</th></tr></thead>
+<tbody>
+<tr><td>產品</td><td><strong>VPC-Chromebox</strong>（<code>172.21.14.185</code>）</td></tr>
+<tr><td>ChromeOS build</td><td><code>R152-16765.49.0</code></td></tr>
+<tr><td>fingerprint</td><td><code>google/brask/brask_cheets:13/R152-16765.49.0/16312981:user/release-keys</code></td></tr>
+<tr><td>Android（ARC）</td><td>13 / SDK <strong>33</strong></td></tr>
+<tr><td>device / board / hardware</td><td><code>brask_cheets</code> / <code>bujia</code> / <code>bertha</code>（ARCVM）</td></tr>
+<tr><td>系統 feature</td><td><code>org.chromium.arc</code>、<code>org.chromium.arc.device_management</code>、<code>org.chromium.bertha</code>、<code>android.hardware.type.pc</code></td></tr>
+<tr><td>CPU</td><td>13th Gen Intel Core <strong>i3-1315U</strong>，8 threads</td></tr>
+<tr><td>RAM</td><td>7 GB（<code>MemTotal: 7160400 kB</code>）</td></tr>
+<tr><td>面板</td><td>ViewSonic <strong>IFP6534</strong>（EDID <code>VSC</code> / <code>17176</code>，2025 W7），3840×2160，density 160（override 200）</td></tr>
+<tr><td>圖形</td><td><strong>Mesa virgl</strong>（VirtIO 虛擬 GPU，Intel RPL-U），OpenGL ES 3.1 Mesa 24.2.8</td></tr>
+<tr><td>軟體（回報）</td><td>myViewBoard 3.10.208，釘 ClassSwift <code>v1.8.3</code></td></tr>
+<tr><td>軟體（調查）</td><td>myViewBoard 3.11.6 debug + ClassSwift <code>develop</code></td></tr>
+</tbody>
+</table>
+
+<p><code>v1.8.3</code> 與 <code>develop</code> 的 legacy 擷取程式碼逐行相同，所以在 develop 上調查對得上線上症狀。</p>
+
+<h3>為什麼只有這台</h3>
+
+<p>擷取路線由 <code>PersistentCaptureSessionPolicy.shouldUse()</code> 分流：IFP 走 VSApi、
+Android 14+ 走 persistent session、<strong>其餘走 legacy per-capture MediaProjection</strong>。
+這台是 SDK 33 又沒有 VSApi，是<strong>唯一</strong>會走 legacy 的機型 ——
+而 legacy 是唯一每次都要彈 ChromeOS 授權對話框的路線。</p>
+
+<h2 id="refuted">2. 被推翻的假說（8 個）</h2>
+
+<p>全部都實際測過才排除。記下來是為了不必重走。</p>
+
+<table>
+<thead><tr><th>假說</th><th>怎麼被推翻的</th></tr></thead>
+<tbody>
+<tr><td><code>ImageReader</code> 的 buffer 深度不足（<code>maxImages=1</code>）</td><td>診斷顯示 <code>drained=1</code>，佇列本來就只有一張</td></tr>
+<tr><td><code>acquireNextImage()</code> 拿到最舊的那張</td><td>同上，只有一張可取，與 <code>acquireLatestImage()</code> 等價</td></tr>
+<tr><td>pipeline 還沒 settle，等久一點就好</td><td>每 500ms 取一次連取 6 次跨 2.5 秒，<strong>全部</strong>沒有 myViewBoard</td></tr>
+<tr><td>授權對話框造成 config change，Flutter 沒重繪</td><td>遮罩開著時手動 <code>wm density</code> / <code>wm size</code>，白板正常重繪</td></tr>
+<tr><td>ARC 的 <code>ArcScreenCaptureSession</code> 壞掉</td><td>先建一個丟棄用的 VirtualDisplay 吃掉它、讓正式的走 GPU fallback，畫面照樣空白</td></tr>
+<tr><td><code>VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR</code> 用錯</td><td>換成 mVB 端的 <code>OWN_CONTENT_ONLY | PUBLIC</code>，畫面照樣空白</td></tr>
+<tr><td>myViewBoard 的視窗有 <code>FLAG_SECURE</code></td><td>原始碼完全沒設定</td></tr>
+<tr><td>mirror layer 的 <code>VisibleRegion=0</code> 是病灶</td><td><strong>正常那次量到它也是 0</strong> — 這個欄位沒有鑑別力</td></tr>
+</tbody>
+</table>
+
+<h2 id="found">3. 找到成因的那一步</h2>
+
+<p>轉捩點是<strong>在同一輪流程裡</strong>把第一次與第二次的完整 <code>dumpsys SurfaceFlinger</code>
+都抓下來逐項比對。合成層清單的唯一實質差異：</p>
+
+<pre><code>第一次（空白）                      第二次（正常）
+  ARC Snapshot 88#72                 ARC Snapshot 88#72
+  Task=140#5953                      Task=140#5953
+  MainActivity#5971   vis=0          MainActivity#5971   vis=1
+  Task=141#5983  ← 多這個               (不在合成清單裡)
+    isOpaque=true
+    geomLayerBounds=[-38400, -21600, 38400, 21600]</code></pre>
+
+<p>兩份 dump 裡 <code>MainActivity</code> 是<strong>同一個 layer</strong>，
+<code>activeBuffer</code>（<code>3840x2160:2816, RGBA_8888</code>）與 <code>flags</code> 完全相同，
+差別只有 <code>VisibleRegion</code>。<strong>畫面內容一直都在，只是沒被合成。</strong></p>
+
+<p>而 <code>Task=141</code> 在 <code>dumpsys window</code> 裡明明是
+<code>translucent=true</code> — WindowManager 與 SurfaceFlinger 對同一個 task 的判斷不一致，
+這就是 ARC 特有的地方。</p>
+
+<h2 id="fix">4. 修法與觸發條件</h2>
+
+<p>遮罩掛好後把 Activity 的 task 退到背景（<code>moveTaskToBack(true)</code>）。遮罩與題型面板是
+<code>TYPE_APPLICATION_OVERLAY</code>，不屬於該 task，所以照常浮在最上層可互動；
+Activity 也還活著，繼續持有 MediaProjection 與 ImageReader。</p>
+
+<pre><code>if (!myViewBoardConnectionStateProvider.isBound()) return   // 獨立 app 沒有 MVB 可以讓位
+if (!packageManager.hasSystemFeature("org.chromium.arc")) return
+moveTaskToBack(true)</code></pre>
+
+<p>用<strong>能力偵測</strong>而不是機型清單。實測：VPC-Chromebox 有 <code>org.chromium.arc</code>，
+IFP51 / IFP63 都沒有。</p>
+
+<p>連帶要移除 manifest 的 <code>android:noHistory="true"</code> ——
+它的語意是「離開前景就銷毀」，與 <code>moveTaskToBack</code> 直接衝突（實測一呼叫就
+<code>onDestroy</code> → <code>sendResult(CANCELED)</code>，遮罩被收掉、擷取當場結束）。</p>
+
+<h3>刻意沒採用的作法</h3>
+
+<ul>
+  <li><strong>偵測擷取結果是不是空的再重試</strong>：老師本來就可能在空白頁上擷取，判準無法區分真假。</li>
+  <li><strong>用「有沒有 VSApi」當條件</strong>：遮擋發生在合成層，每條路線最後都讀合成結果
+      （含 <code>VSPictureManager.screenshot</code>），「VSApi 不受影響」沒有實測支持；
+      而且 ARC 上沒有 VSApi，等於死條件。</li>
+  <li><strong>執行期偵測「這台會不會中」</strong>：<b>做不到。</b>判斷依據是 SurfaceFlinger 的
+      <code>VisibleRegion</code>，屬內部合成狀態、要 shell 權限；app 拿得到的
+      <code>View.getWindowVisibility()</code> / <code>isShown()</code> /
+      <code>onWindowFocusChanged</code> 都只描述<strong>自己的視窗</strong>，
+      而這個 Activity 在所有平台上都是「可見」的。</li>
+</ul>
+
+<h2 id="unknown">5. 還沒驗證的範圍</h2>
+
+<p class="note"><strong>2026-09-23 實測更新：</strong>「對所有機型套用也無妨」<b>不成立</b>。
+把 ARC 條件拿掉、在 Pixel Tablet（Android 16，persistent session 路線）上測，
+擷取出題<strong>畫面確實會閃一下</strong> —— 很快但看得出來，使用者不會知道原因。
+所以維持 ChromeOS 過濾，不放寬。</p>
+
+<ol>
+  <li><strong>是不是所有 ChromeOS 都會中？未知，很可能不是。</strong>合成行為可能隨
+      ChromeOS 版本、ARC 版本、GPU 驅動而異。現行條件對所有 ARC 裝置套用是保守取捨。</li>
+  <li><strong>ChromeOS 升到 Android 14 之後？</strong>會改走 persistent session，
+      該路線的遮罩同樣由 <code>ScreenshotActivity</code> 顯示，推測一樣會中，但沒測過。</li>
+  <li><strong>VSApi 路線在 ARC 上是否受影響？</strong>ARC 上沒有 VSApi，無從驗證。</li>
+</ol>
+
+<p>要縮小範圍（例如只對特定 ChromeOS 版本套用），需要先在<strong>多台不同 ChromeOS 機型</strong>上
+用下面的判準量一遍。</p>
+
+<h2 id="probe">6. 查證指令</h2>
+
+<p>擷取當下（遮罩開著、還沒按 Capture）跑：</p>
+
+<pre><code>adb -s &lt;device&gt; shell dumpsys SurfaceFlinger | grep -A3 'MainActivity#'</code></pre>
+
+<p>看<strong>非</strong> <code>(Mirror)</code> 的那個 layer：<code>count=1</code> 表示 myViewBoard
+有參與合成、擷取拿得到畫面；<code>count=0</code> 就是被遮擋。</p>
+
+<p>⚠️ 同一份輸出裡 <code>(Mirror)</code> 那個 layer 的 count <strong>正常時也是 0</strong>，
+不要拿它當判準 — 這點誤導了好幾輪。</p>
+
+<p>確認 task 有沒有讓出去（合成清單裡不該有 <code>ScreenshotActivity</code> 的 task container）：</p>
+
+<pre><code>adb -s &lt;device&gt; shell dumpsys SurfaceFlinger | grep '^\* Layer' | sed 's/0x[0-9a-f]*//'</code></pre>
+
+<p>認出這台會不會走 legacy 路線：</p>
+
+<pre><code>adb -s &lt;device&gt; shell pm list features | grep chromium
+adb -s &lt;device&gt; shell getprop ro.build.version.sdk</code></pre>
+
+<h2 id="back">7. 已知問題：ARC 上遮罩期間按 Back</h2>
+
+<p>讓出 task 之後，取消用的 <code>onBackPressedDispatcher</code> 綁在已離開前景的
+<code>ScreenshotActivity</code> 上，而 CS 的 overlay 全是 <code>FLAG_NOT_FOCUSABLE</code>，
+所以 Back 會落到前景的 myViewBoard。</p>
+
+<table>
+<thead><tr><th>文件狀態</th><th>修法前（baseline 實測）</th><th>套用後</th></tr></thead>
+<tbody>
+<tr><td>未修改</td><td>只取消擷取</td><td><strong>myViewBoard 直接退出</strong>（無確認）</td></tr>
+<tr><td>已修改</td><td>只取消擷取</td><td>遮罩退出 ＋ 跳儲存對話框</td></tr>
+</tbody>
+</table>
+
+<h3>觸發條件：要送得出 Back</h3>
+
+<ul>
+  <li><strong>Chromebox（觸控）</strong>：實測<strong>按不到</strong> —— 從底部上滑出來的是
+      ChromeOS shelf，沒有 Back。後果是用
+      <code>adb shell input keyevent KEYCODE_BACK</code> 強制送出才觀察到的。</li>
+  <li><strong>Chromebook（鍵盤）</strong>：<strong>按得到</strong>，鍵盤上就有 Back 鍵 ——
+      <strong>只有這台是使用者碰得到的途徑</strong>。</li>
+  <li><strong>非 ARC</strong>：不適用（不套用 workaround，Pixel Tablet 實測行為與修法前相同）。</li>
+</ul>
+
+<p class="note">⚠️ <code>ScreenshotActivity.kt</code> 那句「swipe from the bottom edge brings the
+bar back」是在 <strong>IFP</strong> 上量的，<strong>ChromeOS 上不成立</strong>。我一度把它當成
+ChromeOS 的依據引用，是同一類「把 A 系統的量測外推到 B」的錯。</p>
+
+<h3>決定：列為已知問題，先不修（2026-09-24）</h3>
+
+<p>要同時滿足「ChromeOS」＋「送得出 Back」＋「遮罩期間按下去」才會發生，頻率低；
+而兩條修法的成本都不成比例（動 CS window framework 核心 / 跨 repo 改 myViewBoard）。</p>
+
+<p>⚠️ <strong>討論中原本的安全網假設「畫面上有東西就會跳對話框」不成立</strong> ——
+<code>PageSetModel.isModified()</code> 比的是「相對於開啟時有沒有被編輯」，不是畫面有沒有內容。
+所以<strong>開啟既有教材、未編輯就出題</strong>的情況會無確認直接退出。
+這個例外當場被指出，團隊仍決定降級 —— 記下來是為了讓判斷可追溯，不是沒想到。</p>
+
+<h3>考慮過的修法</h3>
+
+<table>
+<thead><tr><th>方案</th><th>狀態</th></tr></thead>
+<tbody>
+<tr><td><code>setTranslucent(true)</code> 取代 <code>moveTaskToBack</code></td>
+    <td>❌ <strong>實測無效</strong>：系統回 <code>false</code>（theme 本來就 translucent，沒有可轉換的狀態），
+        <code>VisibleRegion</code> 仍 0。這條看起來最誘人，特別記下來不必再試</td></tr>
+<tr><td>遮罩 overlay 自己 focusable 並攔 Back</td>
+    <td>未做。框架<strong>預設</strong> overlay 為 <code>NOT_FOCUSABLE</code>，但執行期切換<strong>已是既有模式</strong>
+        （<code>UrlMetaPreviewDialog.kt:188</code>、<code>CSCreateQuizCollectionFolderWidget.kt:99</code> 都會在聚焦時清掉旗標）——
+        我原本寫成「框架層開新能力」是<strong>誇大</strong>。真正的成本是遮罩要整個 session 保持 focusable
+        （那兩處只在瞬間切換），動到觸控穿透與 IME；另外框架確實沒有任何按鍵處理程式碼，攔截要自己寫</td></tr>
+<tr><td>IPC 讓 myViewBoard 擷取期間忽略 Back</td>
+    <td>未做。跨 repo。線索：Finch <code>v2.11.23</code> 已有「截圖進行中」的處理</td></tr>
+<tr><td>階段 2 架構重構</td>
+    <td><strong>解決不了</strong> —— 根因是「沒有前景 Activity 接 Back」，階段 2 讓 Activity 更早 finish，一樣落到 MVB</td></tr>
+</tbody>
+</table>
+
+<h2 id="home">8. 連帶回歸：拿掉 noHistory 之後的 Home（已修）</h2>
+
+<p>為了讓 <code>moveTaskToBack</code> 能用，manifest 的 <code>android:noHistory="true"</code> 被移除。
+但那個旗標同時也是一張網：「Activity 離開前景就銷毀」→ <code>onDestroy</code> 送 CANCELED。</p>
+
+<p class="note">⚠️ <strong>這個回歸不限 ChromeOS</strong>：<code>noHistory</code> 在 manifest 層，
+不像 <code>moveTaskToBack</code> 有 <code>org.chromium.arc</code> 守著，所以 Pixel、IFP 全都中。
+這是 PR reviewer 的 MINOR 建議挖出來的，我原本低估了它。</p>
+
+<h3>實測重現（Pixel Tablet，未修版）</h3>
+
+<pre><code>遮罩開著按 Home
+  → ScreenshotActivity 仍存活、完全沒有 sendResult
+  → 再按截圖鈕：沒有任何 onCreate（被 re-entrant 守衛擋死）
+  → isCaptureInFlight 放不掉、CS 視窗一直藏著，直到 process 結束</code></pre>
+
+<p><code>waitUntilVirtualDisplayReady</code> 沒有 timeout，所以那個狀態不會自己結束。</p>
+
+<h3>修法：onStop 補網</h3>
+
+<p>在 <code>onStop()</code> 取消這一輪，排除三種情況：自己讓出 task、config change、已送出結果。
+修後同一台：<code>onStop → sendResult CANCELED → 遮罩收掉 → VirtualDisplay 釋放</code>，
+Activity 存活數歸零。</p>
+
+<p>⚠️ <strong>這張網在 ARC 上補不回來</strong>（<code>yieldTaskToMyViewBoard</code> 已經先把 Activity 停掉，
+之後按 Home 不會再觸發 <code>onStop</code>），所以 ChromeOS 上「Home 缺口」與 Back 並列為已知代價。</p>
+
+<h3>兩個自己埋的坑</h3>
+
+<ul>
+  <li><strong>旗標沒吃回傳值</strong>：原本 <code>isYieldingTask = true</code> 設在
+      <code>moveTaskToBack()</code> <strong>之前</strong>，它回 <code>false</code> 時旗標仍是 true，
+      會把下一次真正的「使用者離開」吃掉 —— 等於這張網被消音一次。reviewer 抓到的。</li>
+  <li><strong>未驗證的等價宣稱</strong>：欄位 KDoc 原本寫「比照 <code>noHistory</code> 當初的語意」，
+      但兩者的觸發面從沒逐項比對過。實測熄屏（<code>mWakefulness=Dozing</code>）時
+      <strong>Activity 仍存活、沒有任何 <code>onStop</code></strong>，所以熄屏不會取消擷取、
+      也不需要 <code>isInteractive</code> 判斷。KDoc 改成只寫這條量過的，不宣稱等價。</li>
+</ul>
+
+<h2 id="lesson">9. 這輪的教訓</h2>
+
+<p>八個假說全錯的共同形狀：<strong>只看了「壞掉那次」的數據</strong>。看到任何異常
+（ARC session timeout、GPU fallback、viewport metrics、mirror 的 vis=0）就當成病因，
+卻沒去確認<strong>正常那次是不是也長這樣</strong>。實際比對之後，那些異常全部兩次都有。</p>
+
+<p>真正有效的一步是請人在遮罩出現時<strong>停手</strong>，讓我在同一輪流程裡抓下第一次與第二次的
+完整 dump —— 有了對照組，唯一的實質差異當場浮出來。</p>
+
+<h3>把一次讀到的值當成不變的事實</h3>
+
+<p>調查初期讀到 mvbf 的 <code>finch-ref.properties</code> 是
+<code>vb-2077-mvb-sync-20260914</code>，之後一整天的建置都沿用這個值當 override。
+但那個檔案在 <strong>09-22 就被改釘 <code>v2.11.23</code></strong> 了（commit <code>6b85d2c77</code>），
+我完全沒察覺 —— 因為 gradle 的 incremental build 不會重新評估 <code>:app</code>，
+直到換了 CS 的 checkout 路徑才炸出「找不到 <code>QuizRequestType.aidl</code>」。</p>
+
+<p>也就是說：<strong>先前那些 APK 編的是舊版 Finch 介面</strong>（修正後重建的兩顆大了約 54 MB，
+可以反證）。實測行為沒受影響，但這完全是運氣。</p>
+
+<p>這正是 km rules「不要記會漂移的指標」的同一族 —— 我把「某次 <code>cat</code> 到的值」
+當成常數帶著走。<strong>判準</strong>：每次建置前重讀版本釘選檔，不要從對話歷史裡撈。</p>
+
+<h3>同一個「半改」被抓到兩輪</h3>
+
+<p><code>/review-local</code> 連續兩輪都抓到「同一份文件／同一個 repo 裡並存兩種說法」：</p>
+
+<ul>
+  <li>第一輪：<code>onCreate</code> 的註解仍宣稱「never leaves RESUMED」（正是 workaround 打破的前提）；
+      文件「未驗證的範圍」還寫「只在一台驗證過」，而同一份文件前面已經寫了兩台。</li>
+  <li>第二輪：「階段 2」段落還寫著「Back 鍵的歸屬也不會變」，跟新加的表格正好相反；
+      <code>ScreenshotActivityBackPressTest</code> 的 KDoc 還宣稱真機已驗過 Back 會結束 session。</li>
+</ul>
+
+<p>我每次都只改「我正在寫的那一處」，沒有回頭 grep 被推翻的說法。
+<strong>判準</strong>：推翻一個說法之後，<strong>先 grep 關鍵字掃全 repo</strong>（含測試檔的 KDoc），
+再繼續寫新的。</p>
+
+<h3>「我沒看到」不等於「沒有」</h3>
+
+<p>我寫「讓遮罩 overlay focusable 等於在框架層開新能力」，理由是「所有 overlay 都假設
+<code>FLAG_NOT_FOCUSABLE</code>」。reviewer 指出 repo 裡已經有兩處在執行期切換
+（<code>UrlMetaPreviewDialog.kt:188</code>、<code>CSCreateQuizCollectionFolderWidget.kt:99</code>），
+一 grep 就看得到。</p>
+
+<p>這個誇大會影響決策 —— 它是「不修」的理由之一。
+<strong>判準</strong>：寫「框架沒有 X」之前先 grep X 的反例；成本估算要能指出具體阻礙
+（本例真正的成本是「整個 session 保持 focusable，動到觸控穿透與 IME」），而不是「沒有先例」。</p>
+
+<h3>反過來，review 的意見也要驗</h3>
+
+<p>同一輪 review 推測「Chromebox 接 USB 鍵盤按 Esc 就會送 BACK，觸發範圍比文件寬」。
+查該機的 <code>/system/usr/keychars/Generic.kcm</code>：<code>key ESCAPE</code> 是
+<code>base: none</code>（只有 <code>alt/meta → HOME</code>、<code>ctrl → MENU</code>），
+<strong>這條不成立</strong>。但他同時提的<strong>滑鼠側鍵</strong>沒被驗掉，所以文件把結論
+收窄成「觸控與一般鍵盤碰不到」，滑鼠那條標為未驗證 —— 驗掉一半、保留一半。</p>
+
+<p>另一個自傷的例子：我寫的空白偵測判準是「四個抽樣點全為 0」，但實際畫面是遮罩的灰
+<code>A39C96</code>，<strong>判準在結構上就看不到目標狀態</strong>，所以我寫的重試機制
+從頭到尾沒執行過，而 log 看起來一切正常。換成無條件存圖、用眼睛看，才看見真相。</p>
+
+  </main>
+</div>
+</body>
+</html>

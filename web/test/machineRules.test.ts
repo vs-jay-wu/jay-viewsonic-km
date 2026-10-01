@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyHeartbeat, isStale, machineCommandUrl, remoteSessions, EMPTY_REGISTRY,
-  MACHINE_STALE_MS, type MachineRegistry,
+  applyHeartbeat, forgetMachine, isStale, machineCommandUrl, machineLabel,
+  remoteSessions, renameMachine, EMPTY_REGISTRY, MACHINE_STALE_MS, type MachineRegistry,
 } from "@/lib/machineRules";
 
 const NOW = Date.parse("2026-10-01T10:00:00Z");
@@ -70,5 +70,37 @@ describe("要把動作送到某台機器上", () => {
     expect(machineCommandUrl(live, "uuid-b", NOW + MACHINE_STALE_MS + 1)).toEqual({
       error: expect.stringContaining("離線"),
     });
+  });
+});
+
+describe("在 hub 上改名", () => {
+  it("心跳不會把改過的名字蓋回去", () => {
+    // 這是整件事的重點：`name` 每分鐘被那台自己報的值覆寫一次
+    let r = applyHeartbeat(EMPTY_REGISTRY, B, [], NOW, 9501);
+    r = renameMachine(r, "uuid-b", "工作筆電");
+    r = applyHeartbeat(r, { ...B, name: "VIM-999" }, [{ id: "s" }], NOW + 60_000, 9501);
+    expect(machineLabel(r.machines[0])).toBe("工作筆電");
+    expect(r.machines[0].name).toBe("VIM-999"); // 自己報的那個還留著
+  });
+
+  it("改成空字串＝取消覆寫，回到自己報的名字", () => {
+    let r = renameMachine(applyHeartbeat(EMPTY_REGISTRY, B, [], NOW), "uuid-b", "工作筆電");
+    r = renameMachine(r, "uuid-b", "   ");
+    expect(machineLabel(r.machines[0])).toBe(B.name);
+    expect(r.machines[0].displayName).toBeUndefined();
+  });
+
+  it("別台 session 的徽章用改過的名字", () => {
+    let r = applyHeartbeat(EMPTY_REGISTRY, B, [{ id: "b1" }], NOW);
+    r = renameMachine(r, "uuid-b", "工作筆電");
+    expect(remoteSessions(r, "uuid-a", NOW)[0].machine.name).toBe("工作筆電");
+  });
+
+  it("移除之後下一次心跳會自己回來 —— 這是清單，不是封鎖", () => {
+    let r = applyHeartbeat(EMPTY_REGISTRY, B, [], NOW);
+    r = forgetMachine(r, "uuid-b");
+    expect(r.machines).toHaveLength(0);
+    r = applyHeartbeat(r, B, [], NOW + 60_000);
+    expect(r.machines).toHaveLength(1);
   });
 });

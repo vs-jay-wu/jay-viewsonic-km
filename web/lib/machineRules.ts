@@ -20,6 +20,15 @@ export interface MachineRef {
 }
 
 export interface MachineEntry extends MachineRef {
+  /**
+   * 在 hub 上改的名字。**心跳不會動它** —— `name` 是那台自己報的
+   * （來自它的 `local.workspace.json`），每分鐘覆寫一次；要讓 hub 上的改名活得下去，
+   * 就得有一個心跳碰不到的欄位。
+   *
+   * 兩個都留著是故意的：你在 hub 上叫它「工作筆電」，但出事要連過去時需要知道
+   * 它自己叫什麼（hostname 風格的那個）。
+   */
+  displayName?: string;
   lastSeenAt: string;
   /**
    * hub 要連回這台時用的 port（hub 自己的 loopback，`ssh -R` 轉過去）。
@@ -36,6 +45,29 @@ export interface MachineRegistry {
 
 export const EMPTY_REGISTRY: MachineRegistry = { machines: [] };
 
+/** 畫面上要顯示的名字：hub 改過的優先，沒改過就用那台自己報的 */
+export function machineLabel(m: MachineEntry): string {
+  return m.displayName?.trim() || m.name;
+}
+
+/** 在 hub 上改名。空字串＝取消覆寫，回到那台自己報的名字 */
+export function renameMachine(reg: MachineRegistry, id: string, displayName: string): MachineRegistry {
+  const next = displayName.trim();
+  return {
+    machines: reg.machines.map((m) =>
+      m.id === id ? { ...m, displayName: next || undefined } : m
+    ),
+  };
+}
+
+/**
+ * 從註冊表移除。那台若還活著，**下一次心跳就會自己回來** —— 這是對的：
+ * 這個動作是「清掉不再用的機器」，不是封鎖。要真的擋住它是裝置 token 那一層的事。
+ */
+export function forgetMachine(reg: MachineRegistry, id: string): MachineRegistry {
+  return { machines: reg.machines.filter((m) => m.id !== id) };
+}
+
 export function isStale(m: MachineEntry, now: number): boolean {
   return now - Date.parse(m.lastSeenAt) > MACHINE_STALE_MS;
 }
@@ -51,9 +83,12 @@ export function applyHeartbeat(
   now: number,
   reversePort?: number,
 ): MachineRegistry {
+  const prev = reg.machines.find((m) => m.id === machine.id);
   const entry: MachineEntry = {
     id: machine.id,
     name: machine.name,
+    // 心跳不覆寫 hub 上改過的名字
+    displayName: prev?.displayName,
     lastSeenAt: new Date(now).toISOString(),
     reversePort,
     sessions,
@@ -86,7 +121,7 @@ export function remoteSessions(
     .flatMap((m) =>
       m.sessions.map((s) => ({
         session: s as Record<string, unknown>,
-        machine: { id: m.id, name: m.name },
+        machine: { id: m.id, name: machineLabel(m) },
         lastSeenAt: m.lastSeenAt,
         stale: isStale(m, now),
       })),
@@ -107,10 +142,12 @@ export function machineCommandUrl(
   const m = reg.machines.find((x) => x.id === machineId);
   if (!m) return { error: "不認得這台機器（它還沒送過心跳）" };
   if (!m.reversePort) {
-    return { error: `「${m.name}」沒有開反向轉發，從這裡下不了指令 —— 在那台重跑 setup-km-tunnel.sh` };
+    return {
+      error: `「${machineLabel(m)}」沒有開反向轉發，從這裡下不了指令 —— 在那台重跑 setup-km-tunnel.sh`,
+    };
   }
   if (isStale(m, now)) {
-    return { error: `「${m.name}」已經離線（上次心跳 ${m.lastSeenAt}）` };
+    return { error: `「${machineLabel(m)}」已經離線（上次心跳 ${m.lastSeenAt}）` };
   }
   return { url: `http://localhost:${m.reversePort}` };
 }
