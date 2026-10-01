@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isKnownWorktree } from "@/lib/changes";
 import { isExternalRepo } from "@/lib/externalRepos";
 import { readPinned, togglePinned } from "@/lib/gitView";
+import { refOf } from "@/lib/repoRef";
 
 export const dynamic = "force-dynamic";
 
@@ -26,13 +27,16 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const pinned = await readPinned();
   const worktrees: string[] = [];
+  // 側邊欄的連結要用身分（`?repo=`）—— 只給 `dir=` 的話工作台拿不到身分，預覽就壞了
+  const refs: Record<string, string | null> = {};
   await Promise.all(
     pinned.map(async (dir) => {
       const st = await stat(path.join(dir, ".git")).catch(() => null);
       if (st?.isFile()) worktrees.push(dir);
+      refs[dir] = await refOf(dir);
     })
   );
-  return NextResponse.json({ pinned, worktrees });
+  return NextResponse.json({ pinned, worktrees, refs });
 }
 
 export async function POST(req: NextRequest) {

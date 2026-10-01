@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeRepoRef, encodeRepoRef, repoRefName, type RefRoot } from "@/lib/repoRefRules";
+import { canonicalRepoQuery, decodeRepoRef, encodeRepoRef, repoRefName, type RefRoot } from "@/lib/repoRefRules";
 
 // A 機器
 const A: RefRoot[] = [
@@ -63,5 +63,33 @@ describe("repo 身分", () => {
     expect(repoRefName("Viewsonic-EDU/ragdoll-cat")).toBe("ragdoll-cat");
     expect(repoRefName("km")).toBe("km");
     expect(repoRefName("home/.mvb-worktrees/poc")).toBe("poc");
+  });
+});
+
+describe("舊網址 dir= → repo=", () => {
+  it("換成身分，其他參數原樣保留", () => {
+    const q = canonicalRepoQuery(
+      { dir: "/Users/jay/ProjectsWork_GitHub/Orgs/Viewsonic-EDU/edu-vbo", file: "docs/a b.html" },
+      "Viewsonic-EDU/edu-vbo"
+    );
+    const p = new URLSearchParams(q!);
+    expect(p.get("repo")).toBe("Viewsonic-EDU/edu-vbo");
+    expect(p.get("file")).toBe("docs/a b.html");
+    expect(p.has("dir")).toBe(false);
+  });
+
+  it("已經有 repo= 就不動（就算也帶了 dir=）", () => {
+    expect(canonicalRepoQuery({ repo: "km", dir: "/x" }, "home/x")).toBeNull();
+  });
+
+  it("沒有 dir=、或 dir 解不出身分，就不轉", () => {
+    expect(canonicalRepoQuery({ file: "a.md" }, "km")).toBeNull();
+    expect(canonicalRepoQuery({ dir: "" }, "km")).toBeNull();
+    expect(canonicalRepoQuery({ dir: "/Volumes/Other/x" }, null)).toBeNull();
+  });
+
+  it("重複的參數不會只剩一個", () => {
+    const p = new URLSearchParams(canonicalRepoQuery({ dir: "/x", tag: ["a", "b"] }, "home/x")!);
+    expect(p.getAll("tag")).toEqual(["a", "b"]);
   });
 });

@@ -11,6 +11,8 @@ import { onPinChanged } from "@/lib/pinEvents";
 
 interface Pinned {
   dir: string;
+  /** 對不到任何 root 的才是 null，那種只能退回 `dir=` */
+  ref: string | null;
   name: string;
 }
 
@@ -56,12 +58,12 @@ export default function Sidebar({
   const loadPinned = useCallback(() => {
     fetch("/api/git/pin")
       .then((r) => r.json())
-      .then((d: { pinned?: string[]; worktrees?: string[] }) => {
+      .then((d: { pinned?: string[]; worktrees?: string[]; refs?: Record<string, string | null> }) => {
         const skip = new Set(d.worktrees ?? []);
         setPinned(
           (d.pinned ?? [])
             .filter((dir) => !skip.has(dir))
-            .map((dir) => ({ dir, name: dir.split("/").pop() ?? dir }))
+            .map((dir) => ({ dir, ref: d.refs?.[dir] ?? null, name: dir.split("/").pop() ?? dir }))
         );
       })
       .catch(() => undefined);
@@ -230,7 +232,11 @@ export default function Sidebar({
                   p.name,
                   <Link
                     // 不指定視圖 —— `/repo` 會導到你上次看的那個（lib/repoViewPref.ts）
-                    href={`/repo?dir=${encodeURIComponent(p.dir)}`}
+                    href={
+                      p.ref
+                        ? `/repo?repo=${encodeURIComponent(p.ref)}`
+                        : `/repo?dir=${encodeURIComponent(p.dir)}`
+                    }
                     onClick={onNavigate}
                     className={`${itemClass(false)} w-full`}
                   >

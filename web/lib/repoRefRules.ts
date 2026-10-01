@@ -78,6 +78,27 @@ export function decodeRepoRef(ref: string, roots: RefRoot[]): string | null {
   return rel ? `${base}/${rel}` : base;
 }
 
+/**
+ * 舊網址 `?dir=<絕對路徑>` → 正式的 `?repo=<身分>`，其他參數（`file`、`sha`…）原樣保留。
+ * 不需要轉的（已經有 `repo=`、沒有 `dir=`、`dir` 對不到任何 root）回 null。
+ *
+ * **為什麼要轉，不能兩種都收**：工作台只有 `dir` 的話拿不到身分，而 HTML／SVG／圖片
+ * 的預覽要用身分組 `/code-view/…` 的網址 —— 帶 `dir=` 進來時檔案樹正常、內容正常，
+ * 只有預覽那格顯示「不在已知的工作區底下」（2026-10-01，側邊欄 pin 的連結就是 `dir=`）。
+ */
+export function canonicalRepoQuery(
+  q: Record<string, string | string[] | undefined>,
+  ref: string | null
+): string | null {
+  if (q.repo || typeof q.dir !== "string" || !q.dir || !ref) return null;
+  const next = new URLSearchParams({ repo: ref });
+  for (const [k, v] of Object.entries(q)) {
+    if (k === "dir" || k === "repo" || v === undefined) continue;
+    for (const x of Array.isArray(v) ? v : [v]) next.append(k, x);
+  }
+  return next.toString();
+}
+
 /** 畫面上顯示用的短名：身分的最後一段（`Viewsonic-EDU/ragdoll-cat` → `ragdoll-cat`） */
 export function repoRefName(ref: string): string {
   const parts = ref.split("/").filter(Boolean);

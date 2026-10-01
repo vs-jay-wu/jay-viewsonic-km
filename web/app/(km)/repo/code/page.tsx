@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import RepoWorkbench from "@/components/RepoWorkbench";
 import { repoViewTitle } from "@/lib/navRules";
-import { dirFromParams, type RepoParams } from "@/lib/repoPageParams";
+import { dirFromParams, redirectLegacyDir, type RepoSearchParams } from "@/lib/repoPageParams";
 
 /**
  * 分頁標題要帶 repo 名字，而名字只在網址的 `?repo=` 裡 —— 所以這一頁是
@@ -15,7 +15,7 @@ import { dirFromParams, type RepoParams } from "@/lib/repoPageParams";
 export async function generateMetadata({
   searchParams,
 }: {
-  searchParams: Promise<RepoParams>;
+  searchParams: Promise<RepoSearchParams>;
 }): Promise<Metadata> {
   const { repo, dir } = await searchParams;
   // ref 的最後一段就是 repo 名（`Viewsonic-EDU/ragdoll-cat` → `ragdoll-cat`），
@@ -24,10 +24,12 @@ export async function generateMetadata({
 }
 
 /** 程式碼視圖。內容與另一個視圖共用 `RepoWorkbench`，差別只有這個 prop */
-export default async function Page({ searchParams }: { searchParams: Promise<RepoParams> }) {
+export default async function Page({ searchParams }: { searchParams: Promise<RepoSearchParams> }) {
+  const q = await searchParams;
+  await redirectLegacyDir("code", q);
   return (
     <Suspense fallback={<p className="px-6 py-10 text-sm text-fg-subtle">載入中…</p>}>
-      <RepoWorkbench view="code" dir={await dirFromParams(await searchParams)} />
+      <RepoWorkbench view="code" dir={await dirFromParams(q)} />
     </Suspense>
   );
 }
