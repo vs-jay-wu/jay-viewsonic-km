@@ -43,7 +43,7 @@ export const STATE_OWNER: Record<string, StateOwner> = {
   "vb-bugs-config.json": "hub",
   "pr-inbox-watch.json": "hub",
   "pr-inbox-handled.json": "hub",
-  "health.json": "hub",
+
   "engine-health.json": "hub",
   "work-index.json": "hub",
   "work-lines.json": "hub",
@@ -75,6 +75,13 @@ export const STATE_OWNER: Record<string, StateOwner> = {
   "ui-settings.json": "machine",
   // 上次連上 hub 是什麼時候。描述的是「這台跟 hub 的關係」，所以歸 machine
   "hub-status.json": "machine",
+  /*
+   * ⚠️ health 是 **machine** 擁有的，不是 hub。它記的是「**這台**的排程跑得怎樣」。
+   * 2026-10-01 歸 hub 時實際出事：satellite 上一次失敗的紀錄被轉送到 hub，
+   * hub 的首頁就跳出一個不是它自己的警告（而且訊息是「缺少 ATLASSIAN_API_TOKEN」，
+   * 在 hub 上完全看不懂 —— hub 的 .env 明明有）。
+   */
+  "health.json": "machine",
   // 上傳到 Jira 前的暫存圖檔。程式裡沒有任何引用，是人／agent 手動放的
   "jira-upload": "machine",
 };

@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runOnce, schedulerState } from "@/lib/vbBugs";
+import { refuseIfNotHub } from "@/lib/hubOnly";
 
 export const dynamic = "force-dynamic";
 
 /** body 的 { full: true } 可以強制全同步，不等 24 小時那個週期。 */
 export async function POST(req: NextRequest) {
+  const no = refuseIfNotHub("VB Bug");
+  if (no) return no;
+
   const body = (await req.json().catch(() => ({}))) as { full?: boolean };
   const res = await runOnce({ full: !!body.full });
   if (!res.ok) return NextResponse.json({ error: res.error ?? "抓取失敗" }, { status: 500 });
