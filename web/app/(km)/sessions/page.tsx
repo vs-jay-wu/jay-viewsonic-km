@@ -755,6 +755,8 @@ export default function SessionsPage() {
           sessionId={openSession.id}
           title={openSession.title}
           onClose={() => setOpenId(null)}
+          machineId={openSession.machine?.id}
+          machineName={openSession.machine?.name}
         />
       )}
     </div>

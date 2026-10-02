@@ -458,8 +458,33 @@ hub 絕不自動的另一個理由：**km 就是開發 km 的地方**，工作�
 階段 2  hub 聚合：跨機器 session 索引、機器命名 UI、/repo/code 的「只在 X 上」
         跨機器開 session（含即時詢問目標機器有沒有那個 repo）
 階段 3  版本落後偵測；satellite 自動更新、hub 一鍵更新
-後期    對執行中 session 送 prompt；手機／iPad 的 cookie 配對
+階段 4  對執行中的 session 送 prompt（`orca terminal send`）
+後期    手機／iPad 的 cookie 配對
 ```
+
+### 對執行中的 session 送 prompt（階段 4）
+
+AI 佔著那台的螢幕鍵盤時，你在另一台上還是講得了話 —— §1 的第一個情境。
+
+能做到的關鍵是 **Orca 的 CLI 有這組原語**（2026-10-02 查 `orca agent-context --json`）：
+
+```
+terminal send  --terminal <handle> --text <text> --enter
+terminal show  --terminal <handle>              分頁還在不在
+terminal read  --terminal <handle> --screen     看畫面（還沒用到）
+terminal wait  --terminal <handle> --for tui-idle   等它忙完（還沒用到）
+```
+
+km 本來就有 `sessionId → handle` 的記帳（`data/machine/orca-sessions.json`），
+所以送出就是查記帳 ＋ 一次 `terminal send`。跨機器走跟開 session 同一條轉送。
+
+⚠️ **只送給 km 自己開的分頁。** `--enter` 會**當場送出**：目標若不是 Claude 的 TUI
+而是一個普通 shell，那段文字就變成**被執行的指令**。km 開的分頁是用
+`--command "claude --resume <id>"` 建的，所以知道裡面跑的是什麼；從
+`terminal list` 撈到的 handle 不知道 —— **不要為了方便而放寬這條**。
+
+送出後**不等回覆**：回覆會寫進 session 的 transcript，而那本來就是 km 的
+對話紀錄面板在顯示的東西，等於免費拿到「看著它回」。
 
 ### 跨機器開 session 的機制（階段 2）
 

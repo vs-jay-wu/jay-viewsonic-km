@@ -182,6 +182,53 @@ async function finishCreate(
   return { status: "opened", handle };
 }
 
+// ─── 對正在跑的 session 送 prompt ────────────────────────────────────────────
+
+export type SendOutcome =
+  | { status: "sent" }
+  /** 沒開過、或那個分頁已經關掉 —— 要先「在 Orca 開啟」 */
+  | { status: "not-open" }
+  | { status: "orca-down" }
+  | { status: "error"; error: string };
+
+/**
+ * 把一段文字送進那個 session 正在跑的終端機。
+ *
+ * ⚠️ **只送給 km 自己開的分頁**（`orca-sessions.json` 裡有記帳的那些）。
+ *
+ * 理由是 `terminal send --enter` 會**當場送出**：目標若不是 Claude 的 TUI 而是
+ * 一個普通 shell，那段文字就變成**被執行的指令**。km 開的分頁是用
+ * `--command "claude --resume <id>"` 建的，所以知道裡面跑的是什麼；
+ * 從 `terminal list` 撈來的handle 不知道，**不要**為了方便而放寬這條。
+ *
+ * 送出之後不等回覆：回覆會寫進 session 的 transcript，而那本來就是
+ * `TranscriptPanel` 在顯示的東西 —— 等於免費拿到「看著它回」。
+ */
+export async function sendToSession(sessionId: string, text: string): Promise<SendOutcome> {
+  const body = text.trim();
+  if (!body) return { status: "error", error: "沒有內容" };
+
+  const registry = await readRegistry();
+  const known = registry[sessionId];
+  if (!known) return { status: "not-open" };
+
+  // 分頁可能已經被關掉。handle 死了就把記帳清掉，讓畫面能講「要先開」
+  const shown = await cli<unknown>(["terminal", "show", "--terminal", known.handle]);
+  if (!shown.ok) {
+    const msg = shown.error?.message ?? "";
+    if (/runtime|connect|ECONNREFUSED|not reachable/i.test(msg)) return { status: "orca-down" };
+    delete registry[sessionId];
+    await writeRegistry(registry);
+    return { status: "not-open" };
+  }
+
+  const sent = await cli<unknown>([
+    "terminal", "send", "--terminal", known.handle, "--text", body, "--enter",
+  ]);
+  if (!sent.ok) return { status: "error", error: sent.error?.message ?? "terminal send 失敗" };
+  return { status: "sent" };
+}
+
 // ─── 有沒有裝 Orca ───────────────────────────────────────────────────────────
 
 export interface OrcaPresence {

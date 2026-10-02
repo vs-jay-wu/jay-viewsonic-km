@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Icon from "@/components/Icon";
+import SessionPrompt from "@/components/SessionPrompt";
 import Tooltip from "@/components/Tooltip";
 
 type BlockKind = "text" | "thinking" | "tool_use" | "tool_result" | "image";
@@ -103,10 +104,15 @@ export default function TranscriptPanel({
   sessionId,
   title,
   onClose,
+  machineId,
+  machineName,
 }: {
   sessionId: string;
   title: string;
   onClose: () => void;
+  /** 別台機器的 session 才有 —— 送 prompt 時要知道轉給誰 */
+  machineId?: string;
+  machineName?: string;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [range, setRange] = useState<Range | null>(null);
@@ -423,6 +429,8 @@ export default function TranscriptPanel({
           </>
         )}
       </div>
+      {/* 對正在跑的 session 講話。沒開著的分頁它自己會講「要先開」 */}
+      <SessionPrompt sessionId={sessionId} machineId={machineId} machineName={machineName} />
     </aside>
   );
 }
